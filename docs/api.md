@@ -15,7 +15,7 @@ trimmed). Workspaces are listed in the order they were created.
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204`, or `404`                                 |
 
-A blank or overlong name, or an `id` that is not a UUID, answers `400`.
+A blank or overlong name, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
 
 ```sh
 curl -X POST localhost:8080/api/v1/workspaces -H 'Content-Type: application/json' -d '{"name":"Docs"}'
@@ -39,7 +39,7 @@ cd apps/api
 WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run    # http://localhost:8080/api/v1/swagger-ui
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor
-mvn -DskipTests package && docker build .                 # the image packages the built jar
+mvn -DskipTests spring-boot:build-image                   # buildpacks image, no Dockerfile
 
 cd apps/web
 npm run dev                                               # proxies /api to localhost:8080

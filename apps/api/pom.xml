@@ -105,9 +105,32 @@
 
     <build>
         <plugins>
+            <!-- Builds the container image with Cloud Native Buildpacks, so there is no
+                 Dockerfile: the base image is the builder this plugin version pins, and it
+                 moves with Spring Boot. CI passes imageName and tags. -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <image>
+                        <!-- The cluster is x86; stated so a build on an ARM laptop matches. -->
+                        <imagePlatform>linux/amd64</imagePlatform>
+                        <!-- Buildpacks default to a fixed 1980 timestamp, so `docker images`
+                             could not tell a fresh image from a stale one. -->
+                        <createdDate>now</createdDate>
+                        <env>
+                            <BP_JVM_VERSION>${java.version}</BP_JVM_VERSION>
+                            <!-- The memory calculator reserves a stack per thread before sizing
+                                 the heap, and its default of 250 does not fit the pod's limit.
+                                 Requests run on virtual threads, so few platform ones exist.
+                                 OVERRIDE, not DEFAULT: the JVM buildpack writes its own default
+                                 and that one wins. -->
+                            <BPE_OVERRIDE_BPL_JVM_THREAD_COUNT>50</BPE_OVERRIDE_BPL_JVM_THREAD_COUNT>
+                            <!-- Links the published package back to this repository. -->
+                            <BP_OCI_SOURCE>https://github.com/kalpak44/workspaced-ai</BP_OCI_SOURCE>
+                        </env>
+                    </image>
+                </configuration>
             </plugin>
 
             <!-- The pom declares Java 25 but the compiler only needs a 25 bytecode

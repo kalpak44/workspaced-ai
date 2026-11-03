@@ -70,10 +70,15 @@ class WorkspaceControllerTest {
   }
 
   @Test
-  void answersNotFoundForAnUnknownId() throws Exception {
-    var unknown = "/" + UUID.randomUUID();
-    assertThat(send("PUT", unknown, "{\"name\":\"x\"}").statusCode()).isEqualTo(404);
-    assertThat(send("DELETE", unknown, null).statusCode()).isEqualTo(404);
+  void answersNotFoundForAnUnknownIdAsAProblemDetail() throws Exception {
+    var id = UUID.randomUUID();
+    var renamed = send("PUT", "/" + id, "{\"name\":\"x\"}");
+    assertThat(renamed.statusCode()).isEqualTo(404);
+    assertThat(renamed.headers().firstValue("Content-Type")).hasValue("application/problem+json");
+    var problem = JSON.readTree(renamed.body());
+    assertThat(problem.get("status").asInt()).isEqualTo(404);
+    assertThat(problem.get("detail").asString()).isEqualTo("no workspace " + id);
+    assertThat(send("DELETE", "/" + id, null).statusCode()).isEqualTo(404);
   }
 
   @Test

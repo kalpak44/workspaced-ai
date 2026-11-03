@@ -25,7 +25,15 @@ class OpenApiTest {
   void publishesTheWorkspaceEndpoints() throws Exception {
     var response = get("/api/v1/v3/api-docs");
     assertThat(response.statusCode()).isEqualTo(200);
-    assertThat(response.body()).contains("\"openapi\":\"3.0", "/workspaces/{id}");
+    assertThat(response.body())
+        .contains(
+            "\"openapi\":\"3.0",
+            "/workspaces/{id}",
+            "\"operationId\":\"createWorkspace\"",
+            "\"operationId\":\"renameWorkspace\"",
+            "\"operationId\":\"deleteWorkspace\"",
+            "\"operationId\":\"listWorkspaces\"",
+            "application/problem+json");
   }
 
   @Test

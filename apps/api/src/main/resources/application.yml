@@ -11,6 +11,12 @@ spring:
     virtual:
       enabled: true
 
+  # Errors answer as RFC 9457 problem details (application/problem+json), the shape
+  # WorkspaceApi documents for every 4xx.
+  mvc:
+    problemdetails:
+      enabled: true
+
   # Every value has a local-development default except the password: a fallback password
   # is one that reaches production unnoticed.
   datasource:
