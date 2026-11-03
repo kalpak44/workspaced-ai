@@ -68,20 +68,27 @@ export function useWorkspaces() {
 
   // Plain functions, not async ones: they are handed to click handlers that expect no
   // return value, so each settles its own promise, failure included.
-  const create = (name: string = DEFAULT_NAME) => {
-    const unique = uniqueName(
-      name,
-      workspaces.map((w) => w.name),
-    );
-    createWorkspace(unique).then(
+  /** Resolves true once the workspace exists, false when the API refused it. */
+  const create = (name: string): Promise<boolean> =>
+    createWorkspace(name.trim()).then(
       (created) => {
         const workspace = { ...created, status: latest.current.get(created.id) ?? created.status };
         setWorkspaces((current) => [...current, workspace]);
         setSelectedId(workspace.id);
+        return true;
       },
-      () => setError("Could not create the workspace"),
+      () => {
+        setError("Could not create the workspace");
+        return false;
+      },
     );
-  };
+
+  /** A name for a new workspace that no existing one already has. */
+  const suggestName = (base: string = DEFAULT_NAME) =>
+    uniqueName(
+      base,
+      workspaces.map((w) => w.name),
+    );
 
   const rename = (id: string, name: string) => {
     const trimmed = name.trim();
@@ -112,6 +119,7 @@ export function useWorkspaces() {
     dismissError: () => setError(null),
     select: setSelectedId,
     create,
+    suggestName,
     rename,
     remove,
   };

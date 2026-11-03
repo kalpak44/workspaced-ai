@@ -46,7 +46,13 @@ export function installFakeApi(
   initial: Workspace[] = [{ id: "starter", name: "Starter", status: "READY" }],
 ) {
   const rows = [...initial];
-  const state = { fail: 0, nextId: 1, createStatus: "READY" as WorkspaceStatus };
+  const state = {
+    fail: 0,
+    nextId: 1,
+    createStatus: "READY" as WorkspaceStatus,
+    // When set, POST waits on it, so a test can look at the UI mid-request.
+    holdCreate: null as Promise<void> | null,
+  };
   FakeEventSource.instances.length = 0;
 
   const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
@@ -62,6 +68,7 @@ export function installFakeApi(
     const index = rows.findIndex((w) => w.id === id);
     switch (init?.method ?? "GET") {
       case "POST": {
+        if (state.holdCreate) await state.holdCreate;
         const created = { id: `ws-${state.nextId++}`, name: body!.name, status: state.createStatus };
         rows.push(created);
         return json(created, 201);

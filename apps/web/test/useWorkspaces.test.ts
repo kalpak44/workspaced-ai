@@ -20,6 +20,30 @@ async function loaded() {
 }
 
 describe("useWorkspaces", () => {
+  it("suggests a name no workspace has yet", async () => {
+    installFakeApi();
+    const result = await loaded();
+    expect(result.current.suggestName()).toBe("New Workspace");
+    expect(result.current.suggestName("Starter")).toBe("Starter 2");
+  });
+
+  it("trims the name and reports whether the workspace was created", async () => {
+    const api = installFakeApi();
+    const result = await loaded();
+    let created = false;
+    await act(async () => {
+      created = await result.current.create("  Docs  ");
+    });
+    expect(created).toBe(true);
+    expect(api.rows.at(-1)?.name).toBe("Docs");
+
+    api.state.fail = 500;
+    await act(async () => {
+      created = await result.current.create("Nope");
+    });
+    expect(created).toBe(false);
+  });
+
   it("loads from the API and selects the first", async () => {
     installFakeApi([
       { id: "a", name: "A", status: "READY" },
@@ -51,7 +75,7 @@ describe("useWorkspaces", () => {
     const result = await loaded();
     api.state.fail = 503;
 
-    act(() => result.current.create());
+    act(() => void result.current.create("New Workspace"));
     await waitFor(() => expect(result.current.error).toBe("Could not create the workspace"));
     act(() => result.current.rename("starter", "X"));
     await waitFor(() => expect(result.current.error).toBe("Could not rename the workspace"));
@@ -64,7 +88,7 @@ describe("useWorkspaces", () => {
   it("selects the first remaining once the selected one is deleted", async () => {
     installFakeApi();
     const result = await loaded();
-    act(() => result.current.create());
+    act(() => void result.current.create("New Workspace"));
     await waitFor(() => expect(result.current.selected?.name).toBe("New Workspace"));
     act(() => result.current.remove(result.current.selected!.id));
     await waitFor(() => expect(result.current.selected?.name).toBe("Starter"));
@@ -96,7 +120,7 @@ describe("useWorkspaces", () => {
     api.state.createStatus = "INITIALIZING";
     const result = await loaded();
     FakeEventSource.emit("ws-1", "READY");
-    act(() => result.current.create());
+    act(() => void result.current.create("New Workspace"));
     await waitFor(() => expect(result.current.selected?.id).toBe("ws-1"));
     expect(result.current.selected?.status).toBe("READY");
   });

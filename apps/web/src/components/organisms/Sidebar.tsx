@@ -12,13 +12,14 @@ interface Props {
   readonly section: Section;
   readonly onSection: (section: Section) => void;
   readonly onSelect: (id: string) => void;
-  readonly onCreate: (name?: string) => void;
+  /** Asks for a new workspace; `name` suggests what to call it. */
+  readonly onNew: (name?: string) => void;
   readonly onRename: (id: string, name: string) => void;
   readonly onDelete: (id: string) => void;
 }
 
 export function Sidebar(props: Props) {
-  const { workspaces, selectedId, section, onSection, onSelect, onCreate } = props;
+  const { workspaces, selectedId, section, onSection, onSelect, onNew } = props;
   const fileInput = useRef<HTMLInputElement>(null);
 
   return (
@@ -35,11 +36,11 @@ export function Sidebar(props: Props) {
             label="New workspace"
             icon={Plus}
             onClick={() => {
-              onCreate();
+              onNew();
               onSection("workspaces");
             }}
           />
-          {/* Imports a workspace by file name only, until workspaces carry content. */}
+          {/* Takes only the file name, as the suggested name, until workspaces carry content. */}
           <input
             ref={fileInput}
             type="file"
@@ -49,7 +50,7 @@ export function Sidebar(props: Props) {
             onChange={(e) => {
               const file = e.currentTarget.files?.[0];
               if (file) {
-                onCreate(file.name.replace(/\.json$/i, ""));
+                onNew(file.name.replace(/\.json$/i, ""));
                 onSection("workspaces");
               }
               e.currentTarget.value = "";

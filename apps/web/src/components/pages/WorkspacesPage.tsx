@@ -2,7 +2,7 @@ import { type ReactNode, useState } from "react";
 import { useTheme } from "../../hooks/useTheme";
 import { DEFAULT_NAME, type Workspace, useWorkspaces } from "../../hooks/useWorkspaces";
 import { EmptyState, ErrorBanner } from "../molecules";
-import { type Section, Sidebar, TopBar } from "../organisms";
+import { CreateWorkspaceDialog, type Section, Sidebar, TopBar } from "../organisms";
 import { AppLayout } from "../templates";
 
 const SECTIONS: Record<Exclude<Section, "workspaces">, { title: string; hint: string }> = {
@@ -20,9 +20,9 @@ function viewFor(
   section: Section,
   loading: boolean,
   selected: Workspace | null,
-  create: () => void,
+  openNew: () => void,
 ): View {
-  const newWorkspace = { label: DEFAULT_NAME, onClick: create };
+  const newWorkspace = { label: DEFAULT_NAME, onClick: openNew };
   if (section !== "workspaces") {
     return {
       title: section === "knowledge" ? "Knowledge" : "My Files",
@@ -32,7 +32,7 @@ function viewFor(
   if (loading) {
     return {
       title: "Workspaces",
-      body: <EmptyState title="Loading workspaces…" hint="Fetching them from the API" />,
+      body: <EmptyState busy title="Loading workspaces…" hint="Fetching them from the API" />,
     };
   }
   if (!selected) {
@@ -67,10 +67,23 @@ function viewFor(
 
 export function WorkspacesPage() {
   const [theme, setTheme] = useTheme();
-  const { workspaces, selected, loading, error, dismissError, select, create, rename, remove } =
-    useWorkspaces();
+  const {
+    workspaces,
+    selected,
+    loading,
+    error,
+    dismissError,
+    select,
+    create,
+    suggestName,
+    rename,
+    remove,
+  } = useWorkspaces();
   const [section, setSection] = useState<Section>("workspaces");
-  const view = viewFor(section, loading, selected, () => create());
+  // The name the create dialog opens with; null while it is closed.
+  const [newName, setNewName] = useState<string | null>(null);
+  const openNew = (base?: string) => setNewName(suggestName(base));
+  const view = viewFor(section, loading, selected, () => openNew());
 
   return (
     <AppLayout
@@ -82,7 +95,7 @@ export function WorkspacesPage() {
           section={section}
           onSection={setSection}
           onSelect={select}
-          onCreate={create}
+          onNew={openNew}
           onRename={rename}
           onDelete={remove}
         />
@@ -91,6 +104,13 @@ export function WorkspacesPage() {
       notice={error && <ErrorBanner message={error} onDismiss={dismissError} />}
     >
       {view.body}
+      {newName !== null && (
+        <CreateWorkspaceDialog
+          initialName={newName}
+          onCreate={create}
+          onClose={() => setNewName(null)}
+        />
+      )}
     </AppLayout>
   );
 }

@@ -9,9 +9,9 @@ src/
 ├── hooks/          state and side effects (workspaces, theme, API status, popover dismissal)
 ├── lib/            framework-free helpers
 └── components/
-    ├── atoms/      Logo, Button, IconButton, Spinner, Avatar, Divider — props in, markup out, no hooks
-    ├── molecules/  EmptyState, ErrorBanner, Menu, NavItem, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
-    ├── organisms/  TopBar, UserMenu, Sidebar
+    ├── atoms/      Logo, Button, IconButton, TextField, Spinner, Avatar, Divider — props in, markup out, no hooks
+    ├── molecules/  EmptyState, ErrorBanner, Menu, Modal, NavItem, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
+    ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog
     ├── templates/  AppLayout — the page frame, filled through props
     └── pages/      WorkspacesPage — wires hooks to organisms and picks what the main area shows
 ```
