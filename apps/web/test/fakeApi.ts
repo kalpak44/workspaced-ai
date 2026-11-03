@@ -2,6 +2,7 @@ import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Secret } from "../src/api/secretsApi";
 import type { ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
+import type { McpServer, ModelCatalogue } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
 
 export const OPENROUTER = {
@@ -73,7 +74,7 @@ export class FakeEventSource {
  */
 export function installFakeApi(
   initial: Workspace[] = [
-    { id: "starter", name: "Starter", modelProvider: "openrouter", status: "READY" },
+    { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "READY" },
   ],
 ) {
   const rows = [...initial];
@@ -84,6 +85,15 @@ export function installFakeApi(
   const messages = new Map<string, ChatMessage[]>();
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
+  const mcp = new Map<string, McpServer[]>();
+  const catalogue: ModelCatalogue = {
+    defaultModel: "anthropic/claude-sonnet-5.5",
+    models: [
+      { id: "anthropic/claude-haiku-5.5", name: "Claude Haiku 5.5", contextLength: 200000, inputCost: 1, outputCost: 5 },
+      { id: "anthropic/claude-sonnet-5.5", name: "Claude Sonnet 5.5", contextLength: 1000000, inputCost: 2, outputCost: 10 },
+      { id: "openai/gpt-free", name: "GPT Free", contextLength: null, inputCost: 0, outputCost: 0 },
+    ],
+  };
   const state = {
     fail: 0,
     nextId: 1,
@@ -109,6 +119,10 @@ export function installFakeApi(
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
     }
+    const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers)(?:\/(.+))?$/.exec(url);
+    if (settingsRoute) {
+      return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
+    }
     const sessionsRoute =
       /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages|abort))?$/.exec(url);
     if (sessionsRoute) {
@@ -131,6 +145,7 @@ export function installFakeApi(
           id: `ws-${state.nextId++}`,
           name: body!.name,
           modelProvider: body!.modelProvider!,
+          model: null,
           status: state.createStatus,
         };
         rows.push(created);
@@ -149,6 +164,35 @@ export function installFakeApi(
         return json(rows);
     }
   });
+
+  function settingsResponse(workspaceId: string, kind: string, name: string | undefined, init?: RequestInit) {
+    const index = rows.findIndex((w) => w.id === workspaceId);
+    if (index < 0) return json({}, 404);
+    const method = init?.method ?? "GET";
+    if (kind === "models") return state.harnessDown ? json({}, 503) : json(catalogue);
+    if (kind === "model") {
+      const { model } = JSON.parse(String(init!.body)) as { model: string | null };
+      rows[index] = { ...rows[index], model };
+      return json({ model });
+    }
+    const servers = mcp.get(workspaceId) ?? [];
+    if (method === "POST") {
+      const server = JSON.parse(String(init!.body)) as { name: string; url: string; headers: Record<string, string> };
+      if (servers.some((s) => s.name === server.name)) return json({}, 409);
+      if (server.url.includes("invalid")) return json({}, 400);
+      const added = { name: server.name, url: server.url, headers: Object.keys(server.headers), status: "connected" };
+      mcp.set(workspaceId, [...servers, added]);
+      return json(added, 201);
+    }
+    if (method === "DELETE") {
+      mcp.set(
+        workspaceId,
+        servers.filter((s) => s.name !== name),
+      );
+      return new Response(null, { status: 204 });
+    }
+    return json(servers);
+  }
 
   function sessionsResponse(
     workspaceId: string,
@@ -221,5 +265,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, sessions, messages, prompts, aborted, state, fetchFn };
+  return { rows, secrets, sent, sessions, messages, prompts, aborted, mcp, catalogue, state, fetchFn };
 }

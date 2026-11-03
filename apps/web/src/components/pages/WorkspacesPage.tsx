@@ -19,8 +19,18 @@ const APP = "workspaced-ai";
 export function WorkspacesPage() {
   const [theme, setTheme] = useTheme();
   const route = useRoute();
-  const { workspaces, loading, deleting, error, dismissError, create, suggestName, rename, remove } =
-    useWorkspaces();
+  const {
+    workspaces,
+    loading,
+    deleting,
+    error,
+    dismissError,
+    create,
+    suggestName,
+    rename,
+    remove,
+    patch,
+  } = useWorkspaces();
   const providers = useModelProviders();
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
@@ -70,7 +80,10 @@ export function WorkspacesPage() {
     );
   } else if (route.name === "settings") {
     tabTitle = `Settings · ${workspace.name}`;
-    page = <SettingsPage workspace={workspace} />;
+    const id = workspace.id;
+    page = (
+      <SettingsPage workspace={workspace} onModelChanged={(model) => patch(id, { model })} />
+    );
   } else if (route.name === "session") {
     tabTitle = `${pageTitle ?? "Session"} · ${workspace.name}`;
     page = (

@@ -144,6 +144,10 @@ export function useWorkspaces() {
     );
   };
 
+  /** A change the API has already accepted elsewhere, e.g. a new model from the settings page. */
+  const patch = (id: string, changes: Partial<Workspace>) =>
+    setWorkspaces((current) => current.map((w) => (w.id === id ? { ...w, ...changes } : w)));
+
   // Falls back to the first workspace, which also covers the selected one being deleted.
   const selected = workspaces.find((w) => w.id === selectedId) ?? workspaces.at(0) ?? null;
 
@@ -159,5 +163,6 @@ export function useWorkspaces() {
     suggestName,
     rename,
     remove,
+    patch,
   };
 }

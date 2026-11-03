@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { parseRoute, type Route, routePath } from "../src/lib/routes";
+import { formatPrice, formatTokens } from "../src/lib/format";
 import { timeAgo } from "../src/lib/time";
 
 describe("routes", () => {
@@ -33,5 +34,21 @@ describe("timeAgo", () => {
     expect(timeAgo("2026-11-03T09:00:00Z", now)).toBe("3 hours ago");
     expect(timeAgo("2026-11-02T12:00:00Z", now)).toBe("yesterday");
     expect(timeAgo("2026-10-20T12:00:00Z", now)).toBe("2 weeks ago");
+  });
+});
+
+describe("format", () => {
+  it("says token counts the way people do", () => {
+    expect(formatTokens(1_000_000)).toBe("1M");
+    expect(formatTokens(1_048_576)).toBe("1M");
+    expect(formatTokens(128_000)).toBe("128K");
+    expect(formatTokens(512)).toBe("512");
+  });
+
+  it("prices per million input and output tokens", () => {
+    expect(formatPrice(2, 10)).toBe("$2 / $10");
+    expect(formatPrice(0.15, 0.6)).toBe("$0.15 / $0.6");
+    expect(formatPrice(0, 0)).toBe("free");
+    expect(formatPrice(null, 1)).toBeNull();
   });
 });

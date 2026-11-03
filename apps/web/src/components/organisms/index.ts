@@ -1,5 +1,7 @@
 export { ChatPanel } from "./ChatPanel";
 export { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
+export { McpPanel } from "./McpPanel";
+export { ModelPanel } from "./ModelPanel";
 export { SecretsPanel } from "./SecretsPanel";
 export { SessionList } from "./SessionList";
 export { Sidebar } from "./Sidebar";

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -78,14 +79,25 @@ class OpenCodeHarnessTest {
 
   @Test
   void promptsWithoutWaitingAndAborts() {
-    harness.prompt(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, "Hi \"there\"");
+    harness.prompt(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, "Hi \"there\"", null);
+    harness.prompt(
+        opencode.endpoint(),
+        DIRECTORY,
+        FakeOpenCode.SESSION,
+        "Again",
+        new Harness.ModelRef("openrouter", "anthropic/claude-haiku-5.5"));
     harness.abort(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION);
     assertThat(opencode.requests.get(0).path()).endsWith("/prompt_async");
     var json = JsonMapper.builder().build();
     assertThat(json.readTree(opencode.requests.get(0).body()))
         .isEqualTo(
             json.readTree("{\"parts\":[{\"type\":\"text\",\"text\":\"Hi \\\"there\\\"\"}]}"));
-    assertThat(opencode.requests.get(1).path()).endsWith("/abort");
+    // A named model goes with the prompt, so the reply uses it without reloading anything.
+    assertThat(json.readTree(opencode.requests.get(1).body()).get("model"))
+        .isEqualTo(
+            json.readTree(
+                "{\"providerID\":\"openrouter\",\"modelID\":\"anthropic/claude-haiku-5.5\"}"));
+    assertThat(opencode.requests.get(2).path()).endsWith("/abort");
   }
 
   @Test
@@ -96,7 +108,7 @@ class OpenCodeHarnessTest {
         .isInstanceOf(HarnessUnavailableException.class)
         .hasMessageContaining("500");
     var nowhere = new HarnessEndpoint(URI.create("http://localhost:1"), "pw");
-    assertThatThrownBy(() -> harness.prompt(nowhere, DIRECTORY, "s", "hi"))
+    assertThatThrownBy(() -> harness.prompt(nowhere, DIRECTORY, "s", "hi", null))
         .isInstanceOf(HarnessUnavailableException.class);
   }
 
@@ -177,6 +189,54 @@ class OpenCodeHarnessTest {
     stream.close();
     stream.close();
     assertThat(ended.await(500, TimeUnit.MILLISECONDS)).isFalse();
+  }
+
+  @Test
+  void listsOnlyTheProvidersModelsThatCanCallTools() {
+    var catalogue = harness.models(opencode.endpoint(), "openrouter");
+    // The configured model, not the catalogue's own guess.
+    assertThat(catalogue.defaultModel()).isEqualTo("anthropic/claude-sonnet-5.5");
+    assertThat(catalogue.models())
+        .containsExactly(
+            new ModelOption("anthropic/claude-haiku-5.5", "Claude Haiku 5.5", 200000L, 1.0, 5.0),
+            new ModelOption(
+                "anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", 1000000L, 2.0, 10.0));
+    assertThat(opencode.requests.getFirst().directory()).isEqualTo(Harness.HOME);
+  }
+
+  @Test
+  void writesTheMcpServersOnlyWhenTheyChangeAndDisablesTheOnesRemoved() {
+    var github =
+        new Harness.McpServerConfig(
+            "https://mcp.test/github", Map.of("Authorization", "Bearer {env:GITHUB_TOKEN}"));
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isTrue();
+    assertThat(opencode.globalMcp.get("github").get("enabled").asBoolean()).isTrue();
+    assertThat(opencode.globalMcp.get("github").get("headers").get("Authorization").asString())
+        .isEqualTo("Bearer {env:GITHUB_TOKEN}");
+    assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "connected");
+
+    // The same servers again change nothing: an API restart does this for every workspace.
+    var patches = opencode.patches();
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isFalse();
+    assertThat(opencode.patches()).isEqualTo(patches);
+
+    // Gone from the wanted set: kept, but disabled, since a merge cannot delete it. Only the flag
+    // is sent, so the substituted header read back is never written into the configuration.
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of())).isTrue();
+    assertThat(opencode.requests.getLast().body())
+        .isEqualTo("{\"mcp\":{\"github\":{\"enabled\":false}}}");
+    assertThat(opencode.globalMcp.get("github").get("enabled").asBoolean()).isFalse();
+    assertThat(opencode.globalMcp.get("github").get("headers").get("Authorization").asString())
+        .isEqualTo("Bearer {env:GITHUB_TOKEN}");
+    assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "disabled");
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of())).isFalse();
+
+    // Added back, or pointed elsewhere: written again.
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isTrue();
+    var moved = new Harness.McpServerConfig("https://mcp.test/moved", github.headers());
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", moved))).isTrue();
+    assertThat(opencode.globalMcp.get("github").get("url").asString())
+        .isEqualTo("https://mcp.test/moved");
   }
 
   @Test

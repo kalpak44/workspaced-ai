@@ -214,7 +214,7 @@ describe("App", () => {
     await user.type(input, "Research{Enter}");
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
     expect(api.rows).toEqual([
-      { id: "starter", name: "Research", modelProvider: "openrouter", status: "READY" },
+      { id: "starter", name: "Research", modelProvider: "openrouter", model: null, status: "READY" },
     ]);
 
     await user.click(screen.getByRole("button", { name: "Actions for Research" }));
@@ -457,7 +457,7 @@ describe("App", () => {
   });
 
   it("leaves settings when another workspace is selected", async () => {
-    api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", status: "READY" });
+    api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", model: null, status: "READY" });
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);
@@ -663,5 +663,116 @@ describe("App", () => {
     expect(api.fetchFn.mock.calls.map(([url]) => String(url))).not.toContainEqual(
       expect.stringContaining("/sessions"),
     );
+  });
+
+  it("chooses the agent's model from a searchable list, and goes back to the default", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    await openSettings(user);
+    const model = await screen.findByRole("radiogroup", { name: "Model" });
+    expect(within(model).getByRole("radio", { name: /Default — Claude Sonnet 5.5/ })).toBeChecked();
+    expect(within(model).getByRole("radio", { name: /Claude Haiku 5.5/ })).toHaveTextContent(
+      "200K context · $1 / $5",
+    );
+    expect(within(model).getByRole("radio", { name: /GPT Free/ })).toHaveTextContent("free");
+
+    await user.type(screen.getByRole("textbox", { name: "Search models" }), "haiku");
+    expect(within(model).getAllByRole("radio")).toHaveLength(1);
+    await user.click(within(model).getByRole("radio", { name: /Claude Haiku 5.5/ }));
+    await waitFor(() =>
+      expect(within(model).getByRole("radio", { name: /Claude Haiku 5.5/ })).toBeChecked(),
+    );
+    expect(api.rows[0].model).toBe("anthropic/claude-haiku-5.5");
+    expect(screen.getByRole("region", { name: "Model" })).toHaveTextContent("Now: Claude Haiku 5.5");
+
+    await user.clear(screen.getByRole("textbox", { name: "Search models" }));
+    await user.type(screen.getByRole("textbox", { name: "Search models" }), "nothing like it");
+    expect(within(model).getByText(/No model matches/)).toBeInTheDocument();
+    await user.clear(screen.getByRole("textbox", { name: "Search models" }));
+    await user.click(within(model).getByRole("radio", { name: /Default/ }));
+    await waitFor(() => expect(api.rows[0].model).toBeNull());
+  });
+
+  it("explains the model list waits for a running workspace, and reports one it cannot load", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    FakeEventSource.emit("starter", "INITIALIZING");
+    await openSettings(user);
+    expect(screen.getByText(/shows once the workspace is running/)).toBeInTheDocument();
+    cleanup();
+
+    api.state.harnessDown = true;
+    visit("/workspaces/starter/settings");
+    await renderLoaded();
+    expect(await screen.findByText("Could not load the models")).toBeInTheDocument();
+  });
+
+  it("adds an MCP server with a header, shows it connected, and removes it", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    await openSettings(user);
+    const panel = screen.getByRole("region", { name: "MCP servers" });
+    const form = within(panel).getByRole("form", { name: "Add an MCP server" });
+    await user.type(within(form).getByRole("textbox", { name: "Name" }), "github");
+    await user.type(within(form).getByLabelText("URL"), "https://mcp.test/github");
+    await user.click(within(form).getByRole("button", { name: "Add header" }));
+    await user.click(within(form).getByRole("button", { name: "Add header" }));
+    await user.click(within(form).getByRole("button", { name: "Remove header 2" }));
+    await user.type(within(form).getByLabelText("Header 1 name"), "Authorization");
+    await user.type(within(form).getByLabelText("Header 1 value"), "Bearer {{env:GITHUB_TOKEN}");
+    await user.click(within(form).getByRole("button", { name: "Add server" }));
+
+    const row = (await within(panel).findByText("github")).closest("li")!;
+    expect(row).toHaveTextContent("https://mcp.test/github · sends Authorization");
+    expect(row).toHaveTextContent("Connected");
+    expect(within(form).getByRole("textbox", { name: "Name" })).toHaveValue("");
+    expect(within(form).queryByLabelText("Header 1 name")).not.toBeInTheDocument();
+
+    await user.click(within(panel).getByRole("button", { name: "Remove github" }));
+    await waitFor(() => expect(within(panel).queryByText("github")).not.toBeInTheDocument());
+    expect(api.mcp.get("starter")).toEqual([]);
+  });
+
+  it("checks an MCP server before sending it, and says why the API refused one", async () => {
+    api.mcp.set("starter", [{ name: "github", url: "https://x.test", headers: [], status: "failed" }]);
+    const user = userEvent.setup();
+    await renderLoaded();
+    await openSettings(user);
+    const panel = screen.getByRole("region", { name: "MCP servers" });
+    expect(await within(panel).findByText("Failed")).toBeInTheDocument();
+    const name = within(panel).getByRole("textbox", { name: "Name" });
+    const url = within(panel).getByLabelText("URL");
+
+    await user.type(name, "Bad Name");
+    await user.type(url, "https://x.test");
+    await user.click(within(panel).getByRole("button", { name: "Add server" }));
+    expect(name).toHaveAccessibleDescription("Use lowercase letters, digits, - and _");
+
+    await user.clear(name);
+    await user.type(name, "x");
+    await user.clear(url);
+    await user.type(url, "ftp://x.test");
+    await user.click(within(panel).getByRole("button", { name: "Add server" }));
+    expect(name).toHaveAccessibleDescription("The URL must start with http:// or https://");
+
+    await user.clear(name);
+    await user.type(name, "github");
+    await user.clear(url);
+    await user.type(url, "https://x.test");
+    await user.click(within(panel).getByRole("button", { name: "Add server" }));
+    await waitFor(() => expect(name).toHaveAccessibleDescription("The workspace already has a server of that name"));
+
+    await user.clear(name);
+    await user.type(name, "other");
+    await user.clear(url);
+    await user.type(url, "https://invalid.test");
+    await user.click(within(panel).getByRole("button", { name: "Add server" }));
+    await waitFor(() => expect(name).toHaveAccessibleDescription("Check the URL and header names"));
+
+    api.state.fail = 500;
+    await user.click(within(panel).getByRole("button", { name: "Add server" }));
+    await waitFor(() => expect(name).toHaveAccessibleDescription("Could not add the server"));
+    await user.click(within(panel).getByRole("button", { name: "Remove github" }));
+    expect(await within(panel).findByText("Could not remove github")).toBeInTheDocument();
   });
 });

@@ -10,9 +10,12 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.Executors;
+import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Answers as {@code opencode serve} does, for the routes the API uses. The event stream replays one
@@ -33,6 +36,12 @@ public class FakeOpenCode implements AutoCloseable {
   /** When set, the event stream sends one heartbeat and then stays open until released. */
   public volatile CountDownLatch holdStream;
 
+  /**
+   * The harness's global MCP configuration, merged into by PATCH /global/config as opencode does.
+   */
+  public final ObjectNode globalMcp = JSON.createObjectNode();
+
+  private static final JsonMapper JSON = JsonMapper.builder().build();
   private final HttpServer server;
 
   public FakeOpenCode() throws IOException {
@@ -77,6 +86,39 @@ public class FakeOpenCode implements AutoCloseable {
       case "POST /session/" + SESSION + "/prompt_async" -> respond(exchange, 204, null);
       case "POST /session/" + SESSION + "/abort" -> respond(exchange, 200, "true");
       case "GET /event" -> stream(exchange);
+      case "GET /config/providers" -> respond(exchange, 200, PROVIDERS);
+      case "GET /global/config" -> respond(exchange, 200, globalConfig());
+      case "PATCH /global/config" -> {
+        // A deep merge, as opencode's: a key the patch leaves out keeps its value.
+        var patch = JSON.readTree(requests.getLast().body()).path("mcp");
+        patch
+            .properties()
+            .forEach(
+                e -> {
+                  var existing = globalMcp.get(e.getKey());
+                  if (existing instanceof ObjectNode object) {
+                    object.setAll((ObjectNode) e.getValue());
+                  } else {
+                    globalMcp.set(e.getKey(), e.getValue());
+                  }
+                });
+        respond(exchange, 200, globalConfig());
+      }
+      case "GET /mcp" -> {
+        var statuses = JSON.createObjectNode();
+        globalMcp
+            .properties()
+            .forEach(
+                e ->
+                    statuses
+                        .putObject(e.getKey())
+                        .put(
+                            "status",
+                            e.getValue().path("enabled").asBoolean(true)
+                                ? "connected"
+                                : "disabled"));
+        respond(exchange, 200, JSON.writeValueAsString(statuses));
+      }
       case "GET /session/broken/message" -> respond(exchange, 500, "{}");
       default -> respond(exchange, 404, "{}");
     }
@@ -123,6 +165,32 @@ public class FakeOpenCode implements AutoCloseable {
     }
   }
 
+  /**
+   * As opencode answers it: the configured model, and every {env:NAME} in a header already
+   * substituted, so a client cannot read the reference back.
+   */
+  private String globalConfig() {
+    var mcp = globalMcp.deepCopy();
+    mcp.properties()
+        .forEach(
+            e -> {
+              if (e.getValue().get("headers") instanceof ObjectNode headers) {
+                headers
+                    .properties()
+                    .forEach(
+                        h ->
+                            headers.put(h.getKey(), h.getValue().asString().replace("{env:", "<")));
+              }
+            });
+    return JSON.writeValueAsString(
+        Map.of("model", "openrouter/anthropic/claude-sonnet-5.5", "mcp", mcp));
+  }
+
+  /** How many times the global configuration was written. */
+  public long patches() {
+    return requests.stream().filter(r -> r.method().equals("PATCH")).count();
+  }
+
   @Override
   public void close() {
     var hold = holdStream;
@@ -131,6 +199,22 @@ public class FakeOpenCode implements AutoCloseable {
     }
     server.stop(0);
   }
+
+  // Two that can call tools, one that cannot, and another provider's, in catalogue order.
+  private static final String PROVIDERS =
+      """
+      {"providers":[
+        {"id":"openrouter","models":{
+          "anthropic/claude-sonnet-5.5":{"id":"anthropic/claude-sonnet-5.5",
+            "name":"Claude Sonnet 5.5","limit":{"context":1000000},
+            "cost":{"input":2,"output":10},"capabilities":{"toolcall":true}},
+          "google/lyria":{"id":"google/lyria","name":"Lyria","capabilities":{"toolcall":false}},
+          "anthropic/claude-haiku-5.5":{"id":"anthropic/claude-haiku-5.5",
+            "name":"Claude Haiku 5.5","limit":{"context":200000},
+            "cost":{"input":1,"output":5},"capabilities":{"toolcall":true}}}},
+        {"id":"other","models":{"x":{"id":"x","name":"X","capabilities":{"toolcall":true}}}}],
+       "default":{"openrouter":"google/lyria"}}
+      """;
 
   // A user message, then the agent's reply: a step marker, reasoning, a tool call, text, and
   // a synthetic part the chat must not show.

@@ -8,6 +8,7 @@ export { Modal, ModalBody, ModalFooter } from "./Modal";
 export { PageHeader } from "./PageHeader";
 export { SecretItem } from "./SecretItem";
 export { SessionCard } from "./SessionCard";
+export { SettingsSection } from "./SettingsSection";
 export { ThemeSwitch } from "./ThemeSwitch";
 export { WorkspaceItem } from "./WorkspaceItem";
 export { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";

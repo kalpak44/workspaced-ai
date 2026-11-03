@@ -95,6 +95,32 @@ WORKSPACED_WORKSPACE_LOCAL_HARNESS_URL=http://localhost:4096 \
 WORKSPACED_WORKSPACE_LOCAL_HARNESS_PASSWORD=dev WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run
 ```
 
+## Agent settings
+
+| Method   | Path                                           | Body                                              | Answers                                   |
+|----------|------------------------------------------------|---------------------------------------------------|-------------------------------------------|
+| `GET`    | `/api/v1/workspaces/{id}/models`               |                                                   | `200` and the catalogue, or `503`         |
+| `PUT`    | `/api/v1/workspaces/{id}/model`                | `{"model": "anthropic/claude-sonnet-5.5"}` or `{"model": null}` | `200`, or `400` for an unknown model |
+| `GET`    | `/api/v1/workspaces/{id}/mcp-servers`          |                                                   | `200` and the servers with their status   |
+| `POST`   | `/api/v1/workspaces/{id}/mcp-servers`          | `{"name": "github", "url": "https://…", "headers": {"Authorization": "Bearer {env:GITHUB_TOKEN}"}}` | `201`, `400` or `409` |
+| `DELETE` | `/api/v1/workspaces/{id}/mcp-servers/{name}`   |                                                   | `204` or `404`                            |
+
+**Model.** The catalogue is the harness's own list of the provider's models that can call tools, which an agent
+needs, with `defaultModel` — the one the harness's configuration names. A workspace's choice is stored in its row
+and sent with every prompt, so it applies from the next message in every session with nothing reloaded; `null`
+returns to the default. A model the catalogue does not list is refused with `400`, so a typo fails here rather than
+as a broken reply.
+
+**MCP servers.** Remote servers only: the harness image carries no Node or Python, so a local MCP command could not
+run. The database holds them; the harness gets them through opencode's `PATCH /global/config`, which every session
+picks up at once. That configuration can be merged into but not deleted from, so a removed server is disabled.
+opencode substitutes `{env:NAME}` in a header from the pod's environment, which holds the workspace's secrets — so
+a token belongs in Secrets and the header references it. Header values are never returned, and the API never writes
+back the configuration it reads, because opencode returns it with every reference already substituted. A replaced
+pod starts from the image's configuration, so the API applies a workspace's servers again each time it becomes
+ready, and writes only when they differ. `status` is the harness's (`connected`, `failed`, `needs_auth`,
+`disabled`), `pending` until it has picked a new server up, and `unknown` while it is not running.
+
 ## Workspace secrets
 
 Environment variables a workspace keeps secret. The database holds their names only; each value lives in the

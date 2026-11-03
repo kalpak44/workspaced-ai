@@ -2,7 +2,7 @@ import { Plus } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { type AddResult, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
 import { Button, Spinner, TextField } from "../atoms";
-import { ErrorBanner, SecretItem } from "../molecules";
+import { ErrorBanner, SecretItem, SettingsSection } from "../molecules";
 
 const MAX_NAME = 100;
 const MAX_VALUE = 65536;
@@ -55,14 +55,10 @@ export function SecretsPanel({
   };
 
   return (
-    <section aria-label="Secrets" className="flex flex-col gap-4 px-4 pb-4">
-      <div>
-        <h2 className="font-medium">Secrets</h2>
-        <p className="text-sm text-zinc-500 dark:text-zinc-400">
-          Passed to the workspace as environment variables when it starts. A value cannot be
-          read back once saved.
-        </p>
-      </div>
+    <SettingsSection
+      title="Secrets"
+      description="Passed to the workspace as environment variables when it starts. A value cannot be read back once saved."
+    >
       {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
       {loading ? (
         <Spinner label="Loading secrets" className="size-5 text-zinc-400" />
@@ -118,6 +114,6 @@ export function SecretsPanel({
           />
         </div>
       </form>
-    </section>
+    </SettingsSection>
   );
 }

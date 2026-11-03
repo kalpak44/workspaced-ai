@@ -111,10 +111,17 @@ public class SessionService {
         endpoint(workspaceId), session.getPath(), session.getHarnessSessionId());
   }
 
+  /** With the workspace's chosen model, so a change of model applies from the next message. */
   @Transactional(readOnly = true)
   public void send(UUID workspaceId, UUID sessionId, String text) {
     var session = session(workspaceId, sessionId);
-    harness.prompt(endpoint(workspaceId), session.getPath(), session.getHarnessSessionId(), text);
+    var workspace = workspaces.findById(workspaceId).orElseThrow();
+    var model =
+        workspace.getModel() == null
+            ? null
+            : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
+    harness.prompt(
+        endpoint(workspaceId), session.getPath(), session.getHarnessSessionId(), text, model);
   }
 
   @Transactional(readOnly = true)

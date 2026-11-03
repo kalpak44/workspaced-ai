@@ -6,13 +6,15 @@ when a rule below is broken.
 ```
 src/
 ├── api/            fetch calls and their types — imported only by hooks/
-├── hooks/          state and side effects (route, workspaces, sessions, chat, model providers, secrets, theme, API status, popover dismissal)
-├── lib/            framework-free helpers (routes, relative times, storage)
+├── hooks/          state and side effects (route, workspaces, sessions, chat, model providers, model settings, MCP servers,
+│                   secrets, theme, API status, popover dismissal)
+├── lib/            framework-free helpers (routes, relative times, token and price formatting, storage)
 └── components/
     ├── atoms/      Logo, Button, IconButton, TextField, ChoiceCard, Spinner, Avatar, Divider — props in, markup out, no hooks
     ├── molecules/  ChatComposer, ChatMessageView, EmptyState, ErrorBanner, Markdown, Menu, Modal, PageHeader,
-    │               SecretItem, SessionCard, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
-    ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, SecretsPanel
+    │               SecretItem, SessionCard, SettingsSection, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
+    ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, ModelPanel, McpPanel,
+    │               SecretsPanel
     ├── templates/  AppLayout — the frame every page sits in
     └── pages/      WorkspacesPage (the shell: sidebar, create dialog, routing), WorkspacePage, SessionPage, SettingsPage
 ```
@@ -35,7 +37,7 @@ already answers every path with `index.html`, which is what makes a deep link lo
 | `/`                                    | opens the first workspace                                       |
 | `/workspaces/<id>`                     | its sessions, newest first, and a box that starts a new one     |
 | `/workspaces/<id>/sessions/<session>`  | that session's chat                                             |
-| `/workspaces/<id>/settings`            | its secrets, which can be added and removed but never read back |
+| `/workspaces/<id>/settings`            | its model, MCP servers and secrets                              |
 
 A link to a session or workspace that no longer exists falls back to its workspace or home, replacing the history
 entry so Back skips it. Typing a task on a workspace page creates a session and opens it; the session page sends the

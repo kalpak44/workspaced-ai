@@ -8,6 +8,8 @@ export interface Workspace {
   readonly id: string;
   readonly name: string;
   readonly modelProvider: string;
+  /** The model its agent replies with; null for the harness's default. */
+  readonly model: string | null;
   readonly status: WorkspaceStatus;
 }
 

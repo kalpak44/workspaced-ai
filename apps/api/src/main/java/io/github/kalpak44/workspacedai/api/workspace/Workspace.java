@@ -12,10 +12,15 @@ public record Workspace(
     @Schema(description = "Display name", example = "Research", maxLength = 100) String name,
     @Schema(description = "The model provider it was created with", example = "openrouter")
         String modelProvider,
+    @Schema(
+            description = "The model its agent replies with; null for the harness's default",
+            example = "anthropic/claude-sonnet-5.5")
+        String model,
     @Schema(description = "Whether its runtime can be used yet", example = "INITIALIZING")
         WorkspaceStatus status) {
 
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
-    return new Workspace(entity.getId(), entity.getName(), entity.getModelProvider(), status);
+    return new Workspace(
+        entity.getId(), entity.getName(), entity.getModelProvider(), entity.getModel(), status);
   }
 }

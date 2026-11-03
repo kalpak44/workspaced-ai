@@ -27,6 +27,10 @@ public class WorkspaceEntity {
   @Column(name = "model_provider", nullable = false, length = 50)
   private String modelProvider;
 
+  // A model id at that provider; null keeps the harness's own default.
+  @Column(length = 200)
+  private String model;
+
   // Set by the column default; read only to order the list.
   @Column(name = "created_at", insertable = false, updatable = false)
   private Instant createdAt;
@@ -54,6 +58,14 @@ public class WorkspaceEntity {
 
   public String getModelProvider() {
     return modelProvider;
+  }
+
+  public String getModel() {
+    return model;
+  }
+
+  public void setModel(String model) {
+    this.model = model;
   }
 
   public Instant getCreatedAt() {

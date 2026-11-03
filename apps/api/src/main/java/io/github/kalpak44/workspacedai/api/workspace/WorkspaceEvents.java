@@ -7,6 +7,7 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeUnit;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -23,9 +24,12 @@ public class WorkspaceEvents {
 
   private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
   private final WorkspaceService service;
+  private final ApplicationEventPublisher events;
 
-  public WorkspaceEvents(WorkspaceService service, WorkspaceRuntime runtime) {
+  public WorkspaceEvents(
+      WorkspaceService service, WorkspaceRuntime runtime, ApplicationEventPublisher events) {
     this.service = service;
+    this.events = events;
     runtime.watch(this::publish);
   }
 
@@ -50,8 +54,10 @@ public class WorkspaceEvents {
     return emitter;
   }
 
+  /** To every browser, and to whatever in the API acts on a workspace becoming ready. */
   void publish(UUID id, WorkspaceStatus status) {
     broadcast(event(id, status));
+    events.publishEvent(new WorkspaceStatusChanged(id, status));
   }
 
   /**

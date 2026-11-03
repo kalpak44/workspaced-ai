@@ -14,10 +14,14 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Base64;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeMap;
+import java.util.TreeSet;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -92,9 +96,114 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
-  public void prompt(HarnessEndpoint endpoint, String directory, String sessionId, String text) {
-    var body = Map.of("parts", List.of(Map.of("type", "text", "text", text)));
+  public void prompt(
+      HarnessEndpoint endpoint, String directory, String sessionId, String text, ModelRef model) {
+    var body = new LinkedHashMap<String, Object>();
+    if (model != null) {
+      body.put("model", Map.of("providerID", model.providerId(), "modelID", model.modelId()));
+    }
+    body.put("parts", List.of(Map.of("type", "text", "text", text)));
     call(endpoint, directory, "POST", "/session/" + sessionId + "/prompt_async", body);
+  }
+
+  @Override
+  public ModelCatalogue models(HarnessEndpoint endpoint, String providerId) {
+    var catalogue = call(endpoint, HOME, "GET", "/config/providers", null);
+    var models = new ArrayList<ModelOption>();
+    for (var provider : catalogue.path("providers")) {
+      if (!providerId.equals(text(provider, "id"))) {
+        continue;
+      }
+      for (var model : provider.path("models")) {
+        if (model.path("capabilities").path("toolcall").asBoolean(false)) {
+          var cost = model.path("cost");
+          models.add(
+              new ModelOption(
+                  text(model, "id"),
+                  text(model, "name"),
+                  number(model.path("limit"), "context") == null
+                      ? null
+                      : number(model.path("limit"), "context").longValue(),
+                  number(cost, "input"),
+                  number(cost, "output")));
+        }
+      }
+    }
+    models.sort(Comparator.comparing(ModelOption::name, String.CASE_INSENSITIVE_ORDER));
+    return new ModelCatalogue(configuredModel(endpoint, providerId, catalogue), models);
+  }
+
+  /**
+   * The model the harness's configuration names, which is the one a reply without a model uses. The
+   * catalogue's own default is only opencode's guess, and not what this harness is set to.
+   */
+  private String configuredModel(HarnessEndpoint endpoint, String providerId, JsonNode catalogue) {
+    var configured = text(call(endpoint, HOME, "GET", "/global/config", null), "model");
+    var prefix = providerId + "/";
+    return configured != null && configured.startsWith(prefix)
+        ? configured.substring(prefix.length())
+        : text(catalogue.path("default"), providerId);
+  }
+
+  @Override
+  public Map<String, String> mcpStatus(HarnessEndpoint endpoint) {
+    var statuses = new TreeMap<String, String>();
+    call(endpoint, HOME, "GET", "/mcp", null)
+        .properties()
+        .forEach(e -> statuses.put(e.getKey(), text(e.getValue(), "status")));
+    return statuses;
+  }
+
+  /**
+   * Reads the harness's global configuration first and writes only when it differs, so applying the
+   * same servers twice — as every restart of the API does — leaves the harness alone.
+   *
+   * <p>The configuration comes back with every {@code {env:NAME}} already substituted, so header
+   * values cannot be compared and are never copied back: a server is compared by URL, enabled flag
+   * and header names, and one being disabled is sent only {@code enabled: false}, which opencode
+   * merges into what it has. Writing back what was read would put the secret itself into the
+   * harness's configuration file.
+   */
+  @Override
+  public boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers) {
+    var current = call(endpoint, HOME, "GET", "/global/config", null).path("mcp");
+    var patch = new TreeMap<String, Object>();
+    servers.forEach(
+        (name, server) -> {
+          if (!matches(current.path(name), server)) {
+            var entry = new LinkedHashMap<String, Object>();
+            entry.put("type", "remote");
+            entry.put("url", server.url());
+            entry.put("headers", server.headers());
+            entry.put("enabled", true);
+            patch.put(name, entry);
+          }
+        });
+    current
+        .properties()
+        .forEach(
+            e -> {
+              if (!servers.containsKey(e.getKey())
+                  && e.getValue().path("enabled").asBoolean(true)) {
+                patch.put(e.getKey(), Map.of("enabled", false));
+              }
+            });
+    if (patch.isEmpty()) {
+      return false;
+    }
+    call(endpoint, HOME, "PATCH", "/global/config", Map.of("mcp", patch));
+    return true;
+  }
+
+  private static boolean matches(JsonNode current, McpServerConfig server) {
+    if (current.isMissingNode()
+        || !current.path("enabled").asBoolean(true)
+        || !server.url().equals(text(current, "url"))) {
+      return false;
+    }
+    var names = new TreeSet<String>();
+    current.path("headers").properties().forEach(e -> names.add(e.getKey()));
+    return names.equals(new TreeSet<>(server.headers().keySet()));
   }
 
   @Override
@@ -235,6 +344,11 @@ public class OpenCodeHarness implements Harness {
       }
       default -> null;
     };
+  }
+
+  private static Double number(JsonNode node, String field) {
+    var value = node.get(field);
+    return value == null || !value.isNumber() ? null : value.asDouble();
   }
 
   private static String text(JsonNode node, String field) {

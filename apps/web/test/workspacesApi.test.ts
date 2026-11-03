@@ -12,7 +12,7 @@ describe("workspacesApi", () => {
   it("sends each change to its route and returns what the API answered", async () => {
     const api = installFakeApi([]);
     const created = await createWorkspace({ name: "Docs", modelProvider: "openrouter", apiKey: "k" });
-    const notes = { id: created.id, name: "Notes", modelProvider: "openrouter", status: "READY" };
+    const notes = { id: created.id, name: "Notes", modelProvider: "openrouter", model: null, status: "READY" };
     expect(await renameWorkspace(created.id, "Notes")).toEqual(notes);
     expect(await listWorkspaces()).toEqual([notes]);
     await deleteWorkspace(created.id);
