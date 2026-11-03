@@ -1,13 +1,21 @@
 import { screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { installFakeApi } from "./fakeApi";
+
+let unmount: (() => void) | undefined;
+
+afterEach(() => {
+  unmount?.();
+  unmount = undefined;
+});
 
 describe("main", () => {
   it("mounts the app into #root", async () => {
     vi.resetModules();
     installFakeApi();
     document.body.innerHTML = '<div id="root"></div>';
-    await import("../src/main");
+    const { appRoot } = await import("../src/main");
+    unmount = () => appRoot?.unmount();
     expect(await screen.findByRole("button", { name: "Starter" })).toBeInTheDocument();
   });
 

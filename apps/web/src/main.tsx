@@ -1,12 +1,15 @@
 import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
+import { createRoot, type Root } from "react-dom/client";
 import { App } from "./App";
 import "./style.css";
 
-const root = document.getElementById("root");
+const container = document.getElementById("root");
 
-if (root) {
-  createRoot(root).render(
+/** The mounted app, or null on a page without a root; tests unmount it to release its effects. */
+export const appRoot: Root | null = container ? createRoot(container) : null;
+
+if (appRoot) {
+  appRoot.render(
     <StrictMode>
       <App />
     </StrictMode>,
