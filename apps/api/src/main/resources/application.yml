@@ -1,3 +1,9 @@
+# Everything this app serves lives under /api/v1, docs and health included, so the host
+# root is left to the frontend.
+server:
+  servlet:
+    context-path: /api/v1
+
 spring:
   application:
     name: workspaced-ai-api

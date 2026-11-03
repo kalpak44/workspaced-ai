@@ -21,7 +21,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  * for the event types.
  */
 @RestController
-@RequestMapping("/api/v1/sessions")
+@RequestMapping("/sessions")
 public class SessionController {
 
   private final SessionRegistry registry;
