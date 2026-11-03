@@ -140,6 +140,44 @@ describe("App", () => {
     expect(api.rows).toEqual([]);
   });
 
+  it("shows the workspace deleting until its pod is gone", async () => {
+    let release = () => {};
+    api.state.holdDelete = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+
+    expect(within(sidebar()).getByRole("status", { name: "Deleting" })).toBeInTheDocument();
+    expect(screen.getByText("Deleting workspace")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Actions for Starter" })).toBeDisabled();
+    // The pod disappearing mid-delete is expected, not a failure to show.
+    FakeEventSource.emit("starter", "FAILED");
+    expect(screen.getByText("Deleting workspace")).toBeInTheDocument();
+
+    release();
+    expect(await screen.findByText("No workspaces")).toBeInTheDocument();
+  });
+
+  it("puts the workspace back when its delete fails", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    api.state.fail = 500;
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not delete the workspace");
+    expect(screen.getByText("Empty workspace")).toBeInTheDocument();
+    expect(within(sidebar()).queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("drops a workspace another tab deleted", async () => {
+    await renderLoaded();
+    FakeEventSource.emitDeleted("starter");
+    expect(screen.getByText("No workspaces")).toBeInTheDocument();
+  });
+
   it("closes an item menu on an outside click", async () => {
     const user = userEvent.setup();
     await renderLoaded();

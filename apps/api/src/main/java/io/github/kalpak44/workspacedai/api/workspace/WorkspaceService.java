@@ -5,6 +5,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -18,10 +19,13 @@ public class WorkspaceService {
 
   private final WorkspaceRepository repository;
   private final WorkspaceRuntime runtime;
+  private final ApplicationEventPublisher events;
 
-  public WorkspaceService(WorkspaceRepository repository, WorkspaceRuntime runtime) {
+  public WorkspaceService(
+      WorkspaceRepository repository, WorkspaceRuntime runtime, ApplicationEventPublisher events) {
     this.repository = repository;
     this.runtime = runtime;
+    this.events = events;
   }
 
   @Transactional(readOnly = true)
@@ -49,7 +53,10 @@ public class WorkspaceService {
             });
   }
 
-  /** False when no workspace has that id. */
+  /**
+   * Returns once the workspace's runtime is gone, so the caller can show it deleting until then.
+   * False when no workspace has that id.
+   */
   @Transactional
   public boolean delete(UUID id) {
     var entity = repository.findById(id);
@@ -59,6 +66,7 @@ public class WorkspaceService {
     repository.delete(entity.get());
     repository.flush();
     runtime.stop(id);
+    events.publishEvent(new WorkspaceDeleted(id));
     return true;
   }
 

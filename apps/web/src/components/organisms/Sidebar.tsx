@@ -9,6 +9,7 @@ export type Section = "workspaces" | "knowledge" | "files";
 interface Props {
   readonly workspaces: readonly Workspace[];
   readonly selectedId: string | null;
+  readonly deleting: ReadonlySet<string>;
   readonly section: Section;
   readonly onSection: (section: Section) => void;
   readonly onSelect: (id: string) => void;
@@ -64,6 +65,7 @@ export function Sidebar(props: Props) {
             key={workspace.id}
             workspace={workspace}
             selected={section === "workspaces" && workspace.id === selectedId}
+            deleting={props.deleting.has(workspace.id)}
             onSelect={() => {
               onSelect(workspace.id);
               onSection("workspaces");

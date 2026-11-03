@@ -14,6 +14,7 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.fabric8.mockwebserver.Context;
 import io.fabric8.mockwebserver.MockWebServer;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -43,7 +44,9 @@ class KubernetesWorkspaceRuntimeTest {
             false);
     server.init();
     client = server.createClient();
-    runtime = new KubernetesWorkspaceRuntime(client, new WorkspaceProperties("busybox:test"));
+    runtime =
+        new KubernetesWorkspaceRuntime(
+            client, new WorkspaceProperties("busybox:test", Duration.ofSeconds(5)));
     id = UUID.randomUUID();
   }
 
@@ -100,6 +103,10 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void stopsThePodAndToleratesOneAlreadyGone() {
     runtime.start(id);
+    // Returns only once the pod is gone, which is what lets a delete report it honestly.
+    runtime.stop(id);
+    assertThat(client.pods().inNamespace(client.getNamespace()).withName(podName(id)).get())
+        .isNull();
     runtime.stop(id);
     runtime.stop(id);
     assertThat(client.pods().inNamespace(client.getNamespace()).withName(podName(id)).get())
@@ -143,7 +150,7 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void refusesToStartWithoutKnowingItsNamespace() {
     var noNamespace = mock(KubernetesClient.class);
-    var properties = new WorkspaceProperties("busybox:test");
+    var properties = new WorkspaceProperties("busybox:test", Duration.ofSeconds(5));
     assertThatThrownBy(() -> new KubernetesWorkspaceRuntime(noNamespace, properties))
         .isInstanceOf(IllegalStateException.class);
   }

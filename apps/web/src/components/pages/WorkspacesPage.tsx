@@ -20,6 +20,7 @@ function viewFor(
   section: Section,
   loading: boolean,
   selected: Workspace | null,
+  deleting: ReadonlySet<string>,
   openNew: () => void,
 ): View {
   const newWorkspace = { label: DEFAULT_NAME, onClick: openNew };
@@ -39,6 +40,13 @@ function viewFor(
     return {
       title: "Workspaces",
       body: <EmptyState title="No workspaces" hint="Create one to get started" action={newWorkspace} />,
+    };
+  }
+  // Ahead of the status: the pod is being removed on purpose, so "unavailable" would mislead.
+  if (deleting.has(selected.id)) {
+    return {
+      title: selected.name,
+      body: <EmptyState busy title="Deleting workspace" hint="Stopping its environment…" />,
     };
   }
   switch (selected.status) {
@@ -71,6 +79,7 @@ export function WorkspacesPage() {
     workspaces,
     selected,
     loading,
+    deleting,
     error,
     dismissError,
     select,
@@ -83,7 +92,7 @@ export function WorkspacesPage() {
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
   const openNew = (base?: string) => setNewName(suggestName(base));
-  const view = viewFor(section, loading, selected, () => openNew());
+  const view = viewFor(section, loading, selected, deleting, () => openNew());
 
   return (
     <AppLayout
@@ -92,6 +101,7 @@ export function WorkspacesPage() {
         <Sidebar
           workspaces={workspaces}
           selectedId={selected?.id ?? null}
+          deleting={deleting}
           section={section}
           onSection={setSection}
           onSelect={select}

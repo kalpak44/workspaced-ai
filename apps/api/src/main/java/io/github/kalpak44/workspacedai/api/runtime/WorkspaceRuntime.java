@@ -12,7 +12,10 @@ public interface WorkspaceRuntime {
   /** Starts the workspace's runtime; returns before it is ready. */
   void start(UUID workspaceId);
 
-  /** Stops it. Stopping one that is not running is not an error. */
+  /**
+   * Stops it and returns once it is gone, so a caller can report the workspace deleted only when it
+   * really is. Stopping one that is not running is not an error.
+   */
   void stop(UUID workspaceId);
 
   /** One status per id, in a single lookup however many there are. */

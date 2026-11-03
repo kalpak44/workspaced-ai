@@ -35,6 +35,11 @@ export class FakeEventSource {
     const event = new MessageEvent("status", { data: JSON.stringify({ id, status }) });
     act(() => FakeEventSource.latest().listeners.get("status")?.(event));
   }
+
+  static emitDeleted(id: string) {
+    const event = new MessageEvent("deleted", { data: JSON.stringify({ id }) });
+    act(() => FakeEventSource.latest().listeners.get("deleted")?.(event));
+  }
 }
 
 /**
@@ -50,8 +55,9 @@ export function installFakeApi(
     fail: 0,
     nextId: 1,
     createStatus: "READY" as WorkspaceStatus,
-    // When set, POST waits on it, so a test can look at the UI mid-request.
+    // When set, POST or DELETE waits on it, so a test can look at the UI mid-request.
     holdCreate: null as Promise<void> | null,
+    holdDelete: null as Promise<void> | null,
   };
   FakeEventSource.instances.length = 0;
 
@@ -78,6 +84,7 @@ export function installFakeApi(
         rows[index] = { ...rows[index], name: body!.name };
         return json(rows[index]);
       case "DELETE":
+        if (state.holdDelete) await state.holdDelete;
         if (index < 0) return json({}, 404);
         rows.splice(index, 1);
         return new Response(null, { status: 204 });

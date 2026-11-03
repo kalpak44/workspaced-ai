@@ -6,6 +6,11 @@ export interface Workspace {
   readonly status: WorkspaceStatus;
 }
 
+/** Sent once a workspace's deletion has committed, to every open stream. */
+export interface DeletedEvent {
+  readonly id: string;
+}
+
 /** One `status` event per change, after a snapshot of every workspace on connect. */
 export interface StatusEvent {
   readonly id: string;

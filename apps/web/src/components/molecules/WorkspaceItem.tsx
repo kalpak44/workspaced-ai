@@ -2,19 +2,28 @@ import { MoreHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDismiss } from "../../hooks/useDismiss";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { IconButton } from "../atoms";
+import { IconButton, Spinner } from "../atoms";
 import { Menu, MenuItem } from "./Menu";
 import { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";
 
 interface Props {
   readonly workspace: Workspace;
   readonly selected: boolean;
+  /** While its delete is in flight: a spinner in place of the status, and no actions. */
+  readonly deleting?: boolean;
   readonly onSelect: () => void;
   readonly onRename: (name: string) => void;
   readonly onDelete: () => void;
 }
 
-export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelete }: Props) {
+export function WorkspaceItem({
+  workspace,
+  selected,
+  deleting = false,
+  onSelect,
+  onRename,
+  onDelete,
+}: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
@@ -70,12 +79,17 @@ export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelet
         className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left"
       >
         <span className="truncate">{workspace.name}</span>
-        <WorkspaceStatusIcon status={workspace.status} />
+        {deleting ? (
+          <Spinner label="Deleting" className="size-3.5 shrink-0 text-zinc-400" />
+        ) : (
+          <WorkspaceStatusIcon status={workspace.status} />
+        )}
       </button>
       <IconButton
         label={`Actions for ${workspace.name}`}
         icon={MoreHorizontal}
         aria-expanded={menuOpen}
+        disabled={deleting}
         onClick={() => setMenuOpen(!menuOpen)}
         className="mr-1 p-1 opacity-0 group-hover:opacity-100 aria-expanded:opacity-100"
       />

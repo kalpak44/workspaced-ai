@@ -11,6 +11,7 @@ import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** Fans each workspace status change out to every open event stream. */
@@ -18,6 +19,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 public class WorkspaceEvents {
 
   static final String STATUS = "status";
+  static final String DELETED = "deleted";
 
   private final List<SseEmitter> emitters = new CopyOnWriteArrayList<>();
   private final WorkspaceService service;
@@ -49,21 +51,28 @@ public class WorkspaceEvents {
   }
 
   void publish(UUID id, WorkspaceStatus status) {
-    for (var emitter : emitters) {
-      try {
-        emitter.send(event(id, status));
-      } catch (IOException _) {
-        drop(emitter);
-      }
-    }
+    broadcast(event(id, status));
+  }
+
+  /**
+   * Tells every client the workspace is gone, once its delete has committed. Without it, another
+   * open tab would only see the pod disappear and show the workspace as failed.
+   */
+  @TransactionalEventListener
+  void onDeleted(WorkspaceDeleted deleted) {
+    broadcast(SseEmitter.event().name(DELETED).data(Map.of("id", deleted.id())));
   }
 
   /** A comment line every half minute, so a proxy never sees the stream as idle. */
   @Scheduled(fixedRate = 30, timeUnit = TimeUnit.SECONDS)
   void heartbeat() {
+    broadcast(SseEmitter.event().comment("keepalive"));
+  }
+
+  private void broadcast(SseEmitter.SseEventBuilder event) {
     for (var emitter : emitters) {
       try {
-        emitter.send(SseEmitter.event().comment("keepalive"));
+        emitter.send(event);
       } catch (IOException _) {
         drop(emitter);
       }

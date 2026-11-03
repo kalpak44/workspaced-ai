@@ -10,7 +10,9 @@ import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
+import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -31,12 +33,14 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   private final KubernetesClient client;
   private final String namespace;
   private final String image;
+  private final long stopTimeoutMillis;
   private SharedIndexInformer<Pod> informer;
 
   public KubernetesWorkspaceRuntime(KubernetesClient client, WorkspaceProperties properties) {
     this.client = client;
     this.namespace = client.getNamespace();
     this.image = properties.image();
+    this.stopTimeoutMillis = properties.stopTimeout().toMillis();
     if (namespace == null) {
       throw new IllegalStateException("cannot tell which namespace the API runs in");
     }
@@ -53,7 +57,10 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
 
   @Override
   public void stop(UUID workspaceId) {
-    client.pods().inNamespace(namespace).withName(podName(workspaceId)).delete();
+    var pod = client.pods().inNamespace(namespace).withName(podName(workspaceId));
+    pod.delete();
+    // A delete only marks the pod terminating; this waits for the API server to drop it.
+    pod.waitUntilCondition(Objects::isNull, stopTimeoutMillis, TimeUnit.MILLISECONDS);
   }
 
   @Override

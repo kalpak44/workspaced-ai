@@ -51,6 +51,10 @@ class WorkspaceEventsTest {
     events.publish(workspace.id(), WorkspaceStatus.FAILED);
     assertThat(nextData(lines)).contains(workspace.id().toString(), "\"FAILED\"");
 
+    service.delete(workspace.id());
+    assertThat(nextNonBlank(lines)).isEqualTo("event:" + WorkspaceEvents.DELETED);
+    assertThat(lines.next()).contains(workspace.id().toString());
+
     // Shutdown ends the stream instead of leaving graceful shutdown to wait on it.
     events.closeAll();
     while (lines.hasNext()) {

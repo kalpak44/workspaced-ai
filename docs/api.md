@@ -15,7 +15,7 @@ is gone. Workspaces are listed in the order they were created.
 | `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
-| `DELETE` | `/api/v1/workspaces/{id}` |                    | `204`, or `404`                                 |
+| `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its pod is gone, or `404`            |
 
 A blank or overlong name, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
 
@@ -27,10 +27,12 @@ curl -X DELETE localhost:8080/api/v1/workspaces/$ID
 ```
 
 The event stream sends one `status` event (`{"id": "…", "status": "READY"}`) per existing workspace on connect, then
-one per change; a status may repeat. A `keepalive` comment follows every 30 seconds.
+one per change, plus a `deleted` event (`{"id": "…"}`) after each deletion; a status may repeat. A `keepalive` comment follows every 30 seconds.
 
 In Kubernetes each workspace runs as a pod named `workspaced-ai-workspace-<id>`, labelled
-`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in; deleting the workspace deletes the pod. Outside
+`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in. Deleting the workspace deletes the pod, and the call answers only once the pod is
+gone (`workspaced.workspace.stop-timeout`, 60 seconds by default); if it is not gone in time, the workspace is kept and
+the call fails. Outside
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.
 

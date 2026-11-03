@@ -85,7 +85,7 @@ public interface WorkspaceApi {
       summary = "Stream workspace status changes",
       description =
           "Server-sent events. On connect, one `status` event per existing workspace; after "
-              + "that, one each time a workspace's status changes. A status may repeat. A "
+              + "that, one each time a workspace's status changes. A `deleted` event (`{\"id\":…}`) follows each deletion. A status may repeat. A "
               + "`keepalive` comment is sent every 30 seconds.")
   @ApiResponse(
       responseCode = "200",
@@ -184,8 +184,11 @@ public interface WorkspaceApi {
   @Operation(
       operationId = "deleteWorkspace",
       summary = "Delete a workspace",
-      description = "Removes the workspace and stops its runtime.")
-  @ApiResponse(responseCode = "204", description = "Deleted.")
+      description =
+          "Removes the workspace and stops its runtime, answering only once the runtime is "
+              + "gone, which can take a few seconds. If it does not stop in time the workspace "
+              + "is kept and the call fails.")
+  @ApiResponse(responseCode = "204", description = "Deleted, runtime included.")
   @ApiResponse(
       responseCode = "400",
       description = "The id is not a UUID.",

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   createWorkspace,
+  type DeletedEvent,
   deleteWorkspace,
   EVENTS_URL,
   listWorkspaces,
@@ -35,6 +36,8 @@ export function useWorkspaces() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Ids whose delete is in flight; the API answers only once the pod is gone.
+  const [deleting, setDeleting] = useState<ReadonlySet<string>>(new Set());
   // The latest status seen per id. A status event can beat the create response that
   // introduces its workspace, and this is where it waits until then.
   const latest = useRef(new Map<string, WorkspaceStatus>());
@@ -62,6 +65,11 @@ export function useWorkspaces() {
       const { id, status } = JSON.parse(event.data) as StatusEvent;
       latest.current.set(id, status);
       setWorkspaces((current) => current.map((w) => (w.id === id ? { ...w, status } : w)));
+    });
+    // Another tab's delete; this tab's own delete removes the workspace on its response.
+    source.addEventListener("deleted", (event) => {
+      const { id } = JSON.parse(event.data) as DeletedEvent;
+      setWorkspaces((current) => current.filter((w) => w.id !== id));
     });
     return () => source.close();
   }, [loading]);
@@ -102,9 +110,22 @@ export function useWorkspaces() {
   };
 
   const remove = (id: string) => {
+    const settle = () =>
+      setDeleting((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    setDeleting((current) => new Set(current).add(id));
     deleteWorkspace(id).then(
-      () => setWorkspaces((current) => current.filter((w) => w.id !== id)),
-      () => setError("Could not delete the workspace"),
+      () => {
+        setWorkspaces((current) => current.filter((w) => w.id !== id));
+        settle();
+      },
+      () => {
+        settle();
+        setError("Could not delete the workspace");
+      },
     );
   };
 
@@ -115,6 +136,7 @@ export function useWorkspaces() {
     workspaces,
     selected,
     loading,
+    deleting,
     error,
     dismissError: () => setError(null),
     select: setSelectedId,
