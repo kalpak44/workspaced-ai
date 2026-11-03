@@ -23,7 +23,7 @@ class OpenApiTest {
   void publishesTheSessionEndpoints() throws Exception {
     var response = get("/v3/api-docs");
     assertThat(response.statusCode()).isEqualTo(200);
-    assertThat(response.body()).contains("\"openapi\":\"3.0", "/api/sessions/{id}/events");
+    assertThat(response.body()).contains("\"openapi\":\"3.0", "/api/v1/sessions/{id}/events");
   }
 
   @Test

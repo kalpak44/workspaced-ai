@@ -5,22 +5,22 @@ before a real agent exists. Swagger UI is at `/swagger-ui`, the OpenAPI 3.0 docu
 
 | Requirement                         | Protocol           | Endpoint                                                  |
 |-------------------------------------|--------------------|-----------------------------------------------------------|
-| Watch agent output                  | SSE                | `GET /api/sessions/{id}/events`                           |
+| Watch agent output                  | SSE                | `GET /api/v1/sessions/{id}/events`                           |
 | Stream token-by-token               | SSE                | `token` events on the same stream                         |
 | See shell commands and output       | SSE                | `command`, `output`, `exit` events                        |
 | Answer agent questions              | SSE + POST actions | `question` event, then `POST .../questions/{qid}/answer`  |
 | Approve/reject commands             | SSE + POST actions | `approval` event, then `POST .../commands/{cid}/decision` |
-| Type directly into a running terminal | WebSocket + PTY  | `WS /api/sessions/{id}/terminal`                          |
+| Type directly into a running terminal | WebSocket + PTY  | `WS /api/v1/sessions/{id}/terminal`                          |
 | Full interactive terminal like SSH  | WebSocket + PTY    | same socket                                               |
 
 ## Sessions
 
 ```sh
-curl -X POST localhost:8080/api/sessions               # 201 {"id": "..."}
-curl -N localhost:8080/api/sessions/$ID/events         # opening the stream starts the run
-curl -X POST localhost:8080/api/sessions/$ID/questions/$QID/answer \
+curl -X POST localhost:8080/api/v1/sessions               # 201 {"id": "..."}
+curl -N localhost:8080/api/v1/sessions/$ID/events         # opening the stream starts the run
+curl -X POST localhost:8080/api/v1/sessions/$ID/questions/$QID/answer \
      -H 'Content-Type: application/json' -d '{"answer":"main"}'                  # 202
-curl -X POST localhost:8080/api/sessions/$ID/commands/$CID/decision \
+curl -X POST localhost:8080/api/v1/sessions/$ID/commands/$CID/decision \
      -H 'Content-Type: application/json' -d '{"decision":"approve"}'             # 202, or "reject"
 ```
 

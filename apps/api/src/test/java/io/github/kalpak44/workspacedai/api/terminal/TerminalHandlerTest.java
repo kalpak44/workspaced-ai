@@ -35,7 +35,7 @@ class TerminalHandlerTest {
         };
     socket =
         new StandardWebSocketClient()
-            .execute(handler, "ws://localhost:" + port + "/api/sessions/any/terminal")
+            .execute(handler, "ws://localhost:" + port + "/api/v1/sessions/any/terminal")
             .get(5, TimeUnit.SECONDS);
   }
 
