@@ -1,24 +1,13 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>workspaced-ai</title>
   </head>
-  <body class="min-h-screen bg-slate-950 text-slate-100 antialiased">
-    <main class="mx-auto flex min-h-screen max-w-2xl flex-col justify-center gap-6 px-6">
-      <h1 class="text-4xl font-semibold tracking-tight">workspaced-ai</h1>
-      <p class="text-lg text-slate-400">
-        A platform for running AI agents in isolated, configurable workspaces with real-time
-        streaming and extensible tooling.
-      </p>
-      <p class="flex items-center gap-2 text-sm text-slate-400">
-        <span id="api-dot" class="size-2.5 rounded-full bg-slate-600"></span>
-        API <span id="api-status">checking…</span>
-        <a class="ml-auto text-sky-400 hover:underline" href="/api/v1/swagger-ui">API docs</a>
-      </p>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
+  <body class="bg-white text-zinc-900 antialiased dark:bg-zinc-900 dark:text-zinc-100">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

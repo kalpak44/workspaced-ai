@@ -2,20 +2,13 @@
 // actually serve a session.
 export const READINESS_URL = "/api/v1/actuator/health/readiness";
 
-const DOT = "size-2.5 rounded-full";
+export type ApiStatus = "checking" | "ready" | "unavailable" | "unreachable";
 
-export async function checkApi(
-  dot: HTMLElement,
-  label: HTMLElement,
-  fetchFn: typeof fetch = fetch,
-): Promise<void> {
+export async function fetchApiStatus(fetchFn: typeof fetch = fetch): Promise<ApiStatus> {
   try {
     const response = await fetchFn(READINESS_URL);
-    const ready = response.ok;
-    label.textContent = ready ? "ready" : `unavailable (${response.status})`;
-    dot.className = `${DOT} ${ready ? "bg-emerald-400" : "bg-amber-400"}`;
+    return response.ok ? "ready" : "unavailable";
   } catch {
-    label.textContent = "unreachable";
-    dot.className = `${DOT} bg-rose-500`;
+    return "unreachable";
   }
 }

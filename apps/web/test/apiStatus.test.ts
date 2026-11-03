@@ -1,36 +1,25 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
-import { checkApi, READINESS_URL } from "../src/apiStatus";
+import { describe, expect, it, vi } from "vitest";
+import { fetchApiStatus, READINESS_URL } from "../src/apiStatus";
 
-describe("checkApi", () => {
-  let dot: HTMLSpanElement;
-  let label: HTMLSpanElement;
-
-  beforeEach(() => {
-    dot = document.createElement("span");
-    label = document.createElement("span");
-  });
-
+describe("fetchApiStatus", () => {
   it("asks the readiness probe, which includes the database", async () => {
     const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
-    await checkApi(dot, label, fetchFn);
+    await fetchApiStatus(fetchFn);
     expect(fetchFn).toHaveBeenCalledWith(READINESS_URL);
   });
 
-  it("shows ready when the API answers 200", async () => {
-    await checkApi(dot, label, vi.fn().mockResolvedValue(new Response(null, { status: 200 })));
-    expect(label.textContent).toBe("ready");
-    expect(dot.className).toContain("bg-emerald-400");
+  it("is ready when the API answers 200", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status: 200 }));
+    expect(await fetchApiStatus(fetchFn)).toBe("ready");
   });
 
-  it("shows the status when the API is up but not ready", async () => {
-    await checkApi(dot, label, vi.fn().mockResolvedValue(new Response(null, { status: 503 })));
-    expect(label.textContent).toBe("unavailable (503)");
-    expect(dot.className).toContain("bg-amber-400");
+  it("is unavailable when the API is up but not ready", async () => {
+    const fetchFn = vi.fn().mockResolvedValue(new Response(null, { status: 503 }));
+    expect(await fetchApiStatus(fetchFn)).toBe("unavailable");
   });
 
-  it("shows unreachable when the request itself fails", async () => {
-    await checkApi(dot, label, vi.fn().mockRejectedValue(new TypeError("network")));
-    expect(label.textContent).toBe("unreachable");
-    expect(dot.className).toContain("bg-rose-500");
+  it("is unreachable when the request itself fails", async () => {
+    const fetchFn = vi.fn().mockRejectedValue(new TypeError("network"));
+    expect(await fetchApiStatus(fetchFn)).toBe("unreachable");
   });
 });
