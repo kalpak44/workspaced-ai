@@ -22,6 +22,9 @@ public class DemoAgent {
 
   static final String APPROVE = "approve";
 
+  private static final String COMMAND = "command";
+  private static final String COMMAND_ID = "commandId";
+
   private static final Logger log = LoggerFactory.getLogger(DemoAgent.class);
 
   private final DemoProperties properties;
@@ -44,10 +47,10 @@ public class DemoAgent {
     } catch (IOException e) {
       // The client went away; there is nobody left to stream to.
       log.debug("Session {} stream closed: {}", session.id(), e.getMessage());
-    } catch (TimeoutException e) {
+    } catch (TimeoutException _) {
       log.info("Session {} abandoned waiting on a prompt", session.id());
       session.complete();
-    } catch (InterruptedException e) {
+    } catch (InterruptedException _) {
       Thread.currentThread().interrupt();
     } catch (ExecutionException e) {
       log.warn("Session {} failed", session.id(), e.getCause());
@@ -81,9 +84,9 @@ public class DemoAgent {
     var commandId = UUID.randomUUID().toString();
     var command = "rm -rf build/";
     var decision = session.await(commandId);
-    session.send("approval", Map.of("id", commandId, "command", command));
+    session.send("approval", Map.of("id", commandId, COMMAND, command));
     var verdict = waitFor(decision);
-    session.send("decision", Map.of("commandId", commandId, "decision", verdict));
+    session.send("decision", Map.of(COMMAND_ID, commandId, "decision", verdict));
 
     if (APPROVE.equals(verdict)) {
       run(session, commandId, command, List.of("removed build/"), 0);
@@ -109,12 +112,12 @@ public class DemoAgent {
 
   private void run(Session session, String id, String command, List<String> lines, int code)
       throws IOException, InterruptedException {
-    session.send("command", Map.of("id", id, "command", command));
+    session.send(COMMAND, Map.of("id", id, COMMAND, command));
     for (var line : lines) {
-      session.send("output", Map.of("commandId", id, "stream", "stdout", "text", line));
+      session.send("output", Map.of(COMMAND_ID, id, "stream", "stdout", "text", line));
       pause();
     }
-    session.send("exit", Map.of("commandId", id, "code", code));
+    session.send("exit", Map.of(COMMAND_ID, id, "code", code));
   }
 
   private String waitFor(CompletableFuture<String> reply)

@@ -75,8 +75,11 @@ class SessionControllerTest {
     for (var event = next(lines); event.isPresent(); event = next(lines)) {
       rest.add(event.get().name());
     }
-    assertThat(rest).first().isEqualTo("decision");
-    assertThat(rest).doesNotContain("command").endsWith("message", "status");
+    assertThat(rest)
+        .doesNotContain("command")
+        .endsWith("message", "status")
+        .first()
+        .isEqualTo("decision");
   }
 
   @Test
