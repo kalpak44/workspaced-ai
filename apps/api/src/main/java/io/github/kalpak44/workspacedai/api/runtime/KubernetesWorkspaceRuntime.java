@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
@@ -10,13 +11,17 @@ import io.fabric8.kubernetes.api.model.SecretBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
+import io.github.kalpak44.workspacedai.api.harness.Harness;
+import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 import java.util.function.BiConsumer;
@@ -33,11 +38,9 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   static final String MANAGED_BY_LABEL = "app.kubernetes.io/managed-by";
   static final String MANAGED_BY = "workspaced-ai-api";
   static final String POD_PREFIX = "workspaced-ai-workspace-";
-
-  // Exits on SIGTERM so a deleted workspace's pod goes at once instead of after the grace
-  // period; `sleep & wait` is what lets the trap fire while it sleeps.
-  private static final String WAIT_UNTIL_DELETED =
-      "trap 'exit 0' TERM; while true; do sleep 3600 & wait $!; done";
+  static final int HARNESS_PORT = 4096;
+  // The user the harness image runs as, which owns the home it works in.
+  private static final long HARNESS_USER = 1000L;
 
   private final KubernetesClient client;
   private final String namespace;
@@ -126,6 +129,27 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     if (current != null && current.getData() != null && current.getData().containsKey(name)) {
       secret.edit(s -> new SecretBuilder(s).removeFromData(name).build());
     }
+  }
+
+  /**
+   * Straight to the pod's IP rather than through a Service per workspace: the pod is the only thing
+   * that could answer, and the password in its Secret is what keeps others out.
+   */
+  @Override
+  public Optional<HarnessEndpoint> harness(UUID workspaceId) {
+    var pod = client.pods().inNamespace(namespace).withName(podName(workspaceId)).get();
+    var ip = pod == null || pod.getStatus() == null ? null : pod.getStatus().getPodIP();
+    var secret = client.secrets().inNamespace(namespace).withName(podName(workspaceId)).get();
+    var data = secret == null ? null : secret.getData();
+    if (ip == null || data == null || !data.containsKey(Harness.PASSWORD_VARIABLE)) {
+      return Optional.empty();
+    }
+    var password =
+        new String(
+            Base64.getDecoder().decode(data.get(Harness.PASSWORD_VARIABLE)),
+            StandardCharsets.UTF_8);
+    return Optional.of(
+        new HarnessEndpoint(URI.create("http://" + ip + ":" + HARNESS_PORT), password));
   }
 
   @Override
@@ -250,8 +274,10 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .withTerminationGracePeriodSeconds(5L)
         .withNewSecurityContext()
         .withRunAsNonRoot(true)
-        .withRunAsUser(65534L)
-        .withRunAsGroup(65534L)
+        .withRunAsUser(HARNESS_USER)
+        .withRunAsGroup(HARNESS_USER)
+        // Makes the home volume writable by that user.
+        .withFsGroup(HARNESS_USER)
         .withNewSeccompProfile()
         .withType("RuntimeDefault")
         .endSeccompProfile()
@@ -259,7 +285,10 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .addNewContainer()
         .withName("workspace")
         .withImage(image)
-        .withCommand("sh", "-c", WAIT_UNTIL_DELETED)
+        .addNewPort()
+        .withName("harness")
+        .withContainerPort(HARNESS_PORT)
+        .endPort()
         .addNewEnvFrom()
         .withNewConfigMapRef()
         .withName(podName(workspaceId))
@@ -277,13 +306,42 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .withDrop("ALL")
         .endCapabilities()
         .endSecurityContext()
+        // A TCP check: every HTTP path, health included, sits behind the password.
+        .withNewReadinessProbe()
+        .withNewTcpSocket()
+        .withPort(new IntOrString(HARNESS_PORT))
+        .endTcpSocket()
+        .withPeriodSeconds(5)
+        .endReadinessProbe()
+        // The root filesystem is read-only, so the home and /tmp are the only places the
+        // agent can write: each session's files live in the home, for the pod's lifetime.
+        .addNewVolumeMount()
+        .withName("home")
+        .withMountPath("/home/workspace")
+        .endVolumeMount()
+        .addNewVolumeMount()
+        .withName("tmp")
+        .withMountPath("/tmp")
+        .endVolumeMount()
         .withNewResources()
-        .addToRequests("cpu", new Quantity("5m"))
-        .addToRequests("memory", new Quantity("8Mi"))
-        .addToLimits("cpu", new Quantity("50m"))
-        .addToLimits("memory", new Quantity("16Mi"))
+        .addToRequests("cpu", new Quantity("50m"))
+        .addToRequests("memory", new Quantity("256Mi"))
+        .addToRequests("ephemeral-storage", new Quantity("256Mi"))
+        .addToLimits("cpu", new Quantity("1"))
+        .addToLimits("memory", new Quantity("1Gi"))
+        .addToLimits("ephemeral-storage", new Quantity("4Gi"))
         .endResources()
         .endContainer()
+        .addNewVolume()
+        .withName("home")
+        .withNewEmptyDir()
+        .endEmptyDir()
+        .endVolume()
+        .addNewVolume()
+        .withName("tmp")
+        .withNewEmptyDir()
+        .endEmptyDir()
+        .endVolume()
         .endSpec()
         .build();
   }

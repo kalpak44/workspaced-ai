@@ -1,10 +1,12 @@
 package io.github.kalpak44.workspacedai.api.secret;
 
+import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.stream.Stream;
 import org.springframework.http.HttpStatus;
@@ -19,6 +21,10 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class SecretService {
+
+  // Set by the API for the harness; a user secret of the same name would lock the API out.
+  private static final Set<String> HARNESS_VARIABLES =
+      Set.of(Harness.PASSWORD_VARIABLE, "OPENCODE_SERVER_USERNAME");
 
   private final WorkspaceRepository workspaces;
   private final WorkspaceSecretRepository secrets;
@@ -47,6 +53,9 @@ public class SecretService {
   @Transactional
   public Secret add(UUID workspaceId, String name, String value) {
     var workspace = workspace(workspaceId);
+    if (HARNESS_VARIABLES.contains(name)) {
+      throw conflict(name + " is set by the workspace's harness");
+    }
     if (reserved(workspace, name)) {
       throw conflict(name + " is set by the workspace's model provider");
     }
@@ -61,6 +70,9 @@ public class SecretService {
   @Transactional
   public void remove(UUID workspaceId, String name) {
     var workspace = workspace(workspaceId);
+    if (HARNESS_VARIABLES.contains(name)) {
+      throw conflict(name + " is set by the workspace's harness");
+    }
     if (reserved(workspace, name)) {
       throw conflict(name + " is set by the workspace's model provider");
     }

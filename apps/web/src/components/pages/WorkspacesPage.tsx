@@ -1,7 +1,9 @@
 import { ArrowLeft, Settings } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { useChat } from "../../hooks/useChat";
 import { useModelProviders } from "../../hooks/useModelProviders";
 import { useSecrets } from "../../hooks/useSecrets";
+import { useSessions } from "../../hooks/useSessions";
 import { useTheme } from "../../hooks/useTheme";
 import { DEFAULT_NAME, type Workspace, useWorkspaces } from "../../hooks/useWorkspaces";
 import { IconButton } from "../atoms";
@@ -32,6 +34,7 @@ interface Handlers {
   readonly openSettings: () => void;
   readonly closeSettings: () => void;
   readonly settings: ReactNode;
+  readonly chat: ReactNode;
 }
 
 /** The only place that decides what the main area shows. */
@@ -41,7 +44,7 @@ function viewFor(
   selected: Workspace | null,
   deleting: ReadonlySet<string>,
   settingsOpen: boolean,
-  { openNew, openSettings, closeSettings, settings }: Handlers,
+  { openNew, openSettings, closeSettings, settings, chat }: Handlers,
 ): View {
   if (section !== "workspaces") {
     return {
@@ -104,7 +107,7 @@ function viewFor(
         ),
       };
     default:
-      return { title: selected.name, actions: settingsButton, body: <ChatPanel /> };
+      return { title: selected.name, actions: settingsButton, body: chat };
   }
 }
 
@@ -131,6 +134,22 @@ export function WorkspacesPage() {
   const [settingsFor, setSettingsFor] = useState<string | null>(null);
   const settingsOpen = section === "workspaces" && !!selected && settingsFor === selected.id;
   const secrets = useSecrets(settingsOpen ? selected.id : null);
+  // Sessions only exist in a running harness, so they are fetched once the workspace is ready.
+  const chatOpen =
+    section === "workspaces" &&
+    !!selected &&
+    !settingsOpen &&
+    selected.status === "READY" &&
+    !deleting.has(selected.id);
+  const sessions = useSessions(chatOpen ? selected.id : null);
+  const chat = useChat(chatOpen ? selected.id : null, sessions.selectedId, sessions.retitle);
+  const send = async (text: string) => {
+    if (sessions.selectedId !== null) {
+      return chat.send(text);
+    }
+    const session = await sessions.create();
+    return session ? chat.send(text, session.id) : false;
+  };
   const openNew = (base?: string) => setNewName(suggestName(base));
 
   const settings = (
@@ -144,11 +163,32 @@ export function WorkspacesPage() {
       onRemove={secrets.remove}
     />
   );
+  const chatPanel = (
+    <ChatPanel
+      sessions={sessions.sessions}
+      selectedSessionId={sessions.selectedId}
+      deletingSessions={sessions.deleting}
+      onSelectSession={sessions.select}
+      onNewSession={() => void sessions.create()}
+      onDeleteSession={sessions.remove}
+      messages={chat.messages}
+      loading={sessions.loading || chat.loading}
+      busy={chat.busy}
+      error={sessions.error ?? chat.error}
+      onDismissError={() => {
+        sessions.dismissError();
+        chat.dismissError();
+      }}
+      onSend={send}
+      onStop={chat.stop}
+    />
+  );
   const view = viewFor(section, loading, selected, deleting, settingsOpen, {
     openNew: () => openNew(),
     openSettings: () => setSettingsFor(selected?.id ?? null),
     closeSettings: () => setSettingsFor(null),
     settings,
+    chat: chatPanel,
   });
 
   return (

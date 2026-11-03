@@ -1,9 +1,12 @@
+export { ChatComposer } from "./ChatComposer";
+export { ChatMessageView } from "./ChatMessageView";
 export { EmptyState } from "./EmptyState";
 export { ErrorBanner } from "./ErrorBanner";
 export { Menu, MenuItem, MenuLink } from "./Menu";
 export { Modal, ModalBody, ModalFooter } from "./Modal";
 export { NavItem } from "./NavItem";
 export { SecretItem } from "./SecretItem";
+export { SessionItem } from "./SessionItem";
 export { ThemeSwitch } from "./ThemeSwitch";
 export { WorkspaceItem } from "./WorkspaceItem";
 export { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";

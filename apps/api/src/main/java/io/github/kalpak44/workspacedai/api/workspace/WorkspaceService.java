@@ -1,9 +1,12 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceEnvironment;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
+import java.security.SecureRandom;
+import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,6 +23,8 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class WorkspaceService {
+
+  private static final SecureRandom RANDOM = new SecureRandom();
 
   private final WorkspaceRepository repository;
   private final WorkspaceRuntime runtime;
@@ -47,6 +52,7 @@ public class WorkspaceService {
   /**
    * The key is checked before anything is stored, so a rejected key leaves nothing behind. The
    * workspace receives it as a secret and the base URL as config; neither is kept in the database.
+   * The harness gets a password of its own, which only the API and the pod ever see.
    */
   @Transactional
   public Workspace create(String name, ModelProvider provider, String apiKey) {
@@ -58,8 +64,14 @@ public class WorkspaceService {
         entity.getId(),
         new WorkspaceEnvironment(
             Map.of(provider.baseUrlVariable(), provider.baseUrl()),
-            Map.of(provider.apiKeyVariable(), apiKey)));
+            Map.of(provider.apiKeyVariable(), apiKey, Harness.PASSWORD_VARIABLE, password())));
     return Workspace.of(entity, statusOf(entity.getId()));
+  }
+
+  private static String password() {
+    var bytes = new byte[32];
+    RANDOM.nextBytes(bytes);
+    return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
   }
 
   @Transactional

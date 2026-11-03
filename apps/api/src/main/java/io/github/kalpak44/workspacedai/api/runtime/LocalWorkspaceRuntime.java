@@ -1,8 +1,10 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
@@ -13,6 +15,14 @@ import java.util.stream.Collectors;
  * nothing and reports every workspace ready.
  */
 public class LocalWorkspaceRuntime implements WorkspaceRuntime {
+
+  private final Optional<HarnessEndpoint> harness;
+
+  /** Every workspace shares the one configured harness, since none has a pod of its own. */
+  public LocalWorkspaceRuntime(WorkspaceProperties.LocalHarness harness) {
+    this.harness =
+        Optional.ofNullable(harness.url()).map(url -> new HarnessEndpoint(url, harness.password()));
+  }
 
   @Override
   public void start(UUID workspaceId, WorkspaceEnvironment environment) {
@@ -32,6 +42,11 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   @Override
   public void removeSecret(UUID workspaceId, String name) {
     // Nothing was kept, so there is nothing to remove.
+  }
+
+  @Override
+  public Optional<HarnessEndpoint> harness(UUID workspaceId) {
+    return harness;
   }
 
   @Override

@@ -1,6 +1,7 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Secret } from "../src/api/secretsApi";
+import type { ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
 
 export const OPENROUTER = {
@@ -36,20 +37,31 @@ export class FakeEventSource {
     this.closed = true;
   }
 
-  static latest(): FakeEventSource {
-    const source = FakeEventSource.instances.at(-1);
-    if (!source) throw new Error("no EventSource was opened");
+  /** The newest stream whose URL ends with `suffix`; the workspace stream by default. */
+  static latest(suffix = "/api/v1/workspaces/events"): FakeEventSource {
+    const source = FakeEventSource.instances.findLast((s) => s.url.endsWith(suffix));
+    if (!source) throw new Error(`no EventSource was opened for ${suffix}`);
     return source;
   }
 
+  private dispatch(type: string, data: unknown) {
+    const event = new MessageEvent(type, { data: JSON.stringify(data) });
+    act(() => this.listeners.get(type)?.(event));
+  }
+
   static emit(id: string, status: WorkspaceStatus) {
-    const event = new MessageEvent("status", { data: JSON.stringify({ id, status }) });
-    act(() => FakeEventSource.latest().listeners.get("status")?.(event));
+    FakeEventSource.latest().dispatch("status", { id, status });
   }
 
   static emitDeleted(id: string) {
-    const event = new MessageEvent("deleted", { data: JSON.stringify({ id }) });
-    act(() => FakeEventSource.latest().listeners.get("deleted")?.(event));
+    FakeEventSource.latest().dispatch("deleted", { id });
+  }
+
+  /** Plays one event on the newest open session stream. */
+  static emitSession<K extends keyof SessionEvents>(type: K, data: SessionEvents[K]) {
+    const source = FakeEventSource.instances.findLast((s) => s.url.endsWith("/events") && s.url.includes("/sessions/"));
+    if (!source) throw new Error("no session stream was opened");
+    source.dispatch(type, data);
   }
 }
 
@@ -68,6 +80,10 @@ export function installFakeApi(
   // Names only, as the API keeps them; the provider key is added on every list.
   const secrets = new Map<string, string[]>();
   const sent: { name: string; value: string }[] = [];
+  const sessions = new Map<string, Session[]>();
+  const messages = new Map<string, ChatMessage[]>();
+  const prompts: { sessionId: string; text: string }[] = [];
+  const aborted: string[] = [];
   const state = {
     fail: 0,
     nextId: 1,
@@ -76,6 +92,9 @@ export function installFakeApi(
     holdCreate: null as Promise<void> | null,
     holdDelete: null as Promise<void> | null,
     holdSecretRemove: null as Promise<void> | null,
+    nextSession: 1,
+    // Answers every session call with 503, as a workspace whose harness is down does.
+    harnessDown: false,
   };
   FakeEventSource.instances.length = 0;
 
@@ -89,6 +108,11 @@ export function installFakeApi(
     }
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
+    }
+    const sessionsRoute =
+      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages|abort))?$/.exec(url);
+    if (sessionsRoute) {
+      return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init);
     }
     const secretsRoute = /\/api\/v1\/workspaces\/([^/]+)\/secrets(?:\/(.+))?$/.exec(url);
     if (secretsRoute) {
@@ -126,6 +150,41 @@ export function installFakeApi(
     }
   });
 
+  function sessionsResponse(
+    workspaceId: string,
+    sessionId: string | undefined,
+    action: string | undefined,
+    init?: RequestInit,
+  ) {
+    if (state.harnessDown) return json({}, 503);
+    const list = sessions.get(workspaceId) ?? [];
+    const method = init?.method ?? "GET";
+    if (!sessionId) {
+      if (method === "POST") {
+        const id = `s-${state.nextSession++}`;
+        const session: Session = { id, title: null, path: `/home/workspace/sessions/${id}` };
+        sessions.set(workspaceId, [...list, session]);
+        return json(session, 201);
+      }
+      return json(list);
+    }
+    if (!list.some((s) => s.id === sessionId)) return json({}, 404);
+    if (action === "messages" && method === "POST") {
+      prompts.push({ sessionId, text: (JSON.parse(String(init!.body)) as { text: string }).text });
+      return new Response(null, { status: 202 });
+    }
+    if (action === "messages") return json(messages.get(sessionId) ?? []);
+    if (action === "abort") {
+      aborted.push(sessionId);
+      return new Response(null, { status: 204 });
+    }
+    sessions.set(
+      workspaceId,
+      list.filter((s) => s.id !== sessionId),
+    );
+    return new Response(null, { status: 204 });
+  }
+
   async function secretsResponse(workspaceId: string, name: string | undefined, init?: RequestInit) {
     if (!rows.some((w) => w.id === workspaceId)) return json({}, 404);
     const names = secrets.get(workspaceId) ?? [];
@@ -157,5 +216,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, state, fetchFn };
+  return { rows, secrets, sent, sessions, messages, prompts, aborted, state, fetchFn };
 }

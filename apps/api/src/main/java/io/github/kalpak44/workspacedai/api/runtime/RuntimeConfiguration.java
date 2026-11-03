@@ -37,7 +37,7 @@ public class RuntimeConfiguration {
 
   @Bean
   @ConditionalOnMissingBean(WorkspaceRuntime.class)
-  WorkspaceRuntime localWorkspaceRuntime() {
-    return new LocalWorkspaceRuntime();
+  WorkspaceRuntime localWorkspaceRuntime(WorkspaceProperties properties) {
+    return new LocalWorkspaceRuntime(properties.localHarness());
   }
 }

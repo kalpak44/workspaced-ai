@@ -43,10 +43,12 @@ class WorkspacePodTest {
     var name = "workspaced-ai-workspace-" + workspace.id();
     assertThat(pods()).containsExactly(name);
 
-    // The key reaches the cluster as a Secret, the base URL as a ConfigMap, and nothing else.
+    // The key and the harness's password reach the cluster as a Secret, the base URL as a
+    // ConfigMap, and nothing else.
     var namespace = client.getNamespace();
     var secret = client.secrets().inNamespace(namespace).withName(name).get();
-    assertThat(secret.getData()).containsOnlyKeys("OPENROUTER_API_KEY");
+    assertThat(secret.getData()).containsOnlyKeys("OPENROUTER_API_KEY", "OPENCODE_SERVER_PASSWORD");
+    assertThat(secret.getData().get("OPENCODE_SERVER_PASSWORD")).isNotBlank();
     assertThat(
             new String(
                 Base64.getDecoder().decode(secret.getData().get("OPENROUTER_API_KEY")),

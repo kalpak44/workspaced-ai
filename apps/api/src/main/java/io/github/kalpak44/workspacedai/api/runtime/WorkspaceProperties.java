@@ -1,13 +1,24 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import java.net.URI;
 import java.time.Duration;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
- * @param image what each workspace pod runs; a placeholder that waits until it is deleted
+ * @param image the harness each workspace pod runs; the deployment pins it to a tag
  * @param stopTimeout how long a delete waits for the pod to be gone before it gives up
+ * @param localHarness outside Kubernetes, a harness to chat with, e.g. one started with docker
  */
 @ConfigurationProperties("workspaced.workspace")
 public record WorkspaceProperties(
-    @DefaultValue("busybox:1.38.0") String image, @DefaultValue("60s") Duration stopTimeout) {}
+    @DefaultValue("ghcr.io/kalpak44/workspaced-ai-harness:latest") String image,
+    @DefaultValue("60s") Duration stopTimeout,
+    @DefaultValue LocalHarness localHarness) {
+
+  /**
+   * @param url unset means local workspaces have no harness, and chatting answers 503
+   * @param password what that harness was started with in OPENCODE_SERVER_PASSWORD
+   */
+  public record LocalHarness(URI url, String password) {}
+}

@@ -49,6 +49,45 @@ the call fails. Outside
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.
 
+## Sessions
+
+Each workspace pod runs the agent harness, [opencode](https://opencode.ai) (`apps/harness`), as `opencode serve`.
+A session is one opencode session working in its own directory, `/home/workspace/sessions/<session id>`. The database
+holds the session's id, that path and opencode's id for it; the conversation itself lives in the harness.
+
+| Method   | Path                                                    | Body                 | Answers                                 |
+|----------|---------------------------------------------------------|----------------------|-----------------------------------------|
+| `GET`    | `/api/v1/workspaces/{id}/sessions`                      |                      | `200` and the sessions, oldest first    |
+| `POST`   | `/api/v1/workspaces/{id}/sessions`                      |                      | `201` and the session                   |
+| `DELETE` | `/api/v1/workspaces/{id}/sessions/{sid}`                |                      | `204`; its directory goes with it       |
+| `GET`    | `/api/v1/workspaces/{id}/sessions/{sid}/messages`       |                      | `200` and the conversation              |
+| `POST`   | `/api/v1/workspaces/{id}/sessions/{sid}/messages`       | `{"text": "…"}`      | `202`; the reply streams on `/events`   |
+| `POST`   | `/api/v1/workspaces/{id}/sessions/{sid}/abort`          |                      | `204`                                   |
+| `GET`    | `/api/v1/workspaces/{id}/sessions/{sid}/events`         |                      | `200` and a server-sent event stream    |
+
+The stream carries that one session only: `message` (`{id, role}`), `part` (`{messageId, part}`, a part's whole
+state, which replaces any earlier one of that id), `delta` (`{messageId, partId, delta}`, text appended to a part),
+`status` (`{busy}`), `title` (`{title}`, also stored) and `error` (`{message}`). A part is `text`, `reasoning` or a
+`tool` with its name and status. A session's `title` is null until the agent names it after the first exchange.
+
+The API reaches the harness at the pod's IP on port 4096 with HTTP basic auth; the password is generated when the
+workspace is created and kept in its Secret as `OPENCODE_SERVER_PASSWORD`, which no user secret may replace. A
+harness that is not running, not answering, or belongs to a workspace made before the harness existed answers `503`.
+opencode is limited to the `openrouter` provider, reading the workspace's `OPENROUTER_API_KEY` and
+`OPENROUTER_BASE_URL`; its default model is set in `apps/harness/opencode/opencode.json`.
+
+A session's files live on the pod's `emptyDir` home, so they last as long as the pod does.
+
+To chat outside Kubernetes, run a harness and point the API at it:
+
+```sh
+docker build --platform linux/amd64 -t harness apps/harness
+docker run --rm -p 4096:4096 -e OPENCODE_SERVER_PASSWORD=dev \
+  -e OPENROUTER_API_KEY=sk-or-… -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 harness
+WORKSPACED_WORKSPACE_LOCAL_HARNESS_URL=http://localhost:4096 \
+WORKSPACED_WORKSPACE_LOCAL_HARNESS_PASSWORD=dev WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run
+```
+
 ## Workspace secrets
 
 Environment variables a workspace keeps secret. The database holds their names only; each value lives in the
@@ -62,8 +101,9 @@ a database row at all.
 | `DELETE` | `/api/v1/workspaces/{id}/secrets/{name}` |                                        | `204`, `404`, or `409`                     |
 
 A name must be a valid environment variable name (`[A-Za-z_][A-Za-z0-9_]*`, at most 100 characters), else `400`.
-`409` means the workspace already has that secret, or its provider sets it (`OPENROUTER_API_KEY`,
-`OPENROUTER_BASE_URL`), which no user secret may shadow or remove. A pod reads its environment once, when it starts,
+`409` means the workspace already has that secret, or its provider or harness sets it (`OPENROUTER_API_KEY`,
+`OPENROUTER_BASE_URL`, `OPENCODE_SERVER_PASSWORD`, `OPENCODE_SERVER_USERNAME`), which no user secret may shadow or
+remove. A pod reads its environment once, when it starts,
 so a running workspace sees a change only after it restarts.
 
 The schema is created by Flyway from `apps/api/src/main/resources/db/migration` when the API starts.

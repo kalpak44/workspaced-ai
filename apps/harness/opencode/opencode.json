@@ -1,0 +1,22 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "enabled_providers": [
+    "openrouter"
+  ],
+  "model": "openrouter/anthropic/claude-sonnet-5.5",
+  "small_model": "openrouter/anthropic/claude-haiku-5.5",
+  "autoupdate": false,
+  "share": "disabled",
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "webfetch": "allow"
+  },
+  "provider": {
+    "openrouter": {
+      "options": {
+        "baseURL": "{env:OPENROUTER_BASE_URL}"
+      }
+    }
+  }
+}

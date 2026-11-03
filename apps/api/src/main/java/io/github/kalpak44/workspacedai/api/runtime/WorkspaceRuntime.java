@@ -1,8 +1,10 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
@@ -23,6 +25,9 @@ public interface WorkspaceRuntime {
 
   /** Removes one secret; removing one that is not there is not an error. */
   void removeSecret(UUID workspaceId, String name);
+
+  /** Where the workspace's harness answers; empty while it has none running. */
+  Optional<HarnessEndpoint> harness(UUID workspaceId);
 
   /** One status per id, in a single lookup however many there are. */
   Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds);

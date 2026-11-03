@@ -90,6 +90,15 @@ class SecretControllerTest {
   }
 
   @Test
+  void refusesToShadowTheHarnessPassword() throws Exception {
+    var added = send("POST", "", "{\"name\":\"OPENCODE_SERVER_PASSWORD\",\"value\":\"x\"}");
+    assertThat(added.statusCode()).isEqualTo(409);
+    assertThat(JSON.readTree(added.body()).get("detail").asString())
+        .isEqualTo("OPENCODE_SERVER_PASSWORD is set by the workspace's harness");
+    assertThat(send("DELETE", "/OPENCODE_SERVER_USERNAME", null).statusCode()).isEqualTo(409);
+  }
+
+  @Test
   void refusesADuplicate() throws Exception {
     send("POST", "", "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_1\"}");
     assertThat(send("POST", "", "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_2\"}").statusCode())
