@@ -194,8 +194,9 @@ jobs:
             -Dsonar.qualitygate.wait=true
 
       # `tsc` runs before `vite build`, so a type error fails here and not in the browser.
+      # The short SHA is the image tag too, so the version the UI shows names the image.
       - name: Type check and build
-        run: npm run build
+        run: VITE_APP_VERSION="${GITHUB_SHA:0:7}" npm run build
 
       - name: Log in to GHCR
         if: ${{ env.PUBLISH == 'true' }}
