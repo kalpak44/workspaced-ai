@@ -31,17 +31,18 @@ public class TerminalHandler extends TextWebSocketHandler {
     var line = lines.get(socket.getId());
     var out = new StringBuilder();
     for (char c : message.getPayload().toCharArray()) {
-      switch (c) {
-        case '\r', '\n' -> {
+      switch (Character.valueOf(c)) {
+        case Character ch when ch == '\r' || ch == '\n' -> {
           out.append("\r\n").append(reply(line.toString())).append(PROMPT);
           line.setLength(0);
         }
         // Backspace and DEL: erase one cell, the way a line discipline would.
-        case '\b', 0x7f -> {
-          if (!line.isEmpty()) {
-            line.setLength(line.length() - 1);
-            out.append("\b \b");
-          }
+        case Character ch when (ch == '\b' || ch == 0x7f) && !line.isEmpty() -> {
+          line.setLength(line.length() - 1);
+          out.append("\b \b");
+        }
+        case Character ch when ch == '\b' || ch == 0x7f -> {
+          // Nothing to erase at the start of a line.
         }
         default -> {
           line.append(c);
