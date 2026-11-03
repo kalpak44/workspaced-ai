@@ -4,6 +4,7 @@ import static io.github.kalpak44.workspacedai.api.session.SseClient.next;
 import static io.github.kalpak44.workspacedai.api.session.SseClient.until;
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kalpak44.workspacedai.api.TestDatabase;
 import java.util.ArrayList;
 import java.util.Iterator;
 import org.junit.jupiter.api.BeforeEach;
@@ -11,10 +12,12 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 
 @SpringBootTest(
     webEnvironment = WebEnvironment.RANDOM_PORT,
     properties = {"workspaced.demo.token-delay=0ms", "workspaced.demo.prompt-timeout=5s"})
+@Import(TestDatabase.class)
 class SessionControllerTest {
 
   @LocalServerPort int port;

@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.terminal;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kalpak44.workspacedai.api.TestDatabase;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -11,12 +12,14 @@ import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.client.standard.StandardWebSocketClient;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@Import(TestDatabase.class)
 class TerminalHandlerTest {
 
   @LocalServerPort int port;

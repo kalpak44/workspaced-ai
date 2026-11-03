@@ -53,9 +53,15 @@ line with a fixed reply.
 
 ## Running locally
 
+The API needs PostgreSQL; `WORKSPACED_DB_HOST`, `_PORT`, `_NAME` and `_USERNAME` default to `localhost`, `5432`,
+`workspaced` and `workspaced`, and `WORKSPACED_DB_PASSWORD` has no default. The tests start their own database in
+Docker, so `verify` needs a running Docker daemon.
+
 ```sh
+docker run -d --name workspaced-db -p 5432:5432 \
+  -e POSTGRES_DB=workspaced -e POSTGRES_USER=workspaced -e POSTGRES_PASSWORD=workspaced postgres:18-alpine
 cd apps/api
-./mvnw spring-boot:run                        # http://localhost:8080/api/v1/swagger-ui
+WORKSPACED_DB_PASSWORD=workspaced ./mvnw spring-boot:run  # http://localhost:8080/api/v1/swagger-ui
 ./mvnw fmt:format                             # fixes what the fmt:check gate rejects
 ./mvnw verify                                 # tests plus the 80% line-coverage floor
 ./mvnw -DskipTests package && docker build .  # the image packages the built jar

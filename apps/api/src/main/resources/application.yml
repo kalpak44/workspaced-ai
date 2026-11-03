@@ -11,6 +11,15 @@ spring:
     virtual:
       enabled: true
 
+  # Every value has a local-development default except the password: a fallback password
+  # is one that reaches production unnoticed.
+  datasource:
+    url: jdbc:postgresql://${WORKSPACED_DB_HOST:localhost}:${WORKSPACED_DB_PORT:5432}/${WORKSPACED_DB_NAME:workspaced}
+    username: ${WORKSPACED_DB_USERNAME:workspaced}
+    password: ${WORKSPACED_DB_PASSWORD}
+    hikari:
+      pool-name: workspaced-pool
+
 management:
   endpoints:
     web:
@@ -20,6 +29,11 @@ management:
     health:
       probes:
         enabled: true
+      # A pod that cannot reach its database takes no traffic; liveness leaves it out, so
+      # a database outage does not restart every pod.
+      group:
+        readiness:
+          include: readinessState,db
 
 springdoc:
   show-actuator: true
