@@ -26,4 +26,11 @@ describe("workspacesApi", () => {
     installFakeApi([]);
     await expect(deleteWorkspace("missing")).rejects.toEqual(new ApiError(404));
   });
+
+  it("refuses an id that would escape the workspace route", async () => {
+    const api = installFakeApi([]);
+    await expect(renameWorkspace("../admin", "Notes")).rejects.toThrow("Invalid workspace id");
+    await expect(deleteWorkspace("a/b")).rejects.toThrow("Invalid workspace id");
+    expect(api.fetchFn).not.toHaveBeenCalled();
+  });
 });
