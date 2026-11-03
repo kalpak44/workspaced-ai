@@ -21,8 +21,9 @@ export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelet
 
   // Focus follows the user's own Rename click, so it is moved here rather than by autoFocus.
   useEffect(() => {
-    if (editing) {
-      input.current?.select();
+    if (editing && input.current) {
+      input.current.focus();
+      input.current.select();
     }
   }, [editing]);
 
