@@ -28,7 +28,7 @@ final class SseClient {
   private final String base;
 
   SseClient(int port) {
-    this.base = "http://localhost:" + port + "/api/sessions";
+    this.base = "http://localhost:" + port + "/api/v1/sessions";
   }
 
   String createSession() throws IOException, InterruptedException {

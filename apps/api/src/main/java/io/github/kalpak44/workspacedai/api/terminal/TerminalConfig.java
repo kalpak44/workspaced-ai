@@ -11,6 +11,6 @@ public class TerminalConfig implements WebSocketConfigurer {
 
   @Override
   public void registerWebSocketHandlers(WebSocketHandlerRegistry registry) {
-    registry.addHandler(new TerminalHandler(), "/api/sessions/{id}/terminal");
+    registry.addHandler(new TerminalHandler(), "/api/v1/sessions/{id}/terminal");
   }
 }
