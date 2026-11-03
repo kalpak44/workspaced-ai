@@ -1,19 +1,22 @@
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, Sparkles } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import type { ModelProvider } from "../../hooks/useModelProviders";
 import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
-import { Button, Select, TextField } from "../atoms";
-import { Modal } from "../molecules";
+import { Button, ChoiceCard, Spinner, TextField } from "../atoms";
+import { Modal, ModalBody, ModalFooter } from "../molecules";
 
 // The API rejects anything longer, so the field never lets the user type past it.
 const MAX_NAME = 100;
 const MAX_KEY = 1000;
 
-const PLACEHOLDERS = {
-  loading: "Loading providers…",
-  ready: "Choose a provider",
-  failed: "Could not load providers",
-};
+/** The host alone, which is what tells two providers apart at a glance. */
+function hostOf(url: string): string {
+  try {
+    return new URL(url).host;
+  } catch {
+    return url;
+  }
+}
 
 interface Props {
   readonly initialName: string;
@@ -85,49 +88,84 @@ export function CreateWorkspaceDialog({
     }
   };
 
+  let providerChoices;
+  if (providersStatus === "loading") {
+    providerChoices = (
+      <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+        <Spinner label="Loading providers" />
+        Loading providers…
+      </div>
+    );
+  } else if (providersStatus === "failed") {
+    providerChoices = (
+      <p className="rounded-lg border border-rose-300 px-4 py-3 text-sm text-rose-600 dark:border-rose-900 dark:text-rose-400">
+        Could not load providers. Close this and try again.
+      </p>
+    );
+  } else {
+    providerChoices = providers.map((p) => (
+      <ChoiceCard
+        key={p.id}
+        name="workspace-provider"
+        value={p.id}
+        label={p.name}
+        detail={hostOf(p.baseUrl)}
+        icon={Sparkles}
+        checked={p.id === providerId}
+        disabled={pending}
+        onChange={(id) => {
+          setProviderId(id);
+          setRejected(false);
+        }}
+      />
+    ));
+  }
+
   return (
-    <Modal title="New workspace" onClose={close}>
-      <form onSubmit={submit} className="flex flex-col gap-5">
-        <TextField
-          ref={nameInput}
-          id="workspace-name"
-          label="Name"
-          value={name}
-          maxLength={MAX_NAME}
-          disabled={pending}
-          onChange={(e) => setName(e.currentTarget.value)}
-        />
-        <Select
-          id="workspace-provider"
-          label="Model provider"
-          placeholder={PLACEHOLDERS[providersStatus]}
-          options={providers.map((p) => ({ value: p.id, label: p.name }))}
-          value={providerId}
-          disabled={pending || providersStatus !== "ready"}
-          onChange={(e) => {
-            setProviderId(e.currentTarget.value);
-            setRejected(false);
-          }}
-        />
-        {provider && (
+    <Modal
+      title="New workspace"
+      description="Name it and connect the model provider its agent will use."
+      onClose={close}
+    >
+      <form onSubmit={submit}>
+        <ModalBody>
           <TextField
-            ref={keyInput}
-            id="workspace-api-key"
-            label={`${provider.name} API key`}
-            type="password"
-            autoComplete="off"
-            spellCheck={false}
-            value={apiKey}
-            maxLength={MAX_KEY}
+            ref={nameInput}
+            id="workspace-name"
+            label="Name"
+            value={name}
+            maxLength={MAX_NAME}
             disabled={pending}
-            error={rejected ? `${provider.name} did not accept this key` : null}
-            onChange={(e) => {
-              setApiKey(e.currentTarget.value);
-              setRejected(false);
-            }}
+            onChange={(e) => setName(e.currentTarget.value)}
           />
-        )}
-        <div className="flex justify-end gap-2">
+          <fieldset className="flex flex-col gap-2">
+            <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+              Model provider
+            </legend>
+            {providerChoices}
+          </fieldset>
+          {provider && (
+            <TextField
+              ref={keyInput}
+              id="workspace-api-key"
+              label={`${provider.name} API key`}
+              type="password"
+              placeholder="Paste your key"
+              autoComplete="off"
+              spellCheck={false}
+              value={apiKey}
+              maxLength={MAX_KEY}
+              disabled={pending}
+              hint={`Checked with ${provider.name} before the workspace is created, then kept only in the workspace.`}
+              error={rejected ? `${provider.name} did not accept this key` : null}
+              onChange={(e) => {
+                setApiKey(e.currentTarget.value);
+                setRejected(false);
+              }}
+            />
+          )}
+        </ModalBody>
+        <ModalFooter>
           <Button label="Cancel" variant="secondary" onClick={onClose} disabled={pending} />
           <Button
             label="Continue"
@@ -136,7 +174,7 @@ export function CreateWorkspaceDialog({
             busy={pending}
             disabled={!name.trim() || !provider || !apiKey.trim() || rejected}
           />
-        </div>
+        </ModalFooter>
       </form>
     </Modal>
   );

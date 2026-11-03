@@ -22,8 +22,7 @@ type User = ReturnType<typeof userEvent.setup>;
 
 /** The wizard's steps after the name: pick OpenRouter, which reveals its key field, and type a key. */
 async function chooseProvider(user: User, key = "sk-or-1") {
-  await screen.findByRole("option", { name: "OpenRouter" });
-  await user.selectOptions(screen.getByRole("combobox", { name: "Model provider" }), "openrouter");
+  await user.click(await screen.findByRole("radio", { name: /OpenRouter/ }));
   if (key) await user.type(screen.getByLabelText("OpenRouter API key"), key);
 }
 
@@ -92,7 +91,12 @@ describe("App", () => {
     expect(next).toBeDisabled();
 
     await chooseProvider(user, "");
+    expect(screen.getByRole("radio", { name: /OpenRouter/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /openrouter\.ai/ })).toBeInTheDocument();
     expect(screen.getByLabelText("OpenRouter API key")).toHaveFocus();
+    expect(screen.getByLabelText("OpenRouter API key")).toHaveAccessibleDescription(
+      /Checked with OpenRouter before the workspace is created/,
+    );
     expect(screen.getByLabelText("OpenRouter API key")).toHaveAttribute("type", "password");
     expect(next).toBeDisabled();
     await user.keyboard("sk-or-1");
@@ -128,9 +132,10 @@ describe("App", () => {
     render(<App />);
     await screen.findByRole("alert");
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    const providers = screen.getByRole("combobox", { name: "Model provider" });
-    expect(providers).toBeDisabled();
-    expect(within(providers).getByRole("option", { name: "Could not load providers" })).toBeInTheDocument();
+    const providers = screen.getByRole("group", { name: "Model provider" });
+    expect(within(providers).getByText(/Could not load providers/)).toBeInTheDocument();
+    expect(within(providers).queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
   });
 
   it("closes the dialog on Cancel, Escape or the backdrop without creating anything", async () => {

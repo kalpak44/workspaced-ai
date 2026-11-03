@@ -9,7 +9,7 @@ src/
 ├── hooks/          state and side effects (workspaces, model providers, secrets, theme, API status, popover dismissal)
 ├── lib/            framework-free helpers
 └── components/
-    ├── atoms/      Logo, Button, IconButton, TextField, Select, Spinner, Avatar, Divider — props in, markup out, no hooks
+    ├── atoms/      Logo, Button, IconButton, TextField, ChoiceCard, Spinner, Avatar, Divider — props in, markup out, no hooks
     ├── molecules/  EmptyState, ErrorBanner, Menu, Modal, NavItem, SecretItem, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
     ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, ChatPanel, SecretsPanel
     ├── templates/  AppLayout — the page frame, filled through props
@@ -23,7 +23,8 @@ src/
 | Only `hooks/` imports `api/`                       | Every request has one owner, and components stay mockable |
 | Each layer exports through its `index.ts`          | Moving a file inside a layer changes no imports elsewhere  |
 
-Creating a workspace is a short wizard: the name, then a model provider, whose key field appears once one is chosen.
+Creating a workspace is a short wizard: the name, then a model provider picked from cards (radios underneath), whose
+key field appears once one is chosen.
 A key the provider refuses keeps the dialog open and marks the key field; anything else goes to the page's error
 banner. A ready workspace opens on its chat; the settings button beside its title leads to its secrets, which can be
 added and removed but never read back.
