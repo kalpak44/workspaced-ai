@@ -44,8 +44,8 @@ export function useSecrets(workspaceId: string | null) {
         setSecrets((current) => [...current, secret]);
         return "added";
       },
-      (failure: unknown): AddResult =>
-        failure instanceof ApiError && failure.status === 409 ? "conflict" : "failed",
+      (error_: unknown): AddResult =>
+        error_ instanceof ApiError && error_.status === 409 ? "conflict" : "failed",
     );
   };
 

@@ -30,8 +30,8 @@ function updatePart(
     if (m.id !== messageId) {
       return m;
     }
-    const existing = m.parts.find((p) => p.id === partId);
-    const parts = existing
+    const hasPart = m.parts.some((p) => p.id === partId);
+    const parts = hasPart
       ? m.parts.map((p) => (p.id === partId ? change(p) : p))
       : [...m.parts, change(undefined)];
     return { ...m, parts };
@@ -78,7 +78,7 @@ export function useChat(
         () => active && setError("Could not load the conversation"),
       );
     setLoading(true);
-    load().finally(() => active && setLoading(false));
+    void load().finally(() => active && setLoading(false));
 
     const source = new EventSource(sessionEventsUrl(workspaceId, sessionId));
     const on = <K extends keyof SessionEvents>(name: K, handle: (data: SessionEvents[K]) => void) =>
