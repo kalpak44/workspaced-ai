@@ -1,6 +1,7 @@
-import { act, renderHook } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { act, renderHook, waitFor } from "@testing-library/react";
+import { describe, expect, it } from "vitest";
 import { uniqueName, useWorkspaces } from "../src/useWorkspaces";
+import { installFakeApi } from "./fakeApi";
 
 describe("uniqueName", () => {
   it("keeps a free name", () => {
@@ -12,58 +13,67 @@ describe("uniqueName", () => {
   });
 });
 
+async function loaded() {
+  const hook = renderHook(() => useWorkspaces());
+  await waitFor(() => expect(hook.result.current.loading).toBe(false));
+  return hook.result;
+}
+
 describe("useWorkspaces", () => {
-  it("starts with a Starter workspace selected", () => {
-    const { result } = renderHook(() => useWorkspaces());
-    expect(result.current.workspaces.map((w) => w.name)).toEqual(["Starter"]);
-    expect(result.current.selected?.name).toBe("Starter");
+  it("loads from the API and selects the first", async () => {
+    installFakeApi([
+      { id: "a", name: "A" },
+      { id: "b", name: "B" },
+    ]);
+    const result = await loaded();
+    expect(result.current.workspaces.map((w) => w.name)).toEqual(["A", "B"]);
+    expect(result.current.selected?.id).toBe("a");
   });
 
-  it("restores what an earlier visit stored", () => {
-    localStorage.setItem(
-      "workspaced.workspaces",
-      JSON.stringify([{ id: "a", name: "Kept" }, { broken: true }]),
-    );
-    const { result } = renderHook(() => useWorkspaces());
-    expect(result.current.workspaces).toEqual([{ id: "a", name: "Kept" }]);
+  it("reports a failed load", async () => {
+    installFakeApi().state.fail = 500;
+    const result = await loaded();
+    expect(result.current.error).toBe("Could not load workspaces");
+    act(() => result.current.dismissError());
+    expect(result.current.error).toBeNull();
   });
 
-  it("falls back to the starter set when storage holds garbage", () => {
-    localStorage.setItem("workspaced.workspaces", "{not json");
-    const { result } = renderHook(() => useWorkspaces());
-    expect(result.current.workspaces.map((w) => w.name)).toEqual(["Starter"]);
+  it("does not call the API for a blank or unchanged name", async () => {
+    const api = installFakeApi();
+    const result = await loaded();
+    act(() => result.current.rename("starter", "   "));
+    act(() => result.current.rename("starter", " Starter "));
+    expect(api.fetchFn).toHaveBeenCalledTimes(1);
   });
 
-  it("still works when storage throws", () => {
-    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
-      throw new Error("blocked");
-    });
-    const { result } = renderHook(() => useWorkspaces());
+  it("keeps the list as it was when a change fails", async () => {
+    const api = installFakeApi();
+    const result = await loaded();
+    api.state.fail = 503;
+
     act(() => result.current.create());
-    expect(result.current.workspaces).toHaveLength(2);
+    await waitFor(() => expect(result.current.error).toBe("Could not create the workspace"));
+    act(() => result.current.rename("starter", "X"));
+    await waitFor(() => expect(result.current.error).toBe("Could not rename the workspace"));
+    act(() => result.current.remove("starter"));
+    await waitFor(() => expect(result.current.error).toBe("Could not delete the workspace"));
+
+    expect(result.current.workspaces).toEqual([{ id: "starter", name: "Starter" }]);
   });
 
-  it("ignores a blank rename", () => {
-    const { result } = renderHook(() => useWorkspaces());
-    const id = result.current.workspaces[0].id;
-    act(() => result.current.rename(id, "   "));
-    expect(result.current.workspaces[0].name).toBe("Starter");
-  });
-
-  it("keeps the selection when an unselected workspace is deleted", () => {
-    const { result } = renderHook(() => useWorkspaces());
-    const starter = result.current.workspaces[0].id;
+  it("selects the first remaining once the selected one is deleted", async () => {
+    installFakeApi();
+    const result = await loaded();
     act(() => result.current.create());
-    act(() => result.current.remove(starter));
-    expect(result.current.selected?.name).toBe("New Workspace");
+    await waitFor(() => expect(result.current.selected?.name).toBe("New Workspace"));
+    act(() => result.current.remove(result.current.selected!.id));
+    await waitFor(() => expect(result.current.selected?.name).toBe("Starter"));
   });
 
-  it("selects nothing once the last workspace is gone", () => {
-    const { result } = renderHook(() => useWorkspaces());
-    act(() => result.current.remove(result.current.workspaces[0].id));
-    expect(result.current.selected).toBeNull();
+  it("selects nothing once the last workspace is gone", async () => {
+    installFakeApi();
+    const result = await loaded();
+    act(() => result.current.remove("starter"));
+    await waitFor(() => expect(result.current.selected).toBeNull());
   });
 });

@@ -22,10 +22,10 @@ class OpenApiTest {
   private final HttpClient http = HttpClient.newHttpClient();
 
   @Test
-  void publishesTheSessionEndpoints() throws Exception {
+  void publishesTheWorkspaceEndpoints() throws Exception {
     var response = get("/api/v1/v3/api-docs");
     assertThat(response.statusCode()).isEqualTo(200);
-    assertThat(response.body()).contains("\"openapi\":\"3.0", "/sessions/{id}/events");
+    assertThat(response.body()).contains("\"openapi\":\"3.0", "/workspaces/{id}");
   }
 
   @Test

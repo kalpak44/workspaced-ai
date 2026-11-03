@@ -15,7 +15,7 @@
     <artifactId>workspaced-ai-api</artifactId>
     <version>0.0.1-SNAPSHOT</version>
     <name>workspaced-ai API</name>
-    <description>Streams agent output to clients and takes their answers, approvals and keystrokes</description>
+    <description>Manages the workspaces AI agents run in</description>
 
     <properties>
         <java.version>25</java.version>
@@ -45,20 +45,32 @@
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-websocket</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-validation</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-        <!-- Connectivity only for now: a DataSource and its health check, no ORM. -->
+        <!-- Plain SQL through JdbcClient; the schema is small enough not to need an ORM. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <!-- spring-boot-flyway carries the auto-configuration, which Boot 4 moved out of the
+             main jar: without it flyway-core sits on the classpath and never runs. The
+             PostgreSQL module is separate from Flyway 10 onward. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-flyway</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-core</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.flywaydb</groupId>
+            <artifactId>flyway-database-postgresql</artifactId>
+            <scope>runtime</scope>
         </dependency>
         <!-- Version comes from the Boot BOM, so a Boot upgrade moves the driver with it. -->
         <dependency>

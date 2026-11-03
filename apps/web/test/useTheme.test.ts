@@ -44,6 +44,19 @@ describe("useTheme", () => {
     expect(isDark()).toBe(true);
   });
 
+  it("still works when storage throws", () => {
+    stubMedia(false);
+    vi.spyOn(Storage.prototype, "getItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+      throw new Error("blocked");
+    });
+    const { result } = renderHook(() => useTheme());
+    act(() => result.current[1]("dark"));
+    expect(isDark()).toBe(true);
+  });
+
   it("treats a browser without matchMedia as dark", () => {
     vi.stubGlobal("matchMedia", undefined);
     renderHook(() => useTheme());

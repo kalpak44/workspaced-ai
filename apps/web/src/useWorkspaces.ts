@@ -1,34 +1,15 @@
 import { useEffect, useState } from "react";
-import { readStored, writeStored } from "./storage";
+import {
+  createWorkspace,
+  deleteWorkspace,
+  listWorkspaces,
+  renameWorkspace,
+  type Workspace,
+} from "./workspacesApi";
 
-export interface Workspace {
-  readonly id: string;
-  readonly name: string;
-}
+export type { Workspace } from "./workspacesApi";
 
-// Kept in the browser until the API has workspaces of its own.
-const KEY = "workspaced.workspaces";
 export const DEFAULT_NAME = "New Workspace";
-
-function isWorkspace(value: unknown): value is Workspace {
-  const candidate = value as Partial<Workspace> | null;
-  return typeof candidate?.id === "string" && typeof candidate.name === "string";
-}
-
-function initialWorkspaces(): Workspace[] {
-  const raw = readStored(KEY);
-  if (raw) {
-    try {
-      const parsed: unknown = JSON.parse(raw);
-      if (Array.isArray(parsed)) {
-        return parsed.filter(isWorkspace);
-      }
-    } catch {
-      // A corrupt entry is replaced by the starter set below.
-    }
-  }
-  return [{ id: crypto.randomUUID(), name: "Starter" }];
-}
 
 /** "New Workspace", then "New Workspace 2", 3… so two never share a name. */
 export function uniqueName(base: string, taken: readonly string[]): string {
@@ -42,42 +23,74 @@ export function uniqueName(base: string, taken: readonly string[]): string {
   return `${base} ${n}`;
 }
 
+/**
+ * The list follows the server: state changes only after the API has accepted the change,
+ * so what is shown is never something a reload would take away.
+ */
 export function useWorkspaces() {
-  const [workspaces, setWorkspaces] = useState<Workspace[]>(initialWorkspaces);
-  const [selectedId, setSelectedId] = useState<string | null>(
-    () => workspaces.at(-1)?.id ?? null,
-  );
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => writeStored(KEY, JSON.stringify(workspaces)), [workspaces]);
-
-  const create = (name: string = DEFAULT_NAME) => {
-    const workspace = {
-      id: crypto.randomUUID(),
-      name: uniqueName(
-        name,
-        workspaces.map((w) => w.name),
-      ),
+  useEffect(() => {
+    // StrictMode runs this twice in development; only the live run may set state.
+    let active = true;
+    listWorkspaces()
+      .then((list) => active && setWorkspaces(list))
+      .catch(() => active && setError("Could not load workspaces"))
+      .finally(() => active && setLoading(false));
+    return () => {
+      active = false;
     };
-    setWorkspaces([...workspaces, workspace]);
-    setSelectedId(workspace.id);
+  }, []);
+
+  // Plain functions, not async ones: they are handed to click handlers that expect no
+  // return value, so each settles its own promise, failure included.
+  const create = (name: string = DEFAULT_NAME) => {
+    const unique = uniqueName(
+      name,
+      workspaces.map((w) => w.name),
+    );
+    createWorkspace(unique).then(
+      (workspace) => {
+        setWorkspaces((current) => [...current, workspace]);
+        setSelectedId(workspace.id);
+      },
+      () => setError("Could not create the workspace"),
+    );
   };
 
   const rename = (id: string, name: string) => {
     const trimmed = name.trim();
-    if (trimmed) {
-      setWorkspaces(workspaces.map((w) => (w.id === id ? { ...w, name: trimmed } : w)));
+    if (!trimmed || workspaces.some((w) => w.id === id && w.name === trimmed)) {
+      return;
     }
+    renameWorkspace(id, trimmed).then(
+      (renamed) => setWorkspaces((current) => current.map((w) => (w.id === id ? renamed : w))),
+      () => setError("Could not rename the workspace"),
+    );
   };
 
   const remove = (id: string) => {
-    const remaining = workspaces.filter((w) => w.id !== id);
-    setWorkspaces(remaining);
-    if (selectedId === id) {
-      setSelectedId(remaining.at(0)?.id ?? null);
-    }
+    deleteWorkspace(id).then(
+      () => setWorkspaces((current) => current.filter((w) => w.id !== id)),
+      () => setError("Could not delete the workspace"),
+    );
   };
 
-  const selected = workspaces.find((w) => w.id === selectedId) ?? null;
+  // Falls back to the first workspace, which also covers the selected one being deleted.
+  const selected = workspaces.find((w) => w.id === selectedId) ?? workspaces.at(0) ?? null;
 
-  return { workspaces, selected, select: setSelectedId, create, rename, remove };
+  return {
+    workspaces,
+    selected,
+    loading,
+    error,
+    dismissError: () => setError(null),
+    select: setSelectedId,
+    create,
+    rename,
+    remove,
+  };
 }

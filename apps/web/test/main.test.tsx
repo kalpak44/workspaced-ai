@@ -1,13 +1,14 @@
 import { screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
+import { installFakeApi } from "./fakeApi";
 
 describe("main", () => {
   it("mounts the app into #root", async () => {
     vi.resetModules();
-    vi.stubGlobal("fetch", vi.fn());
+    installFakeApi();
     document.body.innerHTML = '<div id="root"></div>';
     await import("../src/main");
-    expect(await screen.findByRole("heading", { level: 1 })).toHaveTextContent("Starter");
+    expect(await screen.findByRole("button", { name: "Starter" })).toBeInTheDocument();
   });
 
   it("does nothing on a page without a root", async () => {
