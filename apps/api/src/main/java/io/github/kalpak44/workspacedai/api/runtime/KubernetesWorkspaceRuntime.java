@@ -130,9 +130,11 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     if ("Failed".equals(phase) || "Succeeded".equals(phase)) {
       return WorkspaceStatus.FAILED;
     }
+    var conditions = status == null ? null : status.getConditions();
     var ready =
         "Running".equals(phase)
-            && status.getConditions().stream()
+            && conditions != null
+            && conditions.stream()
                 .anyMatch(c -> "Ready".equals(c.getType()) && "True".equals(c.getStatus()));
     return ready ? WorkspaceStatus.READY : WorkspaceStatus.INITIALIZING;
   }

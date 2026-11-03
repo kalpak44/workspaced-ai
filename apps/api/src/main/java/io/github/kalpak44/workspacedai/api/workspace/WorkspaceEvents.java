@@ -42,7 +42,7 @@ public class WorkspaceEvents {
       for (var workspace : service.list()) {
         emitter.send(event(workspace.id(), workspace.status()));
       }
-    } catch (IOException e) {
+    } catch (IOException _) {
       drop(emitter);
     }
     return emitter;
@@ -52,7 +52,7 @@ public class WorkspaceEvents {
     for (var emitter : emitters) {
       try {
         emitter.send(event(id, status));
-      } catch (IOException e) {
+      } catch (IOException _) {
         drop(emitter);
       }
     }
@@ -64,7 +64,7 @@ public class WorkspaceEvents {
     for (var emitter : emitters) {
       try {
         emitter.send(SseEmitter.event().comment("keepalive"));
-      } catch (IOException e) {
+      } catch (IOException _) {
         drop(emitter);
       }
     }
@@ -86,6 +86,6 @@ public class WorkspaceEvents {
   }
 
   private static SseEmitter.SseEventBuilder event(UUID id, WorkspaceStatus status) {
-    return SseEmitter.event().name(STATUS).data(Map.of("id", id, "status", status));
+    return SseEmitter.event().name(STATUS).data(Map.of("id", id, STATUS, status));
   }
 }

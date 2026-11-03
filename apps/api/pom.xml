@@ -36,6 +36,11 @@
         <sonar.projectKey>workspaced-ai-api</sonar.projectKey>
         <sonar.organization>kalpak44</sonar.organization>
         <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+
+        <!-- The registry image the pipeline publishes to. Buildpacks cannot be told
+             extra tags on the command line in Boot 4 (the `tags` user property is
+             gone), so the `latest` alias is declared in the plugin configuration. -->
+        <ghcr.image>ghcr.io/kalpak44/workspaced-ai-api</ghcr.image>
     </properties>
 
     <dependencies>
@@ -136,7 +141,8 @@
         <plugins>
             <!-- Builds the container image with Cloud Native Buildpacks, so there is no
                  Dockerfile: the base image is the builder this plugin version pins, and it
-                 moves with Spring Boot. CI passes imageName and tags. -->
+                 moves with Spring Boot. CI passes the versioned imageName; `latest` is
+                 tagged here because Boot 4 dropped the `build-image.tags` user property. -->
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
@@ -147,6 +153,9 @@
                         <!-- Buildpacks default to a fixed 1980 timestamp, so `docker images`
                              could not tell a fresh image from a stale one. -->
                         <createdDate>now</createdDate>
+                        <tags>
+                            <tag>${ghcr.image}:latest</tag>
+                        </tags>
                         <env>
                             <BP_JVM_VERSION>${java.version}</BP_JVM_VERSION>
                             <!-- The memory calculator reserves a stack per thread before sizing

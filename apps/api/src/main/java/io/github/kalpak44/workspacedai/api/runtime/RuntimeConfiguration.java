@@ -8,6 +8,7 @@ import org.springframework.boot.cloud.CloudPlatform;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 
 /**
  * Pods only when the API itself runs in Kubernetes, which Spring Boot detects from the environment
@@ -28,6 +29,7 @@ public class RuntimeConfiguration {
 
   @Bean
   @ConditionalOnCloudPlatform(CloudPlatform.KUBERNETES)
+  @Primary
   WorkspaceRuntime kubernetesWorkspaceRuntime(
       KubernetesClient client, WorkspaceProperties properties) {
     return new KubernetesWorkspaceRuntime(client, properties);

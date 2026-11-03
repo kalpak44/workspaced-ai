@@ -95,9 +95,11 @@ public interface WorkspaceApi {
               mediaType = MediaType.TEXT_EVENT_STREAM_VALUE,
               examples =
                   @ExampleObject(
-                      "event:status\n"
-                          + "data:{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\","
-                          + "\"status\":\"READY\"}\n\n")))
+                      """
+                      event:status
+                      data:{"id":"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11","status":"READY"}
+
+                      """)))
   @GetMapping(path = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
   ResponseEntity<SseEmitter> events();
 
