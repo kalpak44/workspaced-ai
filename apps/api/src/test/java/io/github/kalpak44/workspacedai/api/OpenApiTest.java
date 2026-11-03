@@ -21,14 +21,14 @@ class OpenApiTest {
 
   @Test
   void publishesTheSessionEndpoints() throws Exception {
-    var response = get("/v3/api-docs");
+    var response = get("/api/v1/v3/api-docs");
     assertThat(response.statusCode()).isEqualTo(200);
-    assertThat(response.body()).contains("\"openapi\":\"3.0", "/api/v1/sessions/{id}/events");
+    assertThat(response.body()).contains("\"openapi\":\"3.0", "/sessions/{id}/events");
   }
 
   @Test
   void servesSwaggerUi() throws Exception {
-    assertThat(get("/swagger-ui/index.html").statusCode()).isEqualTo(200);
+    assertThat(get("/api/v1/swagger-ui/index.html").statusCode()).isEqualTo(200);
   }
 
   private HttpResponse<String> get(String path) throws Exception {

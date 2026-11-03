@@ -1,7 +1,8 @@
 # API
 
 The endpoints are placeholders: a scripted agent stands behind them, so clients can be built against the real protocol
-before a real agent exists. Swagger UI is at `/swagger-ui`, the OpenAPI 3.0 document at `/v3/api-docs`.
+before a real agent exists. The whole app is served under the `/api/v1` context path, so the host root is free for the frontend: Swagger UI is at
+`/api/v1/swagger-ui`, the OpenAPI 3.0 document at `/api/v1/v3/api-docs`, health at `/api/v1/actuator/health`.
 
 | Requirement                         | Protocol           | Endpoint                                                  |
 |-------------------------------------|--------------------|-----------------------------------------------------------|
@@ -54,7 +55,7 @@ line with a fixed reply.
 
 ```sh
 cd apps/api
-./mvnw spring-boot:run                        # http://localhost:8080
+./mvnw spring-boot:run                        # http://localhost:8080/api/v1/swagger-ui
 ./mvnw fmt:format                             # fixes what the fmt:check gate rejects
 ./mvnw verify                                 # tests plus the 80% line-coverage floor
 ./mvnw -DskipTests package && docker build .  # the image packages the built jar
