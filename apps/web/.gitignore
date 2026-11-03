@@ -22,3 +22,7 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Test coverage and Sonar scanner output
+coverage
+.scannerwork
