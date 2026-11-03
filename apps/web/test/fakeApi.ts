@@ -1,6 +1,6 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
-import type { Workspace, WorkspaceStatus } from "../src/workspacesApi";
+import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
 
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });

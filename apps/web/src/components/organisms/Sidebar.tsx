@@ -1,7 +1,8 @@
 import { FileText, Library, Plus, Upload } from "lucide-react";
 import { useRef } from "react";
-import type { Workspace } from "../useWorkspaces";
-import { WorkspaceItem } from "./WorkspaceItem";
+import type { Workspace } from "../../hooks/useWorkspaces";
+import { IconButton } from "../atoms";
+import { NavItem, WorkspaceItem } from "../molecules";
 
 export type Section = "workspaces" | "knowledge" | "files";
 
@@ -16,44 +17,28 @@ interface Props {
   readonly onDelete: (id: string) => void;
 }
 
-const ICON_BUTTON =
-  "rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 hover:text-zinc-900 dark:hover:bg-zinc-800 dark:hover:text-zinc-100";
-
 export function Sidebar(props: Props) {
   const { workspaces, selectedId, section, onSection, onSelect, onCreate } = props;
   const fileInput = useRef<HTMLInputElement>(null);
-
-  const navClass = (target: Section) =>
-    `flex w-full items-center gap-2 rounded-md px-2 py-2 text-left ${
-      section === target
-        ? "bg-zinc-100 font-medium dark:bg-zinc-800"
-        : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-    }`;
 
   return (
     <aside className="flex w-72 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
       <div className="flex items-center justify-between px-4 pt-4 pb-2">
         <h2 className="font-medium">Workspaces</h2>
         <div className="flex gap-1">
-          <button
-            type="button"
-            aria-label="Import workspace"
+          <IconButton
+            label="Import workspace"
+            icon={Upload}
             onClick={() => fileInput.current?.click()}
-            className={ICON_BUTTON}
-          >
-            <Upload className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="New workspace"
+          />
+          <IconButton
+            label="New workspace"
+            icon={Plus}
             onClick={() => {
               onCreate();
               onSection("workspaces");
             }}
-            className={ICON_BUTTON}
-          >
-            <Plus className="size-4" />
-          </button>
+          />
           {/* Imports a workspace by file name only, until workspaces carry content. */}
           <input
             ref={fileInput}
@@ -88,14 +73,18 @@ export function Sidebar(props: Props) {
         ))}
       </ul>
       <nav className="space-y-0.5 border-t border-zinc-200 p-4 text-sm dark:border-zinc-800">
-        <button type="button" onClick={() => onSection("knowledge")} className={navClass("knowledge")}>
-          <Library className="size-4" />
-          Knowledge
-        </button>
-        <button type="button" onClick={() => onSection("files")} className={navClass("files")}>
-          <FileText className="size-4" />
-          My Files
-        </button>
+        <NavItem
+          label="Knowledge"
+          icon={Library}
+          active={section === "knowledge"}
+          onClick={() => onSection("knowledge")}
+        />
+        <NavItem
+          label="My Files"
+          icon={FileText}
+          active={section === "files"}
+          onClick={() => onSection("files")}
+        />
       </nav>
     </aside>
   );

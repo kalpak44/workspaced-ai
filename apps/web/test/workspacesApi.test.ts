@@ -5,7 +5,7 @@ import {
   deleteWorkspace,
   listWorkspaces,
   renameWorkspace,
-} from "../src/workspacesApi";
+} from "../src/api/workspacesApi";
 import { installFakeApi } from "./fakeApi";
 
 describe("workspacesApi", () => {

@@ -1,6 +1,6 @@
 import { act, renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import { useTheme } from "../src/useTheme";
+import { useTheme } from "../src/hooks/useTheme";
 
 function stubMedia(dark: boolean) {
   const listeners = new Set<() => void>();

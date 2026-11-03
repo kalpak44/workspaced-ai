@@ -8,9 +8,9 @@ import {
   type StatusEvent,
   type Workspace,
   type WorkspaceStatus,
-} from "./workspacesApi";
+} from "../api/workspacesApi";
 
-export type { Workspace, WorkspaceStatus } from "./workspacesApi";
+export type { Workspace, WorkspaceStatus } from "../api/workspacesApi";
 
 export const DEFAULT_NAME = "New Workspace";
 

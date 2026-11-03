@@ -1,7 +1,10 @@
-import { CircleAlert, LoaderCircle, MoreHorizontal } from "lucide-react";
+import { MoreHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useDismiss } from "../useDismiss";
-import type { Workspace } from "../useWorkspaces";
+import { useDismiss } from "../../hooks/useDismiss";
+import type { Workspace } from "../../hooks/useWorkspaces";
+import { IconButton } from "../atoms";
+import { Menu, MenuItem } from "./Menu";
+import { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";
 
 interface Props {
   readonly workspace: Workspace;
@@ -31,8 +34,8 @@ export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelet
     return (
       <li>
         <input
-          aria-label="Workspace name"
           ref={input}
+          aria-label="Workspace name"
           defaultValue={workspace.name}
           onBlur={(e) => {
             onRename(e.currentTarget.value);
@@ -67,54 +70,37 @@ export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelet
         className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left"
       >
         <span className="truncate">{workspace.name}</span>
-        {workspace.status === "INITIALIZING" && (
-          <LoaderCircle
-            role="status"
-            aria-label="Initializing"
-            className="size-3.5 shrink-0 animate-spin text-zinc-400"
-          />
-        )}
-        {workspace.status === "FAILED" && (
-          <CircleAlert role="status" aria-label="Failed" className="size-3.5 shrink-0 text-rose-500" />
-        )}
+        <WorkspaceStatusIcon status={workspace.status} />
       </button>
-      <button
-        type="button"
-        aria-label={`Actions for ${workspace.name}`}
+      <IconButton
+        label={`Actions for ${workspace.name}`}
+        icon={MoreHorizontal}
         aria-expanded={menuOpen}
         onClick={() => setMenuOpen(!menuOpen)}
-        className="mr-1 rounded p-1 text-zinc-400 opacity-0 group-hover:opacity-100 hover:text-zinc-600 aria-expanded:opacity-100 dark:hover:text-zinc-200"
-      >
-        <MoreHorizontal className="size-4" />
-      </button>
+        className="mr-1 p-1 opacity-0 group-hover:opacity-100 aria-expanded:opacity-100"
+      />
       {menuOpen && (
-        <div
-          role="menu"
-          className="absolute top-full right-0 z-10 mt-1 w-36 overflow-hidden rounded-md border border-zinc-200 bg-white py-1 text-sm shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
-        >
-          <button
-            type="button"
-            role="menuitem"
+        <Menu className="mt-1 w-36 rounded-md py-1">
+          <MenuItem
+            className="px-3 py-1.5"
             onClick={() => {
               setMenuOpen(false);
               setEditing(true);
             }}
-            className="w-full px-3 py-1.5 text-left hover:bg-zinc-100 dark:hover:bg-zinc-800"
           >
             Rename
-          </button>
-          <button
-            type="button"
-            role="menuitem"
+          </MenuItem>
+          <MenuItem
+            danger
+            className="px-3 py-1.5"
             onClick={() => {
               setMenuOpen(false);
               onDelete();
             }}
-            className="w-full px-3 py-1.5 text-left text-rose-600 hover:bg-zinc-100 dark:text-rose-400 dark:hover:bg-zinc-800"
           >
             Delete
-          </button>
-        </div>
+          </MenuItem>
+        </Menu>
       )}
     </li>
   );

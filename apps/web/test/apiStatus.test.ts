@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { fetchApiStatus, READINESS_URL } from "../src/apiStatus";
+import { fetchApiStatus, READINESS_URL } from "../src/api/apiStatus";
 
 describe("fetchApiStatus", () => {
   it("asks the readiness probe, which includes the database", async () => {

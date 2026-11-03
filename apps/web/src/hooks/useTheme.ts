@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { readStored, writeStored } from "./storage";
+import { readStored, writeStored } from "../lib/storage";
 
 export type Theme = "light" | "dark" | "system";
 

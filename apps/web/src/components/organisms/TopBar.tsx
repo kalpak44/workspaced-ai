@@ -1,6 +1,6 @@
 import { Bell } from "lucide-react";
-import type { Theme } from "../useTheme";
-import { Logo } from "./Logo";
+import type { Theme } from "../../hooks/useTheme";
+import { Divider, IconButton, Logo } from "../atoms";
 import { UserMenu } from "./UserMenu";
 
 interface Props {
@@ -13,14 +13,8 @@ export function TopBar({ theme, onThemeChange }: Props) {
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
       <Logo />
       <div className="flex items-center gap-3">
-        <button
-          type="button"
-          aria-label="Notifications"
-          className="rounded-md p-1.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
-        >
-          <Bell className="size-4" />
-        </button>
-        <span className="h-6 w-px bg-zinc-200 dark:bg-zinc-800" />
+        <IconButton label="Notifications" icon={Bell} />
+        <Divider />
         <UserMenu theme={theme} onThemeChange={onThemeChange} />
       </div>
     </header>
