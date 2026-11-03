@@ -4,6 +4,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import { FakeEventSource, installFakeApi, REJECTED_KEY } from "./fakeApi";
 
+vi.mock("@xterm/xterm", () => ({
+  Terminal: class {
+    cols = 80;
+    rows = 24;
+    loadAddon() {}
+    open() {}
+    focus() {}
+    write() {}
+    writeln() {}
+    dispose() {}
+    onData() {
+      return { dispose() {} };
+    }
+  },
+}));
+vi.mock("@xterm/addon-fit", () => ({ FitAddon: class { fit() {} } }));
+
 let api: ReturnType<typeof installFakeApi>;
 
 beforeEach(() => {
@@ -37,9 +54,17 @@ function visit(url: string) {
 
 /** Opens the selected workspace's settings and waits for its secrets. */
 async function openSettings(user: User) {
-  await user.click(screen.getByRole("button", { name: "Workspace settings" }));
+  await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+  await user.click(screen.getByRole("menuitem", { name: "Settings" }));
   await screen.findByText("OPENROUTER_API_KEY");
   return screen.getByRole("region", { name: "Secrets" });
+}
+
+/** Opens the destructive confirmation without accepting it. */
+async function requestWorkspaceDelete(user: User, name = "Starter") {
+  await user.click(screen.getByRole("button", { name: `Actions for ${name}` }));
+  await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+  return screen.getByRole("dialog", { name: `Delete ${name}?` });
 }
 
 describe("App", () => {
@@ -223,13 +248,64 @@ describe("App", () => {
     expect(heading()).toHaveTextContent("Research");
   });
 
-  it("deletes down to the no-workspaces state", async () => {
+  it("opens a Bash terminal for the selected workspace from its menu", async () => {
+    class FakeSocket extends EventTarget {
+      static readonly OPEN = 1;
+      readonly url: string;
+      readyState = 0;
+      binaryType = "";
+      constructor(url: string) {
+        super();
+        this.url = url;
+      }
+      send() {}
+      close() {}
+    }
+    class FakeResizeObserver {
+      observe() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("WebSocket", FakeSocket);
+    vi.stubGlobal("ResizeObserver", FakeResizeObserver);
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    await user.click(screen.getByRole("menuitem", { name: "Terminal" }));
+
+    expect(path()).toBe("/workspaces/starter/terminal");
+    expect(heading()).toHaveTextContent("Terminal");
+    expect(screen.getByRole("region", { name: "Workspace terminal" })).toBeInTheDocument();
+    expect(document.title).toBe("Terminal · Starter — workspaced-ai");
+  });
+
+  it("deletes down to the no-workspaces state", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    const dialog = await requestWorkspaceDelete(user);
+    expect(dialog).toHaveTextContent("sessions, files, secrets, and workspace configuration");
+    expect(api.rows).toHaveLength(1);
+    await user.click(within(dialog).getByRole("button", { name: "Delete workspace" }));
     expect(await screen.findByText("No workspaces")).toBeInTheDocument();
     expect(api.rows).toEqual([]);
+  });
+
+  it("cancels workspace deletion from Cancel, Escape, or the backdrop", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+
+    let dialog = await requestWorkspaceDelete(user);
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await requestWorkspaceDelete(user);
+    await user.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    dialog = await requestWorkspaceDelete(user);
+    await user.click(screen.getByRole("button", { name: "Close" }));
+    expect(dialog).not.toBeInTheDocument();
+    expect(api.rows).toHaveLength(1);
   });
 
   it("shows the workspace deleting until its pod is gone", async () => {
@@ -239,8 +315,8 @@ describe("App", () => {
     });
     const user = userEvent.setup();
     await renderLoaded();
-    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = await requestWorkspaceDelete(user);
+    await user.click(within(dialog).getByRole("button", { name: "Delete workspace" }));
 
     expect(within(sidebar()).getByRole("status", { name: "Deleting" })).toBeInTheDocument();
     expect(screen.getByText("Deleting workspace")).toBeInTheDocument();
@@ -257,8 +333,8 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     api.state.fail = 500;
-    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+    const dialog = await requestWorkspaceDelete(user);
+    await user.click(within(dialog).getByRole("button", { name: "Delete workspace" }));
     expect(await screen.findByText("Could not delete the workspace")).toBeInTheDocument();
     expect(screen.getByRole("region", { name: "Sessions" })).toBeInTheDocument();
     expect(within(sidebar()).queryByRole("status")).not.toBeInTheDocument();
@@ -333,7 +409,8 @@ describe("App", () => {
 
     expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();
     expect(within(sidebar()).getByRole("status", { name: "Initializing" })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "New session" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "New session" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "Message" })).not.toBeInTheDocument();
 
     // The page opens on its own once the workspace is ready.
     FakeEventSource.emit("ws-1", "READY");
@@ -452,7 +529,9 @@ describe("App", () => {
       globalThis.history.pushState(null, "", "/workspaces/starter");
       globalThis.dispatchEvent(new PopStateEvent("popstate"));
     });
-    await userEvent.setup().click(screen.getByRole("button", { name: "Workspace settings" }));
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
     expect(await screen.findByText("Could not load the secrets")).toBeInTheDocument();
   });
 
@@ -588,19 +667,44 @@ describe("App", () => {
     await sessionsHere();
   });
 
-  it("opens an empty session from the button, and deletes one from its page", async () => {
+  it("creates sessions only from the task input, and deletes one from its page", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await sessionsHere();
-    await user.click(screen.getByRole("button", { name: "New session" }));
+    expect(screen.queryByRole("button", { name: "New session" })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Draft a plan{Enter}");
     await waitFor(() => expect(path()).toBe("/workspaces/starter/sessions/s-1"));
-    expect(await screen.findByText("What should the agent do?")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
 
     await user.click(screen.getByRole("button", { name: "Delete session" }));
     expect(path()).toBe("/workspaces/starter");
     await waitFor(() => expect(api.sessions.get("starter")).toEqual([]));
     await sessionsHere();
+  });
+
+  it("paginates session history after ten items", async () => {
+    api.sessions.set(
+      "starter",
+      Array.from({ length: 12 }, (_, index) => ({
+        id: `s-${index + 1}`,
+        title: `Session ${index + 1}`,
+        path: `/p/s-${index + 1}`,
+        createdAt: new Date(Date.now() - index * 1000).toISOString(),
+      })),
+    );
+    const user = userEvent.setup();
+    await renderLoaded();
+    const list = await screen.findByRole("region", { name: "Sessions" });
+    await within(list).findByText("Session 12");
+
+    expect(within(list).getAllByRole("listitem")).toHaveLength(10);
+    expect(within(list).queryByText("Session 2")).not.toBeInTheDocument();
+    expect(within(list).getByText("Page 1 of 2")).toBeInTheDocument();
+
+    await user.click(within(list).getByRole("button", { name: "Next session page" }));
+    expect(within(list).getAllByRole("listitem")).toHaveLength(2);
+    expect(within(list).getByText("Session 2")).toBeInTheDocument();
+    expect(within(list).getByText("Session 1")).toBeInTheDocument();
+    expect(within(list).getByText("Page 2 of 2")).toBeInTheDocument();
   });
 
   it("deletes a session from the list", async () => {
@@ -670,7 +774,10 @@ describe("App", () => {
     await renderLoaded();
     await openSettings(user);
     const model = await screen.findByRole("radiogroup", { name: "Model" });
-    expect(within(model).getByRole("radio", { name: /Default — Claude Sonnet 5.5/ })).toBeChecked();
+    const defaultModel = within(model).getByRole("radio", { name: /Default — Claude Sonnet 5.5/ });
+    expect(defaultModel).toBeChecked();
+    expect(within(defaultModel).getByText("Active")).toBeInTheDocument();
+    expect(within(model).getAllByRole("radio")[0]).toBe(defaultModel);
     expect(within(model).getByRole("radio", { name: /Claude Haiku 5.5/ })).toHaveTextContent(
       "200K context · $1 / $5",
     );
@@ -682,6 +789,9 @@ describe("App", () => {
     await waitFor(() =>
       expect(within(model).getByRole("radio", { name: /Claude Haiku 5.5/ })).toBeChecked(),
     );
+    const activeModel = within(model).getByRole("radio", { name: /Claude Haiku 5.5/ });
+    expect(within(model).getAllByRole("radio")[0]).toBe(activeModel);
+    expect(within(activeModel).getByText("Active")).toBeInTheDocument();
     expect(api.rows[0].model).toBe("anthropic/claude-haiku-5.5");
     expect(screen.getByRole("region", { name: "Model" })).toHaveTextContent("Now: Claude Haiku 5.5");
 

@@ -6,7 +6,7 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     // In the cluster the API shares this host under /api/v1; locally it runs on its own port.
-    proxy: { "/api": "http://localhost:8080" },
+    proxy: { "/api": { target: "http://localhost:8080", ws: true } },
   },
   test: {
     environment: "jsdom",

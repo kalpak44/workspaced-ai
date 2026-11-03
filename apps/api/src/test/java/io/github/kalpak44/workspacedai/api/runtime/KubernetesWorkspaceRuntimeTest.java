@@ -19,6 +19,7 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.fabric8.mockwebserver.Context;
 import io.fabric8.mockwebserver.MockWebServer;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
@@ -180,6 +181,13 @@ class KubernetesWorkspaceRuntimeTest {
     runtime.putSecret(id, "OPENCODE_SERVER_PASSWORD", "pw-1");
     client.services().inNamespace(namespace()).withName(resourceName(id)).delete();
     assertThat(runtime.harness(id)).isEmpty();
+  }
+
+  @Test
+  void refusesATerminalUntilTheWorkspacePodIsReady() {
+    assertThatThrownBy(() -> runtime.terminal(id, OutputStream.nullOutputStream(), () -> {}))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("workspace pod is not ready");
   }
 
   @Test

@@ -5,6 +5,8 @@ import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceEnvironment;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
+import java.io.OutputStream;
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.List;
@@ -100,6 +102,15 @@ public class WorkspaceService {
     runtime.stop(id);
     events.publishEvent(new WorkspaceDeleted(id));
     return true;
+  }
+
+  /** Opens a terminal only for a workspace that still exists in this application. */
+  @Transactional(readOnly = true)
+  public WorkspaceTerminal terminal(UUID id, OutputStream output, Runnable onExit) {
+    if (!repository.existsById(id)) {
+      throw new IllegalArgumentException("no workspace " + id);
+    }
+    return runtime.terminal(id, output, onExit);
   }
 
   private WorkspaceStatus statusOf(UUID id) {

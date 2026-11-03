@@ -3,6 +3,7 @@ export type Route =
   | { readonly name: "home" }
   | { readonly name: "workspace"; readonly workspaceId: string }
   | { readonly name: "settings"; readonly workspaceId: string }
+  | { readonly name: "terminal"; readonly workspaceId: string }
   | { readonly name: "session"; readonly workspaceId: string; readonly sessionId: string };
 
 // Ids are UUIDs; matching only path-safe characters keeps a crafted URL from reaching an API
@@ -11,6 +12,7 @@ const ID = "([A-Za-z0-9_-]+)";
 const PATTERNS: ReadonlyArray<[RegExp, (ids: string[]) => Route]> = [
   [new RegExp(`^/workspaces/${ID}/?$`), ([w]) => ({ name: "workspace", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/settings/?$`), ([w]) => ({ name: "settings", workspaceId: w })],
+  [new RegExp(`^/workspaces/${ID}/terminal/?$`), ([w]) => ({ name: "terminal", workspaceId: w })],
   [
     new RegExp(`^/workspaces/${ID}/sessions/${ID}/?$`),
     ([w, s]) => ({ name: "session", workspaceId: w, sessionId: s }),
@@ -36,6 +38,8 @@ export function routePath(route: Route): string {
       return `/workspaces/${route.workspaceId}`;
     case "settings":
       return `/workspaces/${route.workspaceId}/settings`;
+    case "terminal":
+      return `/workspaces/${route.workspaceId}/terminal`;
     case "session":
       return `/workspaces/${route.workspaceId}/sessions/${route.sessionId}`;
   }

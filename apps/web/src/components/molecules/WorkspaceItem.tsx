@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react";
+import { MoreHorizontal, Pencil, Settings, SquareTerminal, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDismiss } from "../../hooks/useDismiss";
 import type { Workspace } from "../../hooks/useWorkspaces";
@@ -13,6 +13,8 @@ interface Props {
   readonly deleting?: boolean;
   readonly onSelect: () => void;
   readonly onRename: (name: string) => void;
+  readonly onSettings: () => void;
+  readonly onTerminal: () => void;
   readonly onDelete: () => void;
 }
 
@@ -22,6 +24,8 @@ export function WorkspaceItem({
   deleting = false,
   onSelect,
   onRename,
+  onSettings,
+  onTerminal,
   onDelete,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -96,23 +100,54 @@ export function WorkspaceItem({
       {menuOpen && (
         <Menu className="mt-1 w-36 rounded-md py-1">
           <MenuItem
-            className="px-3 py-1.5"
+            className="gap-2 px-3 py-2"
             onClick={() => {
               setMenuOpen(false);
               setEditing(true);
             }}
           >
-            Rename
+            <span className="flex items-center gap-2">
+              <Pencil aria-hidden className="size-3.5" />
+              Rename
+            </span>
           </MenuItem>
           <MenuItem
+            className="gap-2 px-3 py-2"
+            onClick={() => {
+              setMenuOpen(false);
+              onSettings();
+            }}
+          >
+            <span className="flex items-center gap-2">
+              <Settings aria-hidden className="size-3.5" />
+              Settings
+            </span>
+          </MenuItem>
+          <MenuItem
+            className="gap-2 px-3 py-2"
+            onClick={() => {
+              setMenuOpen(false);
+              onTerminal();
+            }}
+          >
+            <span className="flex items-center gap-2">
+              <SquareTerminal aria-hidden className="size-3.5" />
+              Terminal
+            </span>
+          </MenuItem>
+          <div className="mx-2 my-1 border-t border-zinc-200 dark:border-zinc-700" />
+          <MenuItem
             danger
-            className="px-3 py-1.5"
+            className="gap-2 px-3 py-2"
             onClick={() => {
               setMenuOpen(false);
               onDelete();
             }}
           >
-            Delete
+            <span className="flex items-center gap-2">
+              <Trash2 aria-hidden className="size-3.5" />
+              Delete
+            </span>
           </MenuItem>
         </Menu>
       )}

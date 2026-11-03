@@ -13,7 +13,7 @@ interface Props {
 export function SessionCard({ session, deleting, onOpen, onDelete }: Props) {
   const title = session.title ?? "New session";
   return (
-    <li className="group relative flex items-center rounded-lg border border-zinc-200 hover:border-zinc-400 dark:border-zinc-800 dark:hover:border-zinc-600">
+    <li className="group relative flex items-center rounded-xl border border-zinc-200/80 bg-white transition duration-150 hover:-translate-y-px hover:border-zinc-300 hover:shadow-sm dark:border-zinc-800 dark:bg-zinc-900/40 dark:hover:border-zinc-700">
       <button
         type="button"
         onClick={onOpen}

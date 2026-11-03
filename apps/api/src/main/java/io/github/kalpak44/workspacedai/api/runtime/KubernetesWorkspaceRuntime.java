@@ -21,6 +21,8 @@ import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -182,6 +184,50 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
             StandardCharsets.UTF_8);
     var url = "http://" + name + "." + namespace + ".svc:" + HARNESS_PORT;
     return Optional.of(new HarnessEndpoint(URI.create(url), password));
+  }
+
+  @Override
+  public WorkspaceTerminal terminal(UUID workspaceId, OutputStream output, Runnable onExit) {
+    var pod =
+        client
+            .pods()
+            .inNamespace(namespace)
+            .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
+            .list()
+            .getItems()
+            .stream()
+            .filter(p -> statusOf(p) == WorkspaceStatus.READY)
+            .findFirst()
+            .orElseThrow(() -> new IllegalStateException("workspace pod is not ready"));
+    var watch =
+        client
+            .pods()
+            .inNamespace(namespace)
+            .withName(pod.getMetadata().getName())
+            .inContainer("workspace")
+            .redirectingInput()
+            .writingOutput(output)
+            .writingError(output)
+            .withTTY()
+            .exec("/bin/bash", "-l");
+    watch.exitCode().whenComplete((code, error) -> onExit.run());
+    return new WorkspaceTerminal() {
+      @Override
+      public void input(byte[] bytes) throws IOException {
+        watch.getInput().write(bytes);
+        watch.getInput().flush();
+      }
+
+      @Override
+      public void resize(int columns, int rows) {
+        watch.resize(columns, rows);
+      }
+
+      @Override
+      public void close() {
+        watch.close();
+      }
+    };
   }
 
   /**

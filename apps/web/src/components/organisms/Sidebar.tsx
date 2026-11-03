@@ -10,11 +10,23 @@ interface Props {
   readonly onSelect: (id: string) => void;
   readonly onNew: () => void;
   readonly onRename: (id: string, name: string) => void;
+  readonly onSettings: (id: string) => void;
+  readonly onTerminal: (id: string) => void;
   readonly onDelete: (id: string) => void;
 }
 
-/** Its header shares the page header's height and rule, so the two read as one bar. */
-export function Sidebar({ workspaces, selectedId, deleting, onSelect, onNew, onRename, onDelete }: Props) {
+/** The persistent workspace switcher and home for workspace-level actions. */
+export function Sidebar({
+  workspaces,
+  selectedId,
+  deleting,
+  onSelect,
+  onNew,
+  onRename,
+  onSettings,
+  onTerminal,
+  onDelete,
+}: Props) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
       <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 pr-3 pl-5 dark:border-zinc-800">
@@ -30,6 +42,8 @@ export function Sidebar({ workspaces, selectedId, deleting, onSelect, onNew, onR
             deleting={deleting.has(workspace.id)}
             onSelect={() => onSelect(workspace.id)}
             onRename={(name) => onRename(workspace.id, name)}
+            onSettings={() => onSettings(workspace.id)}
+            onTerminal={() => onTerminal(workspace.id)}
             onDelete={() => onDelete(workspace.id)}
           />
         ))}

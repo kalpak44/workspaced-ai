@@ -35,12 +35,21 @@ function Row({ label, detail, meta, selected, saving, onChoose }: RowProps) {
         role="radio"
         aria-checked={selected}
         onClick={onChoose}
-        className={`flex w-full items-center gap-3 px-3 py-2 text-left hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${
-          selected ? "bg-zinc-50 dark:bg-zinc-800/60" : ""
+        className={`relative flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${
+          selected
+            ? "z-1 bg-zinc-100 shadow-[inset_3px_0_0_#18181b,inset_0_0_0_1px_#d4d4d8] dark:bg-zinc-800 dark:shadow-[inset_3px_0_0_#fafafa,inset_0_0_0_1px_#52525b]"
+            : ""
         }`}
       >
         <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium">{label}</span>
+          <span className="flex items-center gap-2">
+            <span className="truncate text-sm font-medium">{label}</span>
+            {selected && (
+              <span className="shrink-0 rounded-full bg-zinc-900 px-2 py-0.5 text-[10px] font-semibold tracking-wide text-white uppercase dark:bg-zinc-100 dark:text-zinc-900">
+                Active
+              </span>
+            )}
+          </span>
           <span className="block truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
             {detail}
           </span>
@@ -70,10 +79,14 @@ export function ModelPanel(props: Props) {
   const matches = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const models = catalogue?.models ?? [];
-    return needle
+    const filtered = needle
       ? models.filter((m) => `${m.name} ${m.id}`.toLowerCase().includes(needle))
       : models;
-  }, [catalogue, query]);
+    // Keep a custom active model above Default and the rest of the catalogue.
+    return current && !needle
+      ? [...filtered].sort((a, b) => Number(b.id === current) - Number(a.id === current))
+      : filtered;
+  }, [catalogue, current, query]);
   const defaultName =
     catalogue?.models.find((m) => m.id === catalogue.defaultModel)?.name ?? catalogue?.defaultModel;
   const chosen = catalogue?.models.find((m) => m.id === current);
@@ -105,7 +118,7 @@ export function ModelPanel(props: Props) {
           aria-label="Model"
           className="max-h-80 divide-y divide-zinc-100 overflow-y-auto rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800"
         >
-          {!query && (
+          {!query && current === null && (
             <Row
               label={`Default${defaultName ? ` — ${defaultName}` : ""}`}
               detail="Whatever the agent is set up with"
@@ -125,6 +138,15 @@ export function ModelPanel(props: Props) {
               onChoose={() => props.onChoose(model.id)}
             />
           ))}
+          {!query && current !== null && (
+            <Row
+              label={`Default${defaultName ? ` — ${defaultName}` : ""}`}
+              detail="Whatever the agent is set up with"
+              selected={false}
+              saving={saving === null}
+              onChoose={() => props.onChoose(null)}
+            />
+          )}
           {matches.length === 0 && (
             <li className="px-3 py-6 text-center text-sm text-zinc-500">No model matches “{query}”</li>
           )}

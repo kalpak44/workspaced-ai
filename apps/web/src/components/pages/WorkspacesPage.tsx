@@ -4,10 +4,11 @@ import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
 import { DEFAULT_NAME, useWorkspaces } from "../../hooks/useWorkspaces";
 import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
-import { CreateWorkspaceDialog, Sidebar, TopBar } from "../organisms";
+import { CreateWorkspaceDialog, DeleteWorkspaceDialog, Sidebar, TopBar } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
+import { TerminalPage } from "./TerminalPage";
 import { WorkspacePage } from "./WorkspacePage";
 
 const APP = "workspaced-ai";
@@ -34,11 +35,13 @@ export function WorkspacesPage() {
   const providers = useModelProviders();
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const openNew = () => setNewName(suggestName());
 
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
+  const deleteTarget = workspaces.find((w) => w.id === deleteId) ?? null;
 
   // Home is the first workspace, and a workspace that is gone — deleted here or in another
   // tab, or a stale link — falls back to home. Both replace the entry, so Back skips them.
@@ -84,6 +87,9 @@ export function WorkspacesPage() {
     page = (
       <SettingsPage workspace={workspace} onModelChanged={(model) => patch(id, { model })} />
     );
+  } else if (route.name === "terminal") {
+    tabTitle = `Terminal · ${workspace.name}`;
+    page = <TerminalPage workspace={workspace} deleting={deleting.has(workspace.id)} />;
   } else if (route.name === "session") {
     tabTitle = `${pageTitle ?? "Session"} · ${workspace.name}`;
     page = (
@@ -115,7 +121,9 @@ export function WorkspacesPage() {
           onSelect={(id) => navigate({ name: "workspace", workspaceId: id })}
           onNew={openNew}
           onRename={rename}
-          onDelete={remove}
+          onSettings={(id) => navigate({ name: "settings", workspaceId: id })}
+          onTerminal={(id) => navigate({ name: "terminal", workspaceId: id })}
+          onDelete={setDeleteId}
         />
       }
       notice={error && <ErrorBanner message={error} onDismiss={dismissError} />}
@@ -132,6 +140,16 @@ export function WorkspacesPage() {
             )
           }
           onClose={() => setNewName(null)}
+        />
+      )}
+      {deleteTarget && (
+        <DeleteWorkspaceDialog
+          name={deleteTarget.name}
+          onClose={() => setDeleteId(null)}
+          onConfirm={() => {
+            remove(deleteTarget.id);
+            setDeleteId(null);
+          }}
         />
       )}
     </AppLayout>

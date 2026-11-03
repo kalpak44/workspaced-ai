@@ -8,6 +8,7 @@ describe("routes", () => {
     { name: "home" },
     { name: "workspace", workspaceId: "w1" },
     { name: "settings", workspaceId: "w1" },
+    { name: "terminal", workspaceId: "w1" },
     { name: "session", workspaceId: "w1", sessionId: "s1" },
   ];
 

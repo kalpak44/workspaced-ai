@@ -1,3 +1,4 @@
+@import "@xterm/xterm/css/xterm.css";
 @import "tailwindcss";
 
 /* The theme switcher sets .dark on <html>, so "system" is resolved in code, not by media query. */

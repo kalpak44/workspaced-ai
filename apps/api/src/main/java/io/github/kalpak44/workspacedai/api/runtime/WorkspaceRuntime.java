@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -28,6 +29,9 @@ public interface WorkspaceRuntime {
 
   /** Where the workspace's harness answers; empty while it has none running. */
   Optional<HarnessEndpoint> harness(UUID workspaceId);
+
+  /** Opens an interactive Bash TTY and streams its output to {@code output}. */
+  WorkspaceTerminal terminal(UUID workspaceId, OutputStream output, Runnable onExit);
 
   /** One status per id, in a single lookup however many there are. */
   Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds);

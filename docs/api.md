@@ -52,6 +52,24 @@ Deployments ran as a bare pod of that name, which is still reported on and delet
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.
 
+### Workspace terminal
+
+`WS /api/v1/workspaces/{id}/terminal` opens an interactive TTY running `/bin/bash -l` in the workspace pod's
+`workspace` container. Browser input is sent as binary WebSocket frames; output is returned as binary frames.
+Terminal resizing uses a text frame in the form `resize:<columns>:<rows>`. The connection closes when Bash exits,
+the browser leaves the page, or the pod disappears. A missing workspace or a pod that is not ready closes the
+connection with an error reason. Terminals are unavailable in the local runtime because it deliberately does not
+connect to Kubernetes.
+
+The API's Kubernetes service account therefore needs `create` permission on the `pods/exec` subresource in addition
+to its existing pod read/write permissions:
+
+```yaml
+- apiGroups: [""]
+  resources: ["pods/exec"]
+  verbs: ["create"]
+```
+
 ## Sessions
 
 Each workspace pod runs the agent harness, [opencode](https://opencode.ai) (`apps/harness`), as `opencode serve`.

@@ -16,7 +16,8 @@ src/
     ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, ModelPanel, McpPanel,
     │               SecretsPanel
     ├── templates/  AppLayout — the frame every page sits in
-    └── pages/      WorkspacesPage (the shell: sidebar, create dialog, routing), WorkspacePage, SessionPage, SettingsPage
+    └── pages/      WorkspacesPage (the shell: sidebar, dialogs, routing), WorkspacePage, SessionPage, SettingsPage,
+                    TerminalPage
 ```
 
 | Rule                                               | Why                                                        |
@@ -38,6 +39,7 @@ already answers every path with `index.html`, which is what makes a deep link lo
 | `/workspaces/<id>`                     | its sessions, newest first, and a box that starts a new one     |
 | `/workspaces/<id>/sessions/<session>`  | that session's chat                                             |
 | `/workspaces/<id>/settings`            | its model, MCP servers and secrets                              |
+| `/workspaces/<id>/terminal`            | an interactive Bash TTY inside its Kubernetes pod               |
 
 A link to a session or workspace that no longer exists falls back to its workspace or home, replacing the history
 entry so Back skips it. Typing a task on a workspace page creates a session and opens it; the session page sends the

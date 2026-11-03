@@ -1,10 +1,7 @@
-import { Plus, Settings } from "lucide-react";
 import { queuePrompt } from "../../hooks/useChat";
 import { navigate } from "../../hooks/useRoute";
 import { useSessions } from "../../hooks/useSessions";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { Button, IconButton } from "../atoms";
-import { PageHeader, WorkspaceStatusIcon } from "../molecules";
 import { SessionList } from "../organisms";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
@@ -33,26 +30,7 @@ export function WorkspacePage({ workspace, deleting }: Props) {
 
   return (
     <>
-      <PageHeader
-        title={workspace.name}
-        badge={<WorkspaceStatusIcon status={workspace.status} />}
-        actions={
-          <>
-            <IconButton
-              label="Workspace settings"
-              icon={Settings}
-              onClick={() => navigate({ name: "settings", workspaceId: workspace.id })}
-            />
-            <Button
-              label="New session"
-              icon={Plus}
-              variant="secondary"
-              disabled={!ready}
-              onClick={() => void sessions.create().then((s) => s && open(s.id))}
-            />
-          </>
-        }
-      />
+      <h1 className="sr-only">{workspace.name}</h1>
       {ready ? (
         <SessionList
           sessions={sessions.sessions}
