@@ -162,7 +162,12 @@ export function installFakeApi(
     if (!sessionId) {
       if (method === "POST") {
         const id = `s-${state.nextSession++}`;
-        const session: Session = { id, title: null, path: `/home/workspace/sessions/${id}` };
+        const session: Session = {
+          id,
+          title: null,
+          path: `/home/workspace/sessions/${id}`,
+          createdAt: new Date().toISOString(),
+        };
         sessions.set(workspaceId, [...list, session]);
         return json(session, 201);
       }

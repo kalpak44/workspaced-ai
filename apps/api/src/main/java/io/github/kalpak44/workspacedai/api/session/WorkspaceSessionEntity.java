@@ -5,6 +5,7 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 
 /** A chat session as stored; its messages live in the harness, not the database. */
@@ -28,8 +29,8 @@ public class WorkspaceSessionEntity {
   @Column(length = 200)
   private String title;
 
-  // Set by the column default; read only to order the list.
-  @Column(name = "created_at", insertable = false, updatable = false)
+  // Set here rather than left to the column default, so the row just saved can report it.
+  @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
   protected WorkspaceSessionEntity() {
@@ -41,6 +42,8 @@ public class WorkspaceSessionEntity {
     this.workspaceId = workspaceId;
     this.path = path;
     this.harnessSessionId = harnessSessionId;
+    // Postgres keeps microseconds, so the value read back later equals the one returned now.
+    this.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
   }
 
   public UUID getId() {
@@ -61,5 +64,9 @@ public class WorkspaceSessionEntity {
 
   public String getTitle() {
     return title;
+  }
+
+  public Instant getCreatedAt() {
+    return createdAt;
   }
 }

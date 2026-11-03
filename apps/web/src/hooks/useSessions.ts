@@ -5,32 +5,26 @@ export type { Session } from "../api/sessionsApi";
 
 /**
  * A workspace's chat sessions. Like the workspace list, it changes only once the API has
- * accepted the change. Pass null while no workspace's chat is showing.
+ * accepted the change. Pass null while the workspace has no running harness to ask.
  */
 export function useSessions(workspaceId: string | null) {
   const [sessions, setSessions] = useState<Session[]>([]);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  // Loading from the first render, so nothing reads "no sessions" before the fetch began.
+  const [loading, setLoading] = useState(workspaceId !== null);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<ReadonlySet<string>>(new Set());
 
   useEffect(() => {
     setSessions([]);
-    setSelectedId(null);
     setError(null);
     if (workspaceId === null) {
+      setLoading(false);
       return undefined;
     }
     let active = true;
     setLoading(true);
     listSessions(workspaceId)
-      .then((list) => {
-        if (active) {
-          setSessions(list);
-          // The newest is where the user most likely left off.
-          setSelectedId(list.at(-1)?.id ?? null);
-        }
-      })
+      .then((list) => active && setSessions(list))
       .catch(() => active && setError("Could not load the sessions"))
       .finally(() => active && setLoading(false));
     return () => {
@@ -46,7 +40,6 @@ export function useSessions(workspaceId: string | null) {
     return createSession(workspaceId).then(
       (session) => {
         setSessions((current) => [...current, session]);
-        setSelectedId(session.id);
         return session;
       },
       () => {
@@ -70,7 +63,6 @@ export function useSessions(workspaceId: string | null) {
     deleteSession(workspaceId, id).then(
       () => {
         setSessions((current) => current.filter((s) => s.id !== id));
-        setSelectedId((current) => (current === id ? null : current));
         settle();
       },
       () => {
@@ -86,12 +78,10 @@ export function useSessions(workspaceId: string | null) {
 
   return {
     sessions,
-    selectedId,
     loading,
     deleting,
     error,
     dismissError: () => setError(null),
-    select: setSelectedId,
     create,
     remove,
     retitle,

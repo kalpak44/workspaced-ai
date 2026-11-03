@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.session;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
 import java.util.UUID;
 
 @Schema(description = "A chat session in a workspace, with its own working directory")
@@ -13,9 +14,14 @@ public record Session(
     @Schema(
             description = "The directory the agent works in, inside the workspace",
             example = "/home/workspace/sessions/8b0e4f7c-1d2a-4c3b-9e5f-6a7b8c9d0e1f")
-        String path) {
+        String path,
+    @Schema(example = "2026-11-03T15:37:24.531Z") Instant createdAt) {
+
+  Session withTitle(String title) {
+    return new Session(id, title, path, createdAt);
+  }
 
   static Session of(WorkspaceSessionEntity entity) {
-    return new Session(entity.getId(), entity.getTitle(), entity.getPath());
+    return new Session(entity.getId(), entity.getTitle(), entity.getPath(), entity.getCreatedAt());
   }
 }

@@ -8,4 +8,6 @@ afterEach(() => {
   document.documentElement.className = "";
   vi.unstubAllGlobals();
   vi.restoreAllMocks();
+  // The URL is the app's state; each test starts from the root.
+  globalThis.history.replaceState(null, "", "/");
 });

@@ -27,6 +27,9 @@ public class FakeOpenCode implements AutoCloseable {
 
   public final List<Request> requests = new CopyOnWriteArrayList<>();
 
+  /** What GET /session/{id} answers as the title; opencode's placeholder until it names one. */
+  public volatile String title = "New session - 2026-11-03T15:09:46.948Z";
+
   /** When set, the event stream sends one heartbeat and then stays open until released. */
   public volatile CountDownLatch holdStream;
 
@@ -68,6 +71,8 @@ public class FakeOpenCode implements AutoCloseable {
       case "POST /session" ->
           respond(exchange, 200, "{\"id\":\"" + SESSION + "\",\"title\":\"x\"}");
       case "DELETE /session/" + SESSION -> respond(exchange, 200, "true");
+      case "GET /session/" + SESSION ->
+          respond(exchange, 200, "{\"id\":\"" + SESSION + "\",\"title\":\"" + title + "\"}");
       case "GET /session/" + SESSION + "/message" -> respond(exchange, 200, MESSAGES);
       case "POST /session/" + SESSION + "/prompt_async" -> respond(exchange, 204, null);
       case "POST /session/" + SESSION + "/abort" -> respond(exchange, 200, "true");

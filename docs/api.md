@@ -71,7 +71,9 @@ holds the session's id, that path and opencode's id for it; the conversation its
 The stream carries that one session only: `message` (`{id, role}`), `part` (`{messageId, part}`, a part's whole
 state, which replaces any earlier one of that id), `delta` (`{messageId, partId, delta}`, text appended to a part),
 `status` (`{busy}`), `title` (`{title}`, also stored) and `error` (`{message}`). A part is `text`, `reasoning` or a
-`tool` with its name and status. A session's `title` is null until the agent names it after the first exchange.
+`tool` with its name and status. A session's `title` is null until the agent names it after the first exchange, using
+the workspace's own model; a title given while no chat was open is picked up the next time the sessions are listed.
+Each session also carries its `createdAt`.
 
 The API reaches the harness through the workspace's Service, at
 `http://workspaced-ai-workspace-<id>.<namespace>.svc:4096`, with HTTP basic auth; the password is generated when the

@@ -72,6 +72,7 @@ class SessionControllerTest {
   void setUp() {
     repository.deleteAll();
     OPENCODE.requests.clear();
+    OPENCODE.title = "New session - 2026-11-03T15:09:46.948Z";
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -83,6 +84,7 @@ class SessionControllerTest {
     var session = JSON.readValue(created.body(), Session.class);
     assertThat(session.path()).isEqualTo("/home/workspace/sessions/" + session.id());
     assertThat(session.title()).isNull();
+    assertThat(session.createdAt()).isNotNull();
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/sessions/" + session.id()));
     assertThat(OPENCODE.requests.getFirst().directory()).isEqualTo(session.path());
@@ -93,8 +95,22 @@ class SessionControllerTest {
     var second = JSON.readValue(send("POST", "", null).body(), Session.class);
     var listed = JSON.readTree(send("GET", "", null).body());
     assertThat(listed).hasSize(2);
+    // What the create answered is what the list reads back.
+    assertThat(listed.get(0).get("createdAt").asString()).isEqualTo(session.createdAt().toString());
     assertThat(listed.get(0).get("id").asString()).isEqualTo(session.id().toString());
     assertThat(listed.get(1).get("id").asString()).isEqualTo(second.id().toString());
+  }
+
+  @Test
+  void picksUpATitleTheAgentGaveWhileNoChatWasOpen() throws Exception {
+    var session = create();
+    assertThat(JSON.readTree(send("GET", "", null).body()).get(0).get("title").isNull()).isTrue();
+
+    OPENCODE.title = "Fix the login form";
+    var listed = JSON.readTree(send("GET", "", null).body());
+    assertThat(listed.get(0).get("title").asString()).isEqualTo("Fix the login form");
+    assertThat(sessions.findById(session.id()))
+        .hasValueSatisfying(e -> assertThat(e.getTitle()).isEqualTo("Fix the login form"));
   }
 
   @Test
@@ -132,16 +148,17 @@ class SessionControllerTest {
             .build();
     var response = http.send(request, BodyHandlers.ofLines());
     assertThat(response.statusCode()).isEqualTo(200);
+    var lines = response.body().iterator();
+    // The stream opens with a line of its own, before the harness has said anything.
+    assertThat(lines.next()).isEqualTo(":connected");
     var names = new ArrayList<String>();
     var data = new ArrayList<String>();
     // The fake harness replays one reply and ends, which ends this stream too.
-    response
-        .body()
-        .forEach(
-            line -> {
-              if (line.startsWith("event:")) names.add(line.substring(6));
-              if (line.startsWith("data:")) data.add(line.substring(5));
-            });
+    lines.forEachRemaining(
+        line -> {
+          if (line.startsWith("event:")) names.add(line.substring(6));
+          if (line.startsWith("data:")) data.add(line.substring(5));
+        });
     assertThat(names).contains("message", "part", "delta", "status", "title");
     assertThat(data)
         .contains(

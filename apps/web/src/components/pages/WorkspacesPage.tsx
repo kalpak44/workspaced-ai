@@ -1,195 +1,95 @@
-import { ArrowLeft, Settings } from "lucide-react";
-import { type ReactNode, useState } from "react";
-import { useChat } from "../../hooks/useChat";
+import { useCallback, useEffect, useState } from "react";
 import { useModelProviders } from "../../hooks/useModelProviders";
-import { useSecrets } from "../../hooks/useSecrets";
-import { useSessions } from "../../hooks/useSessions";
+import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
-import { DEFAULT_NAME, type Workspace, useWorkspaces } from "../../hooks/useWorkspaces";
-import { IconButton } from "../atoms";
-import { EmptyState, ErrorBanner } from "../molecules";
-import {
-  ChatPanel,
-  CreateWorkspaceDialog,
-  SecretsPanel,
-  type Section,
-  Sidebar,
-  TopBar,
-} from "../organisms";
+import { DEFAULT_NAME, useWorkspaces } from "../../hooks/useWorkspaces";
+import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
+import { CreateWorkspaceDialog, Sidebar, TopBar } from "../organisms";
 import { AppLayout } from "../templates";
+import { SessionPage } from "./SessionPage";
+import { SettingsPage } from "./SettingsPage";
+import { WorkspacePage } from "./WorkspacePage";
 
-const SECTIONS: Record<Exclude<Section, "workspaces">, { title: string; hint: string }> = {
-  knowledge: { title: "No knowledge yet", hint: "Documents your agents can draw on will appear here" },
-  files: { title: "No files yet", hint: "Files you upload will appear here" },
-};
+const APP = "workspaced-ai";
 
-interface View {
-  readonly title: string;
-  readonly body: ReactNode;
-  readonly actions?: ReactNode;
-}
-
-interface Handlers {
-  readonly openNew: () => void;
-  readonly openSettings: () => void;
-  readonly closeSettings: () => void;
-  readonly settings: ReactNode;
-  readonly chat: ReactNode;
-}
-
-/** The only place that decides what the main area shows. */
-function viewFor(
-  section: Section,
-  loading: boolean,
-  selected: Workspace | null,
-  deleting: ReadonlySet<string>,
-  settingsOpen: boolean,
-  { openNew, openSettings, closeSettings, settings, chat }: Handlers,
-): View {
-  if (section !== "workspaces") {
-    return {
-      title: section === "knowledge" ? "Knowledge" : "My Files",
-      body: <EmptyState {...SECTIONS[section]} />,
-    };
-  }
-  if (loading) {
-    return {
-      title: "Workspaces",
-      body: <EmptyState busy title="Loading workspaces…" hint="Fetching them from the API" />,
-    };
-  }
-  if (!selected) {
-    return {
-      title: "Workspaces",
-      body: (
-        <EmptyState
-          title="No workspaces"
-          hint="Create one to get started"
-          action={{ label: DEFAULT_NAME, onClick: openNew }}
-        />
-      ),
-    };
-  }
-  // Ahead of the status: the pod is being removed on purpose, so "unavailable" would mislead.
-  if (deleting.has(selected.id)) {
-    return {
-      title: selected.name,
-      body: <EmptyState busy title="Deleting workspace" hint="Stopping its environment…" />,
-    };
-  }
-  // Secrets live apart from the pod, so they can be changed whatever state it is in.
-  if (settingsOpen) {
-    return {
-      title: `${selected.name} · Settings`,
-      actions: <IconButton label="Back to chat" icon={ArrowLeft} onClick={closeSettings} />,
-      body: settings,
-    };
-  }
-  const settingsButton = (
-    <IconButton label="Workspace settings" icon={Settings} onClick={openSettings} />
-  );
-  switch (selected.status) {
-    case "INITIALIZING":
-      return {
-        title: selected.name,
-        actions: settingsButton,
-        body: <EmptyState busy title="Initializing workspace" hint="Starting its environment…" />,
-      };
-    case "FAILED":
-      return {
-        title: selected.name,
-        actions: settingsButton,
-        body: (
-          <EmptyState
-            title="Workspace unavailable"
-            hint="Its environment stopped or could not start. Delete it and create a new one."
-          />
-        ),
-      };
-    default:
-      return { title: selected.name, actions: settingsButton, body: chat };
-  }
-}
-
+/**
+ * The frame every page shares — the bar, the sidebar of workspaces, the create dialog — and
+ * the one place that turns the URL into the page beside them.
+ */
 export function WorkspacesPage() {
   const [theme, setTheme] = useTheme();
-  const {
-    workspaces,
-    selected,
-    loading,
-    deleting,
-    error,
-    dismissError,
-    select,
-    create,
-    suggestName,
-    rename,
-    remove,
-  } = useWorkspaces();
+  const route = useRoute();
+  const { workspaces, loading, deleting, error, dismissError, create, suggestName, rename, remove } =
+    useWorkspaces();
   const providers = useModelProviders();
-  const [section, setSection] = useState<Section>("workspaces");
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
-  // Which workspace's settings are open. Keyed by id, so a deleted one cannot leave them open.
-  const [settingsFor, setSettingsFor] = useState<string | null>(null);
-  const settingsOpen = section === "workspaces" && !!selected && settingsFor === selected.id;
-  const secrets = useSecrets(settingsOpen ? selected.id : null);
-  // Sessions only exist in a running harness, so they are fetched once the workspace is ready.
-  const chatOpen =
-    section === "workspaces" &&
-    !!selected &&
-    !settingsOpen &&
-    selected.status === "READY" &&
-    !deleting.has(selected.id);
-  const sessions = useSessions(chatOpen ? selected.id : null);
-  const chat = useChat(chatOpen ? selected.id : null, sessions.selectedId, sessions.retitle);
-  const send = async (text: string) => {
-    if (sessions.selectedId !== null) {
-      return chat.send(text);
-    }
-    const session = await sessions.create();
-    return session ? chat.send(text, session.id) : false;
-  };
-  const openNew = (base?: string) => setNewName(suggestName(base));
+  const [pageTitle, setPageTitle] = useState<string | null>(null);
+  const openNew = () => setNewName(suggestName());
 
-  const settings = (
-    <SecretsPanel
-      secrets={secrets.secrets}
-      loading={secrets.loading}
-      removing={secrets.removing}
-      error={secrets.error}
-      onDismissError={secrets.dismissError}
-      onAdd={secrets.add}
-      onRemove={secrets.remove}
-    />
-  );
-  const chatPanel = (
-    <ChatPanel
-      sessions={sessions.sessions}
-      selectedSessionId={sessions.selectedId}
-      deletingSessions={sessions.deleting}
-      onSelectSession={sessions.select}
-      onNewSession={() => void sessions.create()}
-      onDeleteSession={sessions.remove}
-      messages={chat.messages}
-      loading={sessions.loading || chat.loading}
-      busy={chat.busy}
-      error={sessions.error ?? chat.error}
-      onDismissError={() => {
-        sessions.dismissError();
-        chat.dismissError();
-      }}
-      onSend={send}
-      onStop={chat.stop}
-    />
-  );
-  const view = viewFor(section, loading, selected, deleting, settingsOpen, {
-    openNew: () => openNew(),
-    openSettings: () => setSettingsFor(selected?.id ?? null),
-    closeSettings: () => setSettingsFor(null),
-    settings,
-    chat: chatPanel,
-  });
+  const workspaceId = "workspaceId" in route ? route.workspaceId : null;
+  const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
+
+  // Home is the first workspace, and a workspace that is gone — deleted here or in another
+  // tab, or a stale link — falls back to home. Both replace the entry, so Back skips them.
+  useEffect(() => {
+    if (loading) {
+      return;
+    }
+    const first = workspaces.at(0);
+    if (route.name === "home" && first) {
+      navigate({ name: "workspace", workspaceId: first.id }, { replace: true });
+    } else if (workspaceId !== null && !workspace) {
+      navigate({ name: "home" }, { replace: true });
+    }
+  }, [loading, route.name, workspaces, workspaceId, workspace]);
+
+  const onSessionTitle = useCallback((title: string) => setPageTitle(title), []);
+
+  let page;
+  let tabTitle: string;
+  if (loading || (workspaceId !== null && !workspace)) {
+    tabTitle = "Workspaces";
+    page = (
+      <>
+        <PageHeader title="Workspaces" />
+        <EmptyState busy title="Loading workspaces…" hint="Fetching them from the API" />
+      </>
+    );
+  } else if (!workspace) {
+    tabTitle = "Workspaces";
+    page = (
+      <>
+        <PageHeader title="Workspaces" />
+        <EmptyState
+          title="No workspaces"
+          hint="A workspace is a sandbox with its own agent. Create one to get started."
+          action={{ label: DEFAULT_NAME, onClick: openNew }}
+        />
+      </>
+    );
+  } else if (route.name === "settings") {
+    tabTitle = `Settings · ${workspace.name}`;
+    page = <SettingsPage workspace={workspace} />;
+  } else if (route.name === "session") {
+    tabTitle = `${pageTitle ?? "Session"} · ${workspace.name}`;
+    page = (
+      <SessionPage
+        key={route.sessionId}
+        workspace={workspace}
+        sessionId={route.sessionId}
+        deleting={deleting.has(workspace.id)}
+        onTitle={onSessionTitle}
+      />
+    );
+  } else {
+    tabTitle = workspace.name;
+    page = <WorkspacePage workspace={workspace} deleting={deleting.has(workspace.id)} />;
+  }
+
+  useEffect(() => {
+    document.title = `${tabTitle} — ${APP}`;
+  }, [tabTitle]);
 
   return (
     <AppLayout
@@ -197,30 +97,27 @@ export function WorkspacesPage() {
       sidebar={
         <Sidebar
           workspaces={workspaces}
-          selectedId={selected?.id ?? null}
+          selectedId={workspace?.id ?? null}
           deleting={deleting}
-          section={section}
-          onSection={setSection}
-          onSelect={(id) => {
-            select(id);
-            setSettingsFor(null);
-          }}
+          onSelect={(id) => navigate({ name: "workspace", workspaceId: id })}
           onNew={openNew}
           onRename={rename}
           onDelete={remove}
         />
       }
-      title={view.title}
-      actions={view.actions}
       notice={error && <ErrorBanner message={error} onDismiss={dismissError} />}
     >
-      {view.body}
+      {page}
       {newName !== null && (
         <CreateWorkspaceDialog
           initialName={newName}
           providers={providers.providers}
           providersStatus={providers.status}
-          onCreate={create}
+          onCreate={(request) =>
+            create(request, (created) =>
+              navigate({ name: "workspace", workspaceId: created.id }),
+            )
+          }
           onClose={() => setNewName(null)}
         />
       )}

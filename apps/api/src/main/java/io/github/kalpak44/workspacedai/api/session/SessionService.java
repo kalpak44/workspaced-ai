@@ -36,12 +36,36 @@ public class SessionService {
     this.harness = harness;
   }
 
-  @Transactional(readOnly = true)
+  /**
+   * A session still untitled may have been named while no chat was open to hear it, so its title is
+   * asked for here and kept. Best effort: a harness that does not answer leaves it untitled.
+   */
+  @Transactional
   public List<Session> list(UUID workspaceId) {
     requireWorkspace(workspaceId);
+    var endpoint = runtime.harness(workspaceId);
     return sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId).stream()
-        .map(Session::of)
+        .map(
+            entity ->
+                entity.getTitle() != null || endpoint.isEmpty()
+                    ? Session.of(entity)
+                    : backfill(endpoint.get(), entity))
         .toList();
+  }
+
+  private Session backfill(HarnessEndpoint endpoint, WorkspaceSessionEntity entity) {
+    try {
+      return harness
+          .title(endpoint, entity.getPath(), entity.getHarnessSessionId())
+          .map(
+              title -> {
+                sessions.retitle(entity.getId(), title);
+                return Session.of(entity).withTitle(title);
+              })
+          .orElseGet(() -> Session.of(entity));
+    } catch (HarnessUnavailableException _) {
+      return Session.of(entity);
+    }
   }
 
   /**

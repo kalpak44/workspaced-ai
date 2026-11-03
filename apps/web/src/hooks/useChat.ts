@@ -13,6 +13,15 @@ export type { ChatMessage, ChatPart } from "../api/sessionsApi";
 
 type Messages = readonly ChatMessage[];
 
+// A prompt typed before its session's page was open. The page sends it once its stream is
+// listening, so not a token of the reply is missed.
+const queued = new Map<string, string>();
+
+/** Hands `text` to the chat that opens `sessionId` next. */
+export function queuePrompt(sessionId: string, text: string): void {
+  queued.set(sessionId, text);
+}
+
 function upsertMessage(messages: Messages, id: string, role?: ChatMessage["role"]): ChatMessage[] {
   if (messages.some((m) => m.id === id)) {
     return messages.map((m) => (m.id === id && role ? { ...m, role } : m));
@@ -58,7 +67,8 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
-  const [loading, setLoading] = useState(false);
+  // Loading from the first render, so an empty conversation is never shown for a full one.
+  const [loading, setLoading] = useState(workspaceId !== null && sessionId !== null);
   const [error, setError] = useState<string | null>(null);
   // Held in a ref so a new callback each render does not reopen the stream.
   const titled = useRef(onTitle);
@@ -109,6 +119,18 @@ export function useChat(
     });
     on("title", ({ title }) => titled.current(sessionId, title));
     on("error", ({ message }) => setError(message));
+
+    const prompt = queued.get(sessionId);
+    if (prompt !== undefined) {
+      queued.delete(sessionId);
+      setBusy(true);
+      sendMessage(workspaceId, sessionId, prompt).catch(() => {
+        if (active) {
+          setBusy(false);
+          setError("Could not send the message");
+        }
+      });
+    }
     return () => {
       active = false;
       source.close();
@@ -116,16 +138,16 @@ export function useChat(
   }, [workspaceId, sessionId]);
 
   /**
-   * Sends to `target`, or to the open session. The reply, and the message itself, arrive
-   * over the stream; only the request's own failure is reported here.
+   * The reply, and the message itself, arrive over the stream; only the request's own
+   * failure is reported here.
    */
-  const send = (text: string, target: string | null = sessionId): Promise<boolean> => {
-    if (workspaceId === null || target === null) {
+  const send = (text: string): Promise<boolean> => {
+    if (workspaceId === null || sessionId === null) {
       return Promise.resolve(false);
     }
     setBusy(true);
     setError(null);
-    return sendMessage(workspaceId, target, text).then(
+    return sendMessage(workspaceId, sessionId, text).then(
       () => true,
       () => {
         setBusy(false);

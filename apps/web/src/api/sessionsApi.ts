@@ -6,6 +6,8 @@ export interface Session {
   /** Null until the agent names the session after its first exchange. */
   readonly title: string | null;
   readonly path: string;
+  /** ISO 8601. */
+  readonly createdAt: string;
 }
 
 export interface ChatPart {

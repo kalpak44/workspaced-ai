@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.harness;
 
 import java.util.List;
+import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
@@ -26,6 +27,9 @@ public interface Harness {
   void deleteSession(HarnessEndpoint endpoint, String directory, String sessionId);
 
   List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId);
+
+  /** The name the harness gave the session, or empty while it still has its placeholder. */
+  Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId);
 
   /** Starts a reply and returns at once; the reply arrives on {@link #stream}. */
   void prompt(HarnessEndpoint endpoint, String directory, String sessionId, String text);

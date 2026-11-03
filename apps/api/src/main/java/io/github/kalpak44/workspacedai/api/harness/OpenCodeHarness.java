@@ -17,6 +17,7 @@ import java.util.Base64;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -81,6 +82,13 @@ public class OpenCodeHarness implements Harness {
       messages.add(new ChatMessage(text(info, "id"), text(info, "role"), parts));
     }
     return messages;
+  }
+
+  @Override
+  public Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId) {
+    return Optional.ofNullable(
+            text(call(endpoint, directory, "GET", "/session/" + sessionId, null), "title"))
+        .filter(title -> !PLACEHOLDER_TITLE.matcher(title).matches());
   }
 
   @Override

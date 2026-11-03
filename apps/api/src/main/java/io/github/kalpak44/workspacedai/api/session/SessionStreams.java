@@ -30,6 +30,14 @@ public class SessionStreams {
   public SseEmitter subscribe(SessionService.Target target) {
     // 0 disables the async timeout: the stream lives as long as the browser keeps it open.
     var emitter = new SseEmitter(0L);
+    // Opens the browser's stream at once. Otherwise nothing is sent until the harness's first
+    // heartbeat, and a chat reconnecting after an API restart sits closed for that long.
+    try {
+      emitter.send(SseEmitter.event().comment("connected"));
+    } catch (IOException e) {
+      emitter.completeWithError(e);
+      return emitter;
+    }
     var upstream =
         harness.stream(
             target.endpoint(),

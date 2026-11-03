@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -13,7 +13,8 @@ beforeEach(() => {
 /** Renders and waits until the workspaces have arrived from the (fake) API. */
 async function renderLoaded() {
   render(<App />);
-  await screen.findByRole("button", { name: "Starter" });
+  // The sidebar's entry; a breadcrumb may name the workspace too.
+  await screen.findAllByRole("button", { name: "Starter" });
 }
 
 const heading = () => screen.getByRole("heading", { level: 1 });
@@ -26,6 +27,14 @@ async function chooseProvider(user: User, key = "sk-or-1") {
   if (key) await user.type(screen.getByLabelText("OpenRouter API key"), key);
 }
 
+const path = () => globalThis.location.pathname;
+const sessionsHere = () => screen.findByRole("heading", { name: "Start a session" });
+
+/** Opens a page by URL before the app renders, as a pasted link or a reload would. */
+function visit(url: string) {
+  globalThis.history.replaceState(null, "", url);
+}
+
 /** Opens the selected workspace's settings and waits for its secrets. */
 async function openSettings(user: User) {
   await user.click(screen.getByRole("button", { name: "Workspace settings" }));
@@ -34,15 +43,18 @@ async function openSettings(user: User) {
 }
 
 describe("App", () => {
-  it("opens on the chat of the first workspace from the API", async () => {
+  it("opens the first workspace's sessions at its own address", async () => {
     await renderLoaded();
+    await waitFor(() => expect(path()).toBe("/workspaces/starter"));
     expect(heading()).toHaveTextContent("Starter");
-    expect(screen.getByRole("region", { name: "Chat" })).toBeInTheDocument();
-    expect(await screen.findByText("Start a conversation")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+    await sessionsHere();
+    expect(screen.getByRole("region", { name: "Sessions" })).toBeInTheDocument();
+    // The page exists to start work, so the task box is ready to type into.
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
+    expect(document.title).toBe("Starter — workspaced-ai");
   });
 
-  it("asks for a name, suggesting the next free one, from either button", async () => {
+  it("asks for a name, suggesting the next free one", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
@@ -72,7 +84,8 @@ describe("App", () => {
     await chooseProvider(user, "  sk-or-1\t");
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
-    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
+    expect(path()).toBe("/workspaces/ws-1");
+    await sessionsHere();
     expect(api.rows.at(-1)).toMatchObject({ name: "Research", modelProvider: "openrouter" });
     const [, init] = api.fetchFn.mock.calls.find(([, i]) => i?.method === "POST")!;
     expect(JSON.parse(String(init?.body))).toEqual({
@@ -123,7 +136,7 @@ describe("App", () => {
     await user.clear(key);
     await user.type(key, "sk-or-2{Enter}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
+    await sessionsHere();
   });
 
   it("says so when the providers cannot be loaded", async () => {
@@ -247,7 +260,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
     await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(await screen.findByText("Could not delete the workspace")).toBeInTheDocument();
-    expect(screen.getByRole("region", { name: "Chat" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Sessions" })).toBeInTheDocument();
     expect(within(sidebar()).queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -264,31 +277,6 @@ describe("App", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     await user.click(heading());
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
-  });
-
-  it("imports a workspace named after the file", async () => {
-    const user = userEvent.setup();
-    await renderLoaded();
-    await user.click(screen.getByRole("button", { name: "Import workspace" }));
-    await user.upload(
-      screen.getByTestId("import-input"),
-      new File(["{}"], "Imported.json", { type: "application/json" }),
-    );
-    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Imported");
-    await chooseProvider(user);
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await waitFor(() => expect(heading()).toHaveTextContent("Imported"));
-  });
-
-  it("switches to Knowledge and My Files, and back to a workspace", async () => {
-    const user = userEvent.setup();
-    await renderLoaded();
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
-    expect(screen.getByText("No knowledge yet")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "My Files" }));
-    expect(screen.getByText("No files yet")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Starter" }));
-    expect(heading()).toHaveTextContent("Starter");
   });
 
   it("shows the version, the API status and the theme switch in the account menu", async () => {
@@ -343,11 +331,13 @@ describe("App", () => {
     await chooseProvider(user);
     await user.keyboard("{Enter}");
 
-    expect(await screen.findByText("Initializing workspace")).toBeInTheDocument();
+    expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();
     expect(within(sidebar()).getByRole("status", { name: "Initializing" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "New session" })).toBeDisabled();
 
+    // The page opens on its own once the workspace is ready.
     FakeEventSource.emit("ws-1", "READY");
-    expect(await screen.findByText("Start a conversation")).toBeInTheDocument();
+    await sessionsHere();
     expect(within(sidebar()).queryByRole("status")).not.toBeInTheDocument();
   });
 
@@ -370,12 +360,15 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     const secrets = await openSettings(user);
-    expect(heading()).toHaveTextContent("Starter · Settings");
+    expect(heading()).toHaveTextContent("Settings");
+    expect(path()).toBe("/workspaces/starter/settings");
+    expect(document.title).toBe("Settings · Starter — workspaced-ai");
     expect(within(secrets).getByText("Model provider")).toBeInTheDocument();
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Back to chat" }));
-    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
+    await user.click(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("button", { name: "Starter" }));
+    expect(path()).toBe("/workspaces/starter");
+    await sessionsHere();
   });
 
   it("adds a secret by name and value, and never shows the value again", async () => {
@@ -448,43 +441,53 @@ describe("App", () => {
     expect(within(secrets).getByText("GITHUB_TOKEN")).toBeInTheDocument();
     await user.click(within(secrets).getByRole("button", { name: "Dismiss" }));
     expect(within(secrets).queryByRole("alert")).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("button", { name: "Back to chat" }));
-    await user.click(screen.getByRole("button", { name: "Workspace settings" }));
+  it("reports secrets that cannot be loaded", async () => {
+    visit("/workspaces/starter/settings");
+    await renderLoaded();
+    api.state.fail = 500;
+    // Loaded before the failure, so reopen the page to load again.
+    act(() => {
+      globalThis.history.pushState(null, "", "/workspaces/starter");
+      globalThis.dispatchEvent(new PopStateEvent("popstate"));
+    });
+    await userEvent.setup().click(screen.getByRole("button", { name: "Workspace settings" }));
     expect(await screen.findByText("Could not load the secrets")).toBeInTheDocument();
   });
 
-  it("closes settings when another workspace is selected", async () => {
+  it("leaves settings when another workspace is selected", async () => {
     api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", status: "READY" });
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);
     await user.click(screen.getByRole("button", { name: "Other" }));
     expect(heading()).toHaveTextContent("Other");
-    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Starter" }));
-    expect(screen.getByText("Start a conversation")).toBeInTheDocument();
+    expect(path()).toBe("/workspaces/other");
+    await sessionsHere();
   });
 
   it("opens settings for a workspace that is not ready", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     FakeEventSource.emit("starter", "FAILED");
+    expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
     await openSettings(user);
-    expect(heading()).toHaveTextContent("Starter · Settings");
+    expect(heading()).toHaveTextContent("Settings");
   });
 
-  it("starts a session from the first message and streams the reply into it", async () => {
+  it("starts a session from a typed task and streams the reply into its own page", async () => {
     const user = userEvent.setup();
     await renderLoaded();
-    const message = await screen.findByRole("textbox", { name: "Message" });
-    expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
-    await user.type(message, "List the files{Enter}");
+    await sessionsHere();
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "List the files{Enter}");
 
+    await waitFor(() => expect(path()).toBe("/workspaces/starter/sessions/s-1"));
+    // Sent by the session page once it is listening, so the reply streams from its first token.
     await waitFor(() => expect(api.prompts).toEqual([{ sessionId: "s-1", text: "List the files" }]));
-    expect(message).toHaveValue("");
-    const sessions = screen.getByRole("navigation", { name: "Sessions" });
-    expect(within(sessions).getByRole("button", { name: "New session" , current: "page" })).toBeInTheDocument();
+    expect(FakeEventSource.latest("/sessions/s-1/events")).toBeDefined();
+    expect(heading()).toHaveTextContent("New session");
+    expect(screen.getByText("Working…")).toBeInTheDocument();
 
     FakeEventSource.emitSession("status", { busy: true });
     FakeEventSource.emitSession("message", { id: "m1", role: "user" });
@@ -498,21 +501,24 @@ describe("App", () => {
       part: { id: "t1", type: "tool", text: "List files", tool: "bash", status: "running" },
     });
     FakeEventSource.emitSession("delta", { messageId: "m2", partId: "p2", delta: "There are " });
-    FakeEventSource.emitSession("delta", { messageId: "m2", partId: "p2", delta: "none." });
+    FakeEventSource.emitSession("delta", { messageId: "m2", partId: "p2", delta: "**none**." });
 
     expect(screen.getByRole("listitem", { name: "You" })).toHaveTextContent("List the files");
     const agent = screen.getByRole("listitem", { name: "Agent" });
     expect(agent).toHaveTextContent("There are none.");
+    expect(within(agent).getByText("none").tagName).toBe("STRONG");
     expect(within(agent).getByText("bash")).toBeInTheDocument();
     expect(within(agent).getByRole("status", { name: "Running" })).toBeInTheDocument();
-    expect(screen.getByText("Working…")).toBeInTheDocument();
 
     // While the agent works, the send button stops it instead.
     await user.click(screen.getByRole("button", { name: "Stop" }));
     await waitFor(() => expect(api.aborted).toEqual(["s-1"]));
 
+    // The model the workspace is connected to names the session after the first exchange.
     FakeEventSource.emitSession("title", { title: "Listing files" });
-    expect(within(sessions).getByRole("button", { name: "Listing files" })).toBeInTheDocument();
+    expect(heading()).toHaveTextContent("Listing files");
+    expect(document.title).toBe("Listing files · Starter — workspaced-ai");
+
     api.messages.set("s-1", [
       { id: "m1", role: "user", parts: [{ id: "p1", type: "text", text: "List the files", tool: null, status: null }] },
       {
@@ -520,7 +526,7 @@ describe("App", () => {
         role: "assistant",
         parts: [
           { id: "t1", type: "tool", text: "List files", tool: "bash", status: "completed" },
-          { id: "p2", type: "text", text: "There are none.", tool: null, status: null },
+          { id: "p2", type: "text", text: "There are **none**.", tool: null, status: null },
         ],
       },
     ]);
@@ -531,10 +537,11 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
-  it("opens the newest session with its history, and switches between sessions", async () => {
+  it("lists sessions newest first and opens one with its history", async () => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 3600 * 1000).toISOString();
     api.sessions.set("starter", [
-      { id: "old", title: "Old chat", path: "/home/workspace/sessions/old" },
-      { id: "new", title: null, path: "/home/workspace/sessions/new" },
+      { id: "old", title: "Old chat", path: "/home/workspace/sessions/old", createdAt: twoDaysAgo },
+      { id: "new", title: null, path: "/home/workspace/sessions/new", createdAt: new Date().toISOString() },
     ]);
     api.messages.set("old", [
       {
@@ -544,40 +551,68 @@ describe("App", () => {
           { id: "r", type: "reasoning", text: "Thinking it over", tool: null, status: null },
           { id: "x", type: "tool", text: null, tool: "edit", status: "error" },
           { id: "e", type: "text", text: "", tool: null, status: null },
-          { id: "t", type: "text", text: "Earlier answer", tool: null, status: null },
+          { id: "t", type: "text", text: "Earlier answer <b>raw</b>\n\n- one\n- two", tool: null, status: null },
         ],
       },
     ]);
     const user = userEvent.setup();
     await renderLoaded();
-    const sessions = await screen.findByRole("navigation", { name: "Sessions" });
-    expect(await within(sessions).findByRole("button", { name: "New session" , current: "page" })).toBeInTheDocument();
-    expect(await screen.findByText("Start a conversation")).toBeInTheDocument();
+    const list = await screen.findByRole("region", { name: "Sessions" });
+    await within(list).findByText("Old chat");
+    expect(within(list).getAllByRole("listitem").map((card) => card.textContent)).toEqual([
+      "New sessionjust now",
+      "Old chat2 days ago",
+    ]);
+    expect(within(list).getByText("2 days ago")).toBeInTheDocument();
 
-    await user.click(within(sessions).getByRole("button", { name: "Old chat" }));
-    expect(await screen.findByText("Earlier answer")).toBeInTheDocument();
-    expect(screen.getByText("Thinking it over")).toBeInTheDocument();
-    expect(screen.getByRole("img", { name: "Failed" })).toBeInTheDocument();
-    expect(FakeEventSource.latest("/sessions/old/events").url).toBe(
-      "/api/v1/workspaces/starter/sessions/old/events",
-    );
+    await user.click(within(list).getByText("Old chat"));
+    expect(path()).toBe("/workspaces/starter/sessions/old");
+    expect(heading()).toHaveTextContent("Old chat");
+    const agent = await screen.findByRole("listitem", { name: "Agent" });
+    expect(agent).toHaveTextContent("Earlier answer");
+    // Model output is markdown, never markup: raw HTML is shown, not rendered.
+    expect(agent.querySelector("b")).toBeNull();
+    expect(agent).toHaveTextContent("<b>raw</b>");
+    expect(within(agent).getAllByRole("listitem").map((li) => li.textContent)).toEqual(["one", "two"]);
+    expect(within(agent).getByText("Thinking")).toBeInTheDocument();
+    expect(within(agent).getByRole("img", { name: "Failed" })).toBeInTheDocument();
 
     await user.type(screen.getByRole("textbox", { name: "Message" }), "More{Enter}");
     await waitFor(() => expect(api.prompts).toEqual([{ sessionId: "old", text: "More" }]));
+
+    // Back returns to the list, as the browser's own button does.
+    act(() => {
+      globalThis.history.back();
+    });
+    await waitFor(() => expect(path()).toBe("/workspaces/starter"));
+    await sessionsHere();
   });
 
-  it("creates an empty session from the button and deletes one", async () => {
-    api.sessions.set("starter", [{ id: "a", title: "Keep", path: "/p/a" }]);
+  it("opens an empty session from the button, and deletes one from its page", async () => {
     const user = userEvent.setup();
     await renderLoaded();
-    const sessions = await screen.findByRole("navigation", { name: "Sessions" });
-    await within(sessions).findByRole("button", { name: "Keep" });
-    await user.click(within(sessions).getByRole("button", { name: "New session" }));
-    expect(await within(sessions).findByRole("button", { name: "New session", current: "page" })).toBeInTheDocument();
+    await sessionsHere();
+    await user.click(screen.getByRole("button", { name: "New session" }));
+    await waitFor(() => expect(path()).toBe("/workspaces/starter/sessions/s-1"));
+    expect(await screen.findByText("What should the agent do?")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
 
-    await user.click(within(sessions).getByRole("button", { name: "Delete Keep" }));
-    await waitFor(() => expect(within(sessions).queryByText("Keep")).not.toBeInTheDocument());
-    expect(api.sessions.get("starter")?.map((s) => s.id)).toEqual(["s-1"]);
+    await user.click(screen.getByRole("button", { name: "Delete session" }));
+    expect(path()).toBe("/workspaces/starter");
+    await waitFor(() => expect(api.sessions.get("starter")).toEqual([]));
+    await sessionsHere();
+  });
+
+  it("deletes a session from the list", async () => {
+    api.sessions.set("starter", [
+      { id: "a", title: "Keep", path: "/p/a", createdAt: new Date().toISOString() },
+    ]);
+    const user = userEvent.setup();
+    await renderLoaded();
+    const list = await screen.findByRole("region", { name: "Sessions" });
+    await user.click(await within(list).findByRole("button", { name: "Delete Keep" }));
+    await waitFor(() => expect(within(list).queryByText("Keep")).not.toBeInTheDocument());
+    expect(within(list).getByText(/No sessions yet/)).toBeInTheDocument();
   });
 
   it("reports a harness that is not answering, and keeps what was typed", async () => {
@@ -591,13 +626,15 @@ describe("App", () => {
     await user.type(message, "Hello{Enter}");
     expect(await screen.findByText("Could not start a session. Is the workspace ready?")).toBeInTheDocument();
     expect(message).toHaveValue("Hello");
+    expect(path()).toBe("/workspaces/starter");
   });
 
-  it("reports an error the agent hit, and a message that could not be sent", async () => {
-    api.sessions.set("starter", [{ id: "a", title: "Chat", path: "/p/a" }]);
+  it("opens a session from a link, and reports what goes wrong in it", async () => {
+    api.sessions.set("starter", [{ id: "a", title: "Chat", path: "/p/a", createdAt: new Date().toISOString() }]);
+    visit("/workspaces/starter/sessions/a");
     const user = userEvent.setup();
     await renderLoaded();
-    await screen.findByRole("button", { name: "Chat", current: "page" });
+    expect(await screen.findByRole("heading", { level: 1, name: "Chat" })).toBeInTheDocument();
     await waitFor(() => expect(() => FakeEventSource.latest("/sessions/a/events")).not.toThrow());
     FakeEventSource.emitSession("error", { message: "User not found." });
     expect(screen.getByText("User not found.")).toBeInTheDocument();
@@ -608,11 +645,21 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "Send" })).toBeInTheDocument();
   });
 
-  it("does not open a chat for a workspace that is still starting", async () => {
+  it("sends a stale session link back to its workspace, and an unknown workspace home", async () => {
+    visit("/workspaces/starter/sessions/gone");
+    await renderLoaded();
+    await waitFor(() => expect(path()).toBe("/workspaces/starter"));
+    cleanup();
+
+    visit("/workspaces/nowhere");
+    await renderLoaded();
+    await waitFor(() => expect(path()).toBe("/workspaces/starter"));
+  });
+
+  it("does not ask a workspace that is still starting for its sessions", async () => {
     api.rows[0] = { ...api.rows[0], status: "INITIALIZING" };
     render(<App />);
-    expect(await screen.findByText("Initializing workspace")).toBeInTheDocument();
-    expect(screen.queryByRole("region", { name: "Chat" })).not.toBeInTheDocument();
+    expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();
     expect(api.fetchFn.mock.calls.map(([url]) => String(url))).not.toContainEqual(
       expect.stringContaining("/sessions"),
     );

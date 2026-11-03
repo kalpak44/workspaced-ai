@@ -69,6 +69,14 @@ class OpenCodeHarnessTest {
   }
 
   @Test
+  void readsTheTitleOnceItIsNoLongerThePlaceholder() {
+    assertThat(harness.title(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION)).isEmpty();
+    opencode.title = "Fix the login form";
+    assertThat(harness.title(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION))
+        .hasValue("Fix the login form");
+  }
+
+  @Test
   void promptsWithoutWaitingAndAborts() {
     harness.prompt(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, "Hi \"there\"");
     harness.abort(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION);
