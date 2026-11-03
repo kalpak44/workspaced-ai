@@ -32,6 +32,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename" }));
     const input = screen.getByRole("textbox", { name: "Workspace name" });
+    expect(input).toHaveFocus();
     await user.clear(input);
     await user.type(input, "Research{Enter}");
     expect(heading()).toHaveTextContent("Research");

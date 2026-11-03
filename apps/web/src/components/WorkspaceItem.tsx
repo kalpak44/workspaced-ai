@@ -1,5 +1,5 @@
 import { MoreHorizontal } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useDismiss } from "../useDismiss";
 import type { Workspace } from "../useWorkspaces";
 
@@ -15,16 +15,24 @@ export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelet
   const [menuOpen, setMenuOpen] = useState(false);
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
+  const input = useRef<HTMLInputElement>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
   useDismiss(ref, menuOpen, closeMenu);
+
+  // Focus follows the user's own Rename click, so it is moved here rather than by autoFocus.
+  useEffect(() => {
+    if (editing) {
+      input.current?.select();
+    }
+  }, [editing]);
 
   if (editing) {
     return (
       <li>
         <input
           aria-label="Workspace name"
+          ref={input}
           defaultValue={workspace.name}
-          autoFocus
           onBlur={(e) => {
             onRename(e.currentTarget.value);
             setEditing(false);
