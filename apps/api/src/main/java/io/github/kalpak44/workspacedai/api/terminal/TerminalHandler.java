@@ -41,7 +41,9 @@ public class TerminalHandler extends TextWebSocketHandler {
           line.setLength(line.length() - 1);
           out.append("\b \b");
         }
-        case Character ch when ch == '\b' || ch == 0x7f -> {}
+        case Character ch when ch == '\b' || ch == 0x7f -> {
+          // Nothing to erase at the start of a line.
+        }
         default -> {
           line.append(c);
           out.append(c);
