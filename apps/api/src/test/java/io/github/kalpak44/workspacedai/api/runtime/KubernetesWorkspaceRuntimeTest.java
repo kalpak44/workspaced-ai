@@ -1,7 +1,9 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import static io.github.kalpak44.workspacedai.api.runtime.KubernetesWorkspaceRuntime.MANAGED_BY;
+import static io.github.kalpak44.workspacedai.api.runtime.KubernetesWorkspaceRuntime.MANAGED_BY_LABEL;
 import static io.github.kalpak44.workspacedai.api.runtime.KubernetesWorkspaceRuntime.WORKSPACE_ID_LABEL;
-import static io.github.kalpak44.workspacedai.api.runtime.KubernetesWorkspaceRuntime.podName;
+import static io.github.kalpak44.workspacedai.api.runtime.KubernetesWorkspaceRuntime.resourceName;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.tuple;
@@ -30,7 +32,10 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
-/** A fresh API server per test, so no pod or open watch leaks from one test into the next. */
+/**
+ * A fresh API server per test, so nothing leaks from one test into the next. It runs no
+ * controllers, so the pods a Deployment would bring up are created here by hand.
+ */
 class KubernetesWorkspaceRuntimeTest {
 
   static final WorkspaceProperties PROPERTIES =
@@ -62,23 +67,43 @@ class KubernetesWorkspaceRuntimeTest {
     id = UUID.randomUUID();
   }
 
+  @AfterEach
+  void tearDown() {
+    runtime.close();
+    client.close();
+    server.destroy();
+  }
+
   @Test
-  void startsALabelledLockedDownPodInItsOwnNamespace() {
+  void startsOneLockedDownReplicaBehindAService() {
     runtime.start(id, ENVIRONMENT);
 
-    var pod = client.pods().inNamespace(client.getNamespace()).withName(podName(id)).get();
-    assertThat(pod.getMetadata().getName()).isEqualTo("workspaced-ai-workspace-" + id);
-    assertThat(pod.getMetadata().getLabels())
+    var deployment =
+        client.apps().deployments().inNamespace(namespace()).withName(resourceName(id)).get();
+    assertThat(deployment.getMetadata().getName()).isEqualTo("workspaced-ai-workspace-" + id);
+    assertThat(deployment.getMetadata().getLabels())
         .containsEntry(WORKSPACE_ID_LABEL, id.toString())
         .containsEntry("app.kubernetes.io/part-of", "workspaced-ai")
-        .containsEntry("app.kubernetes.io/managed-by", "workspaced-ai-api");
-    var spec = pod.getSpec();
+        .containsEntry(MANAGED_BY_LABEL, MANAGED_BY);
+    assertThat(deployment.getSpec().getReplicas()).isEqualTo(1);
+    // One home per workspace: a rolling update would briefly run two.
+    assertThat(deployment.getSpec().getStrategy().getType()).isEqualTo("Recreate");
+    assertThat(deployment.getSpec().getSelector().getMatchLabels())
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of(WORKSPACE_ID_LABEL, id.toString(), MANAGED_BY_LABEL, MANAGED_BY));
+    assertThat(deployment.getSpec().getTemplate().getMetadata().getLabels())
+        .containsAllEntriesOf(deployment.getSpec().getSelector().getMatchLabels());
+
+    var spec = deployment.getSpec().getTemplate().getSpec();
     assertThat(spec.getAutomountServiceAccountToken()).isFalse();
     assertThat(spec.getSecurityContext().getRunAsNonRoot()).isTrue();
-    var container = spec.getContainers().getFirst();
-    assertThat(container.getImage()).isEqualTo("harness:test");
     assertThat(spec.getSecurityContext().getRunAsUser()).isEqualTo(1000L);
     assertThat(spec.getSecurityContext().getFsGroup()).isEqualTo(1000L);
+    var container = spec.getContainers().getFirst();
+    assertThat(container.getImage()).isEqualTo("harness:test");
+    assertThat(container.getSecurityContext().getReadOnlyRootFilesystem()).isTrue();
+    assertThat(container.getSecurityContext().getCapabilities().getDrop()).containsExactly("ALL");
+    assertThat(container.getResources().getLimits()).containsKeys("cpu", "memory");
     assertThat(container.getPorts().getFirst().getContainerPort()).isEqualTo(4096);
     assertThat(container.getReadinessProbe().getTcpSocket().getPort().getIntVal()).isEqualTo(4096);
     // The root is read-only, so the home and /tmp are where the agent writes.
@@ -86,24 +111,27 @@ class KubernetesWorkspaceRuntimeTest {
         .extracting(m -> m.getMountPath())
         .containsExactlyInAnyOrder("/home/workspace", "/tmp");
     assertThat(spec.getVolumes()).allSatisfy(v -> assertThat(v.getEmptyDir()).isNotNull());
-    assertThat(container.getSecurityContext().getReadOnlyRootFilesystem()).isTrue();
-    assertThat(container.getSecurityContext().getCapabilities().getDrop()).containsExactly("ALL");
-    assertThat(container.getResources().getLimits()).containsKeys("cpu", "memory");
     assertThat(container.getEnvFrom())
         .extracting(
             e -> e.getConfigMapRef() != null ? e.getConfigMapRef().getName() : null,
             e -> e.getSecretRef() != null ? e.getSecretRef().getName() : null)
-        .containsExactly(tuple(podName(id), null), tuple(null, podName(id)));
+        .containsExactly(tuple(resourceName(id), null), tuple(null, resourceName(id)));
+
+    var service = client.services().inNamespace(namespace()).withName(resourceName(id)).get();
+    assertThat(service.getSpec().getSelector())
+        .containsExactlyInAnyOrderEntriesOf(deployment.getSpec().getSelector().getMatchLabels());
+    var port = service.getSpec().getPorts().getFirst();
+    assertThat(port.getPort()).isEqualTo(4096);
+    assertThat(port.getTargetPort().getStrVal()).isEqualTo("harness");
   }
 
   @Test
   void keepsTheEnvironmentInALabelledSecretAndConfigMap() {
     runtime.start(id, ENVIRONMENT);
 
-    var configMap = client.configMaps().inNamespace(client.getNamespace()).withName(podName(id));
-    assertThat(configMap.get().getData())
-        .containsExactlyEntriesOf(Map.of("BASE_URL", "https://x.test"));
-    assertThat(configMap.get().getMetadata().getLabels())
+    var configMap = client.configMaps().inNamespace(namespace()).withName(resourceName(id)).get();
+    assertThat(configMap.getData()).containsExactlyEntriesOf(Map.of("BASE_URL", "https://x.test"));
+    assertThat(configMap.getMetadata().getLabels())
         .containsEntry(WORKSPACE_ID_LABEL, id.toString());
     assertThat(secretValues())
         .containsExactlyInAnyOrderEntriesOf(
@@ -134,114 +162,148 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
-  void findsTheHarnessAtThePodsAddressOnceItHasOne() {
+  void reachesTheHarnessThroughItsServiceByItsFullName() {
     assertThat(runtime.harness(id)).isEmpty();
     runtime.start(id, ENVIRONMENT);
-    // Scheduled but not yet given an address: nothing to talk to.
-    assertThat(runtime.harness(id)).isEmpty();
-
-    var pods = client.pods().inNamespace(client.getNamespace());
-    pods.resource(
-            new PodBuilder(pods.withName(podName(id)).get())
-                .withNewStatus()
-                .withPodIP("10.42.0.17")
-                .endStatus()
-                .build())
-        .updateStatus();
     assertThat(runtime.harness(id))
         .hasValueSatisfying(
             endpoint -> {
-              assertThat(endpoint.baseUrl()).hasToString("http://10.42.0.17:4096");
+              assertThat(endpoint.baseUrl())
+                  .hasToString(
+                      "http://workspaced-ai-workspace-" + id + "." + namespace() + ".svc:4096");
               assertThat(endpoint.password()).isEqualTo("pw-1");
             });
 
     // A workspace made before the harness has no password, so the API cannot sign in.
     runtime.removeSecret(id, "OPENCODE_SERVER_PASSWORD");
     assertThat(runtime.harness(id)).isEmpty();
+    runtime.putSecret(id, "OPENCODE_SERVER_PASSWORD", "pw-1");
+    client.services().inNamespace(namespace()).withName(resourceName(id)).delete();
+    assertThat(runtime.harness(id)).isEmpty();
   }
 
   @Test
-  void leavesNothingBehindWhenThePodCannotBeCreated() {
-    // A pod of this name already exists, so creating the workspace's pod fails.
+  void leavesNothingBehindWhenStartingFailsPartWay() {
+    // A Service of this name already exists, so the last create fails.
     client
-        .pods()
-        .inNamespace(client.getNamespace())
-        .resource(new PodBuilder().withNewMetadata().withName(podName(id)).endMetadata().build())
+        .services()
+        .inNamespace(namespace())
+        .resource(
+            new io.fabric8.kubernetes.api.model.ServiceBuilder()
+                .withNewMetadata()
+                .withName(resourceName(id))
+                .endMetadata()
+                .build())
         .create();
     assertThatThrownBy(() -> runtime.start(id, ENVIRONMENT))
         .isInstanceOf(KubernetesClientException.class);
     assertThat(secret()).isNull();
-    assertThat(client.configMaps().inNamespace(client.getNamespace()).withName(podName(id)).get())
+    assertThat(client.configMaps().inNamespace(namespace()).withName(resourceName(id)).get())
+        .isNull();
+    assertThat(
+            client.apps().deployments().inNamespace(namespace()).withName(resourceName(id)).get())
         .isNull();
   }
 
   @Test
-  void reportsAFreshPodAsInitializing() {
+  void isStartingUntilAReplicaIsReady() {
     runtime.start(id, ENVIRONMENT);
+    // The Deployment exists but has no pod yet.
     assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.INITIALIZING);
-  }
-
-  @Test
-  void reportsAReadyPodAsReady() {
-    runtime.start(id, ENVIRONMENT);
-    setPhase("Running", "True");
+    replica("a", "Running", "False");
+    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.INITIALIZING);
+    replica("a", "Running", "True");
     assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.READY);
   }
 
   @Test
-  void reportsARunningButUnreadyPodAsInitializing() {
+  void isStartingAgainWhileTheDeploymentReplacesAPodThatFailed() {
     runtime.start(id, ENVIRONMENT);
-    setPhase("Running", "False");
+    replica("a", "Failed", "False");
     assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.INITIALIZING);
+    // A ready replica wins over one that is on its way out.
+    replica("b", "Running", "True");
+    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.READY);
   }
 
   @Test
-  void reportsAStoppedOrMissingPodAsFailed() {
-    runtime.start(id, ENVIRONMENT);
-    setPhase("Failed", "False");
+  void judgesAWorkspaceWithNoDeploymentByItsBarePodOrFailsIt() {
     var missing = UUID.randomUUID();
+    bare("Running", "True");
     assertThat(runtime.statuses(List.of(id, missing)))
-        .containsEntry(id, WorkspaceStatus.FAILED)
+        .containsEntry(id, WorkspaceStatus.READY)
         .containsEntry(missing, WorkspaceStatus.FAILED);
+    bare("Failed", "False");
+    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.FAILED);
   }
 
   @Test
-  void stopsThePodAndToleratesOneAlreadyGone() {
+  void stopsEverythingAndToleratesWhatIsAlreadyGone() {
     runtime.start(id, ENVIRONMENT);
-    // Returns only once the pod is gone, which is what lets a delete report it honestly.
     runtime.stop(id);
-    assertThat(client.pods().inNamespace(client.getNamespace()).withName(podName(id)).get())
+    assertThat(
+            client.apps().deployments().inNamespace(namespace()).withName(resourceName(id)).get())
+        .isNull();
+    assertThat(client.services().inNamespace(namespace()).withName(resourceName(id)).get())
         .isNull();
     assertThat(secret()).isNull();
-    assertThat(client.configMaps().inNamespace(client.getNamespace()).withName(podName(id)).get())
+    assertThat(client.configMaps().inNamespace(namespace()).withName(resourceName(id)).get())
         .isNull();
     runtime.stop(id);
-    runtime.stop(id);
-    assertThat(client.pods().inNamespace(client.getNamespace()).withName(podName(id)).get())
-        .isNull();
-  }
-
-  @AfterEach
-  void tearDown() {
-    runtime.close();
-    client.close();
-    server.destroy();
   }
 
   @Test
-  void reportsEachChangeAsItHappensUntilThePodIsGone() throws Exception {
+  void stopsTheBarePodAWorkspaceRanAsBeforeDeployments() {
+    bare("Running", "True");
+    runtime.stop(id);
+    assertThat(client.pods().inNamespace(namespace()).withName(resourceName(id)).get()).isNull();
+  }
+
+  @Test
+  void failsAStopWhosePodsOutlastTheTimeout() {
+    var impatient =
+        new KubernetesWorkspaceRuntime(
+            client,
+            new WorkspaceProperties(
+                "harness:test",
+                Duration.ofMillis(300),
+                new WorkspaceProperties.LocalHarness(null, null)));
+    runtime.start(id, ENVIRONMENT);
+    // Nothing here deletes a Deployment's pods, as a stuck node would not.
+    replica("a", "Running", "True");
+    assertThatThrownBy(() -> impatient.stop(id))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("did not stop in time");
+    impatient.close();
+  }
+
+  @Test
+  void reportsEachChangeAndKeepsAReplacedPodStarting() throws Exception {
     var changes = new LinkedBlockingQueue<Map.Entry<UUID, WorkspaceStatus>>();
     runtime.watch((workspace, status) -> changes.add(Map.entry(workspace, status)));
-
     runtime.start(id, ENVIRONMENT);
+
+    replica("a", "Pending", "False");
+    awaitStatus(changes, WorkspaceStatus.INITIALIZING);
+    replica("a", "Running", "True");
+    awaitStatus(changes, WorkspaceStatus.READY);
+
+    // The pod goes, but its Deployment brings up another: starting, not failed.
+    client.pods().inNamespace(namespace()).withName(resourceName(id) + "-a").delete();
     assertThat(changes.poll(5, TimeUnit.SECONDS))
         .isEqualTo(Map.entry(id, WorkspaceStatus.INITIALIZING));
+  }
 
-    setPhase("Running", "True");
-    assertThat(changes.poll(5, TimeUnit.SECONDS)).isEqualTo(Map.entry(id, WorkspaceStatus.READY));
-
-    runtime.stop(id);
-    assertThat(changes.poll(5, TimeUnit.SECONDS)).isEqualTo(Map.entry(id, WorkspaceStatus.FAILED));
+  /** A status may repeat, so this skips repeats of the one before until the expected one. */
+  private void awaitStatus(
+      LinkedBlockingQueue<Map.Entry<UUID, WorkspaceStatus>> changes, WorkspaceStatus expected)
+      throws InterruptedException {
+    Map.Entry<UUID, WorkspaceStatus> change;
+    do {
+      change = changes.poll(5, TimeUnit.SECONDS);
+      assertThat(change).isNotNull();
+    } while (change.getValue() != expected);
+    assertThat(change.getKey()).isEqualTo(id);
   }
 
   @Test
@@ -250,7 +312,7 @@ class KubernetesWorkspaceRuntimeTest {
     var second = new LinkedBlockingQueue<UUID>();
     runtime.watch((workspace, status) -> first.add(workspace));
     runtime.watch((workspace, status) -> second.add(workspace));
-    runtime.start(id, ENVIRONMENT);
+    bare("Pending", "False");
     assertThat(second.poll(5, TimeUnit.SECONDS)).isEqualTo(id);
     assertThat(first).isEmpty();
   }
@@ -258,13 +320,16 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void refusesToStartWithoutKnowingItsNamespace() {
     var noNamespace = mock(KubernetesClient.class);
-    var properties = PROPERTIES;
-    assertThatThrownBy(() -> new KubernetesWorkspaceRuntime(noNamespace, properties))
+    assertThatThrownBy(() -> new KubernetesWorkspaceRuntime(noNamespace, PROPERTIES))
         .isInstanceOf(IllegalStateException.class);
   }
 
+  private String namespace() {
+    return client.getNamespace();
+  }
+
   private Secret secret() {
-    return client.secrets().inNamespace(client.getNamespace()).withName(podName(id)).get();
+    return client.secrets().inNamespace(namespace()).withName(resourceName(id)).get();
   }
 
   private Map<String, String> secretValues() {
@@ -277,11 +342,31 @@ class KubernetesWorkspaceRuntimeTest {
     return values;
   }
 
-  private void setPhase(String phase, String ready) {
-    var pods = client.pods().inNamespace(client.getNamespace());
-    var pod = pods.withName(podName(id)).get();
+  /** A pod as the workspace's Deployment would make it, under a generated name. */
+  private void replica(String suffix, String phase, String ready) {
+    put(resourceName(id) + "-" + suffix, phase, ready);
+  }
+
+  /** The bare pod a workspace ran as before Deployments, named for the workspace itself. */
+  private void bare(String phase, String ready) {
+    put(resourceName(id), phase, ready);
+  }
+
+  private void put(String name, String phase, String ready) {
+    var pods = client.pods().inNamespace(namespace());
+    if (pods.withName(name).get() == null) {
+      pods.resource(
+              new PodBuilder()
+                  .withNewMetadata()
+                  .withName(name)
+                  .withLabels(
+                      Map.of(WORKSPACE_ID_LABEL, id.toString(), MANAGED_BY_LABEL, MANAGED_BY))
+                  .endMetadata()
+                  .build())
+          .create();
+    }
     pods.resource(
-            new PodBuilder(pod)
+            new PodBuilder(pods.withName(name).get())
                 .withNewStatus()
                 .withPhase(phase)
                 .withConditions(

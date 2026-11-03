@@ -20,7 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
-/** The API as it runs in the cluster: Kubernetes detected, pods on a mock API server. */
+/** The API as it runs in the cluster: Kubernetes detected, workloads on a mock API server. */
 @SpringBootTest(properties = "spring.main.cloud-platform=kubernetes")
 @Import({TestDatabase.class, MockKubernetes.class})
 class WorkspacePodTest {
@@ -37,11 +37,12 @@ class WorkspacePodTest {
   }
 
   @Test
-  void createsAPodPerWorkspaceAndRemovesItWithTheWorkspace() {
+  void runsEachWorkspaceAsADeploymentBehindAServiceAndRemovesThem() {
     var workspace = service.create("Research", ModelProvider.OPENROUTER, "sk-or-1");
     assertThat(workspace.status()).isEqualTo(WorkspaceStatus.INITIALIZING);
     var name = "workspaced-ai-workspace-" + workspace.id();
-    assertThat(pods()).containsExactly(name);
+    assertThat(deployments()).containsExactly(name);
+    assertThat(services()).containsExactly(name);
 
     // The key and the harness's password reach the cluster as a Secret, the base URL as a
     // ConfigMap, and nothing else.
@@ -65,14 +66,21 @@ class WorkspacePodTest {
         .hasValue(WorkspaceStatus.INITIALIZING);
 
     assertThat(service.delete(workspace.id())).isTrue();
-    assertThat(pods()).isEmpty();
+    assertThat(deployments()).isEmpty();
+    assertThat(services()).isEmpty();
     assertThat(client.secrets().inNamespace(namespace).withName(name).get()).isNull();
     assertThat(client.configMaps().inNamespace(namespace).withName(name).get()).isNull();
   }
 
-  private List<String> pods() {
-    return client.pods().inNamespace(client.getNamespace()).list().getItems().stream()
-        .map(p -> p.getMetadata().getName())
+  private List<String> deployments() {
+    return client.apps().deployments().inNamespace(client.getNamespace()).list().getItems().stream()
+        .map(d -> d.getMetadata().getName())
+        .toList();
+  }
+
+  private List<String> services() {
+    return client.services().inNamespace(client.getNamespace()).list().getItems().stream()
+        .map(d -> d.getMetadata().getName())
         .toList();
   }
 }

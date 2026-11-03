@@ -21,7 +21,7 @@ can be used, `FAILED` if it stopped or is gone. Workspaces are listed in the ord
 | `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "apiKey": "sk-or-…"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
-| `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its pod is gone, or `404`            |
+| `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its pods are gone, or `404`          |
 
 A blank or overlong name, a blank key, an unknown provider, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
 
@@ -40,12 +40,15 @@ curl -X DELETE localhost:8080/api/v1/workspaces/$ID
 The event stream sends one `status` event (`{"id": "…", "status": "READY"}`) per existing workspace on connect, then
 one per change, plus a `deleted` event (`{"id": "…"}`) after each deletion; a status may repeat. A `keepalive` comment follows every 30 seconds.
 
-In Kubernetes each workspace runs as a pod named `workspaced-ai-workspace-<id>`, labelled
-`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in. A Secret and a ConfigMap of the same name and
-label hold its environment — the provider key (`OPENROUTER_API_KEY`) plus any secrets added later in the Secret, the
-provider's base URL (`OPENROUTER_BASE_URL`) in the ConfigMap — and the pod takes both with `envFrom`. Deleting the workspace deletes the pod, and the call answers only once the pod is
-gone (`workspaced.workspace.stop-timeout`, 60 seconds by default); if it is not gone in time, the workspace is kept and
-the call fails. Outside
+In Kubernetes each workspace runs as a one-replica Deployment named `workspaced-ai-workspace-<id>`, labelled
+`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in, behind a Service of the same name. The Deployment
+replaces a pod that dies, so the workspace is `INITIALIZING` again rather than `FAILED` while it does; it uses the
+`Recreate` strategy, so two pods never share one workspace. A Secret and a ConfigMap of the same name and label hold
+its environment — the provider key (`OPENROUTER_API_KEY`) plus any secrets added later in the Secret, the provider's
+base URL (`OPENROUTER_BASE_URL`) in the ConfigMap — and the pod takes both with `envFrom`. Deleting the workspace
+deletes all of them, and the call answers only once its pods are gone (`workspaced.workspace.stop-timeout`, 60
+seconds by default); if they are not gone in time, the workspace is kept and the call fails. A workspace made before
+Deployments ran as a bare pod of that name, which is still reported on and deleted. Outside
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.
 
@@ -70,13 +73,15 @@ state, which replaces any earlier one of that id), `delta` (`{messageId, partId,
 `status` (`{busy}`), `title` (`{title}`, also stored) and `error` (`{message}`). A part is `text`, `reasoning` or a
 `tool` with its name and status. A session's `title` is null until the agent names it after the first exchange.
 
-The API reaches the harness at the pod's IP on port 4096 with HTTP basic auth; the password is generated when the
+The API reaches the harness through the workspace's Service, at
+`http://workspaced-ai-workspace-<id>.<namespace>.svc:4096`, with HTTP basic auth; the password is generated when the
 workspace is created and kept in its Secret as `OPENCODE_SERVER_PASSWORD`, which no user secret may replace. A
 harness that is not running, not answering, or belongs to a workspace made before the harness existed answers `503`.
 opencode is limited to the `openrouter` provider, reading the workspace's `OPENROUTER_API_KEY` and
 `OPENROUTER_BASE_URL`; its default model is set in `apps/harness/opencode/opencode.json`.
 
-A session's files live on the pod's `emptyDir` home, so they last as long as the pod does.
+A session's files live on the pod's `emptyDir` home, so they last as long as the pod does: a pod the Deployment
+replaces starts with an empty home.
 
 To chat outside Kubernetes, run a harness and point the API at it:
 

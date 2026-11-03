@@ -1,14 +1,21 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
-import io.fabric8.kubernetes.api.model.PodBuilder;
+import io.fabric8.kubernetes.api.model.PodSpec;
+import io.fabric8.kubernetes.api.model.PodSpecBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
 import io.fabric8.kubernetes.api.model.SecretBuilder;
+import io.fabric8.kubernetes.api.model.Service;
+import io.fabric8.kubernetes.api.model.ServiceBuilder;
+import io.fabric8.kubernetes.api.model.apps.Deployment;
+import io.fabric8.kubernetes.api.model.apps.DeploymentBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
+import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
@@ -19,20 +26,26 @@ import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 import java.util.function.BiConsumer;
-import java.util.function.Function;
 import java.util.stream.Collectors;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 /**
- * One pod per workspace, in the namespace the API itself runs in, with a Secret and a ConfigMap of
- * the same name that it takes its environment from.
+ * One Deployment of one pod per workspace, in the namespace the API itself runs in, behind a
+ * Service the API calls it through. A Secret and a ConfigMap of the same name hold its environment.
+ * The Deployment replaces a pod that dies, so a workspace outlives a node restart or an eviction.
  */
 public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseable {
+
+  private static final Logger LOG = LoggerFactory.getLogger(KubernetesWorkspaceRuntime.class);
 
   static final String WORKSPACE_ID_LABEL = "workspaced-ai/workspace-id";
   static final String MANAGED_BY_LABEL = "app.kubernetes.io/managed-by";
@@ -58,8 +71,11 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     }
   }
 
-  /** The pod, its Secret and its ConfigMap all share this name. */
-  static String podName(UUID workspaceId) {
+  /**
+   * The Deployment, Service, Secret and ConfigMap all share this name. At 60 characters it fits the
+   * 63 a Service name may have.
+   */
+  static String resourceName(UUID workspaceId) {
     return POD_PREFIX + workspaceId;
   }
 
@@ -89,26 +105,40 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
                   .withData(encode(environment.secrets()))
                   .build())
           .create();
-      client.pods().inNamespace(namespace).resource(pod(workspaceId)).create();
+      client.apps().deployments().inNamespace(namespace).resource(deployment(workspaceId)).create();
+      client.services().inNamespace(namespace).resource(service(workspaceId)).create();
     } catch (RuntimeException e) {
-      removeEnvironment(workspaceId);
+      removeAll(workspaceId);
       throw e;
     }
   }
 
+  /**
+   * Waits until no pod of the workspace is left, so a delete reports the workspace gone only once
+   * it is. The bare pod a workspace ran as before Deployments is removed by name.
+   */
   @Override
   public void stop(UUID workspaceId) {
-    var pod = client.pods().inNamespace(namespace).withName(podName(workspaceId));
-    pod.delete();
-    // A delete only marks the pod terminating; this waits for the API server to drop it.
-    pod.waitUntilCondition(Objects::isNull, stopTimeoutMillis, TimeUnit.MILLISECONDS);
-    removeEnvironment(workspaceId);
+    removeAll(workspaceId);
+    try {
+      client
+          .pods()
+          .inNamespace(namespace)
+          .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
+          .informOnCondition(List::isEmpty)
+          .get(stopTimeoutMillis, TimeUnit.MILLISECONDS);
+    } catch (TimeoutException | ExecutionException e) {
+      throw new IllegalStateException("workspace " + workspaceId + " did not stop in time", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("interrupted stopping workspace " + workspaceId, e);
+    }
   }
 
   /** Creates the Secret when it is missing, as it is for a workspace made before secrets were. */
   @Override
   public void putSecret(UUID workspaceId, String name, String value) {
-    var secret = client.secrets().inNamespace(namespace).withName(podName(workspaceId));
+    var secret = client.secrets().inNamespace(namespace).withName(resourceName(workspaceId));
     var encoded = encode(Map.of(name, value));
     if (secret.get() == null) {
       secret.create(
@@ -124,7 +154,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
 
   @Override
   public void removeSecret(UUID workspaceId, String name) {
-    var secret = client.secrets().inNamespace(namespace).withName(podName(workspaceId));
+    var secret = client.secrets().inNamespace(namespace).withName(resourceName(workspaceId));
     var current = secret.get();
     if (current != null && current.getData() != null && current.getData().containsKey(name)) {
       secret.edit(s -> new SecretBuilder(s).removeFromData(name).build());
@@ -132,29 +162,36 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   }
 
   /**
-   * Straight to the pod's IP rather than through a Service per workspace: the pod is the only thing
-   * that could answer, and the password in its Secret is what keeps others out.
+   * Through the workspace's Service, by its fully qualified name so the lookup does not depend on
+   * the API pod's DNS search path. Empty for a workspace with no Service or no password, which is
+   * one made before the harness existed.
    */
   @Override
   public Optional<HarnessEndpoint> harness(UUID workspaceId) {
-    var pod = client.pods().inNamespace(namespace).withName(podName(workspaceId)).get();
-    var ip = pod == null || pod.getStatus() == null ? null : pod.getStatus().getPodIP();
-    var secret = client.secrets().inNamespace(namespace).withName(podName(workspaceId)).get();
+    var name = resourceName(workspaceId);
+    var secret = client.secrets().inNamespace(namespace).withName(name).get();
     var data = secret == null ? null : secret.getData();
-    if (ip == null || data == null || !data.containsKey(Harness.PASSWORD_VARIABLE)) {
+    if (data == null
+        || !data.containsKey(Harness.PASSWORD_VARIABLE)
+        || client.services().inNamespace(namespace).withName(name).get() == null) {
       return Optional.empty();
     }
     var password =
         new String(
             Base64.getDecoder().decode(data.get(Harness.PASSWORD_VARIABLE)),
             StandardCharsets.UTF_8);
-    return Optional.of(
-        new HarnessEndpoint(URI.create("http://" + ip + ":" + HARNESS_PORT), password));
+    var url = "http://" + name + "." + namespace + ".svc:" + HARNESS_PORT;
+    return Optional.of(new HarnessEndpoint(URI.create(url), password));
   }
 
+  /**
+   * Two lists however many workspaces there are: every managed pod and every managed Deployment. A
+   * workspace whose Deployment exists is starting until one of its pods is ready, since the
+   * Deployment replaces any pod that goes; one with no Deployment is judged by its bare pod.
+   */
   @Override
   public Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds) {
-    Map<String, Pod> pods =
+    var pods =
         client
             .pods()
             .inNamespace(namespace)
@@ -163,19 +200,41 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
             .getItems()
             .stream()
             .collect(
-                Collectors.toMap(
-                    p -> p.getMetadata().getLabels().get(WORKSPACE_ID_LABEL),
-                    Function.identity(),
-                    (a, b) -> a));
+                Collectors.groupingBy(p -> p.getMetadata().getLabels().get(WORKSPACE_ID_LABEL)));
+    var deployments =
+        client
+            .apps()
+            .deployments()
+            .inNamespace(namespace)
+            .withLabel(MANAGED_BY_LABEL, MANAGED_BY)
+            .list()
+            .getItems()
+            .stream()
+            .map(d -> d.getMetadata().getLabels().get(WORKSPACE_ID_LABEL))
+            .collect(Collectors.toSet());
     var statuses = new HashMap<UUID, WorkspaceStatus>();
     for (var id : workspaceIds) {
-      var pod = pods.get(id.toString());
-      statuses.put(id, pod == null ? WorkspaceStatus.FAILED : statusOf(pod));
+      var own = pods.getOrDefault(id.toString(), List.of());
+      WorkspaceStatus status;
+      if (own.stream().anyMatch(p -> statusOf(p) == WorkspaceStatus.READY)) {
+        status = WorkspaceStatus.READY;
+      } else if (deployments.contains(id.toString())) {
+        status = WorkspaceStatus.INITIALIZING;
+      } else if (!own.isEmpty()) {
+        status = statusOf(own.getFirst());
+      } else {
+        status = WorkspaceStatus.FAILED;
+      }
+      statuses.put(id, status);
     }
     return statuses;
   }
 
-  /** An informer rather than polling: the API server pushes each pod change as it happens. */
+  /**
+   * An informer rather than polling: the API server pushes each pod change as it happens. The
+   * workspace's status is worked out again on each, because one pod going is not the workspace
+   * going while its Deployment brings up the next.
+   */
   @Override
   public synchronized void watch(BiConsumer<UUID, WorkspaceStatus> listener) {
     if (informer != null) {
@@ -190,17 +249,17 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
                 new ResourceEventHandler<>() {
                   @Override
                   public void onAdd(Pod pod) {
-                    report(listener, pod, statusOf(pod));
+                    report(listener, pod);
                   }
 
                   @Override
                   public void onUpdate(Pod oldPod, Pod pod) {
-                    report(listener, pod, statusOf(pod));
+                    report(listener, pod);
                   }
 
                   @Override
                   public void onDelete(Pod pod, boolean finalStateUnknown) {
-                    report(listener, pod, WorkspaceStatus.FAILED);
+                    report(listener, pod);
                   }
                 });
   }
@@ -212,11 +271,20 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     }
   }
 
-  private static void report(
-      BiConsumer<UUID, WorkspaceStatus> listener, Pod pod, WorkspaceStatus status) {
-    var id = pod.getMetadata().getLabels().get(WORKSPACE_ID_LABEL);
-    if (id != null) {
-      listener.accept(UUID.fromString(id), status);
+  /**
+   * A lookup that fails, as one does while the client shuts down, is skipped rather than thrown
+   * into the informer: the next change or the next client's snapshot reports the status again.
+   */
+  private void report(BiConsumer<UUID, WorkspaceStatus> listener, Pod pod) {
+    var label = pod.getMetadata().getLabels().get(WORKSPACE_ID_LABEL);
+    if (label == null) {
+      return;
+    }
+    var id = UUID.fromString(label);
+    try {
+      listener.accept(id, statuses(List.of(id)).get(id));
+    } catch (KubernetesClientException e) {
+      LOG.debug("could not work out the status of workspace {}", id, e);
     }
   }
 
@@ -235,9 +303,20 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     return ready ? WorkspaceStatus.READY : WorkspaceStatus.INITIALIZING;
   }
 
-  private void removeEnvironment(UUID workspaceId) {
-    client.secrets().inNamespace(namespace).withName(podName(workspaceId)).delete();
-    client.configMaps().inNamespace(namespace).withName(podName(workspaceId)).delete();
+  /** Each delete is a no-op for what is not there, so this also cleans up after a partial start. */
+  private void removeAll(UUID workspaceId) {
+    var name = resourceName(workspaceId);
+    client
+        .apps()
+        .deployments()
+        .inNamespace(namespace)
+        .withName(name)
+        .withPropagationPolicy(DeletionPropagation.BACKGROUND)
+        .delete();
+    client.services().inNamespace(namespace).withName(name).delete();
+    client.pods().inNamespace(namespace).withName(name).delete();
+    client.secrets().inNamespace(namespace).withName(name).delete();
+    client.configMaps().inNamespace(namespace).withName(name).delete();
   }
 
   private static Map<String, String> encode(Map<String, String> values) {
@@ -252,7 +331,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
 
   private static ObjectMeta metadata(UUID workspaceId) {
     return new ObjectMetaBuilder()
-        .withName(podName(workspaceId))
+        .withName(resourceName(workspaceId))
         .withLabels(
             Map.of(
                 "app.kubernetes.io/name",
@@ -266,10 +345,50 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .build();
   }
 
-  private Pod pod(UUID workspaceId) {
-    return new PodBuilder()
+  /**
+   * Recreate, not a rolling update: a workspace is one home, and two pods would be two homes with
+   * the Service splitting requests between them.
+   */
+  private Deployment deployment(UUID workspaceId) {
+    return new DeploymentBuilder()
         .withMetadata(metadata(workspaceId))
         .withNewSpec()
+        .withReplicas(1)
+        .withRevisionHistoryLimit(1)
+        .withNewStrategy()
+        .withType("Recreate")
+        .endStrategy()
+        .withNewSelector()
+        .addToMatchLabels(WORKSPACE_ID_LABEL, workspaceId.toString())
+        .addToMatchLabels(MANAGED_BY_LABEL, MANAGED_BY)
+        .endSelector()
+        .withNewTemplate()
+        .withNewMetadata()
+        .withLabels(metadata(workspaceId).getLabels())
+        .endMetadata()
+        .withSpec(podSpec(workspaceId))
+        .endTemplate()
+        .endSpec()
+        .build();
+  }
+
+  private static Service service(UUID workspaceId) {
+    return new ServiceBuilder()
+        .withMetadata(metadata(workspaceId))
+        .withNewSpec()
+        .addToSelector(WORKSPACE_ID_LABEL, workspaceId.toString())
+        .addToSelector(MANAGED_BY_LABEL, MANAGED_BY)
+        .addNewPort()
+        .withName("harness")
+        .withPort(HARNESS_PORT)
+        .withTargetPort(new IntOrString("harness"))
+        .endPort()
+        .endSpec()
+        .build();
+  }
+
+  private PodSpec podSpec(UUID workspaceId) {
+    return new PodSpecBuilder()
         .withAutomountServiceAccountToken(false)
         .withTerminationGracePeriodSeconds(5L)
         .withNewSecurityContext()
@@ -291,12 +410,12 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .endPort()
         .addNewEnvFrom()
         .withNewConfigMapRef()
-        .withName(podName(workspaceId))
+        .withName(resourceName(workspaceId))
         .endConfigMapRef()
         .endEnvFrom()
         .addNewEnvFrom()
         .withNewSecretRef()
-        .withName(podName(workspaceId))
+        .withName(resourceName(workspaceId))
         .endSecretRef()
         .endEnvFrom()
         .withNewSecurityContext()
@@ -342,7 +461,6 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .withNewEmptyDir()
         .endEmptyDir()
         .endVolume()
-        .endSpec()
         .build();
   }
 }
