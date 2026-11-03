@@ -1,0 +1,19 @@
+# Build output
+target/
+build/
+*.class
+*.log
+
+# Maven wrapper downloads its distribution here; the scripts and properties are committed.
+.mvn/wrapper/maven-wrapper.jar
+
+# IDEs and OS
+.idea/
+*.iml
+.vscode/
+.DS_Store
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example

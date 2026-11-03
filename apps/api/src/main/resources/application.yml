@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: workspaced-ai-api
+  threads:
+    virtual:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+springdoc:
+  show-actuator: true
+  use-management-port: false
+  api-docs:
+    path: '/v3/api-docs'
+    version: openapi_3_0
+  swagger-ui:
+    path: '/swagger-ui'
+    operationsSorter: alpha
+    tagsSorter: alpha
