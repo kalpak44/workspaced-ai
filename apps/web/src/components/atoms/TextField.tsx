@@ -6,7 +6,7 @@ interface Props extends Omit<ComponentProps<"input">, "className"> {
 }
 
 /** A labelled single-line input; the label is visible and names the field for readers. */
-export function TextField({ label, id, ...rest }: Props) {
+export function TextField({ label, id, ...rest }: Readonly<Props>) {
   return (
     <label htmlFor={id} className="flex flex-col gap-1.5 text-sm">
       <span className="text-zinc-500 dark:text-zinc-400">{label}</span>

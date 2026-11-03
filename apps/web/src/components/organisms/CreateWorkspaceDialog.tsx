@@ -1,5 +1,5 @@
 import { Plus } from "lucide-react";
-import { type FormEvent, useEffect, useRef, useState } from "react";
+import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { Button, TextField } from "../atoms";
 import { Modal } from "../molecules";
 
@@ -31,15 +31,17 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
     }
   };
 
-  const submit = (event: FormEvent) => {
+  const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     setPending(true);
-    onCreate(name).then((created) => {
-      setPending(false);
+    try {
+      const created = await onCreate(name).catch(() => false);
       if (created) {
         onClose();
       }
-    });
+    } finally {
+      setPending(false);
+    }
   };
 
   return (

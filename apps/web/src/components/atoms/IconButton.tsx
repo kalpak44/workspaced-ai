@@ -7,7 +7,7 @@ interface Props extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, "type" | "
   readonly icon: LucideIcon;
 }
 
-export function IconButton({ label, icon: Icon, className = "", ...rest }: Props) {
+export function IconButton({ label, icon: Icon, className = "", ...rest }: Readonly<Props>) {
   return (
     <button
       type="button"

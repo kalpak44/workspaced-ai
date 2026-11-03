@@ -27,15 +27,14 @@ export function Modal({ title, onClose, children }: Props) {
         onClick={onClose}
         className="absolute inset-0 cursor-default bg-black/50"
       />
-      <div
-        role="dialog"
-        aria-modal="true"
+      <dialog
+        open
         aria-label={title}
-        className="relative w-96 rounded-lg border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
+        className="relative m-0 w-96 rounded-lg border border-zinc-200 bg-white p-5 shadow-xl dark:border-zinc-700 dark:bg-zinc-900"
       >
         <h2 className="mb-4 text-lg font-semibold">{title}</h2>
         {children}
-      </div>
+      </dialog>
     </div>
   );
 }
