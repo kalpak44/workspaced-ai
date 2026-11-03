@@ -18,7 +18,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -30,13 +29,13 @@ class WorkspaceControllerTest {
 
   @LocalServerPort int port;
 
-  @Autowired JdbcClient jdbc;
+  @Autowired WorkspaceRepository repository;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
   @BeforeEach
   void emptyTable() {
-    jdbc.sql("DELETE FROM workspace").update();
+    repository.deleteAll();
   }
 
   @Test
@@ -45,6 +44,8 @@ class WorkspaceControllerTest {
     assertThat(created.statusCode()).isEqualTo(201);
     var research = JSON.readValue(created.body(), Workspace.class);
     assertThat(research.name()).isEqualTo("Research");
+    // Outside Kubernetes nothing is started, so a workspace is usable at once.
+    assertThat(research.status()).isEqualTo(WorkspaceStatus.READY);
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/api/v1/workspaces/" + research.id()));
 
@@ -58,7 +59,8 @@ class WorkspaceControllerTest {
     var id = create("Old");
     var renamed = send("PUT", "/" + id, "{\"name\":\"New\"}");
     assertThat(renamed.statusCode()).isEqualTo(200);
-    assertThat(JSON.readValue(renamed.body(), Workspace.class)).isEqualTo(new Workspace(id, "New"));
+    assertThat(JSON.readValue(renamed.body(), Workspace.class))
+        .isEqualTo(new Workspace(id, "New", WorkspaceStatus.READY));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
   }
 

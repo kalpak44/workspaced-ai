@@ -1,7 +1,7 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { uniqueName, useWorkspaces } from "../src/useWorkspaces";
-import { installFakeApi } from "./fakeApi";
+import { FakeEventSource, installFakeApi } from "./fakeApi";
 
 describe("uniqueName", () => {
   it("keeps a free name", () => {
@@ -22,8 +22,8 @@ async function loaded() {
 describe("useWorkspaces", () => {
   it("loads from the API and selects the first", async () => {
     installFakeApi([
-      { id: "a", name: "A" },
-      { id: "b", name: "B" },
+      { id: "a", name: "A", status: "READY" },
+      { id: "b", name: "B", status: "READY" },
     ]);
     const result = await loaded();
     expect(result.current.workspaces.map((w) => w.name)).toEqual(["A", "B"]);
@@ -58,7 +58,7 @@ describe("useWorkspaces", () => {
     act(() => result.current.remove("starter"));
     await waitFor(() => expect(result.current.error).toBe("Could not delete the workspace"));
 
-    expect(result.current.workspaces).toEqual([{ id: "starter", name: "Starter" }]);
+    expect(result.current.workspaces).toEqual([{ id: "starter", name: "Starter", status: "READY" }]);
   });
 
   it("selects the first remaining once the selected one is deleted", async () => {
@@ -75,5 +75,29 @@ describe("useWorkspaces", () => {
     const result = await loaded();
     act(() => result.current.remove("starter"));
     await waitFor(() => expect(result.current.selected).toBeNull());
+  });
+
+  it("subscribes to status events only once the list has loaded", async () => {
+    installFakeApi();
+    const hook = renderHook(() => useWorkspaces());
+    expect(FakeEventSource.instances).toHaveLength(0);
+    await waitFor(() => expect(hook.result.current.loading).toBe(false));
+    expect(FakeEventSource.latest().url).toBe("/api/v1/workspaces/events");
+
+    FakeEventSource.emit("starter", "FAILED");
+    expect(hook.result.current.workspaces[0].status).toBe("FAILED");
+
+    hook.unmount();
+    expect(FakeEventSource.latest().closed).toBe(true);
+  });
+
+  it("applies a status that arrived before the create response", async () => {
+    const api = installFakeApi();
+    api.state.createStatus = "INITIALIZING";
+    const result = await loaded();
+    FakeEventSource.emit("ws-1", "READY");
+    act(() => result.current.create());
+    await waitFor(() => expect(result.current.selected?.id).toBe("ws-1"));
+    expect(result.current.selected?.status).toBe("READY");
   });
 });

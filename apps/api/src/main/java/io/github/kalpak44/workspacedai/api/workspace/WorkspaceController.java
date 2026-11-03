@@ -6,26 +6,34 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.server.ResponseStatusException;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /** Routes, validation and documentation are declared on {@link WorkspaceApi}. */
 @RestController
 public class WorkspaceController implements WorkspaceApi {
 
-  private final WorkspaceRepository repository;
+  private final WorkspaceService service;
+  private final WorkspaceEvents events;
 
-  public WorkspaceController(WorkspaceRepository repository) {
-    this.repository = repository;
+  public WorkspaceController(WorkspaceService service, WorkspaceEvents events) {
+    this.service = service;
+    this.events = events;
   }
 
   @Override
-  public List<Workspace> list() {
-    return repository.findAll();
+  public ResponseEntity<SseEmitter> events() {
+    return ResponseEntity.ok(events.subscribe());
+  }
+
+  @Override
+  public ResponseEntity<List<Workspace>> list() {
+    return ResponseEntity.ok(service.list());
   }
 
   @Override
   public ResponseEntity<Workspace> create(WorkspaceRequest request) {
-    var workspace = repository.create(request.trimmedName());
+    var workspace = service.create(request.trimmedName());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
@@ -35,15 +43,19 @@ public class WorkspaceController implements WorkspaceApi {
   }
 
   @Override
-  public Workspace rename(UUID id, WorkspaceRequest request) {
-    return repository.rename(id, request.trimmedName()).orElseThrow(() -> notFound(id));
+  public ResponseEntity<Workspace> rename(UUID id, WorkspaceRequest request) {
+    return service
+        .rename(id, request.trimmedName())
+        .map(ResponseEntity::ok)
+        .orElseThrow(() -> notFound(id));
   }
 
   @Override
-  public void delete(UUID id) {
-    if (!repository.delete(id)) {
+  public ResponseEntity<Void> delete(UUID id) {
+    if (!service.delete(id)) {
       throw notFound(id);
     }
+    return ResponseEntity.noContent().build();
   }
 
   private static ResponseStatusException notFound(UUID id) {

@@ -27,6 +27,7 @@
         <sonar.plugin.version>5.8.0.7211</sonar.plugin.version>
         <!-- springdoc 3.x is the line built for Boot 4; 2.x targets Boot 3. -->
         <spring-doc.version>3.2.0</spring-doc.version>
+        <fabric8.version>8.0.0</fabric8.version>
 
         <!-- The floor `mvn verify` enforces. It lives here rather than in a CI step so a
              step deleted from the workflow cannot silently disable it. -->
@@ -51,10 +52,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
-        <!-- Plain SQL through JdbcClient; the schema is small enough not to need an ORM. -->
+        <!-- JPA for the entities; Flyway still owns the schema, and Hibernate only
+             validates it against the mappings. -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-jdbc</artifactId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
         </dependency>
         <!-- spring-boot-flyway carries the auto-configuration, which Boot 4 moved out of the
              main jar: without it flyway-core sits on the classpath and never runs. The
@@ -78,6 +80,25 @@
             <artifactId>postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Starts and stops each workspace's pod in the namespace the API runs in. On the
+             JDK's own HTTP client rather than the default Vert.x one: Vert.x's threads keep
+             the JVM from exiting, which surefire reports by killing its fork. -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-client</artifactId>
+            <version>${fabric8.version}</version>
+            <exclusions>
+                <exclusion>
+                    <groupId>io.fabric8</groupId>
+                    <artifactId>kubernetes-httpclient-vertx</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-httpclient-jdk</artifactId>
+            <version>${fabric8.version}</version>
+        </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
             <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
@@ -99,6 +120,14 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- An in-memory API server that stores what is created, so pod handling is tested
+             against real client calls without a cluster. -->
+        <dependency>
+            <groupId>io.fabric8</groupId>
+            <artifactId>kubernetes-server-mock</artifactId>
+            <version>${fabric8.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

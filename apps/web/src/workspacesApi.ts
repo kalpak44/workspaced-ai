@@ -1,9 +1,19 @@
+export type WorkspaceStatus = "INITIALIZING" | "READY" | "FAILED";
+
 export interface Workspace {
   readonly id: string;
   readonly name: string;
+  readonly status: WorkspaceStatus;
+}
+
+/** One `status` event per change, after a snapshot of every workspace on connect. */
+export interface StatusEvent {
+  readonly id: string;
+  readonly status: WorkspaceStatus;
 }
 
 const BASE = "/api/v1/workspaces";
+export const EVENTS_URL = `${BASE}/events`;
 
 // The server assigns UUIDs, and an id becomes a path segment of the request URL.
 // Accepting only path-safe characters keeps a hostile response from steering the

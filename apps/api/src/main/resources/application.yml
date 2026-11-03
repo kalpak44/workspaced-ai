@@ -26,6 +26,15 @@ spring:
     hikari:
       pool-name: workspaced-pool
 
+  jpa:
+    # Flyway creates the tables; a mapping that drifts from them fails at startup instead
+    # of being "fixed" by Hibernate in production.
+    hibernate:
+      ddl-auto: validate
+    # No lazy loading during view rendering: every query runs inside the service's
+    # transaction, where it can be seen.
+    open-in-view: false
+
 management:
   endpoints:
     web:

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
-import { installFakeApi } from "./fakeApi";
+import { FakeEventSource, installFakeApi } from "./fakeApi";
 
 let api: ReturnType<typeof installFakeApi>;
 
@@ -46,7 +46,7 @@ describe("App", () => {
     await user.clear(input);
     await user.type(input, "Research{Enter}");
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
-    expect(api.rows).toEqual([{ id: "starter", name: "Research" }]);
+    expect(api.rows).toEqual([{ id: "starter", name: "Research", status: "READY" }]);
 
     await user.click(screen.getByRole("button", { name: "Actions for Research" }));
     await user.click(screen.getByRole("menuitem", { name: "Rename" }));
@@ -135,6 +135,27 @@ describe("App", () => {
     expect(alert).toHaveTextContent("Could not load workspaces");
     await userEvent.setup().click(within(alert).getByRole("button", { name: "Dismiss" }));
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
+
+  it("shows a new workspace initializing until its environment is ready", async () => {
+    api.state.createStatus = "INITIALIZING";
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+
+    expect(await screen.findByText("Initializing workspace")).toBeInTheDocument();
+    expect(within(sidebar()).getByRole("status", { name: "Initializing" })).toBeInTheDocument();
+
+    FakeEventSource.emit("ws-1", "READY");
+    expect(screen.getByText("Empty workspace")).toBeInTheDocument();
+    expect(within(sidebar()).queryByRole("status")).not.toBeInTheDocument();
+  });
+
+  it("shows a workspace whose environment failed", async () => {
+    await renderLoaded();
+    FakeEventSource.emit("starter", "FAILED");
+    expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
+    expect(within(sidebar()).getByRole("status", { name: "Failed" })).toBeInTheDocument();
   });
 
   it("shows an unreachable API", async () => {

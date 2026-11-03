@@ -27,6 +27,17 @@ export function App() {
   } else if (loading) {
     title = "Workspaces";
     body = <EmptyState title="Loading workspaces…" hint="Fetching them from the API" />;
+  } else if (selected?.status === "INITIALIZING") {
+    title = selected.name;
+    body = <EmptyState busy title="Initializing workspace" hint="Starting its environment…" />;
+  } else if (selected?.status === "FAILED") {
+    title = selected.name;
+    body = (
+      <EmptyState
+        title="Workspace unavailable"
+        hint="Its environment stopped or could not start. Delete it and create a new one."
+      />
+    );
   } else if (selected) {
     title = selected.name;
     body = <EmptyState title="Empty workspace" hint="Start automating here" action={newWorkspace} />;

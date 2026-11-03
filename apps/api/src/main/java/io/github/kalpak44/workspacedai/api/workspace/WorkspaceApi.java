@@ -11,7 +11,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
-import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -21,7 +21,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Workspace API: the routes and their OpenAPI documentation, kept apart from the implementation so
@@ -37,7 +37,12 @@ public interface WorkspaceApi {
   String PROBLEM_JSON = "application/problem+json";
 
   String WORKSPACE_EXAMPLE =
-      "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\"}";
+      "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
+          + "\"status\":\"READY\"}";
+
+  String CREATED_EXAMPLE =
+      "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
+          + "\"status\":\"INITIALIZING\"}";
 
   String BAD_REQUEST_EXAMPLE =
       "{\"type\":\"about:blank\",\"title\":\"Bad Request\",\"status\":400,"
@@ -56,7 +61,9 @@ public interface WorkspaceApi {
   @Operation(
       operationId = "listWorkspaces",
       summary = "List workspaces",
-      description = "Every workspace, in the order they were created.")
+      description =
+          "Every workspace, in the order they were created, with the status of its runtime. "
+              + "Follow later changes on /workspaces/events.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",
@@ -66,7 +73,33 @@ public interface WorkspaceApi {
               array = @ArraySchema(schema = @Schema(implementation = Workspace.class)),
               examples = @ExampleObject("[" + WORKSPACE_EXAMPLE + "]")))
   @GetMapping(produces = JSON)
-  List<Workspace> list();
+  ResponseEntity<List<Workspace>> list();
+
+  /**
+   * Streams workspace status changes.
+   *
+   * @return a stream that stays open until the client closes it
+   */
+  @Operation(
+      operationId = "streamWorkspaceEvents",
+      summary = "Stream workspace status changes",
+      description =
+          "Server-sent events. On connect, one `status` event per existing workspace; after "
+              + "that, one each time a workspace's status changes. A status may repeat. A "
+              + "`keepalive` comment is sent every 30 seconds.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "An open event stream.",
+      content =
+          @Content(
+              mediaType = MediaType.TEXT_EVENT_STREAM_VALUE,
+              examples =
+                  @ExampleObject(
+                      "event:status\n"
+                          + "data:{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\","
+                          + "\"status\":\"READY\"}\n\n")))
+  @GetMapping(path = "/events", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  ResponseEntity<SseEmitter> events();
 
   /**
    * Creates a workspace.
@@ -77,7 +110,9 @@ public interface WorkspaceApi {
   @Operation(
       operationId = "createWorkspace",
       summary = "Create a workspace",
-      description = "The server assigns the id. Surrounding whitespace is trimmed from the name.")
+      description =
+          "The server assigns the id and starts the workspace's runtime, which is INITIALIZING "
+              + "until it can be used. Surrounding whitespace is trimmed from the name.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -85,7 +120,7 @@ public interface WorkspaceApi {
           @Content(
               mediaType = JSON,
               schema = @Schema(implementation = Workspace.class),
-              examples = @ExampleObject(WORKSPACE_EXAMPLE)))
+              examples = @ExampleObject(CREATED_EXAMPLE)))
   @ApiResponse(
       responseCode = "400",
       description = "The name is blank or longer than 100 characters.",
@@ -133,7 +168,7 @@ public interface WorkspaceApi {
               schema = @Schema(implementation = ProblemDetail.class),
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
   @PutMapping(path = "/{id}", consumes = JSON, produces = JSON)
-  Workspace rename(
+  ResponseEntity<Workspace> rename(
       @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
           @PathVariable
           UUID id,
@@ -147,7 +182,7 @@ public interface WorkspaceApi {
   @Operation(
       operationId = "deleteWorkspace",
       summary = "Delete a workspace",
-      description = "Removes the workspace for good.")
+      description = "Removes the workspace and stops its runtime.")
   @ApiResponse(responseCode = "204", description = "Deleted.")
   @ApiResponse(
       responseCode = "400",
@@ -165,8 +200,7 @@ public interface WorkspaceApi {
               schema = @Schema(implementation = ProblemDetail.class),
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
   @DeleteMapping("/{id}")
-  @ResponseStatus(HttpStatus.NO_CONTENT)
-  void delete(
+  ResponseEntity<Void> delete(
       @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
           @PathVariable
           UUID id);

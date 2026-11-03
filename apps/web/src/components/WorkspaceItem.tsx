@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react";
+import { CircleAlert, LoaderCircle, MoreHorizontal } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useDismiss } from "../useDismiss";
 import type { Workspace } from "../useWorkspaces";
@@ -64,9 +64,19 @@ export function WorkspaceItem({ workspace, selected, onSelect, onRename, onDelet
         type="button"
         aria-current={selected ? "page" : undefined}
         onClick={onSelect}
-        className="flex-1 truncate px-2 py-2 text-left"
+        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left"
       >
-        {workspace.name}
+        <span className="truncate">{workspace.name}</span>
+        {workspace.status === "INITIALIZING" && (
+          <LoaderCircle
+            role="status"
+            aria-label="Initializing"
+            className="size-3.5 shrink-0 animate-spin text-zinc-400"
+          />
+        )}
+        {workspace.status === "FAILED" && (
+          <CircleAlert role="status" aria-label="Failed" className="size-3.5 shrink-0 text-rose-500" />
+        )}
       </button>
       <button
         type="button"

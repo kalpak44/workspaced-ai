@@ -1,13 +1,16 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   createWorkspace,
   deleteWorkspace,
+  EVENTS_URL,
   listWorkspaces,
   renameWorkspace,
+  type StatusEvent,
   type Workspace,
+  type WorkspaceStatus,
 } from "./workspacesApi";
 
-export type { Workspace } from "./workspacesApi";
+export type { Workspace, WorkspaceStatus } from "./workspacesApi";
 
 export const DEFAULT_NAME = "New Workspace";
 
@@ -32,6 +35,9 @@ export function useWorkspaces() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // The latest status seen per id. A status event can beat the create response that
+  // introduces its workspace, and this is where it waits until then.
+  const latest = useRef(new Map<string, WorkspaceStatus>());
 
   useEffect(() => {
     // StrictMode runs this twice in development; only the live run may set state.
@@ -45,6 +51,21 @@ export function useWorkspaces() {
     };
   }, []);
 
+  // Pushed rather than polled. EventSource reconnects by itself, and every connection
+  // opens with a full snapshot, so a dropped stream cannot leave a status stale.
+  useEffect(() => {
+    if (loading) {
+      return undefined;
+    }
+    const source = new EventSource(EVENTS_URL);
+    source.addEventListener("status", (event) => {
+      const { id, status } = JSON.parse(event.data) as StatusEvent;
+      latest.current.set(id, status);
+      setWorkspaces((current) => current.map((w) => (w.id === id ? { ...w, status } : w)));
+    });
+    return () => source.close();
+  }, [loading]);
+
   // Plain functions, not async ones: they are handed to click handlers that expect no
   // return value, so each settles its own promise, failure included.
   const create = (name: string = DEFAULT_NAME) => {
@@ -53,7 +74,8 @@ export function useWorkspaces() {
       workspaces.map((w) => w.name),
     );
     createWorkspace(unique).then(
-      (workspace) => {
+      (created) => {
+        const workspace = { ...created, status: latest.current.get(created.id) ?? created.status };
         setWorkspaces((current) => [...current, workspace]);
         setSelectedId(workspace.id);
       },

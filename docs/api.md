@@ -5,12 +5,14 @@ The whole app is served under the `/api/v1` context path, so the host root is fr
 
 ## Workspaces
 
-A workspace has an `id` (UUID, assigned by the server) and a `name` (1–100 characters, surrounding whitespace
-trimmed). Workspaces are listed in the order they were created.
+A workspace has an `id` (UUID, assigned by the server), a `name` (1–100 characters, surrounding whitespace trimmed)
+and a `status`: `INITIALIZING` while its environment starts, `READY` once it can be used, `FAILED` if it stopped or
+is gone. Workspaces are listed in the order they were created.
 
 | Method   | Path                      | Body               | Answers                                         |
 |----------|---------------------------|--------------------|-------------------------------------------------|
 | `GET`    | `/api/v1/workspaces`      |                    | `200` and every workspace                       |
+| `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204`, or `404`                                 |
@@ -23,6 +25,14 @@ curl localhost:8080/api/v1/workspaces
 curl -X PUT localhost:8080/api/v1/workspaces/$ID -H 'Content-Type: application/json' -d '{"name":"Notes"}'
 curl -X DELETE localhost:8080/api/v1/workspaces/$ID
 ```
+
+The event stream sends one `status` event (`{"id": "…", "status": "READY"}`) per existing workspace on connect, then
+one per change; a status may repeat. A `keepalive` comment follows every 30 seconds.
+
+In Kubernetes each workspace runs as a pod named `workspaced-ai-workspace-<id>`, labelled
+`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in; deleting the workspace deletes the pod. Outside
+Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
+the kubeconfig points at.
 
 The schema is created by Flyway from `apps/api/src/main/resources/db/migration` when the API starts.
 
