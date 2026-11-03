@@ -1,5 +1,5 @@
-# Packages the jar `./mvnw verify` already built, so CI compiles and tests once.
-# Build it first: `./mvnw -B package -DskipTests && docker build .`
+# Packages the jar `mvn verify` already built, so CI compiles and tests once.
+# Build it first: `mvn -B package -DskipTests && docker build .`
 
 # Azul rebuilds this tag after Alpine security updates, which the Temurin JRE image lags.
 FROM azul/zulu-openjdk-alpine:25-jre-headless AS layers
