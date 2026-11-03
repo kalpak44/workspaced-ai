@@ -3,24 +3,35 @@
 The whole app is served under the `/api/v1` context path, so the host root is free for the frontend: Swagger UI is at
 `/api/v1/swagger-ui`, the OpenAPI 3.0 document at `/api/v1/v3/api-docs`, health at `/api/v1/actuator/health`.
 
+## Model providers
+
+`GET /api/v1/model-providers` lists the providers a workspace can be created with: `id`, `name`, `baseUrl`, and
+`apiKeyVariable`, the secret the workspace receives the key in. The list is hardcoded — OpenRouter only for now —
+because each provider needs its own key check.
+
 ## Workspaces
 
-A workspace has an `id` (UUID, assigned by the server), a `name` (1–100 characters, surrounding whitespace trimmed)
-and a `status`: `INITIALIZING` while its environment starts, `READY` once it can be used, `FAILED` if it stopped or
-is gone. Workspaces are listed in the order they were created.
+A workspace has an `id` (UUID, assigned by the server), a `name` (1–100 characters, surrounding whitespace trimmed),
+the `modelProvider` it was created with, and a `status`: `INITIALIZING` while its environment starts, `READY` once it
+can be used, `FAILED` if it stopped or is gone. Workspaces are listed in the order they were created.
 
 | Method   | Path                      | Body               | Answers                                         |
 |----------|---------------------------|--------------------|-------------------------------------------------|
 | `GET`    | `/api/v1/workspaces`      |                    | `200` and every workspace                       |
 | `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
-| `POST`   | `/api/v1/workspaces`      | `{"name": "Docs"}` | `201`, the workspace, and its URL in `Location` |
+| `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "apiKey": "sk-or-…"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its pod is gone, or `404`            |
 
-A blank or overlong name, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
+A blank or overlong name, a blank key, an unknown provider, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
+
+Creating a workspace first calls the provider with the key (OpenRouter's `GET /key`). A key the provider refuses
+answers `422` and creates nothing; a provider that cannot be reached answers `502`. The key is never stored by the
+API: it goes straight into the workspace's Kubernetes Secret.
 
 ```sh
-curl -X POST localhost:8080/api/v1/workspaces -H 'Content-Type: application/json' -d '{"name":"Docs"}'
+curl -X POST localhost:8080/api/v1/workspaces -H 'Content-Type: application/json' \
+  -d '{"name":"Docs","modelProvider":"openrouter","apiKey":"sk-or-…"}'
 curl localhost:8080/api/v1/workspaces
 curl -X PUT localhost:8080/api/v1/workspaces/$ID -H 'Content-Type: application/json' -d '{"name":"Notes"}'
 curl -X DELETE localhost:8080/api/v1/workspaces/$ID
@@ -30,11 +41,30 @@ The event stream sends one `status` event (`{"id": "…", "status": "READY"}`) p
 one per change, plus a `deleted` event (`{"id": "…"}`) after each deletion; a status may repeat. A `keepalive` comment follows every 30 seconds.
 
 In Kubernetes each workspace runs as a pod named `workspaced-ai-workspace-<id>`, labelled
-`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in. Deleting the workspace deletes the pod, and the call answers only once the pod is
+`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in. A Secret and a ConfigMap of the same name and
+label hold its environment — the provider key (`OPENROUTER_API_KEY`) plus any secrets added later in the Secret, the
+provider's base URL (`OPENROUTER_BASE_URL`) in the ConfigMap — and the pod takes both with `envFrom`. Deleting the workspace deletes the pod, and the call answers only once the pod is
 gone (`workspaced.workspace.stop-timeout`, 60 seconds by default); if it is not gone in time, the workspace is kept and
 the call fails. Outside
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.
+
+## Workspace secrets
+
+Environment variables a workspace keeps secret. The database holds their names only; each value lives in the
+workspace's Kubernetes Secret and is never returned. The provider key is listed first, marked `managed`, and is not
+a database row at all.
+
+| Method   | Path                                     | Body                                   | Answers                                    |
+|----------|------------------------------------------|----------------------------------------|--------------------------------------------|
+| `GET`    | `/api/v1/workspaces/{id}/secrets`        |                                        | `200` and the names, or `404`              |
+| `POST`   | `/api/v1/workspaces/{id}/secrets`        | `{"name": "GITHUB_TOKEN", "value": "…"}` | `201` and the secret, `404`, or `409`      |
+| `DELETE` | `/api/v1/workspaces/{id}/secrets/{name}` |                                        | `204`, `404`, or `409`                     |
+
+A name must be a valid environment variable name (`[A-Za-z_][A-Za-z0-9_]*`, at most 100 characters), else `400`.
+`409` means the workspace already has that secret, or its provider sets it (`OPENROUTER_API_KEY`,
+`OPENROUTER_BASE_URL`), which no user secret may shadow or remove. A pod reads its environment once, when it starts,
+so a running workspace sees a change only after it restarts.
 
 The schema is created by Flyway from `apps/api/src/main/resources/db/migration` when the API starts.
 

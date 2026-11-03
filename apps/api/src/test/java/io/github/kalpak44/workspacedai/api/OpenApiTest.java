@@ -33,6 +33,9 @@ class OpenApiTest {
             "\"operationId\":\"renameWorkspace\"",
             "\"operationId\":\"deleteWorkspace\"",
             "\"operationId\":\"listWorkspaces\"",
+            "\"operationId\":\"listModelProviders\"",
+            "\"operationId\":\"addWorkspaceSecret\"",
+            "\"operationId\":\"removeWorkspaceSecret\"",
             "application/problem+json");
   }
 

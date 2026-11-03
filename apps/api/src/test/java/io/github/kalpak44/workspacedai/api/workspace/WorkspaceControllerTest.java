@@ -1,8 +1,15 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
+import io.github.kalpak44.workspacedai.api.provider.ProviderUnreachableException;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -18,6 +25,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -30,28 +38,73 @@ class WorkspaceControllerTest {
   @LocalServerPort int port;
 
   @Autowired WorkspaceRepository repository;
+  @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
   @BeforeEach
   void emptyTable() {
     repository.deleteAll();
+    when(keyCheck.accepts(any(), any())).thenReturn(true);
   }
 
   @Test
   void createsAndListsInCreationOrder() throws Exception {
-    var created = send("POST", "", "{\"name\":\"  Research  \"}");
+    var created = send("POST", "", body("  Research  ", "openrouter", " sk-or-1\\n"));
     assertThat(created.statusCode()).isEqualTo(201);
     var research = JSON.readValue(created.body(), Workspace.class);
     assertThat(research.name()).isEqualTo("Research");
+    assertThat(research.modelProvider()).isEqualTo("openrouter");
+    // The key is checked as it would be used, without the whitespace a paste brings along.
+    verify(keyCheck).accepts(ModelProvider.OPENROUTER, "sk-or-1");
     // Outside Kubernetes nothing is started, so a workspace is usable at once.
     assertThat(research.status()).isEqualTo(WorkspaceStatus.READY);
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/api/v1/workspaces/" + research.id()));
 
-    send("POST", "", "{\"name\":\"Docs\"}");
+    create("Docs");
 
     assertThat(list()).extracting(Workspace::name).containsExactly("Research", "Docs");
+  }
+
+  @Test
+  void createsNothingWithAKeyTheProviderRejects() throws Exception {
+    when(keyCheck.accepts(ModelProvider.OPENROUTER, "sk-bad")).thenReturn(false);
+    var refused = send("POST", "", body("Research", "openrouter", "sk-bad"));
+    assertThat(refused.statusCode()).isEqualTo(422);
+    assertThat(JSON.readTree(refused.body()).get("detail").asString())
+        .isEqualTo("OpenRouter rejected the API key");
+    assertThat(list()).isEmpty();
+  }
+
+  @Test
+  void createsNothingWhenTheProviderCannotBeReached() throws Exception {
+    when(keyCheck.accepts(eq(ModelProvider.OPENROUTER), any()))
+        .thenThrow(new ProviderUnreachableException(ModelProvider.OPENROUTER, null));
+    assertThat(send("POST", "", body("Research", "openrouter", "sk-or-1")).statusCode())
+        .isEqualTo(502);
+    assertThat(list()).isEmpty();
+  }
+
+  @Test
+  void rejectsAnUnknownProviderOrAMissingKey() throws Exception {
+    assertThat(send("POST", "", body("Research", "nope", "sk-or-1")).statusCode()).isEqualTo(400);
+    assertThat(send("POST", "", body("Research", "openrouter", "  ")).statusCode()).isEqualTo(400);
+    assertThat(send("POST", "", "{\"name\":\"Research\"}").statusCode()).isEqualTo(400);
+    assertThat(list()).isEmpty();
+  }
+
+  @Test
+  void listsTheSupportedModelProviders() throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/model-providers"))
+            .build();
+    var providers = JSON.readTree(http.send(request, BodyHandlers.ofString()).body());
+    assertThat(providers).hasSize(1);
+    assertThat(providers.get(0).get("id").asString()).isEqualTo("openrouter");
+    assertThat(providers.get(0).get("baseUrl").asString())
+        .isEqualTo("https://openrouter.ai/api/v1");
+    assertThat(providers.get(0).get("apiKeyVariable").asString()).isEqualTo("OPENROUTER_API_KEY");
   }
 
   @Test
@@ -60,7 +113,7 @@ class WorkspaceControllerTest {
     var renamed = send("PUT", "/" + id, "{\"name\":\"New\"}");
     assertThat(renamed.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(renamed.body(), Workspace.class))
-        .isEqualTo(new Workspace(id, "New", WorkspaceStatus.READY));
+        .isEqualTo(new Workspace(id, "New", "openrouter", WorkspaceStatus.READY));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
   }
 
@@ -85,10 +138,11 @@ class WorkspaceControllerTest {
 
   @Test
   void rejectsABlankOrOverlongName() throws Exception {
-    assertThat(send("POST", "", "{\"name\":\"   \"}").statusCode()).isEqualTo(400);
-    assertThat(send("POST", "", "{\"name\":\"" + "x".repeat(101) + "\"}").statusCode())
+    assertThat(send("POST", "", body("   ", "openrouter", "k")).statusCode()).isEqualTo(400);
+    assertThat(send("POST", "", body("x".repeat(101), "openrouter", "k")).statusCode())
         .isEqualTo(400);
     assertThat(send("POST", "", "{}").statusCode()).isEqualTo(400);
+    assertThat(send("PUT", "/" + create("Kept"), "{\"name\":\"   \"}").statusCode()).isEqualTo(400);
   }
 
   @Test
@@ -97,8 +151,18 @@ class WorkspaceControllerTest {
   }
 
   private UUID create(String name) throws Exception {
-    var response = send("POST", "", "{\"name\":\"" + name + "\"}");
+    var response = send("POST", "", body(name, "openrouter", "sk-or-1"));
     return JSON.readValue(response.body(), Workspace.class).id();
+  }
+
+  private static String body(String name, String provider, String apiKey) {
+    return "{\"name\":\""
+        + name
+        + "\",\"modelProvider\":\""
+        + provider
+        + "\",\"apiKey\":\""
+        + apiKey
+        + "\"}";
   }
 
   private List<Workspace> list() throws Exception {

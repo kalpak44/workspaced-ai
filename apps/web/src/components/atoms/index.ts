@@ -3,5 +3,6 @@ export { Button } from "./Button";
 export { Divider } from "./Divider";
 export { IconButton } from "./IconButton";
 export { Logo } from "./Logo";
+export { Select } from "./Select";
 export { Spinner } from "./Spinner";
 export { TextField } from "./TextField";

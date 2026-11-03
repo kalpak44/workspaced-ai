@@ -38,11 +38,15 @@ public interface WorkspaceApi {
 
   String WORKSPACE_EXAMPLE =
       "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
-          + "\"status\":\"READY\"}";
+          + "\"modelProvider\":\"openrouter\",\"status\":\"READY\"}";
 
   String CREATED_EXAMPLE =
       "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
-          + "\"status\":\"INITIALIZING\"}";
+          + "\"modelProvider\":\"openrouter\",\"status\":\"INITIALIZING\"}";
+
+  String REJECTED_KEY_EXAMPLE =
+      "{\"type\":\"about:blank\",\"title\":\"Unprocessable Content\",\"status\":422,"
+          + "\"detail\":\"OpenRouter rejected the API key\",\"instance\":\"/api/v1/workspaces\"}";
 
   String BAD_REQUEST_EXAMPLE =
       "{\"type\":\"about:blank\",\"title\":\"Bad Request\",\"status\":400,"
@@ -106,15 +110,17 @@ public interface WorkspaceApi {
   /**
    * Creates a workspace.
    *
-   * @param request the name, trimmed before it is stored
+   * @param request the name, trimmed before it is stored, the model provider and its API key
    * @return the workspace with its new id, and its URL in {@code Location}
    */
   @Operation(
       operationId = "createWorkspace",
       summary = "Create a workspace",
       description =
-          "The server assigns the id and starts the workspace's runtime, which is INITIALIZING "
-              + "until it can be used. Surrounding whitespace is trimmed from the name.")
+          "Checks the API key with the model provider, then assigns the id and starts the "
+              + "workspace's runtime, which is INITIALIZING until it can be used. The key and the "
+              + "provider's base URL reach the runtime only; the key is not stored by the API. "
+              + "Surrounding whitespace is trimmed from the name and the key.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -125,14 +131,31 @@ public interface WorkspaceApi {
               examples = @ExampleObject(CREATED_EXAMPLE)))
   @ApiResponse(
       responseCode = "400",
-      description = "The name is blank or longer than 100 characters.",
+      description =
+          "The name is blank or longer than 100 characters, the key is blank, or the model "
+              + "provider is not one /model-providers lists.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class),
               examples = @ExampleObject(BAD_REQUEST_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "422",
+      description = "The model provider rejected the API key; nothing was created.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class),
+              examples = @ExampleObject(REJECTED_KEY_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "502",
+      description = "The model provider could not be reached to check the key.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(consumes = JSON, produces = JSON)
-  ResponseEntity<Workspace> create(@Valid @RequestBody WorkspaceRequest request);
+  ResponseEntity<Workspace> create(@Valid @RequestBody CreateWorkspaceRequest request);
 
   /**
    * Renames a workspace.

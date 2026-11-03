@@ -1,12 +1,18 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.ObjectMeta;
+import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.Quantity;
+import io.fabric8.kubernetes.api.model.SecretBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.informers.ResourceEventHandler;
 import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.Map;
@@ -17,7 +23,10 @@ import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/** One pod per workspace, in the namespace the API itself runs in. */
+/**
+ * One pod per workspace, in the namespace the API itself runs in, with a Secret and a ConfigMap of
+ * the same name that it takes its environment from.
+ */
 public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseable {
 
   static final String WORKSPACE_ID_LABEL = "workspaced-ai/workspace-id";
@@ -46,13 +55,42 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     }
   }
 
+  /** The pod, its Secret and its ConfigMap all share this name. */
   static String podName(UUID workspaceId) {
     return POD_PREFIX + workspaceId;
   }
 
+  /**
+   * The Secret and ConfigMap go first, since the pod cannot start without them. A failure part way
+   * removes what was made, because the caller rolls the workspace back and nothing else would.
+   */
   @Override
-  public void start(UUID workspaceId) {
-    client.pods().inNamespace(namespace).resource(pod(workspaceId)).create();
+  public void start(UUID workspaceId, WorkspaceEnvironment environment) {
+    try {
+      client
+          .configMaps()
+          .inNamespace(namespace)
+          .resource(
+              new ConfigMapBuilder()
+                  .withMetadata(metadata(workspaceId))
+                  .withData(environment.config())
+                  .build())
+          .create();
+      client
+          .secrets()
+          .inNamespace(namespace)
+          .resource(
+              new SecretBuilder()
+                  .withMetadata(metadata(workspaceId))
+                  .withType("Opaque")
+                  .withData(encode(environment.secrets()))
+                  .build())
+          .create();
+      client.pods().inNamespace(namespace).resource(pod(workspaceId)).create();
+    } catch (RuntimeException e) {
+      removeEnvironment(workspaceId);
+      throw e;
+    }
   }
 
   @Override
@@ -61,6 +99,33 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     pod.delete();
     // A delete only marks the pod terminating; this waits for the API server to drop it.
     pod.waitUntilCondition(Objects::isNull, stopTimeoutMillis, TimeUnit.MILLISECONDS);
+    removeEnvironment(workspaceId);
+  }
+
+  /** Creates the Secret when it is missing, as it is for a workspace made before secrets were. */
+  @Override
+  public void putSecret(UUID workspaceId, String name, String value) {
+    var secret = client.secrets().inNamespace(namespace).withName(podName(workspaceId));
+    var encoded = encode(Map.of(name, value));
+    if (secret.get() == null) {
+      secret.create(
+          new SecretBuilder()
+              .withMetadata(metadata(workspaceId))
+              .withType("Opaque")
+              .withData(encoded)
+              .build());
+    } else {
+      secret.edit(s -> new SecretBuilder(s).addToData(encoded).build());
+    }
+  }
+
+  @Override
+  public void removeSecret(UUID workspaceId, String name) {
+    var secret = client.secrets().inNamespace(namespace).withName(podName(workspaceId));
+    var current = secret.get();
+    if (current != null && current.getData() != null && current.getData().containsKey(name)) {
+      secret.edit(s -> new SecretBuilder(s).removeFromData(name).build());
+    }
   }
 
   @Override
@@ -146,9 +211,23 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     return ready ? WorkspaceStatus.READY : WorkspaceStatus.INITIALIZING;
   }
 
-  private Pod pod(UUID workspaceId) {
-    return new PodBuilder()
-        .withNewMetadata()
+  private void removeEnvironment(UUID workspaceId) {
+    client.secrets().inNamespace(namespace).withName(podName(workspaceId)).delete();
+    client.configMaps().inNamespace(namespace).withName(podName(workspaceId)).delete();
+  }
+
+  private static Map<String, String> encode(Map<String, String> values) {
+    return values.entrySet().stream()
+        .collect(
+            Collectors.toMap(
+                Map.Entry::getKey,
+                e ->
+                    Base64.getEncoder()
+                        .encodeToString(e.getValue().getBytes(StandardCharsets.UTF_8))));
+  }
+
+  private static ObjectMeta metadata(UUID workspaceId) {
+    return new ObjectMetaBuilder()
         .withName(podName(workspaceId))
         .withLabels(
             Map.of(
@@ -160,7 +239,12 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
                 MANAGED_BY,
                 WORKSPACE_ID_LABEL,
                 workspaceId.toString()))
-        .endMetadata()
+        .build();
+  }
+
+  private Pod pod(UUID workspaceId) {
+    return new PodBuilder()
+        .withMetadata(metadata(workspaceId))
         .withNewSpec()
         .withAutomountServiceAccountToken(false)
         .withTerminationGracePeriodSeconds(5L)
@@ -176,6 +260,16 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .withName("workspace")
         .withImage(image)
         .withCommand("sh", "-c", WAIT_UNTIL_DELETED)
+        .addNewEnvFrom()
+        .withNewConfigMapRef()
+        .withName(podName(workspaceId))
+        .endConfigMapRef()
+        .endEnvFrom()
+        .addNewEnvFrom()
+        .withNewSecretRef()
+        .withName(podName(workspaceId))
+        .endSecretRef()
+        .endEnvFrom()
         .withNewSecurityContext()
         .withAllowPrivilegeEscalation(false)
         .withReadOnlyRootFilesystem(true)

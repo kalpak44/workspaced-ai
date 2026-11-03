@@ -1,7 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { uniqueName, useWorkspaces } from "../src/hooks/useWorkspaces";
-import { FakeEventSource, installFakeApi } from "./fakeApi";
+import { FakeEventSource, installFakeApi, REJECTED_KEY } from "./fakeApi";
+
+const request = (name: string, apiKey = "sk-or-1") => ({ name, modelProvider: "openrouter", apiKey });
 
 describe("uniqueName", () => {
   it("keeps a free name", () => {
@@ -30,24 +32,32 @@ describe("useWorkspaces", () => {
   it("trims the name and reports whether the workspace was created", async () => {
     const api = installFakeApi();
     const result = await loaded();
-    let created = false;
+    let created = "";
     await act(async () => {
-      created = await result.current.create("  Docs  ");
+      created = await result.current.create(request("  Docs  "));
     });
-    expect(created).toBe(true);
+    expect(created).toBe("created");
     expect(api.rows.at(-1)?.name).toBe("Docs");
+
+    // A rejected key is the form's to show, so it does not reach the banner.
+    await act(async () => {
+      created = await result.current.create(request("Nope", REJECTED_KEY));
+    });
+    expect(created).toBe("rejected");
+    expect(result.current.error).toBeNull();
 
     api.state.fail = 500;
     await act(async () => {
-      created = await result.current.create("Nope");
+      created = await result.current.create(request("Nope"));
     });
-    expect(created).toBe(false);
+    expect(created).toBe("failed");
+    expect(result.current.error).toBe("Could not create the workspace");
   });
 
   it("loads from the API and selects the first", async () => {
     installFakeApi([
-      { id: "a", name: "A", status: "READY" },
-      { id: "b", name: "B", status: "READY" },
+      { id: "a", name: "A", modelProvider: "openrouter", status: "READY" },
+      { id: "b", name: "B", modelProvider: "openrouter", status: "READY" },
     ]);
     const result = await loaded();
     expect(result.current.workspaces.map((w) => w.name)).toEqual(["A", "B"]);
@@ -75,20 +85,22 @@ describe("useWorkspaces", () => {
     const result = await loaded();
     api.state.fail = 503;
 
-    act(() => void result.current.create("New Workspace"));
+    act(() => void result.current.create(request("New Workspace")));
     await waitFor(() => expect(result.current.error).toBe("Could not create the workspace"));
     act(() => result.current.rename("starter", "X"));
     await waitFor(() => expect(result.current.error).toBe("Could not rename the workspace"));
     act(() => result.current.remove("starter"));
     await waitFor(() => expect(result.current.error).toBe("Could not delete the workspace"));
 
-    expect(result.current.workspaces).toEqual([{ id: "starter", name: "Starter", status: "READY" }]);
+    expect(result.current.workspaces).toEqual([
+      { id: "starter", name: "Starter", modelProvider: "openrouter", status: "READY" },
+    ]);
   });
 
   it("selects the first remaining once the selected one is deleted", async () => {
     installFakeApi();
     const result = await loaded();
-    act(() => void result.current.create("New Workspace"));
+    act(() => void result.current.create(request("New Workspace")));
     await waitFor(() => expect(result.current.selected?.name).toBe("New Workspace"));
     act(() => result.current.remove(result.current.selected!.id));
     await waitFor(() => expect(result.current.selected?.name).toBe("Starter"));
@@ -120,7 +132,7 @@ describe("useWorkspaces", () => {
     api.state.createStatus = "INITIALIZING";
     const result = await loaded();
     FakeEventSource.emit("ws-1", "READY");
-    act(() => void result.current.create("New Workspace"));
+    act(() => void result.current.create(request("New Workspace")));
     await waitFor(() => expect(result.current.selected?.id).toBe("ws-1"));
     expect(result.current.selected?.status).toBe("READY");
   });

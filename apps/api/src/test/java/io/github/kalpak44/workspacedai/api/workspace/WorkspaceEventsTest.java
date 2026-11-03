@@ -1,8 +1,12 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -16,6 +20,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import(TestDatabase.class)
@@ -25,16 +30,18 @@ class WorkspaceEventsTest {
   @Autowired WorkspaceService service;
   @Autowired WorkspaceEvents events;
   @Autowired WorkspaceRepository repository;
+  @MockitoBean ApiKeyCheck keyCheck;
 
   @BeforeEach
   void emptyTable() {
     repository.deleteAll();
+    when(keyCheck.accepts(any(), any())).thenReturn(true);
   }
 
   @Test
   @Timeout(10)
   void sendsASnapshotOnConnectThenEachChange() throws Exception {
-    var workspace = service.create("Research");
+    var workspace = service.create("Research", ModelProvider.OPENROUTER, "sk-test");
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
             .header("Accept", "text/event-stream")

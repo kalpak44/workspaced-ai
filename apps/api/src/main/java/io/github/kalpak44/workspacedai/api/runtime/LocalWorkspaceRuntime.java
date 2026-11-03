@@ -15,13 +15,23 @@ import java.util.stream.Collectors;
 public class LocalWorkspaceRuntime implements WorkspaceRuntime {
 
   @Override
-  public void start(UUID workspaceId) {
+  public void start(UUID workspaceId, WorkspaceEnvironment environment) {
     // Nothing runs locally; the workspace is usable as soon as it is stored.
   }
 
   @Override
   public void stop(UUID workspaceId) {
     // Nothing was started, so there is nothing to stop.
+  }
+
+  @Override
+  public void putSecret(UUID workspaceId, String name, String value) {
+    // Nothing runs that could read it, so the value is not kept anywhere.
+  }
+
+  @Override
+  public void removeSecret(UUID workspaceId, String name) {
+    // Nothing was kept, so there is nothing to remove.
   }
 
   @Override

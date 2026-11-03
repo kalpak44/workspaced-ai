@@ -23,6 +23,10 @@ public class WorkspaceEntity {
   @Column(nullable = false, length = 100)
   private String name;
 
+  // An id from ModelProvider; stored as text so a provider can be added without a migration.
+  @Column(name = "model_provider", nullable = false, length = 50)
+  private String modelProvider;
+
   // Set by the column default; read only to order the list.
   @Column(name = "created_at", insertable = false, updatable = false)
   private Instant createdAt;
@@ -31,8 +35,9 @@ public class WorkspaceEntity {
     // For JPA.
   }
 
-  public WorkspaceEntity(String name) {
+  public WorkspaceEntity(String name, String modelProvider) {
     this.name = name;
+    this.modelProvider = modelProvider;
   }
 
   public UUID getId() {
@@ -45,6 +50,10 @@ public class WorkspaceEntity {
 
   public void setName(String name) {
     this.name = name;
+  }
+
+  public String getModelProvider() {
+    return modelProvider;
   }
 
   public Instant getCreatedAt() {

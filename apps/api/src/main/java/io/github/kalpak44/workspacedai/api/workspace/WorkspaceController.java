@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
@@ -32,8 +33,15 @@ public class WorkspaceController implements WorkspaceApi {
   }
 
   @Override
-  public ResponseEntity<Workspace> create(WorkspaceRequest request) {
-    var workspace = service.create(request.trimmedName());
+  public ResponseEntity<Workspace> create(CreateWorkspaceRequest request) {
+    var provider =
+        ModelProvider.byId(request.modelProvider())
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.BAD_REQUEST,
+                        "unknown model provider " + request.modelProvider()));
+    var workspace = service.create(request.trimmedName(), provider, request.trimmedApiKey());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
