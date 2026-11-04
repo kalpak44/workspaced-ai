@@ -1,6 +1,7 @@
-import { CircleAlert, CircleCheck, Wrench } from "lucide-react";
+import { CircleAlert, CircleCheck, Pencil, Wrench } from "lucide-react";
+import { useState } from "react";
 import type { ChatMessage, ChatPart } from "../../hooks/useChat";
-import { Spinner } from "../atoms";
+import { Button, IconButton, Spinner } from "../atoms";
 import { Markdown } from "./Markdown";
 
 function ToolPart({ part }: { readonly part: ChatPart }) {
@@ -53,10 +54,57 @@ function Part({ part, markdown }: { readonly part: ChatPart; readonly markdown: 
  * The user's messages as bubbles on the right, kept as typed; the agent's in full width,
  * rendered as the markdown it writes.
  */
-export function ChatMessageView({ message }: { readonly message: ChatMessage }) {
+export function ChatMessageEditor({ message, busy, onSave, onCancel }: {
+  readonly message: ChatMessage;
+  readonly busy: boolean;
+  readonly onSave: (text: string) => Promise<boolean>;
+  readonly onCancel: () => void;
+}) {
+  const [draft, setDraft] = useState(() => message.parts
+    .filter((p) => p.type === "text").map((p) => p.text ?? "").join("\n"));
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
+    if (!draft.trim() || saving || busy) return;
+    setSaving(true);
+    try {
+      await onSave(draft.trim());
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <li aria-label="You" className="flex flex-col gap-3 rounded-xl border border-zinc-300 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
+      <textarea
+        aria-label="Edit message"
+        autoFocus
+        rows={4}
+        maxLength={100000}
+        value={draft}
+        disabled={saving}
+        onChange={(e) => setDraft(e.currentTarget.value)}
+        className="w-full resize-y bg-transparent text-sm outline-none"
+      />
+      <p className="text-xs text-zinc-500">
+        This replaces this message and all later replies. Project files stay as they are.
+      </p>
+      <div className="flex justify-end gap-2">
+        <Button label="Cancel" variant="secondary" disabled={saving} onClick={onCancel} />
+        <Button label="Save & regenerate" busy={saving} disabled={busy || !draft.trim()} onClick={() => void save()} />
+      </div>
+    </li>
+  );
+}
+
+export function ChatMessageView({ message, busy = false, onEdit }: {
+  readonly message: ChatMessage;
+  readonly busy?: boolean;
+  readonly onEdit?: () => void;
+}) {
   if (message.role === "user") {
     return (
-      <li aria-label="You" className="flex justify-end">
+      <li aria-label="You" className="group flex items-start justify-end gap-2">
+        {onEdit && <IconButton label="Edit message" icon={Pencil} disabled={busy}
+          className="shrink-0" onClick={onEdit} />}
         <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
           {message.parts.map((part) => (
             <Part key={part.id} part={part} markdown={false} />

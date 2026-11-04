@@ -79,3 +79,11 @@ export async function sendMessage(workspaceId: string, sessionId: string, text: 
 export async function abortSession(workspaceId: string, sessionId: string): Promise<void> {
   await send(`${sessionUrl(workspaceId, sessionId)}/abort`, { method: "POST" });
 }
+
+/** Replaces a user turn and later history, then generates a fresh response. */
+export async function editMessage(workspaceId: string, sessionId: string, messageId: string, text: string): Promise<void> {
+  if (!SAFE_ID.test(messageId)) throw new Error("Invalid message id");
+  await send(`${sessionUrl(workspaceId, sessionId)}/messages/${encodeURIComponent(messageId)}`, {
+    method: "PUT", body: JSON.stringify({ text }),
+  });
+}

@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -171,6 +172,24 @@ public interface SessionApi {
       @Parameter(description = "Workspace id", example = WORKSPACE_ID) @PathVariable
           UUID workspaceId,
       @Parameter(description = "Session id", example = SESSION_ID) @PathVariable UUID sessionId,
+      @Valid @RequestBody MessageRequest request);
+
+  @Operation(
+      operationId = "editMessage",
+      summary = "Edit a user message and regenerate",
+      description =
+          "Replaces this message and all later messages with a new turn. Project files are retained. The session must be idle.")
+  @ApiResponse(responseCode = "202", description = "Accepted; the new reply streams on /events.")
+  @ApiResponse(responseCode = "400", description = "Invalid text or an assistant message.")
+  @ApiResponse(responseCode = "404", description = "No such session or message.")
+  @ApiResponse(
+      responseCode = "503",
+      description = "The harness is unavailable or refused the edit.")
+  @PutMapping(path = "/{sessionId}/messages/{messageId}", consumes = JSON)
+  ResponseEntity<Void> edit(
+      @PathVariable UUID workspaceId,
+      @PathVariable UUID sessionId,
+      @PathVariable String messageId,
       @Valid @RequestBody MessageRequest request);
 
   @Operation(

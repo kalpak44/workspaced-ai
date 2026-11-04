@@ -1,17 +1,9 @@
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { type ApiStatus, useApiStatus } from "../../hooks/useApiStatus";
 import { useDismiss } from "../../hooks/useDismiss";
 import type { Theme } from "../../hooks/useTheme";
 import { Avatar } from "../atoms";
 import { Menu, MenuItem, MenuLink, ThemeSwitch } from "../molecules";
-
-const STATUS_COLOR: Record<ApiStatus, string> = {
-  checking: "text-zinc-400",
-  ready: "text-emerald-500",
-  unavailable: "text-amber-500",
-  unreachable: "text-rose-500",
-};
 
 const ROW = "flex w-full items-center justify-between px-4 py-2.5";
 const SEPARATED = "border-b border-zinc-200 dark:border-zinc-700";
@@ -23,7 +15,6 @@ interface Props {
 
 export function UserMenu({ theme, onThemeChange }: Props) {
   const [open, setOpen] = useState(false);
-  const api = useApiStatus(open);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(ref, open, close);
@@ -46,15 +37,11 @@ export function UserMenu({ theme, onThemeChange }: Props) {
             <span>Version</span>
             <span className="text-emerald-500">{import.meta.env.VITE_APP_VERSION ?? "dev"}</span>
           </div>
-          <div className={`${ROW} ${SEPARATED}`}>
-            <span>API</span>
-            <span className={STATUS_COLOR[api]}>{api}</span>
-          </div>
           <MenuItem className={ROW} onClick={close}>
             Settings
           </MenuItem>
           <MenuLink className={`${ROW} ${SEPARATED}`} href="/api/v1/swagger-ui">
-            Docs
+            Swagger
           </MenuLink>
           <div className={`${ROW} ${SEPARATED}`}>
             <span>Theme</span>

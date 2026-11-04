@@ -2,16 +2,17 @@ import { queuePrompt } from "../../hooks/useChat";
 import { navigate } from "../../hooks/useRoute";
 import { useSessions } from "../../hooks/useSessions";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { SessionList } from "../organisms";
+import { ChatModelPicker, SessionList } from "../organisms";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
 interface Props {
   readonly workspace: Workspace;
   readonly deleting: boolean;
+  readonly onModelChanged: (model: string | null) => void;
 }
 
 /** A workspace's sessions, and the box that starts a new one. */
-export function WorkspacePage({ workspace, deleting }: Props) {
+export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
   const ready = workspace.status === "READY" && !deleting;
   const sessions = useSessions(ready ? workspace.id : null);
   const open = (sessionId: string) =>
@@ -33,6 +34,7 @@ export function WorkspacePage({ workspace, deleting }: Props) {
       <h1 className="sr-only">{workspace.name}</h1>
       {ready ? (
         <SessionList
+          modelControl={<ChatModelPicker workspace={workspace} onChanged={onModelChanged} />}
           sessions={sessions.sessions}
           loading={sessions.loading}
           deleting={sessions.deleting}

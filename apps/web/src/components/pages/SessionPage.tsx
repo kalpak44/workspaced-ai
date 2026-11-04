@@ -6,19 +6,20 @@ import { useSessions } from "../../hooks/useSessions";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { IconButton } from "../atoms";
 import { PageHeader } from "../molecules";
-import { ChatPanel } from "../organisms";
+import { ChatModelPicker, ChatPanel } from "../organisms";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
 interface Props {
   readonly workspace: Workspace;
   readonly sessionId: string;
+  readonly onModelChanged: (model: string | null) => void;
   readonly deleting: boolean;
   /** Tells the shell the page's name, for the browser tab. */
   readonly onTitle: (title: string) => void;
 }
 
 /** One session's chat, full width. */
-export function SessionPage({ workspace, sessionId, deleting, onTitle }: Props) {
+export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelChanged }: Props) {
   const ready = workspace.status === "READY" && !deleting;
   const sessions = useSessions(ready ? workspace.id : null);
   const chat = useChat(ready ? workspace.id : null, ready ? sessionId : null, sessions.retitle);
@@ -64,6 +65,8 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle }: Props) 
             sessions.dismissError();
             chat.dismissError();
           }}
+          modelControl={<ChatModelPicker workspace={workspace} disabled={chat.busy} onChanged={onModelChanged} />}
+          onEdit={chat.edit}
           onSend={chat.send}
           onStop={chat.stop}
         />

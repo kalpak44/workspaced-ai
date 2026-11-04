@@ -51,6 +51,7 @@ public class OpenCodeHarness implements Harness {
           ",",
           "session.renamed",
           "session.inbox.delivered",
+          "session.revert.committed",
           "session.execution.started",
           "session.execution.succeeded",
           "session.execution.failed",
@@ -172,6 +173,27 @@ public class OpenCodeHarness implements Harness {
           Map.of("model", Map.of("providerID", model.providerId(), "id", model.modelId())));
     }
     call(endpoint, "POST", "/api/session/" + encode(sessionId) + "/prompt", Map.of("text", text));
+  }
+
+  @Override
+  public void editMessage(
+      HarnessEndpoint endpoint,
+      String directory,
+      String sessionId,
+      String messageId,
+      String text,
+      ModelRef model) {
+    var path = "/api/session/" + encode(sessionId);
+    if (model != null) {
+      call(
+          endpoint,
+          "POST",
+          path + "/model",
+          Map.of("model", Map.of("providerID", model.providerId(), "id", model.modelId())));
+    }
+    call(endpoint, "POST", path + "/revert/stage", Map.of("messageID", messageId, "files", false));
+    call(endpoint, "POST", path + "/revert/commit", Map.of());
+    prompt(endpoint, directory, sessionId, text, null);
   }
 
   @Override
@@ -434,7 +456,8 @@ public class OpenCodeHarness implements Harness {
     var result = new ArrayList<HarnessEvent>();
     switch (type) {
       case "session.renamed" -> result.add(new HarnessEvent.Title(text(data, "title")));
-      case "session.inbox.delivered" -> result.add(new HarnessEvent.Refresh());
+      case "session.inbox.delivered", "session.revert.committed" ->
+          result.add(new HarnessEvent.Refresh());
       case "session.execution.started" -> result.add(new HarnessEvent.Status(true));
       case "session.execution.succeeded", "session.execution.interrupted" ->
           result.add(new HarnessEvent.Status(false));

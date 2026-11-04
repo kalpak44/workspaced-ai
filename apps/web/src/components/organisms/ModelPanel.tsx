@@ -24,10 +24,11 @@ interface RowProps {
   readonly meta?: string | null;
   readonly selected: boolean;
   readonly saving: boolean;
+  readonly disabled: boolean;
   readonly onChoose: () => void;
 }
 
-function Row({ label, detail, meta, selected, saving, onChoose }: RowProps) {
+function Row({ label, detail, meta, selected, saving, disabled, onChoose }: RowProps) {
   return (
     <li>
       <button
@@ -35,6 +36,7 @@ function Row({ label, detail, meta, selected, saving, onChoose }: RowProps) {
         role="radio"
         aria-checked={selected}
         onClick={onChoose}
+        disabled={disabled}
         className={`relative flex w-full items-center gap-3 px-3 py-2.5 text-left transition hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${
           selected
             ? "z-1 bg-zinc-100 shadow-[inset_3px_0_0_#18181b,inset_0_0_0_1px_#d4d4d8] dark:bg-zinc-800 dark:shadow-[inset_3px_0_0_#fafafa,inset_0_0_0_1px_#52525b]"
@@ -123,6 +125,7 @@ export function ModelPanel(props: Props) {
               label={`Default${defaultName ? ` — ${defaultName}` : ""}`}
               detail="Whatever the agent is set up with"
               selected={current === null}
+              disabled={saving !== undefined}
               saving={saving === null}
               onChoose={() => props.onChoose(null)}
             />
@@ -134,6 +137,7 @@ export function ModelPanel(props: Props) {
               detail={model.id}
               meta={metaOf(model)}
               selected={model.id === current}
+              disabled={saving !== undefined}
               saving={saving === model.id}
               onChoose={() => props.onChoose(model.id)}
             />
@@ -143,6 +147,7 @@ export function ModelPanel(props: Props) {
               label={`Default${defaultName ? ` — ${defaultName}` : ""}`}
               detail="Whatever the agent is set up with"
               selected={false}
+              disabled={saving !== undefined}
               saving={saving === null}
               onChoose={() => props.onChoose(null)}
             />

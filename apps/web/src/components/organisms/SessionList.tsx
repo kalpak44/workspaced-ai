@@ -1,5 +1,5 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { useEffect, useState } from "react";
+import { type ReactNode, useEffect, useState } from "react";
 import type { Session } from "../../hooks/useSessions";
 import { IconButton } from "../atoms";
 import { ChatComposer, ErrorBanner, SessionCard } from "../molecules";
@@ -7,6 +7,7 @@ import { ChatComposer, ErrorBanner, SessionCard } from "../molecules";
 const PAGE_SIZE = 10;
 
 interface Props {
+  readonly modelControl?: ReactNode;
   readonly sessions: readonly Session[];
   readonly loading: boolean;
   readonly deleting: ReadonlySet<string>;
@@ -45,6 +46,7 @@ export function SessionList(props: Props) {
           New task
         </p>
         <h2 className="mb-4 text-2xl font-semibold tracking-tight">Start a session</h2>
+        <div className="mb-2">{props.modelControl}</div>
         <ChatComposer
           busy={false}
           autoFocus

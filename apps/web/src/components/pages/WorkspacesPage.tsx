@@ -83,9 +83,8 @@ export function WorkspacesPage() {
     );
   } else if (route.name === "settings") {
     tabTitle = `Settings · ${workspace.name}`;
-    const id = workspace.id;
     page = (
-      <SettingsPage workspace={workspace} onModelChanged={(model) => patch(id, { model })} />
+      <SettingsPage workspace={workspace} />
     );
   } else if (route.name === "terminal") {
     tabTitle = `Terminal · ${workspace.name}`;
@@ -98,12 +97,13 @@ export function WorkspacesPage() {
         workspace={workspace}
         sessionId={route.sessionId}
         deleting={deleting.has(workspace.id)}
+        onModelChanged={(model) => patch(workspace.id, { model })}
         onTitle={onSessionTitle}
       />
     );
   } else {
     tabTitle = workspace.name;
-    page = <WorkspacePage workspace={workspace} deleting={deleting.has(workspace.id)} />;
+    page = <WorkspacePage workspace={workspace} deleting={deleting.has(workspace.id)} onModelChanged={(model) => patch(workspace.id, { model })} />;
   }
 
   useEffect(() => {

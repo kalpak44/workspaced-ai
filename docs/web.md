@@ -7,13 +7,13 @@ when a rule below is broken.
 src/
 ├── api/            fetch calls and their types — imported only by hooks/
 ├── hooks/          state and side effects (route, workspaces, sessions, chat, model providers, model settings, MCP servers,
-│                   secrets, theme, API status, popover dismissal)
+│                   secrets, theme, voice dictation, popover dismissal)
 ├── lib/            framework-free helpers (routes, relative times, token and price formatting, storage)
 └── components/
     ├── atoms/      Logo, Button, IconButton, TextField, ChoiceCard, Spinner, Avatar, Divider — props in, markup out, no hooks
     ├── molecules/  ChatComposer, ChatMessageView, EmptyState, ErrorBanner, Markdown, Menu, Modal, PageHeader,
     │               SecretItem, SessionCard, SettingsSection, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
-    ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, ModelPanel, McpPanel,
+    ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, ChatModelPicker, ModelPanel, McpPanel,
     │               SecretsPanel
     ├── templates/  AppLayout — the frame every page sits in
     └── pages/      WorkspacesPage (the shell: sidebar, dialogs, routing), WorkspacePage, SessionPage, SettingsPage,
@@ -38,7 +38,7 @@ already answers every path with `index.html`, which is what makes a deep link lo
 | `/`                                    | opens the first workspace                                       |
 | `/workspaces/<id>`                     | its sessions, newest first, and a box that starts a new one     |
 | `/workspaces/<id>/sessions/<session>`  | that session's chat                                             |
-| `/workspaces/<id>/settings`            | its model, MCP servers and secrets                              |
+| `/workspaces/<id>/settings`            | its MCP servers and secrets                              |
 | `/workspaces/<id>/terminal`            | an interactive Bash PTY through the workspace's OpenCode V2 service |
 
 A link to a session or workspace that no longer exists falls back to its workspace or home, replacing the history
@@ -58,3 +58,16 @@ cd apps/web
 npm run dev   # proxies /api to localhost:8080
 npm test      # vitest, the architecture rules, and the 80% line-coverage floor
 ```
+
+The model selector sits beside the composer on both new-task and session pages, and saves the workspace's model
+choice for subsequent messages. User messages have an Edit action with Save & regenerate: this replaces the selected
+turn and later history, retaining project files. A failed edit keeps its draft available even if the server already
+shortened the conversation. While a reply is running, editing is disabled.
+
+Where supported, microphone dictation appends recognized speech to the composer for review; stop dictation before
+sending. It uses the browser's speech service and microphone permission, independently of the selected chat model.
+The account menu links to Swagger at `/api/v1/swagger-ui` without polling the API health endpoint.
+
+The terminal uses an ANSI color palette on a dark background. The harness image sets a color-capable terminal type
+and installs an interactive Bash profile with a colored prompt and `ls` output. Existing pods need the rebuilt
+harness image before the shell defaults change.

@@ -355,14 +355,14 @@ describe("App", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("shows the version, the API status and the theme switch in the account menu", async () => {
+  it("shows the version, Swagger link and the theme switch in the account menu", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     const menu = screen.getByRole("menu");
     expect(within(menu).getByText("dev")).toBeInTheDocument();
-    await waitFor(() => expect(within(menu).getByText("ready")).toBeInTheDocument());
-    expect(within(menu).getByRole("menuitem", { name: "Docs" })).toHaveAttribute(
+    expect(within(menu).queryByText("API")).not.toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Swagger" })).toHaveAttribute(
       "href",
       "/api/v1/swagger-ui",
     );
@@ -425,13 +425,6 @@ describe("App", () => {
     expect(within(sidebar()).getByRole("status", { name: "Failed" })).toBeInTheDocument();
   });
 
-  it("shows an unreachable API", async () => {
-    const user = userEvent.setup();
-    await renderLoaded();
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("network")));
-    await user.click(screen.getByRole("button", { name: "Account menu" }));
-    await waitFor(() => expect(screen.getByText("unreachable")).toBeInTheDocument());
-  });
 
   it("lists the provider key in settings as managed, with no way to remove it", async () => {
     const user = userEvent.setup();
@@ -769,10 +762,53 @@ describe("App", () => {
     );
   });
 
+  it("removes superseded replies when another tab refreshes the conversation", async () => {
+    api.sessions.set("starter", [{ id: "shared", title: "Shared", path: "/p", createdAt: new Date().toISOString() }]);
+    api.messages.set("shared", [{ id: "old", role: "assistant", parts: [{ id: "old-part", type: "text", text: "Superseded answer", tool: null, status: null }] }]);
+    visit("/workspaces/starter/sessions/shared");
+    await renderLoaded();
+    await screen.findByText("Superseded answer");
+    api.messages.set("shared", []);
+    FakeEventSource.emitSession("refresh", {});
+    await waitFor(() => expect(screen.queryByText("Superseded answer")).not.toBeInTheDocument());
+    expect(screen.getByRole("heading", { name: "What should the agent do?" })).toBeInTheDocument();
+  });
+
+  it("edits an earlier user message and replaces later history", async () => {
+    const user = userEvent.setup();
+    api.sessions.set("starter", [{ id: "edit-chat", title: "Editing", path: "/p", createdAt: new Date().toISOString() }]);
+    const part = (text: string) => [{ id: text, type: "text" as const, text, tool: null, status: null }];
+    api.messages.set("edit-chat", [
+      { id: "first", role: "user", parts: part("Original question") },
+      { id: "answer", role: "assistant", parts: part("Old reply") },
+      { id: "later", role: "user", parts: part("Later question") },
+    ]);
+    visit("/workspaces/starter/sessions/edit-chat");
+    await renderLoaded();
+    await screen.findByText("Old reply");
+    expect(screen.getAllByRole("button", { name: "Edit message" })).toHaveLength(2);
+    await user.click(screen.getAllByRole("button", { name: "Edit message" })[0]);
+    const input = screen.getByRole("textbox", { name: "Edit message" });
+    await user.clear(input);
+    await user.type(input, "Revised question");
+    await user.click(screen.getByRole("button", { name: "Save & regenerate" }));
+    expect(await screen.findByText("Revised question")).toBeInTheDocument();
+    expect(screen.queryByText("Old reply")).not.toBeInTheDocument();
+    expect(screen.queryByText("Later question")).not.toBeInTheDocument();
+    expect(api.prompts).toContainEqual({ sessionId: "edit-chat", text: "Revised question" });
+    FakeEventSource.emitSession("status", { busy: false });
+    await user.click(screen.getByRole("button", { name: "Edit message" }));
+    api.state.failEditAfterTruncate = true;
+    await user.click(screen.getByRole("button", { name: "Save & regenerate" }));
+    expect(await screen.findByText(/Could not edit the message/)).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Edit message" })).toHaveValue("Revised question");
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+  });
+
   it("chooses the agent's model from a searchable list, and goes back to the default", async () => {
     const user = userEvent.setup();
     await renderLoaded();
-    await openSettings(user);
+    await user.click(await screen.findByRole("button", { name: /Model:/ }));
     const model = await screen.findByRole("radiogroup", { name: "Model" });
     const defaultModel = within(model).getByRole("radio", { name: /Default — Claude Sonnet 5.5/ });
     expect(defaultModel).toBeChecked();
@@ -803,18 +839,15 @@ describe("App", () => {
     await waitFor(() => expect(api.rows[0].model).toBeNull());
   });
 
-  it("explains the model list waits for a running workspace, and reports one it cannot load", async () => {
+  it("keeps models out of settings and reports catalogue errors in chat", async () => {
     const user = userEvent.setup();
-    await renderLoaded();
-    FakeEventSource.emit("starter", "INITIALIZING");
-    await openSettings(user);
-    expect(screen.getByText(/shows once the workspace is running/)).toBeInTheDocument();
-    cleanup();
-
     api.state.harnessDown = true;
-    visit("/workspaces/starter/settings");
     await renderLoaded();
+    await user.click(await screen.findByRole("button", { name: /Model:/ }));
     expect(await screen.findByText("Could not load the models")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Done" }));
+    await openSettings(user);
+    expect(screen.queryByRole("region", { name: "Model" })).not.toBeInTheDocument();
   });
 
   it("adds an MCP server with a header, shows it connected, and removes it", async () => {

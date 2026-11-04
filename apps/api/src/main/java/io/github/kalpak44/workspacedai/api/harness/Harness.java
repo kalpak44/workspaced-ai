@@ -51,6 +51,15 @@ public interface Harness {
   void prompt(
       HarnessEndpoint endpoint, String directory, String sessionId, String text, ModelRef model);
 
+  /** Removes a user turn and its successors, retaining project files, then starts a new reply. */
+  void editMessage(
+      HarnessEndpoint endpoint,
+      String directory,
+      String sessionId,
+      String messageId,
+      String text,
+      ModelRef model);
+
   /** A model as the harness names it: the provider it comes from and its id there. */
   record ModelRef(String providerId, String modelId) {}
 

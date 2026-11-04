@@ -54,6 +54,13 @@ public class SessionController implements SessionApi {
   }
 
   @Override
+  public ResponseEntity<Void> edit(
+      UUID workspaceId, UUID sessionId, String messageId, MessageRequest request) {
+    service.edit(workspaceId, sessionId, messageId, request.text());
+    return ResponseEntity.accepted().build();
+  }
+
+  @Override
   public ResponseEntity<Void> abort(UUID workspaceId, UUID sessionId) {
     service.abort(workspaceId, sessionId);
     return ResponseEntity.noContent().build();

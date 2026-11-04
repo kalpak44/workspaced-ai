@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   abortSession,
+  editMessage,
   type ChatMessage,
   type ChatPart,
   listMessages,
@@ -71,6 +72,10 @@ export function useChat(
   const [loading, setLoading] = useState(workspaceId !== null && sessionId !== null);
   const [error, setError] = useState<string | null>(null);
   // Held in a ref so a new callback each render does not reopen the stream.
+  const reload = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  const revision = useRef(0);
+  const latestMessages = useRef<Messages>(messages);
+  latestMessages.current = messages;
   const titled = useRef(onTitle);
   titled.current = onTitle;
 
@@ -82,11 +87,24 @@ export function useChat(
       return undefined;
     }
     let active = true;
-    const load = () =>
-      listMessages(workspaceId, sessionId).then(
-        (history) => active && setMessages((current) => merge(current, history)),
-        () => active && setError("Could not load the conversation"),
+    const load = (replace = false) => {
+      const version = ++revision.current;
+      // Reverts can remove history. Ordinary reconciliation still retains messages only
+      // the stream has seen; a refresh drops prior history but preserves newly arriving ids.
+      const known = new Set(replace ? latestMessages.current.map((m) => m.id) : []);
+      return listMessages(workspaceId, sessionId).then(
+        (history) => {
+          if (active && version === revision.current) {
+            setMessages((current) => {
+              const next = merge(current.filter((m) => !known.has(m.id)), history);
+              return next;
+            });
+          }
+        },
+        () => active && version === revision.current && setError("Could not load the conversation"),
       );
+    };
+    reload.current = () => load(true);
     setLoading(true);
     void load().finally(() => active && setLoading(false));
 
@@ -120,7 +138,7 @@ export function useChat(
     });
     on("title", ({ title }) => titled.current(sessionId, title));
     on("error", ({ message }) => setError(message));
-    on("refresh", () => void load());
+    on("refresh", () => void load(true));
 
     const prompt = queued.get(sessionId);
     if (prompt !== undefined) {
@@ -159,11 +177,33 @@ export function useChat(
     );
   };
 
+  const edit = async (messageId: string, text: string): Promise<boolean> => {
+    if (workspaceId === null || sessionId === null || busy) return false;
+    ++revision.current;
+    setBusy(true);
+    setError(null);
+    try {
+      await editMessage(workspaceId, sessionId, messageId, text);
+      // The server history now excludes the replaced turn; reconcile even if no SSE arrived.
+      setMessages((current) => {
+        const index = current.findIndex((m) => m.id === messageId);
+        return index < 0 ? current : current.slice(0, index);
+      });
+      await reload.current();
+      return true;
+    } catch {
+      setBusy(false);
+      await reload.current();
+      setError("Could not edit the message. Reload the conversation before retrying.");
+      return false;
+    }
+  };
+
   const stop = () => {
     if (workspaceId !== null && sessionId !== null) {
       abortSession(workspaceId, sessionId).catch(() => setError("Could not stop the reply"));
     }
   };
 
-  return { messages, busy, loading, error, dismissError: () => setError(null), send, stop };
+  return { messages, busy, loading, error, dismissError: () => setError(null), send, edit, stop };
 }

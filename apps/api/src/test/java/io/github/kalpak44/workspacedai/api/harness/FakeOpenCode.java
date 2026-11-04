@@ -26,6 +26,7 @@ public class FakeOpenCode implements AutoCloseable {
   public final List<Request> requests = new CopyOnWriteArrayList<>();
   public final ObjectNode globalMcp = JSON.createObjectNode();
   public volatile String title;
+  public volatile boolean rejectRevert;
   public volatile CountDownLatch holdStream;
   public volatile boolean sessionExists = true;
 
@@ -111,6 +112,9 @@ public class FakeOpenCode implements AutoCloseable {
       case "POST /api/session/" + SESSION + "/model" -> respond(exchange, 204, null);
       case "POST /api/session/" + SESSION + "/prompt" ->
           respond(exchange, 200, "{\"data\":{\"id\":\"msg_u\"}}");
+      case "POST /api/session/" + SESSION + "/revert/stage" ->
+          respond(exchange, rejectRevert ? 409 : 200, "{}");
+      case "POST /api/session/" + SESSION + "/revert/commit" -> respond(exchange, 204, null);
       case "POST /api/session/" + SESSION + "/interrupt" -> respond(exchange, 204, null);
       case "GET /api/event" -> stream(exchange);
       case "GET /api/model" -> respond(exchange, 200, MODELS);

@@ -103,6 +103,7 @@ export function installFakeApi(
     holdDelete: null as Promise<void> | null,
     holdSecretRemove: null as Promise<void> | null,
     nextSession: 1,
+    failEditAfterTruncate: false,
     // Answers every session call with 503, as a workspace whose harness is down does.
     harnessDown: false,
   };
@@ -124,7 +125,7 @@ export function installFakeApi(
       return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
     }
     const sessionsRoute =
-      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages|abort))?$/.exec(url);
+      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort))?$/.exec(url);
     if (sessionsRoute) {
       return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init);
     }
@@ -218,6 +219,20 @@ export function installFakeApi(
       return json(list);
     }
     if (!list.some((s) => s.id === sessionId)) return json({}, 404);
+    if (action?.startsWith("messages/") && method === "PUT") {
+      const id = action.slice("messages/".length);
+      const history = messages.get(sessionId) ?? [];
+      const index = history.findIndex((m) => m.id === id && m.role === "user");
+      if (index < 0) return json({}, 404);
+      const text = (JSON.parse(String(init!.body)) as { text: string }).text;
+      messages.set(sessionId, [...history.slice(0, index), { id: `edited-${id}`, role: "user", parts: [{ id: "edit-text", type: "text", text, tool: null, status: null }] }]);
+      if (state.failEditAfterTruncate) {
+        messages.set(sessionId, history.slice(0, index));
+        return json({}, 503);
+      }
+      prompts.push({ sessionId, text });
+      return new Response(null, { status: 202 });
+    }
     if (action === "messages" && method === "POST") {
       prompts.push({ sessionId, text: (JSON.parse(String(init!.body)) as { text: string }).text });
       return new Response(null, { status: 202 });

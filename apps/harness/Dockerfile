@@ -41,8 +41,9 @@ COPY --from=fetch /opencode /usr/local/bin/opencode
 # as a managed config directory of its own, loading the plugin twice and writing into it.
 COPY --from=config /stage/.config/opencode/opencode.json /usr/share/harness/opencode/opencode.json
 COPY start.sh /usr/local/bin/start-harness
+COPY terminal.sh /etc/profile.d/workspaced-terminal.sh
 
-ENV HOME=/home/workspace
+ENV HOME=/home/workspace TERM=xterm-256color COLORTERM=truecolor
 
 USER 1000
 WORKDIR /home/workspace

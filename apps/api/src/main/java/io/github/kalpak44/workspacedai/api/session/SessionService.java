@@ -115,15 +115,43 @@ public class SessionService {
   @Transactional(readOnly = true)
   public void send(UUID workspaceId, UUID sessionId, String text) {
     var session = session(workspaceId, sessionId);
-    var workspace = workspaces.findById(workspaceId).orElseThrow();
-    var model =
-        workspace.getModel() == null
-            ? new Harness.ModelRef(
-                workspace.getModelProvider(),
-                harness.models(endpoint(workspaceId), workspace.getModelProvider()).defaultModel())
-            : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
     harness.prompt(
-        endpoint(workspaceId), session.getPath(), session.getHarnessSessionId(), text, model);
+        endpoint(workspaceId),
+        session.getPath(),
+        session.getHarnessSessionId(),
+        text,
+        model(workspaceId));
+  }
+
+  @Transactional(readOnly = true)
+  public void edit(UUID workspaceId, UUID sessionId, String messageId, String text) {
+    var session = session(workspaceId, sessionId);
+    var endpoint = endpoint(workspaceId);
+    var message =
+        harness.messages(endpoint, session.getPath(), session.getHarnessSessionId()).stream()
+            .filter(m -> m.id().equals(messageId))
+            .findFirst()
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no message " + messageId));
+    if (!"user".equals(message.role())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "only user messages can be edited");
+    }
+    harness.editMessage(
+        endpoint,
+        session.getPath(),
+        session.getHarnessSessionId(),
+        messageId,
+        text,
+        model(workspaceId));
+  }
+
+  private Harness.ModelRef model(UUID workspaceId) {
+    var workspace = workspaces.findById(workspaceId).orElseThrow();
+    return workspace.getModel() == null
+        ? new Harness.ModelRef(
+            workspace.getModelProvider(),
+            harness.models(endpoint(workspaceId), workspace.getModelProvider()).defaultModel())
+        : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
   }
 
   @Transactional(readOnly = true)

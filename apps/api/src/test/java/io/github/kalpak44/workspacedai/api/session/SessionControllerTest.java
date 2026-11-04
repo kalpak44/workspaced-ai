@@ -73,6 +73,7 @@ class SessionControllerTest {
     repository.deleteAll();
     OPENCODE.requests.clear();
     OPENCODE.title = null;
+    OPENCODE.rejectRevert = false;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -137,6 +138,46 @@ class SessionControllerTest {
     assertThat(send("POST", "/" + session.id() + "/messages", "{\"text\":\"  \"}").statusCode())
         .isEqualTo(400);
     assertThat(send("POST", "/" + session.id() + "/abort", null).statusCode()).isEqualTo(204);
+  }
+
+  @Test
+  void editsOnlyUserMessagesAndRegeneratesAfterTruncatingHistory() throws Exception {
+    var session = create();
+    OPENCODE.requests.clear();
+    var path = "/" + session.id() + "/messages/";
+    assertThat(send("PUT", path + "msg_u", "{\"text\":\"Revised\"}").statusCode()).isEqualTo(202);
+    assertThat(OPENCODE.requests)
+        .extracting(FakeOpenCode.Request::path)
+        .containsSubsequence(
+            "/api/session/" + FakeOpenCode.SESSION + "/model",
+            "/api/session/" + FakeOpenCode.SESSION + "/revert/stage",
+            "/api/session/" + FakeOpenCode.SESSION + "/revert/commit",
+            "/api/session/" + FakeOpenCode.SESSION + "/prompt");
+    assertThat(OPENCODE.requests)
+        .anySatisfy(
+            r -> {
+              assertThat(r.path()).endsWith("/revert/stage");
+              assertThat(r.body()).contains("\"messageID\":\"msg_u\"", "\"files\":false");
+            });
+    assertThat(OPENCODE.requests.getLast().body()).contains("Revised");
+    OPENCODE.requests.clear();
+    assertThat(send("PUT", path + "msg_a", "{\"text\":\"No\"}").statusCode()).isEqualTo(400);
+    assertThat(send("PUT", path + "missing", "{\"text\":\"No\"}").statusCode()).isEqualTo(404);
+    assertThat(send("PUT", path + "msg_u", "{\"text\":\" \"}").statusCode()).isEqualTo(400);
+    assertThat(OPENCODE.requests).noneSatisfy(r -> assertThat(r.path()).contains("revert"));
+  }
+
+  @Test
+  void doesNotCommitOrPromptWhenTheHarnessRefusesAnEdit() throws Exception {
+    var session = create();
+    OPENCODE.rejectRevert = true;
+    OPENCODE.requests.clear();
+    assertThat(
+            send("PUT", "/" + session.id() + "/messages/msg_u", "{\"text\":\"Revised\"}")
+                .statusCode())
+        .isEqualTo(503);
+    assertThat(OPENCODE.requests).noneSatisfy(r -> assertThat(r.path()).endsWith("/revert/commit"));
+    assertThat(OPENCODE.requests).noneSatisfy(r -> assertThat(r.path()).endsWith("/prompt"));
   }
 
   @Test

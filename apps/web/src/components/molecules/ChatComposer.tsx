@@ -1,5 +1,6 @@
-import { SendHorizontal, Square } from "lucide-react";
+import { Mic, MicOff, SendHorizontal, Square } from "lucide-react";
 import { type KeyboardEvent, type SubmitEvent, useEffect, useRef, useState } from "react";
+import { useDictation } from "../../hooks/useDictation";
 import { IconButton } from "../atoms";
 
 // The API refuses anything longer.
@@ -28,6 +29,7 @@ export function ChatComposer({
 }: Props) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
+  const dictation = useDictation((spoken) => setText((current) => `${current}${current && !/\s$/.test(current) ? " " : ""}${spoken}`.slice(0, MAX_TEXT)), disabled || busy || pending);
   const field = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -38,7 +40,7 @@ export function ChatComposer({
 
   const submit = async () => {
     const message = text.trim();
-    if (!message || busy || pending) {
+    if (!message || disabled || busy || pending || dictation.listening) {
       return;
     }
     setPending(true);
@@ -59,6 +61,7 @@ export function ChatComposer({
   };
 
   return (
+    <>
     <form
       onSubmit={(event: SubmitEvent) => {
         event.preventDefault();
@@ -78,6 +81,13 @@ export function ChatComposer({
         onKeyDown={onKeyDown}
         className="max-h-48 flex-1 resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed"
       />
+      {dictation.supported && <IconButton
+        label={dictation.listening ? "Stop dictation" : "Dictate message"}
+        title={dictation.listening ? "Stop dictation" : "Dictate message"}
+        icon={dictation.listening ? MicOff : Mic} aria-pressed={dictation.listening}
+        disabled={disabled || busy || pending} onClick={dictation.toggle}
+        className={dictation.listening ? "bg-rose-100 text-rose-600 dark:bg-rose-950" : ""}
+      />}
       {busy ? (
         <IconButton label="Stop" icon={Square} onClick={onStop} />
       ) : (
@@ -85,9 +95,12 @@ export function ChatComposer({
           label="Send"
           icon={SendHorizontal}
           submit
-          disabled={disabled || pending || !text.trim()}
+          disabled={disabled || pending || dictation.listening || !text.trim()}
         />
       )}
     </form>
+    {dictation.listening && <p role="status" className="mt-2 text-xs text-rose-600">Listening… Stop dictation to review and send.</p>}
+    {dictation.error && <p role="alert" className="mt-2 text-xs text-rose-600">{dictation.error}</p>}
+    </>
   );
 }

@@ -3,6 +3,15 @@
 The whole app is served under the `/api/v1` context path, so the host root is free for the frontend: Swagger UI is at
 `/api/v1/swagger-ui`, the OpenAPI 3.0 document at `/api/v1/v3/api-docs`, health at `/api/v1/actuator/health`.
 
+## OpenCode API reference
+
+The workspace harness uses the [OpenCode V2 HTTP API documentation](https://dev.opencode.ai/v2/docs/api).
+Its OpenAPI 3.1 specification is available as a [local JSON snapshot](opencode-openapi.json)
+and as the [upstream OpenAPI JSON](https://dev.opencode.ai/v2/openapi.json).
+The local snapshot was retrieved on 2026-11-04; it describes OpenCode's experimental API, whose schema
+version is `0.0.1`, rather than the Workspaced API documented below. Check the deployed harness version
+before relying on newer upstream operations.
+
 ## Model providers
 
 `GET /api/v1/model-providers` lists the providers a workspace can be created with: `id`, `name`, `baseUrl`, and
@@ -117,6 +126,19 @@ docker run --rm -p 4096:4096 -e OPENCODE_PASSWORD=dev \
 WORKSPACED_WORKSPACE_LOCAL_HARNESS_URL=http://localhost:4096 \
 WORKSPACED_WORKSPACE_LOCAL_HARNESS_PASSWORD=dev WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run
 ```
+
+### Editing chat messages
+
+`PUT /api/v1/workspaces/{id}/sessions/{sid}/messages/{messageId}` accepts
+`{"text":"Updated prompt"}` and returns `202` once a new reply is started. Only user messages can be edited.
+The harness must be idle: the edited message and all later conversation turns are replaced, while project files
+are retained. The replacement uses the workspace's currently selected model. Invalid text or an assistant message
+returns `400`, unknown sessions/messages return `404`, and a harness failure returns `503`. A failure after the
+history was truncated can leave the conversation shortened; reload its history before retrying.
+
+The model selector is available beside the composer for new tasks and session chats. It continues to apply to
+all sessions in the workspace. Supported browsers also offer microphone dictation; recognized text stays in the
+composer for review and is sent as an ordinary text prompt.
 
 ## Agent settings
 
