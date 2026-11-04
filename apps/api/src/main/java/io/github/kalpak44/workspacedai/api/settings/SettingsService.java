@@ -7,9 +7,12 @@ import io.github.kalpak44.workspacedai.api.harness.ModelCatalogue;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
+import java.util.regex.Pattern;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -18,6 +21,8 @@ import org.springframework.web.server.ResponseStatusException;
 /** Stores the workspace's model preference and delegates MCP management to OpenCode. */
 @Service
 public class SettingsService {
+
+  private static final Pattern SECRET_REFERENCE = Pattern.compile("\\{env:[A-Za-z_][A-Za-z0-9_]*}");
 
   private final WorkspaceRepository workspaces;
   private final WorkspaceRuntime runtime;
@@ -67,14 +72,12 @@ public class SettingsService {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "the workspace already has an MCP server " + request.name());
     }
-    validateHeaders(request.headers());
-    harness.configureMcp(
-        endpoint,
-        Map.of(request.name(), new Harness.McpServerConfig(request.url(), request.headers())));
+    harness.configureMcp(endpoint, Map.of(request.name(), config(request)));
+    // Projects rebuilt by the reload list their servers only once they have started them.
     return mcpServers(workspaceId).stream()
         .filter(s -> s.name().equals(request.name()))
         .findFirst()
-        .orElseThrow();
+        .orElse(new McpServer(request.name(), "pending"));
   }
 
   @Transactional
@@ -86,6 +89,53 @@ public class SettingsService {
           HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name);
     }
     harness.removeMcp(endpoint, name);
+  }
+
+  /** Exactly one of a URL or a command; the parts that belong to the other form are refused. */
+  private static Harness.McpServerConfig config(McpServerRequest request) {
+    var remote = request.url() != null;
+    if (remote == (request.command() != null)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "an MCP server needs either a url or a command");
+    }
+    if (remote) {
+      if (request.args() != null || request.env() != null) {
+        throw new ResponseStatusException(
+            HttpStatus.BAD_REQUEST, "args and env belong to a server started by command");
+      }
+      var headers = request.headers() == null ? Map.<String, String>of() : request.headers();
+      validateHeaders(headers);
+      return new Harness.McpServerConfig.Remote(request.url(), headers);
+    }
+    if (request.headers() != null) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "headers belong to a server reached by url");
+    }
+    var command = new ArrayList<String>();
+    command.add(request.command());
+    if (request.args() != null) {
+      command.addAll(request.args());
+    }
+    var environment = new LinkedHashMap<String, String>();
+    if (request.env() != null) {
+      request
+          .env()
+          .forEach((variable, value) -> environment.put(variable, secret(variable, value)));
+    }
+    return new Harness.McpServerConfig.Local(List.copyOf(command), environment);
+  }
+
+  /** Empty stands for the secret of the variable's own name, as config files leave them. */
+  private static String secret(String variable, String value) {
+    if (value.isEmpty()) {
+      return "{env:" + variable + "}";
+    }
+    if (!SECRET_REFERENCE.matcher(value).matches()) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "MCP env values must be empty or reference a workspace secret using {env:SECRET_NAME}");
+    }
+    return value;
   }
 
   private static void validateHeaders(Map<String, String> headers) {

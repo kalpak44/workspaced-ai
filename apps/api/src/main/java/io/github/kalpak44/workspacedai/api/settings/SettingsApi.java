@@ -104,15 +104,18 @@ public interface SettingsApi {
       operationId = "addMcpServer",
       summary = "Add an MCP server",
       description =
-          "Every session can use it at once, until the workspace restarts. Reference a "
-              + "workspace secret in a header as {env:NAME}.")
+          "Every session can use it at once, until the workspace restarts. One entry of an "
+              + "mcpServers config: a url, with headers, for a remote server, or a command, with "
+              + "args and env, for one the workspace starts. Header and env values reference "
+              + "workspace secrets as {env:NAME}; an empty env value means the secret of the "
+              + "variable's own name.")
   @ApiResponse(
       responseCode = "201",
       description = "Added.",
       content = @Content(mediaType = JSON, schema = @Schema(implementation = McpServer.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "The name, URL or a header is not valid.",
+      description = "The name, url, command or a header or env value is not valid.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

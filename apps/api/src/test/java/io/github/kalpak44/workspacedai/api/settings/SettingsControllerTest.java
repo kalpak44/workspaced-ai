@@ -74,6 +74,8 @@ class SettingsControllerTest {
     repository.deleteAll();
     OPENCODE.requests.clear();
     OPENCODE.globalMcp.removeAll();
+    OPENCODE.mcpConfigFile = null;
+    OPENCODE.mcpStarting = false;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -126,14 +128,64 @@ class SettingsControllerTest {
     // Header values never come back: one may be a token typed in by hand.
     assertThat(added.body()).doesNotContain("Bearer");
     assertThat(server.has("headers")).isFalse();
-    assertThat(OPENCODE.globalMcp.get("github").get("url").asString())
+    assertThat(OPENCODE.configuredMcp().get("github").get("url").asString())
         .isEqualTo("https://mcp.test/github");
 
     assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).hasSize(1);
     assertThat(send("DELETE", "/mcp-servers/github", null).statusCode()).isEqualTo(204);
     assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).isEmpty();
-    assertThat(OPENCODE.globalMcp.has("github")).isFalse();
+    assertThat(OPENCODE.configuredMcp().has("github")).isFalse();
     assertThat(send("DELETE", "/mcp-servers/github", null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void answersPendingForAServerTheReloadHasNotStartedYet() throws Exception {
+    OPENCODE.mcpStarting = true;
+    var added =
+        send(
+            "POST",
+            "/mcp-servers",
+            "{\"name\":\"github\",\"url\":\"https://mcp.test/github\",\"headers\":{}}");
+    assertThat(added.statusCode()).isEqualTo(201);
+    assertThat(JSON.readTree(added.body()).get("status").asString()).isEqualTo("pending");
+    assertThat(OPENCODE.configuredMcp().has("github")).isTrue();
+  }
+
+  @Test
+  void startsALocalServerByCommandWithItsSecrets() throws Exception {
+    var added =
+        send(
+            "POST",
+            "/mcp-servers",
+            "{\"name\":\"browserbase\",\"command\":\"npx\",\"args\":[\"@browserbasehq/mcp\"],"
+                + "\"env\":{\"BROWSERBASE_API_KEY\":\"\",\"GEMINI_API_KEY\":\"{env:GOOGLE_KEY}\"}}");
+    assertThat(added.statusCode()).isEqualTo(201);
+    var config = OPENCODE.configuredMcp().get("browserbase");
+    assertThat(config.get("type").asString()).isEqualTo("local");
+    assertThat(JSON.writeValueAsString(config.get("command")))
+        .isEqualTo("[\"npx\",\"@browserbasehq/mcp\"]");
+    // An empty value stands for the secret of the variable's own name.
+    assertThat(config.get("environment").get("BROWSERBASE_API_KEY").asString())
+        .isEqualTo("{env:BROWSERBASE_API_KEY}");
+    assertThat(config.get("environment").get("GEMINI_API_KEY").asString())
+        .isEqualTo("{env:GOOGLE_KEY}");
+  }
+
+  @Test
+  void refusesAServerThatMixesOrLacksTheTwoForms() throws Exception {
+    for (var body :
+        new String[] {
+          "{\"name\":\"x\"}",
+          "{\"name\":\"x\",\"url\":\"https://x.test\",\"command\":\"npx\"}",
+          "{\"name\":\"x\",\"url\":\"https://x.test\",\"args\":[\"a\"]}",
+          "{\"name\":\"x\",\"command\":\"npx\",\"headers\":{}}",
+          "{\"name\":\"x\",\"command\":\"npx\",\"env\":{\"KEY\":\"raw-token\"}}",
+          "{\"name\":\"x\",\"command\":\"npx\",\"env\":{\"BAD-NAME\":\"\"}}",
+          "{\"name\":\"x\",\"command\":\"two words\"}"
+        }) {
+      assertThat(send("POST", "/mcp-servers", body).statusCode()).as(body).isEqualTo(400);
+    }
+    assertThat(OPENCODE.mcpConfigFile).isNull();
   }
 
   @Test
@@ -162,19 +214,19 @@ class SettingsControllerTest {
   }
 
   @Test
-  void readsConfigurationFromOpenCodeWithoutDatabaseCopies() throws Exception {
+  void keepsConfigurationInOpenCodeWithoutDatabaseCopies() throws Exception {
     send(
         "POST",
         "/mcp-servers",
         "{\"name\":\"github\",\"url\":\"https://mcp.test/g\",\"headers\":{}}");
-    assertThat(OPENCODE.globalMcp.has("github")).isTrue();
+    assertThat(OPENCODE.configuredMcp().has("github")).isTrue();
     assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).hasSize(1);
-    assertThat(OPENCODE.requests).noneMatch(r -> r.path().contains("/fs/"));
   }
 
   @Test
   void listsAndRemovesServersConfiguredOutsideTheUi() throws Exception {
-    // The fake has no filesystem routes: discovery must use OpenCode's effective runtime list.
+    // Not in the global config: listed from OpenCode's effective list, removed from its runtime
+    // set.
     OPENCODE.globalMcp.set(
         "Local.Tools", JSON.readTree("{\"type\":\"local\",\"command\":[\"tool-server\"]}"));
     var response = send("GET", "/mcp-servers", null);
@@ -184,7 +236,6 @@ class SettingsControllerTest {
     assertThat(servers.get(0).path("name").asString()).isEqualTo("Local.Tools");
     assertThat(send("DELETE", "/mcp-servers/Local.Tools", null).statusCode()).isEqualTo(204);
     assertThat(OPENCODE.globalMcp).isEmpty();
-    assertThat(OPENCODE.requests).noneMatch(r -> r.path().contains("/fs/"));
   }
 
   @Test
@@ -203,7 +254,7 @@ class SettingsControllerTest {
                     "{\"name\":\"unsafe\",\"url\":\"https://mcp.test/g\",\"headers\":{\"Authorization\":\"Bearer raw-token\"}}")
                 .statusCode())
         .isEqualTo(400);
-    assertThat(OPENCODE.globalMcp.has("unsafe")).isFalse();
+    assertThat(OPENCODE.mcpConfigFile).isNull();
   }
 
   private HttpResponse<String> send(String method, String path, String json) throws Exception {

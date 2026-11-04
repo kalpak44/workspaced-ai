@@ -1,6 +1,7 @@
 import { Plus, Trash2, X } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
-import { type AddServerResult, MCP_NAME, type McpServer } from "../../hooks/useMcpServers";
+import { parseMcpConfig } from "../../lib/mcpConfig";
+import { type AddServerResult, MCP_NAME, type McpServer, type NewMcpServer } from "../../hooks/useMcpServers";
 import { Button, IconButton, Spinner, TextField } from "../atoms";
 import { ErrorBanner, SettingsSection } from "../molecules";
 
@@ -30,11 +31,7 @@ interface Props {
   readonly removing: ReadonlySet<string>;
   readonly error: string | null;
   readonly onDismissError: () => void;
-  readonly onAdd: (server: {
-    name: string;
-    url: string;
-    headers: Record<string, string>;
-  }) => Promise<AddServerResult>;
+  readonly onAdd: (server: NewMcpServer) => Promise<AddServerResult>;
   readonly onRemove: (name: string) => void;
 }
 
@@ -46,12 +43,100 @@ interface Header {
 
 const MESSAGES: Record<Exclude<AddServerResult, "added">, string> = {
   conflict: "The workspace already has a server of that name",
-  invalid: "Check the URL and header names",
+  invalid: "Check the URL, command, header and env names, and that values reference secrets",
   failed: "Could not add the server",
 };
 
-/** Remote MCP servers: what the agent can reach, and a form to add one. */
+const EXAMPLE = `{
+  "mcpServers": {
+    "browserbase": {
+      "command": "npx",
+      "args": ["@browserbasehq/mcp"],
+      "env": { "BROWSERBASE_API_KEY": "" }
+    }
+  }
+}`;
+
+/**
+ * Pasted `mcpServers` JSON, as other MCP clients take it. Servers are added one by one, so
+ * the ones that fail are named and the rest still land.
+ */
+function JsonImport({ onAdd }: { readonly onAdd: Props["onAdd"] }) {
+  const [text, setText] = useState("");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [pending, setPending] = useState(false);
+
+  const submit = async (event: SubmitEvent) => {
+    event.preventDefault();
+    const parsed = parseMcpConfig(text);
+    if (parsed.error !== undefined) {
+      setFormError(parsed.error);
+      return;
+    }
+    setPending(true);
+    try {
+      const failures: string[] = [];
+      for (const server of parsed.servers) {
+        const result = await onAdd(server).catch((): AddServerResult => "failed");
+        if (result !== "added") failures.push(`${server.name}: ${MESSAGES[result]}`);
+      }
+      if (failures.length === 0) {
+        setText("");
+        setFormError(null);
+      } else {
+        setFormError(failures.join(". "));
+      }
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <form
+      onSubmit={submit}
+      aria-label="Add MCP servers from JSON"
+      className="flex flex-col gap-3 rounded-md bg-zinc-50 p-4 dark:bg-zinc-900/60"
+    >
+      <label htmlFor="mcp-json" className="text-sm font-medium">
+        MCP config
+      </label>
+      <textarea
+        id="mcp-json"
+        rows={10}
+        spellCheck={false}
+        value={text}
+        maxLength={50000}
+        disabled={pending}
+        placeholder={EXAMPLE}
+        aria-invalid={formError !== null}
+        aria-describedby={formError ? "mcp-json-error" : undefined}
+        onChange={(e) => {
+          setText(e.currentTarget.value);
+          setFormError(null);
+        }}
+        className="w-full resize-y rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-zinc-500 disabled:cursor-not-allowed dark:border-zinc-700 dark:bg-zinc-950"
+      />
+      {formError && (
+        <p id="mcp-json-error" className="text-xs text-rose-600">
+          {formError}
+        </p>
+      )}
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+        A server takes a <code className="rounded bg-zinc-200 px-1 font-mono dark:bg-zinc-800">url</code> or a{" "}
+        <code className="rounded bg-zinc-200 px-1 font-mono dark:bg-zinc-800">command</code> such as npx. Leave an env
+        value empty to use the secret of the same name, or write{" "}
+        <code className="rounded bg-zinc-200 px-1 font-mono dark:bg-zinc-800">{"{env:NAME}"}</code> for another.
+      </p>
+      <div className="flex justify-end">
+        <Button label="Add servers" type="submit" icon={Plus} busy={pending} disabled={!text.trim()} />
+      </div>
+    </form>
+  );
+}
+
+/** MCP servers: what the agent can reach, and a form or pasted JSON to add more. */
 export function McpPanel({ servers, loading, removing, error, onDismissError, onAdd, onRemove }: Props) {
+  const [mode, setMode] = useState<"form" | "json">("form");
   const [name, setName] = useState("");
   const [url, setUrl] = useState("");
   const [headers, setHeaders] = useState<Header[]>([]);
@@ -122,7 +207,20 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
           ))}
         </ul>
       )}
-      <form
+      <div className="flex gap-1 self-start rounded-md bg-zinc-100 p-0.5 text-sm dark:bg-zinc-800">
+        {(["form", "json"] as const).map((option) => (
+          <button
+            key={option}
+            type="button"
+            aria-pressed={mode === option}
+            onClick={() => setMode(option)}
+            className={`rounded px-3 py-1 ${mode === option ? "bg-white shadow-sm dark:bg-zinc-950" : "text-zinc-600 dark:text-zinc-400"}`}
+          >
+            {option === "form" ? "Form" : "JSON"}
+          </button>
+        ))}
+      </div>
+      {mode === "json" ? <JsonImport onAdd={onAdd} /> : <form
         onSubmit={submit}
         aria-label="Add an MCP server"
         className="flex flex-col gap-3 rounded-md bg-zinc-50 p-4 dark:bg-zinc-900/60"
@@ -205,7 +303,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
           />
           <Button label="Add server" type="submit" icon={Plus} busy={pending} disabled={!name || !url} />
         </div>
-      </form>
+      </form>}
     </SettingsSection>
   );
 }

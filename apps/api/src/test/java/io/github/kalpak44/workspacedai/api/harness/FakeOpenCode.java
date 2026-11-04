@@ -24,7 +24,20 @@ public class FakeOpenCode implements AutoCloseable {
   public record Request(String method, String path, String directory, String auth, String body) {}
 
   public final List<Request> requests = new CopyOnWriteArrayList<>();
+
+  /** Servers added at runtime, as the API did before it kept them in the global config. */
   public final ObjectNode globalMcp = JSON.createObjectNode();
+
+  /** The global opencode.jsonc the API writes MCP servers to; null while it does not exist. */
+  public volatile String mcpConfigFile;
+
+  public final List<String> shellCommands = new CopyOnWriteArrayList<>();
+  public volatile int shellExit;
+  public volatile int reloads;
+
+  /** Lists no MCP servers, as OpenCode does while a reload is still starting them. */
+  public volatile boolean mcpStarting;
+
   public volatile String title;
   public volatile boolean rejectRevert;
   public volatile CountDownLatch holdStream;
@@ -34,6 +47,7 @@ public class FakeOpenCode implements AutoCloseable {
   public volatile boolean sessionBusy;
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
+  private static final String CONFIG_FILE = "/home/workspace/.config/opencode/opencode.jsonc";
   private final HttpServer server;
 
   public FakeOpenCode() throws IOException {
@@ -76,6 +90,11 @@ public class FakeOpenCode implements AutoCloseable {
     if (method.equals("DELETE") && path.startsWith("/api/experimental/mcp/")) {
       globalMcp.remove(path.substring(path.lastIndexOf('/') + 1));
       respond(exchange, 204, null);
+      return;
+    }
+    if (method.equals("POST") && path.equals("/api/shell")) {
+      shellCommands.add(JSON.readTree(requests.getLast().body()).path("command").asString());
+      respond(exchange, 200, "{\"data\":{\"id\":\"sh_1\",\"status\":\"running\"}}");
       return;
     }
     switch (method + " " + path) {
@@ -130,6 +149,26 @@ public class FakeOpenCode implements AutoCloseable {
               "{\"location\":{\"directory\":\"/home/workspace/project\"},"
                   + "\"data\":{\"id\":\"anthropic/claude-sonnet-5.5\",\"providerID\":\"openrouter\"}}");
       case "GET /api/mcp" -> respond(exchange, 200, mcp());
+      case "GET /api/shell/sh_1" ->
+          respond(
+              exchange,
+              200,
+              "{\"data\":{\"id\":\"sh_1\",\"status\":\"exited\",\"exit\":" + shellExit + "}}");
+      case "GET /api/fs/read/opencode.jsonc" -> {
+        var config = mcpConfigFile;
+        respond(exchange, config == null ? 404 : 200, config == null ? "{}" : config);
+      }
+      case "POST /api/experimental/fs/write" -> {
+        if (CONFIG_FILE.equals(query(exchange.getRequestURI(), "path"))) {
+          mcpConfigFile = requests.getLast().body();
+        }
+        respond(exchange, 200, "{\"data\":{}}");
+      }
+      case "POST /api/location/reload" -> {
+        reloads++;
+        respond(exchange, 204, null);
+      }
+      case "DELETE /api/debug/location" -> respond(exchange, 204, null);
       default -> respond(exchange, 404, "{}");
     }
   }
@@ -160,9 +199,23 @@ public class FakeOpenCode implements AutoCloseable {
         + "}";
   }
 
+  /** The servers in the global config file, by name. */
+  public ObjectNode configuredMcp() {
+    var config = mcpConfigFile;
+    return config != null
+            && JSON.readTree(config).path("mcp").path("servers") instanceof ObjectNode servers
+        ? servers
+        : JSON.createObjectNode();
+  }
+
   private String mcp() {
     var data = JSON.createArrayNode();
-    globalMcp
+    var servers = configuredMcp();
+    servers.setAll(globalMcp);
+    if (mcpStarting) {
+      servers.removeAll();
+    }
+    servers
         .properties()
         .forEach(
             entry ->

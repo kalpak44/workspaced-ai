@@ -22,11 +22,20 @@ export interface McpServer {
   readonly status: McpStatus | string;
 }
 
-export interface NewMcpServer {
-  readonly name: string;
-  readonly url: string;
-  readonly headers: Readonly<Record<string, string>>;
-}
+/** A remote server by url, or a local one the workspace starts by command. */
+export type NewMcpServer =
+  | {
+      readonly name: string;
+      readonly url: string;
+      readonly headers: Readonly<Record<string, string>>;
+    }
+  | {
+      readonly name: string;
+      readonly command: string;
+      readonly args?: readonly string[];
+      /** Each value is {env:SECRET}, or empty for the secret of the variable's own name. */
+      readonly env?: Readonly<Record<string, string>>;
+    };
 
 // Server names are slugs; anything else is refused before it becomes a path segment.
 export const MCP_NAME = /^[a-z0-9][a-z0-9_-]{0,63}$/;

@@ -19,8 +19,14 @@ public interface Harness {
   /** The harness's home; requests about the whole harness rather than a session use it. */
   String HOME = "/home/workspace";
 
-  /** The shared project every ordinary session and workspace terminal works in. */
+  /**
+   * Where the workspace terminal opens and whole-harness requests resolve, and the shared project
+   * of sessions created before each had its own.
+   */
   String PROJECT_ROOT = HOME + "/project";
+
+  /** Each session's own folder is made here; OpenCode treats every folder as a separate project. */
+  String SESSIONS_ROOT = HOME + "/sessions";
 
   /** Fails when the server is not OpenCode V2 or the project location cannot be resolved. */
   void validate(HarnessEndpoint endpoint, String directory);
@@ -37,6 +43,15 @@ public interface Harness {
 
   /** Deletes the conversation, retaining shared project files; one already gone is not an error. */
   void deleteSession(HarnessEndpoint endpoint, String directory, String sessionId);
+
+  /** Creates a session's folder, which OpenCode needs to exist before it can work there. */
+  void createDirectory(HarnessEndpoint endpoint, String directory);
+
+  /**
+   * Stops what OpenCode runs for a session's folder and removes it with its files. Only a folder
+   * directly under {@link #SESSIONS_ROOT} is accepted, so no other path can be removed.
+   */
+  void removeDirectory(HarnessEndpoint endpoint, String directory);
 
   List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId);
 
@@ -77,14 +92,26 @@ public interface Harness {
   Map<String, String> mcpStatus(HarnessEndpoint endpoint);
 
   /**
-   * Adds or replaces runtime MCP entries through OpenCode; changes last until restart.
+   * Adds or replaces MCP servers in the harness's global configuration, which every session's
+   * project reads, and reloads it. They outlast a restart, since the configuration is in the home.
    *
    * @return whether anything had to change
    */
   boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers);
 
-  /** A remote MCP server; a header value may be {@code {env:NAME}}, filled from the pod. */
-  record McpServerConfig(String url, Map<String, String> headers) {}
+  /** An MCP server the harness reaches over HTTP, or one it starts in the workspace. */
+  sealed interface McpServerConfig {
+
+    /** A header value may be {@code {env:NAME}}, filled from the pod. */
+    record Remote(String url, Map<String, String> headers) implements McpServerConfig {}
+
+    /**
+     * Started in each project that uses it. It inherits the pod's environment, secrets included; an
+     * {@code environment} value may be {@code {env:NAME}}, filled from the pod.
+     */
+    record Local(List<String> command, Map<String, String> environment)
+        implements McpServerConfig {}
+  }
 
   /** Stops the reply in progress, if there is one. */
   void abort(HarnessEndpoint endpoint, String directory, String sessionId);
@@ -100,6 +127,9 @@ public interface Harness {
   AutoCloseable stream(
       HarnessEndpoint endpoint, Consumer<HarnessEventEnvelope> onEvent, Runnable onEnd);
 
-  /** Removes one runtime MCP server. Missing servers are ignored. */
+  /**
+   * Removes one MCP server, from the global configuration or else from the runtime set servers
+   * added before it held them. Missing servers are ignored.
+   */
   void removeMcp(HarnessEndpoint endpoint, String name);
 }

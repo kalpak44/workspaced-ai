@@ -2,7 +2,7 @@ import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Secret } from "../src/api/secretsApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
-import type { McpServer, ModelCatalogue } from "../src/api/settingsApi";
+import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
 
 export const OPENROUTER = {
@@ -88,6 +88,8 @@ export function installFakeApi(
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
   const mcp = new Map<string, McpServer[]>();
+  // Every server POSTed, as sent, so a test can check what the UI built.
+  const mcpPosted: NewMcpServer[] = [];
   const catalogue: ModelCatalogue = {
     defaultModel: "anthropic/claude-sonnet-5.5",
     models: [
@@ -181,9 +183,10 @@ export function installFakeApi(
     }
     const servers = mcp.get(workspaceId) ?? [];
     if (method === "POST") {
-      const server = JSON.parse(String(init!.body)) as { name: string; url: string; headers: Record<string, string> };
+      const server = JSON.parse(String(init!.body)) as NewMcpServer;
+      mcpPosted.push(server);
       if (servers.some((s) => s.name === server.name)) return json({}, 409);
-      if (server.url.includes("invalid")) return json({}, 400);
+      if ("url" in server && server.url.includes("invalid")) return json({}, 400);
       const added = { name: server.name, status: "connected" };
       mcp.set(workspaceId, [...servers, added]);
       return json(added, 201);
@@ -291,5 +294,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, catalogue, state, fetchFn };
+  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, catalogue, state, fetchFn };
 }

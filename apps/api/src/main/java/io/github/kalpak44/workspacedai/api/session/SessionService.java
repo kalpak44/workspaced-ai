@@ -70,29 +70,36 @@ public class SessionService {
   }
 
   /**
-   * The harness session first, since the row needs its id. If the row then cannot be written, the
-   * harness session is removed again rather than left with nothing pointing at it.
+   * The session's own folder, a project of its own to OpenCode, then the harness session, since the
+   * row needs its id. Whatever was made is removed again if a later step fails, rather than left
+   * with nothing pointing at it.
    */
   @Transactional
   public Session create(UUID workspaceId) {
     requireWorkspace(workspaceId);
     var endpoint = endpoint(workspaceId);
     var id = UUID.randomUUID();
-    var path = Harness.PROJECT_ROOT;
-    harness.validate(endpoint, path);
-    var harnessId = harness.createSession(endpoint, path, null);
+    var path = Harness.SESSIONS_ROOT + "/" + id;
+    harness.createDirectory(endpoint, path);
+    String harnessId = null;
     try {
+      harness.validate(endpoint, path);
+      harnessId = harness.createSession(endpoint, path, null);
       return Session.of(
           sessions.saveAndFlush(new WorkspaceSessionEntity(id, workspaceId, path, harnessId)));
     } catch (RuntimeException e) {
-      harness.deleteSession(endpoint, path, harnessId);
+      if (harnessId != null) {
+        harness.deleteSession(endpoint, path, harnessId);
+      }
+      harness.removeDirectory(endpoint, path);
       throw e;
     }
   }
 
   /**
-   * A workspace whose pod is gone took every session's files with it, so the row is removed even
-   * when there is no harness to tell.
+   * The session's folder goes with it. One in the shared project, from before sessions had their
+   * own, is kept. The row is removed even when there is no harness to tell, as when the workspace
+   * is not running.
    */
   @Transactional
   public void delete(UUID workspaceId, UUID sessionId) {
@@ -102,8 +109,12 @@ public class SessionService {
     runtime
         .harness(workspaceId)
         .ifPresent(
-            endpoint ->
-                harness.deleteSession(endpoint, session.getPath(), session.getHarnessSessionId()));
+            endpoint -> {
+              harness.deleteSession(endpoint, session.getPath(), session.getHarnessSessionId());
+              if (session.getPath().startsWith(Harness.SESSIONS_ROOT + "/")) {
+                harness.removeDirectory(endpoint, session.getPath());
+              }
+            });
   }
 
   @Transactional(readOnly = true)

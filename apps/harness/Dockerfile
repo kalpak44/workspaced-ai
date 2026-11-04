@@ -31,8 +31,9 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 
 # The agent's own tools: git and ripgrep, which opencode would otherwise download at run
 # time into a home that does not survive the pod, curl, and a shell for its bash tool.
-# tini reaps the processes that tool leaves behind.
-RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ ripgrep tini \
+# tini reaps the processes that tool leaves behind. Node.js and npm run MCP servers started
+# with npx; nodejs-current is Alpine's Node 26, the active LTS line, where nodejs is still 24.
+RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ nodejs-current npm ripgrep tini \
  && adduser -D -u 1000 -h /home/workspace workspace
 
 COPY --from=fetch /opencode /usr/local/bin/opencode

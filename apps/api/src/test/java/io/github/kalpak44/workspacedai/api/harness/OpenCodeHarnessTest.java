@@ -223,26 +223,84 @@ class OpenCodeHarnessTest {
   }
 
   @Test
-  void addsListsAndRemovesRuntimeMcpServers() {
+  void keepsMcpServersInTheGlobalConfigEveryProjectReads() {
+    opencode.mcpConfigFile = "{\"$schema\":\"https://opencode.ai/config.json\"}";
     var github =
-        new Harness.McpServerConfig(
+        new Harness.McpServerConfig.Remote(
             "https://mcp.test/github", Map.of("Authorization", "Bearer {env:GITHUB_TOKEN}"));
     assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isTrue();
-    assertThat(opencode.globalMcp.get("github").get("url").asString())
+    assertThat(opencode.configuredMcp().get("github").get("url").asString())
         .isEqualTo("https://mcp.test/github");
+    // Left as written: OpenCode fills it in from the pod when it reads the file.
+    assertThat(
+            opencode.configuredMcp().get("github").get("headers").get("Authorization").asString())
+        .isEqualTo("Bearer {env:GITHUB_TOKEN}");
+    assertThat(opencode.mcpConfigFile).contains("\"$schema\"");
+    assertThat(opencode.reloads).isEqualTo(1);
     assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "connected");
+
     harness.removeMcp(opencode.endpoint(), "github");
-    assertThat(opencode.globalMcp).isEmpty();
-    assertThat(opencode.requests)
-        .extracting(
-            FakeOpenCode.Request::method,
-            FakeOpenCode.Request::path,
-            FakeOpenCode.Request::directory)
-        .containsExactly(
-            Tuple.tuple("PUT", "/api/experimental/mcp/github", DIRECTORY),
-            Tuple.tuple("GET", "/api/mcp", DIRECTORY),
-            Tuple.tuple("DELETE", "/api/experimental/mcp/github", DIRECTORY));
+    assertThat(opencode.configuredMcp().has("github")).isFalse();
+    assertThat(opencode.reloads).isEqualTo(2);
+    assertThat(opencode.requests).noneMatch(r -> r.method().equals("PUT"));
     assertThat(harness.configureMcp(opencode.endpoint(), Map.of())).isFalse();
+  }
+
+  @Test
+  void startsTheConfigFileWhenThereIsNoneAndRemovesRuntimeServersItDoesNotHold() {
+    var memory =
+        new Harness.McpServerConfig.Local(
+            List.of("npx", "-y", "@modelcontextprotocol/server-memory"),
+            Map.of("API_KEY", "{env:API_KEY}"));
+    harness.configureMcp(opencode.endpoint(), Map.of("memory", memory));
+    var written = opencode.configuredMcp().get("memory");
+    assertThat(written.get("type").asString()).isEqualTo("local");
+    assertThat(written.get("command").get(2).asString())
+        .isEqualTo("@modelcontextprotocol/server-memory");
+    assertThat(written.get("environment").get("API_KEY").asString()).isEqualTo("{env:API_KEY}");
+
+    opencode.globalMcp.set("forma", opencode.configuredMcp().get("memory"));
+    harness.removeMcp(opencode.endpoint(), "forma");
+    assertThat(opencode.globalMcp).isEmpty();
+    assertThat(opencode.configuredMcp().has("memory")).isTrue();
+    assertThat(opencode.requests)
+        .extracting(FakeOpenCode.Request::method, FakeOpenCode.Request::path)
+        .contains(Tuple.tuple("DELETE", "/api/experimental/mcp/forma"));
+  }
+
+  @Test
+  void createsAndRemovesASessionFolderThroughTheShell() {
+    var folder = Harness.SESSIONS_ROOT + "/3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11";
+    harness.createDirectory(opencode.endpoint(), folder);
+    harness.removeDirectory(opencode.endpoint(), folder);
+    assertThat(opencode.shellCommands)
+        .containsExactly("mkdir -p -- '" + folder + "'", "rm -rf -- '" + folder + "'");
+    assertThat(opencode.requests)
+        .extracting(FakeOpenCode.Request::method, FakeOpenCode.Request::path)
+        .contains(Tuple.tuple("DELETE", "/api/debug/location"));
+
+    opencode.shellExit = 1;
+    assertThatThrownBy(() -> harness.createDirectory(opencode.endpoint(), folder))
+        .isInstanceOf(HarnessUnavailableException.class);
+  }
+
+  @Test
+  void quotesAFolderAndRefusesToRemoveOneOutsideTheSessions() {
+    harness.createDirectory(opencode.endpoint(), "/home/workspace/sessions/it's");
+    assertThat(opencode.shellCommands)
+        .containsExactly("mkdir -p -- '/home/workspace/sessions/it'\\''s'");
+    for (var outside :
+        List.of(
+            Harness.PROJECT_ROOT,
+            Harness.SESSIONS_ROOT,
+            Harness.SESSIONS_ROOT + "/a/b",
+            Harness.SESSIONS_ROOT + "/../project",
+            "sessions/a")) {
+      assertThatThrownBy(() -> harness.removeDirectory(opencode.endpoint(), outside))
+          .as(outside)
+          .isInstanceOf(IllegalArgumentException.class);
+    }
+    assertThat(opencode.shellCommands).hasSize(1);
   }
 
   @Test

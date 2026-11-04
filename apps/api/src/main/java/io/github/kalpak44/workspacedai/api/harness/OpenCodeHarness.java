@@ -16,6 +16,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -35,6 +36,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** Talks only to the OpenCode V2 HTTP API. */
 @Component
@@ -44,6 +46,10 @@ public class OpenCodeHarness implements Harness {
   private static final String USER = "opencode";
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+  private static final Duration SHELL_TIMEOUT = Duration.ofSeconds(30);
+  private static final Duration SHELL_POLL = Duration.ofMillis(200);
+  private static final String CONFIG_DIRECTORY = HOME + "/.config/opencode";
+  private static final String MCP_CONFIG = "opencode.jsonc";
   private static final String EVENT_TYPES =
       String.join(
           ",",
@@ -75,6 +81,7 @@ public class OpenCodeHarness implements Harness {
           .connectTimeout(CONNECT_TIMEOUT)
           .build();
   private final JsonMapper json;
+  private final Object configLock = new Object();
 
   public OpenCodeHarness(JsonMapper json) {
     this.json = json;
@@ -141,6 +148,57 @@ public class OpenCodeHarness implements Harness {
     if (response.statusCode() != 404) {
       check(response);
     }
+  }
+
+  @Override
+  public void createDirectory(HarnessEndpoint endpoint, String directory) {
+    shell(endpoint, "mkdir -p -- " + quote(directory));
+  }
+
+  @Override
+  public void removeDirectory(HarnessEndpoint endpoint, String directory) {
+    var path = Path.of(directory).normalize();
+    if (!path.isAbsolute() || !Path.of(SESSIONS_ROOT).equals(path.getParent())) {
+      throw new IllegalArgumentException("not a session directory: " + directory);
+    }
+    // Its MCP servers and other services keep running until the project is let go.
+    send(request(endpoint, withLocation("/api/debug/location", path.toString())).DELETE());
+    shell(endpoint, "rm -rf -- " + quote(path.toString()));
+  }
+
+  /** Runs one command to completion, failing unless it exits with 0. */
+  private void shell(HarnessEndpoint endpoint, String command) {
+    var info =
+        call(
+                endpoint,
+                "POST",
+                withLocation("/api/shell", PROJECT_ROOT),
+                Map.of("command", command, "timeout", SHELL_TIMEOUT.toMillis()))
+            .path("data");
+    var id = text(info, "id");
+    var deadline = Instant.now().plus(SHELL_TIMEOUT).plus(CONNECT_TIMEOUT);
+    while ("running".equals(text(info, "status"))) {
+      if (Instant.now().isAfter(deadline)) {
+        throw new HarnessUnavailableException("the workspace did not finish: " + command);
+      }
+      try {
+        Thread.sleep(SHELL_POLL);
+      } catch (InterruptedException e) {
+        Thread.currentThread().interrupt();
+        throw new HarnessUnavailableException("interrupted waiting for: " + command, e);
+      }
+      info =
+          call(endpoint, "GET", withLocation("/api/shell/" + encode(id), PROJECT_ROOT), null)
+              .path("data");
+    }
+    var exit = number(info, "exit");
+    if (!"exited".equals(text(info, "status")) || exit == null || exit != 0) {
+      throw new HarnessUnavailableException("the workspace could not run: " + command);
+    }
+  }
+
+  private static String quote(String value) {
+    return "'" + value.replace("'", "'\\''") + "'";
   }
 
   @Override
@@ -267,27 +325,83 @@ public class OpenCodeHarness implements Harness {
     return statuses;
   }
 
+  /**
+   * The servers go into a global configuration file of their own: {@code start.sh} replaces the
+   * image's {@code opencode.json} on every start but leaves this one, which OpenCode reads on top
+   * of it. Reloading applies it to every loaded project; it also cancels pending permission and
+   * form requests, which sessions see as cancelled.
+   */
   @Override
   public boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers) {
-    servers.forEach(
-        (name, server) ->
-            call(
-                endpoint,
-                "PUT",
-                withLocation("/api/experimental/mcp/" + encode(name), PROJECT_ROOT),
-                Map.of(
-                    "config",
-                    Map.of("type", "remote", "url", server.url(), "headers", server.headers()))));
-    return !servers.isEmpty();
+    if (servers.isEmpty()) {
+      return false;
+    }
+    synchronized (configLock) {
+      var config = readConfig(endpoint);
+      var configured = config.withObjectProperty("mcp").withObjectProperty("servers");
+      servers.forEach((name, server) -> configured.set(name, json.valueToTree(mcpConfig(server))));
+      writeConfig(endpoint, config);
+    }
+    call(endpoint, "POST", "/api/location/reload", null);
+    return true;
+  }
+
+  static Map<String, Object> mcpConfig(McpServerConfig server) {
+    return switch (server) {
+      case McpServerConfig.Remote remote ->
+          Map.of("type", "remote", "url", remote.url(), "headers", remote.headers());
+      case McpServerConfig.Local local ->
+          Map.of("type", "local", "command", local.command(), "environment", local.environment());
+    };
   }
 
   @Override
   public void removeMcp(HarnessEndpoint endpoint, String name) {
+    synchronized (configLock) {
+      var config = readConfig(endpoint);
+      if (config.path("mcp").path("servers") instanceof ObjectNode configured
+          && configured.has(name)) {
+        configured.remove(name);
+        writeConfig(endpoint, config);
+        call(endpoint, "POST", "/api/location/reload", null);
+        return;
+      }
+    }
     call(
         endpoint,
         "DELETE",
         withLocation("/api/experimental/mcp/" + encode(name), PROJECT_ROOT),
         null);
+  }
+
+  /** An object, empty while the file does not exist yet. */
+  private ObjectNode readConfig(HarnessEndpoint endpoint) {
+    var response =
+        send(request(endpoint, withLocation("/api/fs/read/" + MCP_CONFIG, CONFIG_DIRECTORY)).GET());
+    if (response.statusCode() == 404) {
+      return json.createObjectNode();
+    }
+    if (check(response).body().isBlank()) {
+      return json.createObjectNode();
+    }
+    if (json.readTree(response.body()) instanceof ObjectNode config) {
+      return config;
+    }
+    throw new HarnessUnavailableException(
+        CONFIG_DIRECTORY + "/" + MCP_CONFIG + " is not an object");
+  }
+
+  private void writeConfig(HarnessEndpoint endpoint, ObjectNode config) {
+    check(
+        send(
+            request(
+                    endpoint,
+                    "/api/experimental/fs/write?path="
+                        + encode(CONFIG_DIRECTORY + "/" + MCP_CONFIG))
+                .header("Content-Type", "application/octet-stream")
+                .POST(
+                    BodyPublishers.ofString(
+                        json.writerWithDefaultPrettyPrinter().writeValueAsString(config)))));
   }
 
   @Override

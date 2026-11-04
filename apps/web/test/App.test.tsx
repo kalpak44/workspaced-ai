@@ -917,6 +917,45 @@ describe("App", () => {
     expect(api.mcp.get("starter")).toEqual([]);
   });
 
+  it("adds every server of pasted mcpServers JSON and names the ones refused", async () => {
+    api.mcp.set("starter", [{ name: "github", status: "connected" }]);
+    const user = userEvent.setup();
+    await renderLoaded();
+    await openSettings(user);
+    const panel = screen.getByRole("region", { name: "MCP servers" });
+    await user.click(within(panel).getByRole("button", { name: "JSON" }));
+    const form = within(panel).getByRole("form", { name: "Add MCP servers from JSON" });
+    const config = within(form).getByRole("textbox", { name: "MCP config" });
+
+    await user.click(config);
+    await user.paste("{ not json");
+    await user.click(within(form).getByRole("button", { name: "Add servers" }));
+    expect(config).toHaveAccessibleDescription("This is not valid JSON");
+
+    await user.clear(config);
+    await user.paste(
+      JSON.stringify({
+        mcpServers: {
+          remote: { type: "http", url: "https://mcp.browserbase.com/mcp" },
+          browserbase: { command: "npx", args: ["@browserbasehq/mcp"], env: { BROWSERBASE_API_KEY: "" } },
+          github: { url: "https://mcp.test/github" },
+        },
+      }),
+    );
+    await user.click(within(form).getByRole("button", { name: "Add servers" }));
+
+    await waitFor(() =>
+      expect(config).toHaveAccessibleDescription("github: The workspace already has a server of that name"),
+    );
+    expect(within(panel).getByText("remote")).toBeInTheDocument();
+    expect(within(panel).getByText("browserbase")).toBeInTheDocument();
+    expect(api.mcpPosted).toEqual([
+      { name: "remote", url: "https://mcp.browserbase.com/mcp", headers: {} },
+      { name: "browserbase", command: "npx", args: ["@browserbasehq/mcp"], env: { BROWSERBASE_API_KEY: "" } },
+      { name: "github", url: "https://mcp.test/github", headers: {} },
+    ]);
+  });
+
   it("shows and removes an existing OpenCode server with a non-slug name", async () => {
     api.mcp.set("starter", [{ name: "Local.Tools", status: "connected" }]);
     const user = userEvent.setup();
@@ -962,7 +1001,7 @@ describe("App", () => {
     await user.clear(url);
     await user.type(url, "https://invalid.test");
     await user.click(within(panel).getByRole("button", { name: "Add server" }));
-    await waitFor(() => expect(name).toHaveAccessibleDescription("Check the URL and header names"));
+    await waitFor(() => expect(name).toHaveAccessibleDescription("Check the URL, command, header and env names, and that values reference secrets"));
 
     api.state.fail = 500;
     await user.click(within(panel).getByRole("button", { name: "Add server" }));

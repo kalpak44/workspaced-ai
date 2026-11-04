@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
+import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -18,6 +19,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.ArrayList;
 import java.util.UUID;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -74,6 +76,8 @@ class SessionControllerTest {
     OPENCODE.requests.clear();
     OPENCODE.title = null;
     OPENCODE.rejectRevert = false;
+    OPENCODE.shellCommands.clear();
+    OPENCODE.shellExit = 0;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -83,7 +87,9 @@ class SessionControllerTest {
     var created = send("POST", "", null);
     assertThat(created.statusCode()).isEqualTo(201);
     var session = JSON.readValue(created.body(), Session.class);
-    assertThat(session.path()).isEqualTo("/home/workspace/project");
+    // A folder of its own is a project of its own to OpenCode.
+    assertThat(session.path()).isEqualTo("/home/workspace/sessions/" + session.id());
+    assertThat(OPENCODE.shellCommands).containsExactly("mkdir -p -- '" + session.path() + "'");
     assertThat(session.title()).isNull();
     assertThat(session.createdAt()).isNotNull();
     assertThat(created.headers().firstValue("Location"))
@@ -116,13 +122,33 @@ class SessionControllerTest {
   }
 
   @Test
-  void deletesTheSessionFromTheHarnessToo() throws Exception {
+  void deletesTheSessionFromTheHarnessWithItsFolder() throws Exception {
     var session = create();
     assertThat(send("DELETE", "/" + session.id(), null).statusCode()).isEqualTo(204);
     assertThat(sessions.findAll()).isEmpty();
-    assertThat(OPENCODE.requests.getLast().method()).isEqualTo("DELETE");
-    assertThat(OPENCODE.requests.getLast().path()).endsWith("/" + FakeOpenCode.SESSION);
+    assertThat(OPENCODE.requests)
+        .extracting(FakeOpenCode.Request::method, FakeOpenCode.Request::path)
+        .contains(Tuple.tuple("DELETE", "/api/session/" + FakeOpenCode.SESSION));
+    assertThat(OPENCODE.shellCommands).last().isEqualTo("rm -rf -- '" + session.path() + "'");
     assertThat(send("DELETE", "/" + session.id(), null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void keepsTheSharedProjectWhenDeletingASessionFromBeforeFolders() throws Exception {
+    var id = UUID.randomUUID();
+    sessions.saveAndFlush(
+        new WorkspaceSessionEntity(id, workspace, Harness.PROJECT_ROOT, FakeOpenCode.SESSION));
+    assertThat(send("DELETE", "/" + id, null).statusCode()).isEqualTo(204);
+    assertThat(OPENCODE.shellCommands).isEmpty();
+  }
+
+  @Test
+  void startsNoSessionWhenItsFolderCannotBeMade() throws Exception {
+    OPENCODE.shellExit = 1;
+    assertThat(send("POST", "", null).statusCode()).isEqualTo(503);
+    assertThat(sessions.findAll()).isEmpty();
+    assertThat(OPENCODE.requests)
+        .noneMatch(r -> r.method().equals("POST") && r.path().equals("/api/session"));
   }
 
   @Test
