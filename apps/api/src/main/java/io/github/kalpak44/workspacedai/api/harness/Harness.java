@@ -120,6 +120,19 @@ public interface Harness {
   WorkspaceTerminal terminal(
       HarnessEndpoint endpoint, String directory, OutputStream output, Runnable onExit);
 
+  List<TerminalSession> terminals(HarnessEndpoint endpoint, String directory);
+
+  TerminalSession createTerminal(HarnessEndpoint endpoint, String directory, String title);
+
+  Optional<TerminalSession> terminalInfo(HarnessEndpoint endpoint, String directory, String id);
+
+  /** Terminates the process and removes its retained metadata. Missing terminals are ignored. */
+  void deleteTerminal(HarnessEndpoint endpoint, String directory, String id);
+
+  /** Attaches to an existing PTY. Closing this handle only detaches the browser. */
+  WorkspaceTerminal connectTerminal(
+      HarnessEndpoint endpoint, String directory, String id, OutputStream output, Runnable onExit);
+
   /**
    * Follows the workspace-wide V2 event stream until the returned handle is closed or the harness
    * ends it. Callers fan its envelopes out to their session subscribers.

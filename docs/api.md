@@ -61,13 +61,34 @@ Deployments ran as a bare pod of that name, which is still reported on and delet
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.
 
-### Workspace terminal
+### Workspace terminals
 
-`WS /api/v1/workspaces/{id}/terminal` creates an OpenCode V2 PTY running `/bin/bash -l` in
-`/home/workspace/project`. Browser input is sent as binary WebSocket frames; output is returned as binary frames.
-Terminal resizing uses a text frame in the form `resize:<columns>:<rows>`. The connection closes when Bash exits,
-the browser leaves the page, or the pod disappears. A missing workspace or a pod that is not ready closes the
-connection with an error reason. The local runtime supports terminals when a V2 harness is configured.
+Terminal sessions are OpenCode V2 PTYs running `/bin/bash -l` in `/home/workspace/project`.
+They are separate from AI conversations. OpenCode owns their processes and metadata; no database row is needed.
+
+| Method | Path | Body | Result |
+| --- | --- | --- | --- |
+| `GET` | `/api/v1/workspaces/{id}/terminals` | | `200`, running and exited terminals |
+| `POST` | `/api/v1/workspaces/{id}/terminals` | `{"title":"Terminal 1"}` | `201`, the created terminal and a Location header |
+| `GET` | `/api/v1/workspaces/{id}/terminals/{tid}` | | `200`, terminal metadata; `404` if absent |
+| `DELETE` | `/api/v1/workspaces/{id}/terminals/{tid}` | | `204`, stops and removes the terminal; already absent is accepted |
+
+Titles must be nonblank and at most 100 characters. Terminal IDs begin with `pty` and contain only letters,
+digits, `_`, and `-`. Metadata includes `id`, `title`, `command`, `cwd`, `status` (`running` or `exited`),
+`pid`, and nullable `exitCode`. Missing workspaces return `404`; an unavailable harness returns `503`.
+
+`WS /api/v1/workspaces/{id}/terminals/{tid}/connect` attaches to an existing running terminal.
+Browser input and shell output use binary frames. Resizing uses a text frame `resize:<columns>:<rows>`
+with dimensions from 1 to 1000. Leaving the page, switching terminals, or losing the browser connection
+only detaches; the shell keeps running. Reconnecting attaches to that same PTY, with OpenCode replaying
+retained output. Explicit deletion terminates the shell and its commands, retaining workspace files and AI conversations.
+Exited terminals remain listed until deleted. Processes do not survive a workspace runtime restart.
+An invalid, missing, exited, or unavailable terminal closes the connection with an error reason.
+The old auto-creating `/terminal` WebSocket has been replaced by these explicit lifecycle routes.
+
+The frontend polls metadata every five seconds while visible, supports searching a scrollable terminal list,
+and addresses the selected terminal at `/workspaces/{id}/terminal/{tid}` so reload and browser history reconnect correctly.
+The local runtime supports terminals when a V2 harness is configured (as elsewhere, all local workspaces share that configured harness).
 
 Terminal connections use short-lived OpenCode WebSocket tickets; pod credentials stay in the backend.
 The API no longer needs `pods/exec`. Persistent homes require these additional service-account permissions:

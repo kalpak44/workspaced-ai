@@ -39,13 +39,11 @@ export function SessionList(props: Props) {
   }, [pageCount]);
 
   return (
-    <section aria-label="Sessions" className="mx-auto flex w-full max-w-3xl flex-col gap-10 px-6 py-12 sm:px-8 sm:py-16">
+    <section aria-label="Sessions" className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-8 sm:py-10">
       {props.error && <ErrorBanner message={props.error} onDismiss={props.onDismissError} />}
       <div>
-        <p className="mb-2 text-xs font-semibold tracking-[0.16em] text-zinc-400 uppercase dark:text-zinc-500">
-          New task
-        </p>
-        <h2 className="mb-4 text-2xl font-semibold tracking-tight">Start a session</h2>
+        <h2 className="mb-2 text-xl font-semibold tracking-tight">Start a session</h2>
+        <p className="mb-5 text-sm text-zinc-500 dark:text-zinc-400">Start a new task or continue a recent conversation.</p>
         <ChatComposer
           busy={false}
           modelControl={props.modelControl}
@@ -70,7 +68,7 @@ export function SessionList(props: Props) {
             No sessions yet. Start a task to work with your workspace’s files.
           </p>
         ) : (
-          <ul className="flex flex-col gap-2" aria-busy={loading}>
+          <ul className="flex flex-col divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-busy={loading}>
             {loading ? (
               <>
                 <Placeholder />

@@ -3,3 +3,38 @@
 
 /* The theme switcher sets .dark on <html>, so "system" is resolved in code, not by media query. */
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* The rich text editor follows the same type scale and colors as chat Markdown. */
+.instructions-editor {
+  overflow-wrap: anywhere;
+  & > * + * { margin-top: 0.75rem; }
+  & h1 { font-size: 1.25rem; font-weight: 600; }
+  & h2 { font-size: 1.125rem; font-weight: 600; }
+  & h3, & h4, & h5, & h6 { font-weight: 600; }
+  & ul { list-style: disc; padding-left: 1.5rem; }
+  & ol { list-style: decimal; padding-left: 1.5rem; }
+  & li + li { margin-top: 0.25rem; }
+  & blockquote { border-left: 2px solid var(--color-zinc-300); padding-left: 0.75rem; color: var(--color-zinc-500); }
+  & pre { overflow-x: auto; border-radius: 0.5rem; background: var(--color-zinc-100); padding: 0.75rem; }
+  & code { border-radius: 0.25rem; background: var(--color-zinc-100); padding: 0.125rem 0.25rem; font-size: 0.85em; }
+  & pre code { background: transparent; padding: 0; }
+  & a { text-decoration: underline; text-underline-offset: 2px; }
+  & img { max-width: 100%; border-radius: 0.5rem; }
+  & table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+  & th, & td { border: 1px solid var(--color-zinc-300); padding: 0.5rem; vertical-align: top; }
+  & th { font-weight: 600; text-align: left; background: var(--color-zinc-50); }
+  & ul[data-type="taskList"] { list-style: none; padding-left: 0; }
+  & li[data-type="taskItem"] { display: flex; align-items: baseline; gap: 0.5rem; }
+  & li[data-type="taskItem"] > div { min-width: 0; flex: 1; }
+  & input[type="checkbox"] { accent-color: var(--color-zinc-500); }
+  & hr { margin-block: 1rem; border-color: var(--color-zinc-200); }
+  & p:only-child:empty::before { content: "Describe how you want your AI to work…"; color: var(--color-zinc-400); pointer-events: none; float: left; height: 0; }
+}
+.dark .instructions-editor {
+  & pre, & code { background: var(--color-zinc-800); }
+  & pre code { background: transparent; }
+  & blockquote { border-color: var(--color-zinc-700); color: var(--color-zinc-400); }
+  & hr { border-color: var(--color-zinc-800); }
+  & th, & td { border-color: var(--color-zinc-700); }
+  & th { background: var(--color-zinc-900); }
+}

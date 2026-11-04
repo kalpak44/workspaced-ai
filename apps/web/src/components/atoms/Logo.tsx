@@ -1,11 +1,14 @@
 export function Logo() {
   return (
-    <svg viewBox="0 0 24 24" className="size-6" fill="none" aria-label="workspaced-ai">
+    <svg viewBox="0 0 24 24" className="size-6" fill="none" role="img" aria-label="workspaced-ai">
+      <path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z" fill="currentColor" fillOpacity="0.04" />
+      <path d="m12 12 9-5v10l-9 5V12Z" fill="currentColor" fillOpacity="0.12" />
       <path
-        d="M4 9c2-3 4-3 6-1s4 2 6-1M4 14c2-3 4-3 6-1s4 2 6-1M8 19c2-3 4-3 6-1s4 2 6-1M8 4c2-3 4-3 6-1"
+        d="m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10 9-5M12 12 3 7m9 5v10"
         stroke="currentColor"
-        strokeWidth="2.2"
+        strokeWidth="1.7"
         strokeLinecap="round"
+        strokeLinejoin="round"
       />
     </svg>
   );

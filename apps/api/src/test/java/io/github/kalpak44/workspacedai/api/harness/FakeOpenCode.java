@@ -24,6 +24,10 @@ public class FakeOpenCode implements AutoCloseable {
   public record Request(String method, String path, String directory, String auth, String body) {}
 
   public final List<Request> requests = new CopyOnWriteArrayList<>();
+  public final Map<String, ObjectNode> terminals = new java.util.concurrent.ConcurrentHashMap<>();
+  public volatile boolean rejectTerminals;
+  private final java.util.concurrent.atomic.AtomicInteger nextTerminal =
+      new java.util.concurrent.atomic.AtomicInteger();
 
   /** Servers added at runtime, as the API did before it kept them in the global config. */
   public final ObjectNode globalMcp = JSON.createObjectNode();
@@ -82,6 +86,45 @@ public class FakeOpenCode implements AutoCloseable {
             new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8)));
     if (!"Basic b3BlbmNvZGU6cHc=".equals(auth)) {
       respond(exchange, 401, "");
+      return;
+    }
+    if (path.equals("/api/pty") || path.startsWith("/api/pty/")) {
+      if (rejectTerminals) {
+        respond(exchange, 503, "{}");
+        return;
+      }
+      var directory = query(exchange.getRequestURI(), "location[directory]");
+      var id = path.substring(path.lastIndexOf('/') + 1);
+      var key = directory + ":" + id;
+      if (path.equals("/api/pty") && method.equals("GET")) {
+        var data = JSON.createArrayNode();
+        terminals.forEach(
+            (own, value) -> {
+              if (own.startsWith(directory + ":")) data.add(value);
+            });
+        respond(exchange, 200, JSON.writeValueAsString(Map.of("data", data)));
+      } else if (path.equals("/api/pty") && method.equals("POST")) {
+        var body = JSON.readTree(requests.getLast().body());
+        var terminal =
+            JSON.createObjectNode()
+                .put("id", "pty_" + nextTerminal.incrementAndGet())
+                .put("title", body.path("title").asString())
+                .put("command", body.path("command").asString())
+                .put("cwd", body.path("cwd").asString())
+                .put("status", "running")
+                .put("pid", 123);
+        terminal.set("args", body.path("args"));
+        terminals.put(directory + ":" + terminal.path("id").asString(), terminal);
+        respond(exchange, 200, JSON.writeValueAsString(Map.of("data", terminal)));
+      } else if (method.equals("DELETE")) {
+        respond(exchange, terminals.remove(key) == null ? 404 : 204, null);
+      } else if (method.equals("GET") && terminals.containsKey(key)) {
+        respond(exchange, 200, JSON.writeValueAsString(Map.of("data", terminals.get(key))));
+      } else if (method.equals("PUT") && terminals.containsKey(key)) {
+        respond(exchange, 200, JSON.writeValueAsString(Map.of("data", terminals.get(key))));
+      } else {
+        respond(exchange, 404, "{}");
+      }
       return;
     }
     if (method.equals("PUT") && path.startsWith("/api/experimental/mcp/")) {

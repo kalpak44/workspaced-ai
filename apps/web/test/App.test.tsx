@@ -53,17 +53,18 @@ function visit(url: string) {
 }
 
 /** Opens the selected workspace's settings and waits for its secrets. */
-async function openSettings(user: User) {
+async function openSettings(user: User, section: "mcp" | "secrets" = "secrets") {
   await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
   await user.click(screen.getByRole("menuitem", { name: "Settings" }));
   await screen.findByText("OPENROUTER_API_KEY");
-  return screen.getByRole("region", { name: "Secrets" });
+  if (section === "secrets") await user.click(screen.getByRole("button", { name: "Secrets" }));
+  return screen.getByRole("region", { name: section === "mcp" ? "MCP servers" : "Secrets" });
 }
 
 /** Opens the destructive confirmation without accepting it. */
 async function requestWorkspaceDelete(user: User, name = "Starter") {
   await user.click(screen.getByRole("button", { name: `Actions for ${name}` }));
-  await user.click(screen.getByRole("menuitem", { name: "Delete" }));
+  await user.click(screen.getByRole("menuitem", { name: "Delete workspace" }));
   return screen.getByRole("dialog", { name: `Delete ${name}?` });
 }
 
@@ -273,7 +274,9 @@ describe("App", () => {
     await user.click(screen.getByRole("menuitem", { name: "Terminal" }));
 
     expect(path()).toBe("/workspaces/starter/terminal");
-    expect(heading()).toHaveTextContent("Terminal");
+    expect(heading()).toHaveTextContent("Terminals");
+    await user.click(await screen.findByRole("button", { name: "Create terminal" }));
+    await screen.findByRole("heading", { name: "Terminal 1" });
     expect(screen.getByRole("region", { name: "Workspace terminal" })).toBeInTheDocument();
     expect(document.title).toBe("Terminal · Starter — workspaced-ai");
   });
@@ -355,14 +358,14 @@ describe("App", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("shows the version, Swagger link and the theme switch in the account menu", async () => {
+  it("shows the version, API Reference link and the theme switch in the account menu", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     const menu = screen.getByRole("menu");
     expect(within(menu).getByText("dev")).toBeInTheDocument();
     expect(within(menu).queryByText("API")).not.toBeInTheDocument();
-    expect(within(menu).getByRole("menuitem", { name: "Swagger" })).toHaveAttribute(
+    expect(within(menu).getByRole("menuitem", { name: "API Reference" })).toHaveAttribute(
       "href",
       "/api/v1/swagger-ui",
     );
@@ -430,7 +433,7 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     const secrets = await openSettings(user);
-    expect(heading()).toHaveTextContent("Settings");
+    expect(heading()).toHaveTextContent("Workspace settings");
     expect(path()).toBe("/workspaces/starter/settings");
     expect(document.title).toBe("Settings · Starter — workspaced-ai");
     expect(within(secrets).getByText("Model provider")).toBeInTheDocument();
@@ -533,6 +536,7 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);
+    await user.click(screen.getByRole("button", { name: "Back to workspace" }));
     await user.click(screen.getByRole("button", { name: "Other" }));
     expect(heading()).toHaveTextContent("Other");
     expect(path()).toBe("/workspaces/other");
@@ -545,7 +549,7 @@ describe("App", () => {
     FakeEventSource.emit("starter", "FAILED");
     expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
     await openSettings(user);
-    expect(heading()).toHaveTextContent("Settings");
+    expect(heading()).toHaveTextContent("Workspace settings");
   });
 
   it("starts a session from a typed task and streams the reply into its own page", async () => {
@@ -668,8 +672,14 @@ describe("App", () => {
     await user.type(screen.getByRole("textbox", { name: "Message" }), "Draft a plan{Enter}");
     await waitFor(() => expect(path()).toBe("/workspaces/starter/sessions/s-1"));
 
-    await user.click(screen.getByRole("button", { name: "Delete session" }));
-    expect(path()).toBe("/workspaces/starter");
+    await user.click(screen.getByRole("button", { name: "Delete session: New session" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete session?" });
+    expect(dialog).toHaveTextContent("Your workspace and its files will be kept");
+    expect(path()).toBe("/workspaces/starter/sessions/s-1");
+    expect(api.sessions.get("starter")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Actions for Starter" })).not.toBeInTheDocument();
+    await user.click(within(dialog).getByRole("button", { name: "Delete session" }));
+    await waitFor(() => expect(path()).toBe("/workspaces/starter"));
     await waitFor(() => expect(api.sessions.get("starter")).toEqual([]));
     await sessionsHere();
   });
@@ -708,8 +718,66 @@ describe("App", () => {
     await renderLoaded();
     const list = await screen.findByRole("region", { name: "Sessions" });
     await user.click(await within(list).findByRole("button", { name: "Delete Keep" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete session?" });
+    expect(dialog).toHaveTextContent("Keep");
+    expect(api.sessions.get("starter")).toHaveLength(1);
+    await user.click(within(dialog).getByRole("button", { name: "Delete session" }));
     await waitFor(() => expect(within(list).queryByText("Keep")).not.toBeInTheDocument());
     expect(within(list).getByText(/No sessions yet/)).toBeInTheDocument();
+  });
+
+  it("isolates general settings navigation from workspace management", async () => {
+    visit("/settings");
+    render(<App />);
+    await screen.findByRole("heading", { name: "General settings" });
+    expect(screen.getByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Actions for Starter" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "New workspace" })).not.toBeInTheDocument();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Workspaces" }));
+    await sessionsHere();
+    expect(screen.getByRole("button", { name: "Actions for Starter" })).toBeInTheDocument();
+  });
+
+  it("keeps a session open when deletion is cancelled or fails", async () => {
+    api.sessions.set("starter", [{ id: "keep", title: "Important conversation", path: "/p/keep", createdAt: new Date().toISOString() }]);
+    visit("/workspaces/starter/sessions/keep");
+    const user = userEvent.setup();
+    await renderLoaded();
+    await screen.findByRole("heading", { name: "Important conversation" });
+    expect(screen.getByRole("navigation", { name: "Session navigation" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Actions for Starter" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Delete session: Important conversation" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(api.sessions.get("starter")).toHaveLength(1);
+    expect(path()).toBe("/workspaces/starter/sessions/keep");
+    api.state.harnessDown = true;
+    await user.click(screen.getByRole("button", { name: "Delete session: Important conversation" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete session" }));
+    await screen.findByText("Could not delete the session");
+    expect(path()).toBe("/workspaces/starter/sessions/keep");
+    expect(api.sessions.get("starter")).toHaveLength(1);
+  });
+
+  it("deletes another session from its sidebar row and starts a new task from the bottom action", async () => {
+    api.sessions.set("starter", [
+      { id: "active", title: "Current conversation", path: "/p/active", createdAt: new Date().toISOString() },
+      { id: "other", title: "Old conversation", path: "/p/other", createdAt: new Date().toISOString() },
+    ]);
+    visit("/workspaces/starter/sessions/active");
+    const user = userEvent.setup();
+    await renderLoaded();
+    await screen.findByRole("heading", { name: "Current conversation" });
+    await user.click(screen.getByRole("button", { name: "Delete session: Old conversation" }));
+    const dialog = screen.getByRole("dialog", { name: "Delete session?" });
+    expect(dialog).toHaveTextContent("Old conversation");
+    await user.click(within(dialog).getByRole("button", { name: "Delete session" }));
+    await waitFor(() => expect(api.sessions.get("starter")?.map((session) => session.id)).toEqual(["active"]));
+    expect(path()).toBe("/workspaces/starter/sessions/active");
+    expect(heading()).toHaveTextContent("Current conversation");
+    await user.click(screen.getByRole("button", { name: "New session" }));
+    await sessionsHere();
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveFocus();
   });
 
   it("reports a harness that is not answering, and keeps what was typed", async () => {
@@ -894,7 +962,7 @@ describe("App", () => {
   it("adds an MCP server with a header, shows it connected, and removes it", async () => {
     const user = userEvent.setup();
     await renderLoaded();
-    await openSettings(user);
+    await openSettings(user, "mcp");
     const panel = screen.getByRole("region", { name: "MCP servers" });
     const form = within(panel).getByRole("form", { name: "Add an MCP server" });
     await user.type(within(form).getByRole("textbox", { name: "Name" }), "github");
@@ -921,7 +989,7 @@ describe("App", () => {
     api.mcp.set("starter", [{ name: "github", status: "connected" }]);
     const user = userEvent.setup();
     await renderLoaded();
-    await openSettings(user);
+    await openSettings(user, "mcp");
     const panel = screen.getByRole("region", { name: "MCP servers" });
     await user.click(within(panel).getByRole("button", { name: "JSON" }));
     const form = within(panel).getByRole("form", { name: "Add MCP servers from JSON" });
@@ -960,7 +1028,7 @@ describe("App", () => {
     api.mcp.set("starter", [{ name: "Local.Tools", status: "connected" }]);
     const user = userEvent.setup();
     await renderLoaded();
-    await openSettings(user);
+    await openSettings(user, "mcp");
     const panel = screen.getByRole("region", { name: "MCP servers" });
     expect(await within(panel).findByText("Local.Tools")).toBeInTheDocument();
     await user.click(within(panel).getByRole("button", { name: "Remove Local.Tools" }));
@@ -971,7 +1039,7 @@ describe("App", () => {
     api.mcp.set("starter", [{ name: "github", status: "failed" }]);
     const user = userEvent.setup();
     await renderLoaded();
-    await openSettings(user);
+    await openSettings(user, "mcp");
     const panel = screen.getByRole("region", { name: "MCP servers" });
     expect(await within(panel).findByText("Failed")).toBeInTheDocument();
     const name = within(panel).getByRole("textbox", { name: "Name" });

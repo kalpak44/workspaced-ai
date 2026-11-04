@@ -146,7 +146,7 @@ export function WorkspaceItem({
           >
             <span className="flex items-center gap-2">
               <Trash2 aria-hidden className="size-3.5" />
-              Delete
+              Delete workspace
             </span>
           </MenuItem>
         </Menu>

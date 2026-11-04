@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 interface Props {
   readonly header: ReactNode;
-  readonly sidebar: ReactNode;
+  readonly sidebar?: ReactNode;
   /** Shown above the page, e.g. an error banner. */
   readonly notice?: ReactNode;
   /** The page, which brings its own header. */

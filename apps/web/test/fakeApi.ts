@@ -4,6 +4,7 @@ import type { Secret } from "../src/api/secretsApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
+import type { TerminalSession } from "../src/api/terminalsApi";
 
 export const OPENROUTER = {
   id: "openrouter",
@@ -88,6 +89,7 @@ export function installFakeApi(
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
   const mcp = new Map<string, McpServer[]>();
+  const terminals = new Map<string, TerminalSession[]>();
   // Every server POSTed, as sent, so a test can check what the UI built.
   const mcpPosted: NewMcpServer[] = [];
   const catalogue: ModelCatalogue = {
@@ -107,6 +109,9 @@ export function installFakeApi(
     holdDelete: null as Promise<void> | null,
     holdSecretRemove: null as Promise<void> | null,
     nextSession: 1,
+    nextTerminal: 1,
+    failTerminalDelete: false,
+    failTerminalCreate: false,
     failEditAfterTruncate: false,
     failAnswer: false,
     // Answers every session call with 503, as a workspace whose harness is down does.
@@ -126,6 +131,25 @@ export function installFakeApi(
       return json([OPENROUTER]);
     }
     const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers)(?:\/(.+))?$/.exec(url);
+    const terminalRoute = /\/api\/v1\/workspaces\/([^/]+)\/terminals(?:\/([^/]+))?$/.exec(url);
+    if (terminalRoute) {
+      const [, workspaceId, terminalId] = terminalRoute;
+      if (!rows.some((workspace) => workspace.id === workspaceId)) return json({}, 404);
+      if (state.harnessDown) return json({}, 503);
+      const list = terminals.get(workspaceId) ?? [];
+      if (init?.method === "POST") {
+        if (state.failTerminalCreate) return json({}, 503);
+        const terminal: TerminalSession = { id: `pty_${state.nextTerminal++}`, title: JSON.parse(String(init.body)).title, command: "/bin/bash", cwd: "/home/workspace/project", status: "running", pid: 123, exitCode: null };
+        terminals.set(workspaceId, [...list, terminal]);
+        return json(terminal, 201);
+      }
+      if (init?.method === "DELETE") {
+        if (state.failTerminalDelete) return json({}, 503);
+        terminals.set(workspaceId, list.filter((terminal) => terminal.id !== terminalId));
+        return new Response(null, { status: 204 });
+      }
+      return json(list);
+    }
     if (settingsRoute) {
       return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
     }
@@ -294,5 +318,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, catalogue, state, fetchFn };
+  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, catalogue, state, fetchFn };
 }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useModelProviders } from "../../hooks/useModelProviders";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
@@ -12,6 +12,7 @@ import { TerminalPage } from "./TerminalPage";
 import { WorkspacePage } from "./WorkspacePage";
 
 const APP = "workspaced-ai";
+const GeneralSettingsPage = lazy(() => import("./GeneralSettingsPage").then((page) => ({ default: page.GeneralSettingsPage })));
 
 /**
  * The frame every page shares — the bar, the sidebar of workspaces, the create dialog — and
@@ -61,7 +62,10 @@ export function WorkspacesPage() {
 
   let page;
   let tabTitle: string;
-  if (loading || (workspaceId !== null && !workspace)) {
+  if (route.name === "general-settings") {
+    tabTitle = "General settings";
+    page = <Suspense fallback={<EmptyState busy title="Loading settings…" hint="Preparing your preferences" />}><GeneralSettingsPage /></Suspense>;
+  } else if (loading || (workspaceId !== null && !workspace)) {
     tabTitle = "Workspaces";
     page = (
       <>
@@ -88,7 +92,7 @@ export function WorkspacesPage() {
     );
   } else if (route.name === "terminal") {
     tabTitle = `Terminal · ${workspace.name}`;
-    page = <TerminalPage workspace={workspace} deleting={deleting.has(workspace.id)} />;
+    page = <TerminalPage key={workspace.id} workspace={workspace} terminalId={route.terminalId} deleting={deleting.has(workspace.id)} />;
   } else if (route.name === "session") {
     tabTitle = `${pageTitle ?? "Session"} · ${workspace.name}`;
     page = (
@@ -114,7 +118,7 @@ export function WorkspacesPage() {
     <AppLayout
       header={<TopBar theme={theme} onThemeChange={setTheme} />}
       sidebar={
-        <Sidebar
+        route.name !== "session" && route.name !== "terminal" && route.name !== "settings" && route.name !== "general-settings" && <Sidebar
           workspaces={workspaces}
           selectedId={workspace?.id ?? null}
           deleting={deleting}

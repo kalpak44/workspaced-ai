@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { IconButton } from "../atoms";
+import { Button } from "../atoms";
 import { WorkspaceItem } from "../molecules";
 
 interface Props {
@@ -29,11 +29,7 @@ export function Sidebar({
 }: Props) {
   return (
     <aside className="flex w-64 shrink-0 flex-col border-r border-zinc-200 dark:border-zinc-800">
-      <div className="flex h-14 shrink-0 items-center justify-between border-b border-zinc-200 pr-3 pl-5 dark:border-zinc-800">
-        <h2 className="text-sm font-medium">Workspaces</h2>
-        <IconButton label="New workspace" icon={Plus} onClick={onNew} />
-      </div>
-      <ul className="flex-1 space-y-0.5 overflow-y-auto p-3 text-sm">
+      <ul aria-label="Workspaces" className="min-h-0 flex-1 space-y-0.5 overflow-y-auto p-3 text-sm">
         {workspaces.map((workspace) => (
           <WorkspaceItem
             key={workspace.id}
@@ -48,6 +44,9 @@ export function Sidebar({
           />
         ))}
       </ul>
+      <div className="shrink-0 border-t border-zinc-200 p-3 dark:border-zinc-800 [&>button]:w-full [&>button]:justify-center">
+        <Button label="New workspace" icon={Plus} variant="secondary" onClick={onNew} />
+      </div>
     </aside>
   );
 }

@@ -19,6 +19,89 @@ import tools.jackson.databind.json.JsonMapper;
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 class OpenCodeLiveTest {
   @Test
+  void switchesBetweenPersistentTerminalsAndDeletesOnlyTheSelectedShell() throws Exception {
+    var harness = new OpenCodeHarness(JsonMapper.builder().build());
+    var endpoint =
+        new HarnessEndpoint(
+            URI.create(System.getProperty("opencode.live.url")),
+            System.getProperty("opencode.live.password"));
+    var first = harness.createTerminal(endpoint, Harness.PROJECT_ROOT, "Terminal lifecycle first");
+    var second =
+        harness.createTerminal(endpoint, Harness.PROJECT_ROOT, "Terminal lifecycle second");
+    try {
+      var output = new ByteArrayOutputStream();
+      try (var connection =
+          harness.connectTerminal(endpoint, Harness.PROJECT_ROOT, first.id(), output, () -> {})) {
+        connection.resize(100, 30);
+        connection.input(
+            "export WORKSPACED_CHECK=retained; printf 'CHECK_%s:%s\\n' 'FIRST' \"$WORKSPACED_CHECK\"\n"
+                .getBytes(StandardCharsets.UTF_8));
+        awaitOutput(output, "CHECK_FIRST:retained");
+      }
+      assertThat(
+              harness
+                  .terminalInfo(endpoint, Harness.PROJECT_ROOT, first.id())
+                  .orElseThrow()
+                  .status())
+          .isEqualTo("running");
+      var otherOutput = new ByteArrayOutputStream();
+      try (var connection =
+          harness.connectTerminal(
+              endpoint, Harness.PROJECT_ROOT, second.id(), otherOutput, () -> {})) {
+        connection.input(
+            "printf 'CHECK_%s:%s\\n' 'SECOND' \"${WORKSPACED_CHECK:-isolated}\"\n"
+                .getBytes(StandardCharsets.UTF_8));
+        awaitOutput(otherOutput, "CHECK_SECOND:isolated");
+      }
+      var reattached = new ByteArrayOutputStream();
+      try (var connection =
+          harness.connectTerminal(
+              endpoint, Harness.PROJECT_ROOT, first.id(), reattached, () -> {})) {
+        awaitOutput(reattached, "CHECK_FIRST:retained");
+        connection.input(
+            "printf 'CHECK_%s:%s\\n' 'REATTACHED' \"$WORKSPACED_CHECK\"\n"
+                .getBytes(StandardCharsets.UTF_8));
+        awaitOutput(reattached, "CHECK_REATTACHED:retained");
+        harness.deleteTerminal(endpoint, Harness.PROJECT_ROOT, second.id());
+        assertThat(harness.terminalInfo(endpoint, Harness.PROJECT_ROOT, second.id())).isEmpty();
+        assertThat(harness.terminals(endpoint, Harness.PROJECT_ROOT))
+            .anyMatch(terminal -> terminal.id().equals(first.id()));
+        connection.input("exit 7\n".getBytes(StandardCharsets.UTF_8));
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while ("running"
+                .equals(
+                    harness
+                        .terminalInfo(endpoint, Harness.PROJECT_ROOT, first.id())
+                        .orElseThrow()
+                        .status())
+            && System.nanoTime() < deadline) Thread.sleep(20);
+        assertThat(
+                harness
+                    .terminalInfo(endpoint, Harness.PROJECT_ROOT, first.id())
+                    .orElseThrow()
+                    .exitCode())
+            .isEqualTo(7);
+      }
+    } finally {
+      harness.deleteTerminal(endpoint, Harness.PROJECT_ROOT, first.id());
+      harness.deleteTerminal(endpoint, Harness.PROJECT_ROOT, second.id());
+    }
+  }
+
+  private static void awaitOutput(ByteArrayOutputStream output, String expected) throws Exception {
+    var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+    while (System.nanoTime() < deadline) {
+      synchronized (output) {
+        if (output.toString(StandardCharsets.UTF_8).contains(expected)) return;
+      }
+      Thread.sleep(20);
+    }
+    synchronized (output) {
+      assertThat(output.toString(StandardCharsets.UTF_8)).contains(expected);
+    }
+  }
+
+  @Test
   void addsAndRemovesGlobalMcpServersThroughOpenCode() throws Exception {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());
     var endpoint =

@@ -1,7 +1,6 @@
 package io.github.kalpak44.workspacedai.api.terminal;
 
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
@@ -21,25 +20,28 @@ import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorato
 @Component
 public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
 
-  private static final Pattern WORKSPACE = Pattern.compile("/workspaces/([^/]+)/terminal$");
+  private static final Pattern WORKSPACE =
+      Pattern.compile("/workspaces/([^/]+)/terminals/(pty[A-Za-z0-9_-]{1,200})/connect$");
   private static final Pattern RESIZE = Pattern.compile("resize:(\\d+):(\\d+)");
   private static final int MAX_DIMENSION = 1000;
 
-  private final WorkspaceService workspaces;
+  private final TerminalService service;
   private final Map<String, WorkspaceTerminal> terminals = new ConcurrentHashMap<>();
 
-  public TerminalWebSocketHandler(WorkspaceService workspaces) {
-    this.workspaces = workspaces;
+  public TerminalWebSocketHandler(TerminalService service) {
+    this.service = service;
   }
 
   @Override
   public void afterConnectionEstablished(WebSocketSession raw) throws Exception {
     var session = new ConcurrentWebSocketSessionDecorator(raw, 10_000, 1_048_576);
     try {
-      var id = workspaceId(session);
+      var match = terminalPath(session);
+      var id = UUID.fromString(match.group(1));
       var terminal =
-          workspaces.terminal(
+          service.connect(
               id,
+              match.group(2),
               new SocketOutput(session),
               () -> close(session, CloseStatus.NORMAL.withReason("shell exited")));
       if (session.isOpen()) {
@@ -72,6 +74,9 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
     if (terminal == null || !resize.matches()) {
       return;
     }
+    if (resize.group(1).length() > 4 || resize.group(2).length() > 4) {
+      return;
+    }
     var columns = Integer.parseInt(resize.group(1));
     var rows = Integer.parseInt(resize.group(2));
     if (columns > 0 && rows > 0 && columns <= MAX_DIMENSION && rows <= MAX_DIMENSION) {
@@ -92,13 +97,13 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
     close(session, CloseStatus.SERVER_ERROR);
   }
 
-  private static UUID workspaceId(WebSocketSession session) {
+  private static java.util.regex.Matcher terminalPath(WebSocketSession session) {
     var uri = session.getUri();
     var match = WORKSPACE.matcher(uri == null ? "" : uri.getPath());
     if (!match.find()) {
       throw new IllegalArgumentException("invalid terminal path");
     }
-    return UUID.fromString(match.group(1));
+    return match;
   }
 
   private static String safeReason(RuntimeException error) {

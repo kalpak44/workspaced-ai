@@ -1,8 +1,10 @@
 import { queuePrompt } from "../../hooks/useChat";
 import { navigate } from "../../hooks/useRoute";
 import { useSessions } from "../../hooks/useSessions";
+import { useState } from "react";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { ChatModelPicker, SessionList } from "../organisms";
+import { DeleteSessionDialog } from "../organisms/DeleteSessionDialog";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
 interface Props {
@@ -15,6 +17,8 @@ interface Props {
 export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
   const ready = workspace.status === "READY" && !deleting;
   const sessions = useSessions(ready ? workspace.id : null);
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const deleteTarget = sessions.sessions.find((session) => session.id === deleteId);
   const open = (sessionId: string) =>
     navigate({ name: "session", workspaceId: workspace.id, sessionId });
 
@@ -42,11 +46,12 @@ export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
           onDismissError={sessions.dismissError}
           onStart={start}
           onOpen={open}
-          onDelete={sessions.remove}
+          onDelete={setDeleteId}
         />
       ) : (
         <WorkspaceStatusView workspace={workspace} deleting={deleting} />
       )}
+      {deleteTarget && <DeleteSessionDialog title={deleteTarget.title ?? "New session"} onClose={() => setDeleteId(null)} onConfirm={() => { sessions.remove(deleteTarget.id); setDeleteId(null); }} />}
     </>
   );
 }

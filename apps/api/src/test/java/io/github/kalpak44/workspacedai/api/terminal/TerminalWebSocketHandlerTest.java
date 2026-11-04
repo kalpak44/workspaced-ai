@@ -9,7 +9,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
 import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -25,15 +24,16 @@ class TerminalWebSocketHandlerTest {
 
   @Test
   void bridgesInputOutputResizeAndClose() throws Exception {
-    var service = mock(WorkspaceService.class);
+    var service = mock(TerminalService.class);
     var terminal = mock(WorkspaceTerminal.class);
     var id = UUID.randomUUID();
     var session = mock(WebSocketSession.class);
     when(session.getId()).thenReturn("socket-1");
     when(session.getUri())
-        .thenReturn(URI.create("ws://localhost/api/v1/workspaces/" + id + "/terminal"));
+        .thenReturn(
+            URI.create("ws://localhost/api/v1/workspaces/" + id + "/terminals/pty_1/connect"));
     when(session.isOpen()).thenReturn(true);
-    when(service.terminal(eq(id), any(), any())).thenReturn(terminal);
+    when(service.connect(eq(id), eq("pty_1"), any(), any())).thenReturn(terminal);
     var handler = new TerminalWebSocketHandler(service);
 
     handler.afterConnectionEstablished(session);
@@ -46,7 +46,7 @@ class TerminalWebSocketHandlerTest {
     verify(terminal).close();
 
     var output = ArgumentCaptor.forClass(OutputStream.class);
-    verify(service).terminal(eq(id), output.capture(), any());
+    verify(service).connect(eq(id), eq("pty_1"), output.capture(), any());
     output.getValue().write("ready".getBytes(StandardCharsets.UTF_8));
     var message = ArgumentCaptor.forClass(BinaryMessage.class);
     verify(session).sendMessage(message.capture());

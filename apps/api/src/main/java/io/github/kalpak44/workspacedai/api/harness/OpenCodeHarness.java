@@ -412,6 +412,74 @@ public class OpenCodeHarness implements Harness {
   @Override
   public WorkspaceTerminal terminal(
       HarnessEndpoint endpoint, String directory, OutputStream output, Runnable onExit) {
+    var created = createTerminal(endpoint, directory, "Workspace terminal");
+    WorkspaceTerminal connection;
+    try {
+      connection = connectTerminal(endpoint, directory, created.id(), output, onExit);
+    } catch (RuntimeException error) {
+      deleteTerminal(endpoint, directory, created.id());
+      throw error;
+    }
+    return new WorkspaceTerminal() {
+      public void input(byte[] bytes) throws IOException {
+        connection.input(bytes);
+      }
+
+      public void resize(int columns, int rows) {
+        connection.resize(columns, rows);
+      }
+
+      public void close() {
+        try {
+          connection.close();
+        } finally {
+          deleteTerminal(endpoint, directory, created.id());
+        }
+      }
+    };
+  }
+
+  @Override
+  public List<TerminalSession> terminals(HarnessEndpoint endpoint, String directory) {
+    var result = new ArrayList<TerminalSession>();
+    for (var item : call(endpoint, "GET", withLocation("/api/pty", directory), null).path("data")) {
+      result.add(terminalSession(item));
+    }
+    return List.copyOf(result);
+  }
+
+  @Override
+  public Optional<TerminalSession> terminalInfo(
+      HarnessEndpoint endpoint, String directory, String id) {
+    var response = send(request(endpoint, withLocation("/api/pty/" + encode(id), directory)).GET());
+    if (response.statusCode() == 404) {
+      return Optional.empty();
+    }
+    return Optional.of(terminalSession(json.readTree(check(response).body()).path("data")));
+  }
+
+  @Override
+  public void deleteTerminal(HarnessEndpoint endpoint, String directory, String id) {
+    var response =
+        send(request(endpoint, withLocation("/api/pty/" + encode(id), directory)).DELETE());
+    if (response.statusCode() != 404) {
+      check(response);
+    }
+  }
+
+  private static TerminalSession terminalSession(JsonNode node) {
+    return new TerminalSession(
+        text(node, "id"),
+        text(node, "title"),
+        text(node, "command"),
+        text(node, "cwd"),
+        text(node, "status"),
+        node.path("pid").asLong(),
+        node.path("exitCode").isNumber() ? node.path("exitCode").asInt() : null);
+  }
+
+  @Override
+  public TerminalSession createTerminal(HarnessEndpoint endpoint, String directory, String title) {
     validate(endpoint, directory);
     var created =
         call(
@@ -426,9 +494,18 @@ public class OpenCodeHarness implements Harness {
                     "cwd",
                     directory,
                     "title",
-                    "Workspace terminal"))
+                    title))
             .path("data");
-    var ptyId = text(created, "id");
+    return terminalSession(created);
+  }
+
+  @Override
+  public WorkspaceTerminal connectTerminal(
+      HarnessEndpoint endpoint,
+      String directory,
+      String ptyId,
+      OutputStream output,
+      Runnable onExit) {
     var tokenResponse =
         check(
             send(
@@ -446,11 +523,16 @@ public class OpenCodeHarness implements Harness {
                 + "&ticket="
                 + encode(ticket));
     var closed = new AtomicBoolean();
-    var socket =
-        http.newWebSocketBuilder()
-            .connectTimeout(CONNECT_TIMEOUT)
-            .buildAsync(socketUri, new TerminalListener(output, closed, onExit))
-            .join();
+    WebSocket socket;
+    try {
+      socket =
+          http.newWebSocketBuilder()
+              .connectTimeout(CONNECT_TIMEOUT)
+              .buildAsync(socketUri, new TerminalListener(output, closed, onExit))
+              .join();
+    } catch (RuntimeException error) {
+      throw new HarnessUnavailableException("could not connect to the terminal", error);
+    }
     return new WorkspaceTerminal() {
       @Override
       public void input(byte[] bytes) {
@@ -470,12 +552,6 @@ public class OpenCodeHarness implements Harness {
       public void close() {
         if (closed.compareAndSet(false, true)) {
           socket.sendClose(WebSocket.NORMAL_CLOSURE, "closed");
-          var response =
-              send(
-                  request(endpoint, withLocation("/api/pty/" + encode(ptyId), directory)).DELETE());
-          if (response.statusCode() != 404) {
-            check(response);
-          }
         }
       }
     };

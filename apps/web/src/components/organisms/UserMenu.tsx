@@ -1,6 +1,8 @@
 import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useDismiss } from "../../hooks/useDismiss";
+import { useGeneralSettings } from "../../hooks/useGeneralSettings";
+import { navigate } from "../../hooks/useRoute";
 import type { Theme } from "../../hooks/useTheme";
 import { Avatar } from "../atoms";
 import { Menu, MenuItem, MenuLink, ThemeSwitch } from "../molecules";
@@ -14,6 +16,7 @@ interface Props {
 }
 
 export function UserMenu({ theme, onThemeChange }: Props) {
+  const { settings } = useGeneralSettings();
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
@@ -28,7 +31,7 @@ export function UserMenu({ theme, onThemeChange }: Props) {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1 rounded-md p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
       >
-        <Avatar />
+        <Avatar src={settings.avatar} />
         <ChevronsUpDown className="size-3.5 text-zinc-400" />
       </button>
       {open && (
@@ -37,11 +40,11 @@ export function UserMenu({ theme, onThemeChange }: Props) {
             <span>Version</span>
             <span className="text-emerald-500">{import.meta.env.VITE_APP_VERSION ?? "dev"}</span>
           </div>
-          <MenuItem className={ROW} onClick={close}>
+          <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "general-settings" }); }}>
             Settings
           </MenuItem>
           <MenuLink className={`${ROW} ${SEPARATED}`} href="/api/v1/swagger-ui">
-            Swagger
+            API Reference
           </MenuLink>
           <div className={`${ROW} ${SEPARATED}`}>
             <span>Theme</span>

@@ -1,155 +1,53 @@
-import { useEffect, useRef, useState } from "react";
+import { RefreshCw, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { navigate } from "../../hooks/useRoute";
+import { useTerminals, type TerminalSession } from "../../hooks/useTerminals";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { PageHeader } from "../molecules";
+import { Button, IconButton } from "../atoms";
+import { EmptyState, ErrorBanner, Modal, ModalBody, ModalFooter, PageHeader } from "../molecules";
+import { TerminalConsole } from "../organisms/TerminalConsole";
+import { TerminalSidebar } from "../organisms/TerminalSidebar";
+import { ContextLayout } from "../templates/ContextLayout";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
 interface Props {
   readonly workspace: Workspace;
+  readonly terminalId?: string;
   readonly deleting: boolean;
 }
 
-type ConnectionStatus = "connecting" | "connected" | "closed";
-
-function socketUrl(workspaceId: string): string {
-  const protocol = globalThis.location.protocol === "https:" ? "wss:" : "ws:";
-  return `${protocol}//${globalThis.location.host}/api/v1/workspaces/${workspaceId}/terminal`;
-}
-
-/** An xterm.js TTY connected to Bash inside this workspace's pod. */
-export function TerminalPage({ workspace, deleting }: Props) {
+export function TerminalPage({ workspace, terminalId, deleting }: Props) {
   const ready = workspace.status === "READY" && !deleting;
-  const host = useRef<HTMLDivElement>(null);
-  const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const terminals = useTerminals(ready ? workspace.id : null);
+  const [deleteTarget, setDeleteTarget] = useState<TerminalSession | null>(null);
+  const selected = terminals.terminals.find((terminal) => terminal.id === terminalId);
+  const open = (id?: string, replace = false) => navigate({ name: "terminal", workspaceId: workspace.id, ...(id ? { terminalId: id } : {}) }, { replace });
 
   useEffect(() => {
-    if (!ready || !host.current) {
-      return undefined;
+    if (ready && !terminals.loading && !terminals.error && !selected && terminals.terminals.length > 0) {
+      navigate({ name: "terminal", workspaceId: workspace.id, terminalId: terminals.terminals[0].id }, { replace: true });
+    } else if (ready && !terminals.loading && !terminals.error && terminalId && terminals.terminals.length === 0) {
+      navigate({ name: "terminal", workspaceId: workspace.id }, { replace: true });
     }
-    let disposed = false;
-    let dispose = () => {};
-    void Promise.all([import("@xterm/xterm"), import("@xterm/addon-fit")]).then(
-      ([{ Terminal: XTerm }, { FitAddon }]) => {
-        if (disposed || !host.current) {
-          return;
-        }
-        const terminal = new XTerm({
-          cursorBlink: true,
-          cursorStyle: "bar",
-          fontFamily: '"JetBrains Mono", "SFMono-Regular", Consolas, monospace',
-          fontSize: 13,
-          lineHeight: 1.35,
-          scrollback: 5000,
-          theme: {
-            background: "#09090b",
-            foreground: "#e4e4e7",
-            cursor: "#fafafa",
-            cursorAccent: "#09090b",
-            selectionBackground: "#3f3f4680",
-            black: "#27272a",
-            red: "#f87171",
-            green: "#4ade80",
-            yellow: "#facc15",
-            blue: "#60a5fa",
-            magenta: "#c084fc",
-            cyan: "#22d3ee",
-            white: "#e4e4e7",
-            brightBlack: "#71717a",
-            brightRed: "#fca5a5",
-            brightGreen: "#86efac",
-            brightYellow: "#fde047",
-            brightBlue: "#93c5fd",
-            brightMagenta: "#d8b4fe",
-            brightCyan: "#67e8f9",
-            brightWhite: "#fafafa",
-          },
-        });
-        const fit = new FitAddon();
-        terminal.loadAddon(fit);
-        terminal.open(host.current);
+  }, [ready, terminals.loading, terminals.error, terminals.terminals, selected, terminalId, workspace.id]);
 
-        const socket = new WebSocket(socketUrl(workspace.id));
-        socket.binaryType = "arraybuffer";
-        const resize = () => {
-          fit.fit();
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.send(`resize:${terminal.cols}:${terminal.rows}`);
-          }
-        };
-        socket.addEventListener("open", () => {
-          setStatus("connected");
-          resize();
-          terminal.focus();
-        });
-        socket.addEventListener("message", (event) => {
-          if (event.data instanceof ArrayBuffer) {
-            terminal.write(new Uint8Array(event.data));
-          }
-        });
-        socket.addEventListener("close", (event) => {
-          setStatus("closed");
-          terminal.writeln(
-            `\r\n\x1b[90m[terminal closed${event.reason ? `: ${event.reason}` : ""}]\x1b[0m`,
-          );
-        });
-        const input = terminal.onData((data) => {
-          if (socket.readyState === WebSocket.OPEN) {
-            socket.send(new TextEncoder().encode(data));
-          }
-        });
-        const observer = new ResizeObserver(resize);
-        observer.observe(host.current);
-        resize();
-        dispose = () => {
-          observer.disconnect();
-          input.dispose();
-          socket.close();
-          terminal.dispose();
-        };
-      },
-    );
-
-    return () => {
-      disposed = true;
-      dispose();
-    };
-  }, [ready, workspace.id]);
-
-  if (!ready) {
-    return <WorkspaceStatusView workspace={workspace} deleting={deleting} />;
+  async function create() {
+    const terminal = await terminals.create();
+    if (terminal) open(terminal.id);
   }
 
-  return (
-    <>
-      <PageHeader
-        title="Terminal"
-        crumbs={[
-          {
-            label: workspace.name,
-            onClick: () => navigate({ name: "workspace", workspaceId: workspace.id }),
-          },
-        ]}
-        badge={
-          <span className="ml-1 flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-            <span
-              className={`size-1.5 rounded-full ${
-                status === "connected"
-                  ? "bg-emerald-500"
-                  : status === "closed"
-                    ? "bg-rose-500"
-                    : "animate-pulse bg-amber-400"
-              }`}
-            />
-            {status}
-          </span>
-        }
-      />
-      <section aria-label="Workspace terminal" className="flex min-h-0 flex-1 bg-zinc-950 p-3 sm:p-4">
-        <div
-          ref={host}
-          className="min-h-0 min-w-0 flex-1 overflow-hidden rounded-md border border-zinc-800 bg-zinc-950 p-3 shadow-[0_18px_60px_-30px_rgba(0,0,0,0.8)]"
-        />
-      </section>
-    </>
-  );
+  return <ContextLayout sidebar={<TerminalSidebar workspaceName={workspace.name} terminals={terminals.terminals} selectedId={selected?.id} loading={terminals.loading} creating={terminals.creating} removing={terminals.removing} disabled={!ready || terminals.loading || terminals.removing !== null} onBack={() => navigate({ name: "workspace", workspaceId: workspace.id })} onCreate={() => { void create(); }} onSelect={(id) => { setDeleteTarget(null); open(id); }} onDelete={(id) => setDeleteTarget(terminals.terminals.find((terminal) => terminal.id === id) ?? null)} />}>
+    <PageHeader title={selected?.title ?? "Terminals"} crumbs={[{ label: workspace.name, onClick: () => navigate({ name: "workspace", workspaceId: workspace.id }) }]} actions={<>
+      <IconButton label="Refresh terminals" title="Refresh terminals" icon={RefreshCw} disabled={!ready || terminals.creating || terminals.removing !== null} onClick={() => { terminals.dismissError(); void terminals.refresh(); }} />
+    </>} />
+    {terminals.error && <ErrorBanner message={terminals.error} onDismiss={terminals.dismissError} />}
+    {!ready ? <WorkspaceStatusView workspace={workspace} deleting={deleting} /> : terminals.loading ? <EmptyState busy title="Loading terminals…" hint="Fetching the workspace's shell sessions" /> : selected ? <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 sm:p-6">
+      <p className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-zinc-500 dark:text-zinc-400"><span className="font-mono">{selected.cwd}</span><span>{selected.command} · PID {selected.pid}</span>{selected.status === "exited" && <span>Exit code {selected.exitCode ?? "unknown"}</span>}</p>
+      <TerminalConsole key={selected.id} workspaceId={workspace.id} terminalId={selected.id} running={selected.status === "running"} onDisconnect={terminals.refresh} />
+    </div> : <EmptyState title="No terminals yet" hint="Create a shell to work with your workspace's files. You can keep several terminals running and switch between them." action={{ label: "Create terminal", onClick: () => { void create(); } }} />}
+    {deleteTarget && <Modal title="Delete terminal?" description="This stops the shell and any commands running in it." onClose={() => { if (!terminals.removing) setDeleteTarget(null); }}>
+      <ModalBody><p className="text-sm text-zinc-600 dark:text-zinc-300">Delete <strong>{deleteTarget.title}</strong>? Workspace files and AI conversations will be kept.</p>{terminals.error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{terminals.error}</p>}</ModalBody>
+      <ModalFooter><Button label="Cancel" variant="secondary" autoFocus disabled={terminals.removing !== null} onClick={() => setDeleteTarget(null)} /><Button label="Delete terminal" variant="danger" icon={Trash2} busy={terminals.removing !== null} onClick={() => { void terminals.remove(deleteTarget.id).then((removed) => { if (removed) { setDeleteTarget(null); if (selected?.id === deleteTarget.id) open(undefined, true); } }); }} /></ModalFooter>
+    </Modal>}
+  </ContextLayout>;
 }
