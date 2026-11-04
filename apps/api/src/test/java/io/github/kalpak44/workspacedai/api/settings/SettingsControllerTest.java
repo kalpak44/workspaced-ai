@@ -125,7 +125,7 @@ class SettingsControllerTest {
     assertThat(server.get("status").asString()).isEqualTo("connected");
     // Header values never come back: one may be a token typed in by hand.
     assertThat(added.body()).doesNotContain("Bearer");
-    assertThat(server.get("headers").get(0).asString()).isEqualTo("Authorization");
+    assertThat(server.has("headers")).isFalse();
     assertThat(OPENCODE.globalMcp.get("github").get("url").asString())
         .isEqualTo("https://mcp.test/github");
 
@@ -169,7 +169,22 @@ class SettingsControllerTest {
         "{\"name\":\"github\",\"url\":\"https://mcp.test/g\",\"headers\":{}}");
     assertThat(OPENCODE.globalMcp.has("github")).isTrue();
     assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).hasSize(1);
-    assertThat(OPENCODE.requests).anyMatch(r -> r.path().equals("/api/experimental/fs/write"));
+    assertThat(OPENCODE.requests).noneMatch(r -> r.path().contains("/fs/"));
+  }
+
+  @Test
+  void listsAndRemovesServersConfiguredOutsideTheUi() throws Exception {
+    // The fake has no filesystem routes: discovery must use OpenCode's effective runtime list.
+    OPENCODE.globalMcp.set(
+        "Local.Tools", JSON.readTree("{\"type\":\"local\",\"command\":[\"tool-server\"]}"));
+    var response = send("GET", "/mcp-servers", null);
+    assertThat(response.statusCode()).isEqualTo(200);
+    var servers = JSON.readTree(response.body());
+    assertThat(servers).hasSize(1);
+    assertThat(servers.get(0).path("name").asString()).isEqualTo("Local.Tools");
+    assertThat(send("DELETE", "/mcp-servers/Local.Tools", null).statusCode()).isEqualTo(204);
+    assertThat(OPENCODE.globalMcp).isEmpty();
+    assertThat(OPENCODE.requests).noneMatch(r -> r.path().contains("/fs/"));
   }
 
   @Test

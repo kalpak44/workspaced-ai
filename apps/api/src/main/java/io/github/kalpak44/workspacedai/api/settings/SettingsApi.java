@@ -104,7 +104,7 @@ public interface SettingsApi {
       operationId = "addMcpServer",
       summary = "Add an MCP server",
       description =
-          "Every session can use it at once, and a restarted workspace gets it back. Reference a "
+          "Every session can use it at once, until the workspace restarts. Reference a "
               + "workspace secret in a header as {env:NAME}.")
   @ApiResponse(
       responseCode = "201",

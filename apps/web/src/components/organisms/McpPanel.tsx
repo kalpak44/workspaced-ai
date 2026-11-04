@@ -97,7 +97,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
   return (
     <SettingsSection
       title="MCP servers"
-      description="Remote tools the agent can call. Changes reach every session at once."
+      description="Tools available through OpenCode. Changes apply to every session until the workspace restarts."
     >
       {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
       {loading && <Spinner label="Loading MCP servers" className="size-5 text-zinc-400" />}
@@ -107,10 +107,6 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
             <li key={server.name} className="flex items-center gap-3 px-3 py-2.5">
               <span className="min-w-0 flex-1">
                 <span className="block font-mono text-sm">{server.name}</span>
-                <span className="block truncate text-xs text-zinc-500 dark:text-zinc-400">
-                  {server.url}
-                  {server.headers.length > 0 && ` · sends ${server.headers.join(", ")}`}
-                </span>
               </span>
               <StatusBadge status={server.status} />
               {removing.has(server.name) ? (

@@ -184,7 +184,7 @@ export function installFakeApi(
       const server = JSON.parse(String(init!.body)) as { name: string; url: string; headers: Record<string, string> };
       if (servers.some((s) => s.name === server.name)) return json({}, 409);
       if (server.url.includes("invalid")) return json({}, 400);
-      const added = { name: server.name, url: server.url, headers: Object.keys(server.headers), status: "connected" };
+      const added = { name: server.name, status: "connected" };
       mcp.set(workspaceId, [...servers, added]);
       return json(added, 201);
     }

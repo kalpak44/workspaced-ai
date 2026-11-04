@@ -15,9 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- * Stores the workspace's model preference and wraps OpenCode's durable project MCP configuration.
- */
+/** Stores the workspace's model preference and delegates MCP management to OpenCode. */
 @Service
 public class SettingsService {
 
@@ -56,15 +54,8 @@ public class SettingsService {
   public List<McpServer> mcpServers(UUID workspaceId) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
-    var statuses = harness.mcpStatus(endpoint);
-    return harness.mcpConfiguration(endpoint).entrySet().stream()
-        .map(
-            e ->
-                new McpServer(
-                    e.getKey(),
-                    e.getValue().url(),
-                    e.getValue().headers().keySet().stream().sorted().toList(),
-                    statuses.getOrDefault(e.getKey(), "pending")))
+    return harness.mcpStatus(endpoint).entrySet().stream()
+        .map(e -> new McpServer(e.getKey(), e.getValue()))
         .toList();
   }
 
@@ -72,7 +63,7 @@ public class SettingsService {
   public McpServer addMcpServer(UUID workspaceId, McpServerRequest request) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
-    if (harness.mcpConfiguration(endpoint).containsKey(request.name())) {
+    if (harness.mcpStatus(endpoint).containsKey(request.name())) {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "the workspace already has an MCP server " + request.name());
     }
@@ -90,7 +81,7 @@ public class SettingsService {
   public void removeMcpServer(UUID workspaceId, String name) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
-    if (!harness.mcpConfiguration(endpoint).containsKey(name)) {
+    if (!harness.mcpStatus(endpoint).containsKey(name)) {
       throw new ResponseStatusException(
           HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name);
     }

@@ -215,7 +215,7 @@ class OpenCodeHarnessTest {
   }
 
   @Test
-  void AddsListsAndRemovesRuntimeMcpServers() {
+  void addsListsAndRemovesRuntimeMcpServers() {
     var github =
         new Harness.McpServerConfig(
             "https://mcp.test/github", Map.of("Authorization", "Bearer {env:GITHUB_TOKEN}"));
@@ -225,6 +225,16 @@ class OpenCodeHarnessTest {
     assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "connected");
     harness.removeMcp(opencode.endpoint(), "github");
     assertThat(opencode.globalMcp).isEmpty();
+    assertThat(opencode.requests)
+        .extracting(
+            FakeOpenCode.Request::method,
+            FakeOpenCode.Request::path,
+            FakeOpenCode.Request::directory)
+        .containsExactly(
+            Tuple.tuple("PUT", "/api/experimental/mcp/github", DIRECTORY),
+            Tuple.tuple("GET", "/api/mcp", DIRECTORY),
+            Tuple.tuple("DELETE", "/api/experimental/mcp/github", DIRECTORY));
+    assertThat(harness.configureMcp(opencode.endpoint(), Map.of())).isFalse();
   }
 
   @Test

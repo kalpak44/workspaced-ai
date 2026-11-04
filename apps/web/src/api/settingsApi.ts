@@ -19,9 +19,6 @@ export type McpStatus = "connected" | "failed" | "needs_auth" | "disabled" | "pe
 
 export interface McpServer {
   readonly name: string;
-  readonly url: string;
-  /** Header names only; values never come back. */
-  readonly headers: readonly string[];
   readonly status: McpStatus | string;
 }
 
@@ -54,9 +51,6 @@ export async function addMcpServer(workspaceId: string, server: NewMcpServer): P
 }
 
 export async function removeMcpServer(workspaceId: string, name: string): Promise<void> {
-  if (!MCP_NAME.test(name)) {
-    throw new Error("Invalid server name");
-  }
   await send(`${workspaceUrl(workspaceId)}/mcp-servers/${encodeURIComponent(name)}`, {
     method: "DELETE",
   });

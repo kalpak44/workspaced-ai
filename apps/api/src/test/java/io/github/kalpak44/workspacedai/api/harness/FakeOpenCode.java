@@ -76,15 +76,6 @@ public class FakeOpenCode implements AutoCloseable {
       return;
     }
     switch (method + " " + path) {
-      case "GET /api/fs/read/.opencode/opencode.json" ->
-          respond(exchange, 200, JSON.writeValueAsString(Map.of("mcp", globalMcp)));
-      case "POST /api/experimental/fs/write" -> {
-        var document = JSON.readTree(requests.getLast().body());
-        globalMcp.removeAll();
-        globalMcp.setAll((ObjectNode) document.path("mcp"));
-        respond(exchange, 200, "{}");
-      }
-      case "POST /api/location/reload" -> respond(exchange, 204, null);
       case "GET /api/info" ->
           respond(
               exchange,

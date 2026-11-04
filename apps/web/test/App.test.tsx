@@ -907,7 +907,7 @@ describe("App", () => {
     await user.click(within(form).getByRole("button", { name: "Add server" }));
 
     const row = (await within(panel).findByText("github")).closest("li")!;
-    expect(row).toHaveTextContent("https://mcp.test/github · sends Authorization");
+    expect(row).toHaveTextContent("github");
     expect(row).toHaveTextContent("Connected");
     expect(within(form).getByRole("textbox", { name: "Name" })).toHaveValue("");
     expect(within(form).queryByLabelText("Header 1 name")).not.toBeInTheDocument();
@@ -917,8 +917,19 @@ describe("App", () => {
     expect(api.mcp.get("starter")).toEqual([]);
   });
 
+  it("shows and removes an existing OpenCode server with a non-slug name", async () => {
+    api.mcp.set("starter", [{ name: "Local.Tools", status: "connected" }]);
+    const user = userEvent.setup();
+    await renderLoaded();
+    await openSettings(user);
+    const panel = screen.getByRole("region", { name: "MCP servers" });
+    expect(await within(panel).findByText("Local.Tools")).toBeInTheDocument();
+    await user.click(within(panel).getByRole("button", { name: "Remove Local.Tools" }));
+    await waitFor(() => expect(within(panel).queryByText("Local.Tools")).not.toBeInTheDocument());
+  });
+
   it("checks an MCP server before sending it, and says why the API refused one", async () => {
-    api.mcp.set("starter", [{ name: "github", url: "https://x.test", headers: [], status: "failed" }]);
+    api.mcp.set("starter", [{ name: "github", status: "failed" }]);
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);

@@ -76,10 +76,8 @@ public interface Harness {
   /** Each MCP server the harness knows, by name, with its connection status. */
   Map<String, String> mcpStatus(HarnessEndpoint endpoint);
 
-  Map<String, McpServerConfig> mcpConfiguration(HarnessEndpoint endpoint);
-
   /**
-   * Persists MCP entries in the project configuration and reloads OpenCode.
+   * Adds or replaces runtime MCP entries through OpenCode; changes last until restart.
    *
    * @return whether anything had to change
    */

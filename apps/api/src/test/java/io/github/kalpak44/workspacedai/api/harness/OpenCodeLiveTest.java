@@ -17,7 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 class OpenCodeLiveTest {
   @Test
-  void persistsMcpReferencesAndRemovesThemThroughOpenCode() {
+  void addsAndRemovesRuntimeMcpServersThroughOpenCode() {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());
     var endpoint =
         new HarnessEndpoint(
@@ -28,11 +28,11 @@ class OpenCodeLiveTest {
             "https://example.invalid/mcp", Map.of("Authorization", "Bearer {env:CHECK_TOKEN}"));
     harness.configureMcp(endpoint, Map.of("contract-check", config));
     try {
-      assertThat(harness.mcpConfiguration(endpoint)).containsEntry("contract-check", config);
+      assertThat(harness.mcpStatus(endpoint)).containsKey("contract-check");
     } finally {
       harness.removeMcp(endpoint, "contract-check");
     }
-    assertThat(harness.mcpConfiguration(endpoint)).doesNotContainKey("contract-check");
+    assertThat(harness.mcpStatus(endpoint)).doesNotContainKey("contract-check");
   }
 
   @RepeatedTest(5)

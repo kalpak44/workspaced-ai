@@ -156,19 +156,22 @@ and sent with every prompt, so it applies from the next message in every session
 returns to the default. A model the catalogue does not list is refused with `400`, so a typo fails here rather than
 as a broken reply.
 
-**MCP servers.** OpenCode owns the durable configuration in
-`/home/workspace/project/.opencode/opencode.json` on the workspace PVC. The API reads that file and merges MCP
-changes while preserving other configuration fields. It then calls `POST /api/location/reload`; OpenCode handles
-configuration discovery, secret reference expansion and connections on every restart. Reload rebuilds loaded
-locations and cancels pending permissions/forms; running sessions pick up fresh services at their next step boundary.
+**MCP servers.** OpenCode is the source of truth. The API lists all effective servers through
+`GET /api/mcp`, including local servers and servers configured outside the UI. It adds remote servers
+through `PUT /api/experimental/mcp/{server}` and removes servers through the corresponding `DELETE`.
+Responses contain names and connection statuses; OpenCode's list endpoint does not expose URLs or headers.
+No project configuration files are read or rewritten, and no location reload is needed.
 
-The UI manages remote servers. Header values must be `{env:SECRET_NAME}`, optionally prefixed with `Bearer `
-or `Basic `. Store actual credentials in Kubernetes Secrets; header values are never returned by the API.
-A newly added environment secret requires a workspace restart before OpenCode can read it. MCP operations require
-a reachable workspace, so they return 503 while OpenCode is unavailable.
+These mutation endpoints change runtime state only. UI additions disappear on restart, and removals of
+servers from OpenCode's own configuration last until restart. For durable setup, configure servers in
+OpenCode's configuration files on the workspace PVC.
+
+Header values must be `{env:SECRET_NAME}`, optionally prefixed with `Bearer ` or `Basic `.
+Store actual credentials in Kubernetes Secrets; header values are never returned by the API.
+A newly added environment secret requires a workspace restart before OpenCode can read it. MCP operations
+require a reachable workspace, so they return 503 while OpenCode is unavailable.
 
 PostgreSQL holds no MCP settings or references. Migration V6 drops the old MCP table without importing its entries.
-Existing settings must already be present in the OpenCode project config or be re-added through the UI.
 
 ## Workspace secrets
 
