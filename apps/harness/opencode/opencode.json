@@ -1,20 +1,25 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "enabled_providers": [
-    "openrouter"
+  "policies": [
+    { "action": "provider.use", "resource": "*", "effect": "deny" },
+    { "action": "provider.use", "resource": "openrouter", "effect": "allow" }
   ],
   "model": "openrouter/anthropic/claude-sonnet-5.5",
-  "small_model": "openrouter/anthropic/claude-haiku-5.5",
-  "autoupdate": false,
-  "share": "disabled",
-  "permission": {
-    "edit": "allow",
-    "bash": "allow",
-    "webfetch": "allow"
+  "agents": {
+    "title": {
+      "model": "openrouter/anthropic/claude-haiku-5.5"
+    }
   },
-  "provider": {
+  "update": "disable",
+  "share": "disabled",
+  "permissions": [
+    { "action": "edit", "resource": "*", "effect": "allow" },
+    { "action": "shell", "resource": "*", "effect": "allow" },
+    { "action": "webfetch", "resource": "*", "effect": "allow" }
+  ],
+  "providers": {
     "openrouter": {
-      "options": {
+      "settings": {
         "baseURL": "{env:OPENROUTER_BASE_URL}"
       }
     }

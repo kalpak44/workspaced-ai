@@ -5,6 +5,7 @@ import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
+import io.fabric8.kubernetes.api.model.PersistentVolumeClaimBuilder;
 import io.fabric8.kubernetes.api.model.Pod;
 import io.fabric8.kubernetes.api.model.PodSpec;
 import io.fabric8.kubernetes.api.model.PodSpecBuilder;
@@ -21,8 +22,6 @@ import io.fabric8.kubernetes.client.informers.SharedIndexInformer;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
-import java.io.IOException;
-import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
@@ -61,6 +60,8 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   private final String namespace;
   private final String image;
   private final long stopTimeoutMillis;
+  private final String storageSize;
+  private final String storageClass;
   private SharedIndexInformer<Pod> informer;
 
   public KubernetesWorkspaceRuntime(KubernetesClient client, WorkspaceProperties properties) {
@@ -68,6 +69,8 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     this.namespace = client.getNamespace();
     this.image = properties.image();
     this.stopTimeoutMillis = properties.stopTimeout().toMillis();
+    this.storageSize = properties.storageSize();
+    this.storageClass = properties.storageClass();
     if (namespace == null) {
       throw new IllegalStateException("cannot tell which namespace the API runs in");
     }
@@ -105,6 +108,21 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
                   .withMetadata(metadata(workspaceId))
                   .withType("Opaque")
                   .withData(encode(environment.secrets()))
+                  .build())
+          .create();
+      client
+          .persistentVolumeClaims()
+          .inNamespace(namespace)
+          .resource(
+              new PersistentVolumeClaimBuilder()
+                  .withMetadata(metadata(workspaceId))
+                  .withNewSpec()
+                  .withAccessModes("ReadWriteOnce")
+                  .withStorageClassName(storageClass.isBlank() ? null : storageClass)
+                  .withNewResources()
+                  .addToRequests("storage", new Quantity(storageSize))
+                  .endResources()
+                  .endSpec()
                   .build())
           .create();
       client.apps().deployments().inNamespace(namespace).resource(deployment(workspaceId)).create();
@@ -173,61 +191,34 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     var name = resourceName(workspaceId);
     var secret = client.secrets().inNamespace(namespace).withName(name).get();
     var data = secret == null ? null : secret.getData();
+    var passwordKey =
+        data != null && data.containsKey(Harness.PASSWORD_VARIABLE)
+            ? Harness.PASSWORD_VARIABLE
+            : "OPENCODE_SERVER_PASSWORD";
     if (data == null
-        || !data.containsKey(Harness.PASSWORD_VARIABLE)
+        || !data.containsKey(passwordKey)
         || client.services().inNamespace(namespace).withName(name).get() == null) {
       return Optional.empty();
     }
     var password =
-        new String(
-            Base64.getDecoder().decode(data.get(Harness.PASSWORD_VARIABLE)),
-            StandardCharsets.UTF_8);
+        new String(Base64.getDecoder().decode(data.get(passwordKey)), StandardCharsets.UTF_8);
     var url = "http://" + name + "." + namespace + ".svc:" + HARNESS_PORT;
     return Optional.of(new HarnessEndpoint(URI.create(url), password));
   }
 
   @Override
-  public WorkspaceTerminal terminal(UUID workspaceId, OutputStream output, Runnable onExit) {
-    var pod =
-        client
-            .pods()
-            .inNamespace(namespace)
-            .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
-            .list()
-            .getItems()
-            .stream()
-            .filter(p -> statusOf(p) == WorkspaceStatus.READY)
-            .findFirst()
-            .orElseThrow(() -> new IllegalStateException("workspace pod is not ready"));
-    var watch =
-        client
-            .pods()
-            .inNamespace(namespace)
-            .withName(pod.getMetadata().getName())
-            .inContainer("workspace")
-            .redirectingInput()
-            .writingOutput(output)
-            .writingError(output)
-            .withTTY()
-            .exec("/bin/bash", "-l");
-    watch.exitCode().whenComplete((code, error) -> onExit.run());
-    return new WorkspaceTerminal() {
-      @Override
-      public void input(byte[] bytes) throws IOException {
-        watch.getInput().write(bytes);
-        watch.getInput().flush();
-      }
-
-      @Override
-      public void resize(int columns, int rows) {
-        watch.resize(columns, rows);
-      }
-
-      @Override
-      public void close() {
-        watch.close();
-      }
-    };
+  public Optional<String> environmentValue(UUID workspaceId, String name) {
+    var secret = client.secrets().inNamespace(namespace).withName(resourceName(workspaceId)).get();
+    if (secret != null && secret.getData() != null && secret.getData().containsKey(name)) {
+      return Optional.of(
+          new String(
+              Base64.getDecoder().decode(secret.getData().get(name)), StandardCharsets.UTF_8));
+    }
+    var config =
+        client.configMaps().inNamespace(namespace).withName(resourceName(workspaceId)).get();
+    return config == null || config.getData() == null
+        ? Optional.empty()
+        : Optional.ofNullable(config.getData().get(name));
   }
 
   /**
@@ -363,6 +354,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     client.pods().inNamespace(namespace).withName(name).delete();
     client.secrets().inNamespace(namespace).withName(name).delete();
     client.configMaps().inNamespace(namespace).withName(name).delete();
+    client.persistentVolumeClaims().inNamespace(namespace).withName(name).delete();
   }
 
   private static Map<String, String> encode(Map<String, String> values) {
@@ -478,8 +470,8 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .endTcpSocket()
         .withPeriodSeconds(5)
         .endReadinessProbe()
-        // The root filesystem is read-only, so the home and /tmp are the only places the
-        // agent can write: each session's files live in the home, for the pod's lifetime.
+        // The root filesystem is read-only; the persistent home keeps sessions and project
+        // files across replacement pods, while /tmp remains disposable.
         .addNewVolumeMount()
         .withName("home")
         .withMountPath("/home/workspace")
@@ -499,8 +491,9 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .endContainer()
         .addNewVolume()
         .withName("home")
-        .withNewEmptyDir()
-        .endEmptyDir()
+        .withNewPersistentVolumeClaim()
+        .withClaimName(resourceName(workspaceId))
+        .endPersistentVolumeClaim()
         .endVolume()
         .addNewVolume()
         .withName("tmp")

@@ -50,6 +50,13 @@ public sealed interface HarnessEvent {
     }
   }
 
+  /** Durable state changed and the browser should reconcile with message history. */
+  record Refresh() implements HarnessEvent {
+    public String name() {
+      return "refresh";
+    }
+  }
+
   /** Nothing happened; sent so a proxy never sees the stream as idle. */
   record Heartbeat() implements HarnessEvent {
     public String name() {

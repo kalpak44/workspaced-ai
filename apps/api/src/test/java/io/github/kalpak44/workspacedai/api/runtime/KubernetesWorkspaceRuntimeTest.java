@@ -19,7 +19,6 @@ import io.fabric8.kubernetes.client.server.mock.KubernetesMockServer;
 import io.fabric8.mockwebserver.Context;
 import io.fabric8.mockwebserver.MockWebServer;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
-import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.Base64;
@@ -41,12 +40,16 @@ class KubernetesWorkspaceRuntimeTest {
 
   static final WorkspaceProperties PROPERTIES =
       new WorkspaceProperties(
-          "harness:test", Duration.ofSeconds(5), new WorkspaceProperties.LocalHarness(null, null));
+          "harness:test",
+          Duration.ofSeconds(5),
+          "10Gi",
+          "fast",
+          new WorkspaceProperties.LocalHarness(null, null));
 
   static final WorkspaceEnvironment ENVIRONMENT =
       new WorkspaceEnvironment(
           Map.of("BASE_URL", "https://x.test"),
-          Map.of("API_KEY", "sk-1", "OPENCODE_SERVER_PASSWORD", "pw-1"));
+          Map.of("API_KEY", "sk-1", "OPENCODE_PASSWORD", "pw-1"));
 
   KubernetesMockServer server;
   KubernetesClient client;
@@ -111,7 +114,17 @@ class KubernetesWorkspaceRuntimeTest {
     assertThat(container.getVolumeMounts())
         .extracting(m -> m.getMountPath())
         .containsExactlyInAnyOrder("/home/workspace", "/tmp");
-    assertThat(spec.getVolumes()).allSatisfy(v -> assertThat(v.getEmptyDir()).isNotNull());
+    assertThat(spec.getVolumes())
+        .anySatisfy(
+            v ->
+                assertThat(v.getPersistentVolumeClaim().getClaimName()).isEqualTo(resourceName(id)))
+        .anySatisfy(v -> assertThat(v.getEmptyDir()).isNotNull());
+    var claim =
+        client.persistentVolumeClaims().inNamespace(namespace()).withName(resourceName(id)).get();
+    assertThat(claim.getSpec().getStorageClassName()).isEqualTo("fast");
+    assertThat(claim.getSpec().getAccessModes()).containsExactly("ReadWriteOnce");
+    assertThat(claim.getSpec().getResources().getRequests().get("storage").getAmount())
+        .isEqualTo("10");
     assertThat(container.getEnvFrom())
         .extracting(
             e -> e.getConfigMapRef() != null ? e.getConfigMapRef().getName() : null,
@@ -129,14 +142,16 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void keepsTheEnvironmentInALabelledSecretAndConfigMap() {
     runtime.start(id, ENVIRONMENT);
+    assertThat(runtime.environmentValue(id, "API_KEY")).hasValue("sk-1");
+    assertThat(runtime.environmentValue(id, "BASE_URL")).hasValue("https://x.test");
+    assertThat(runtime.environmentValue(id, "MISSING")).isEmpty();
 
     var configMap = client.configMaps().inNamespace(namespace()).withName(resourceName(id)).get();
     assertThat(configMap.getData()).containsExactlyEntriesOf(Map.of("BASE_URL", "https://x.test"));
     assertThat(configMap.getMetadata().getLabels())
         .containsEntry(WORKSPACE_ID_LABEL, id.toString());
     assertThat(secretValues())
-        .containsExactlyInAnyOrderEntriesOf(
-            Map.of("API_KEY", "sk-1", "OPENCODE_SERVER_PASSWORD", "pw-1"));
+        .containsExactlyInAnyOrderEntriesOf(Map.of("API_KEY", "sk-1", "OPENCODE_PASSWORD", "pw-1"));
     assertThat(secret().getMetadata().getLabels()).containsEntry(WORKSPACE_ID_LABEL, id.toString());
   }
 
@@ -144,14 +159,13 @@ class KubernetesWorkspaceRuntimeTest {
   void addsAndRemovesSecretsBesideTheProviderKey() {
     runtime.start(id, ENVIRONMENT);
     runtime.putSecret(id, "GITHUB_TOKEN", "ghp_1");
-    assertThat(secretValues())
-        .containsOnlyKeys("API_KEY", "OPENCODE_SERVER_PASSWORD", "GITHUB_TOKEN");
+    assertThat(secretValues()).containsOnlyKeys("API_KEY", "OPENCODE_PASSWORD", "GITHUB_TOKEN");
     runtime.putSecret(id, "GITHUB_TOKEN", "ghp_2");
     assertThat(secretValues()).containsEntry("GITHUB_TOKEN", "ghp_2");
 
     runtime.removeSecret(id, "GITHUB_TOKEN");
     runtime.removeSecret(id, "GITHUB_TOKEN");
-    assertThat(secretValues()).containsOnlyKeys("API_KEY", "OPENCODE_SERVER_PASSWORD");
+    assertThat(secretValues()).containsOnlyKeys("API_KEY", "OPENCODE_PASSWORD");
   }
 
   @Test
@@ -176,18 +190,11 @@ class KubernetesWorkspaceRuntimeTest {
             });
 
     // A workspace made before the harness has no password, so the API cannot sign in.
-    runtime.removeSecret(id, "OPENCODE_SERVER_PASSWORD");
+    runtime.removeSecret(id, "OPENCODE_PASSWORD");
     assertThat(runtime.harness(id)).isEmpty();
-    runtime.putSecret(id, "OPENCODE_SERVER_PASSWORD", "pw-1");
+    runtime.putSecret(id, "OPENCODE_PASSWORD", "pw-1");
     client.services().inNamespace(namespace()).withName(resourceName(id)).delete();
     assertThat(runtime.harness(id)).isEmpty();
-  }
-
-  @Test
-  void refusesATerminalUntilTheWorkspacePodIsReady() {
-    assertThatThrownBy(() -> runtime.terminal(id, OutputStream.nullOutputStream(), () -> {}))
-        .isInstanceOf(IllegalStateException.class)
-        .hasMessage("workspace pod is not ready");
   }
 
   @Test
@@ -207,6 +214,13 @@ class KubernetesWorkspaceRuntimeTest {
         .isInstanceOf(KubernetesClientException.class);
     assertThat(secret()).isNull();
     assertThat(client.configMaps().inNamespace(namespace()).withName(resourceName(id)).get())
+        .isNull();
+    assertThat(
+            client
+                .persistentVolumeClaims()
+                .inNamespace(namespace())
+                .withName(resourceName(id))
+                .get())
         .isNull();
     assertThat(
             client.apps().deployments().inNamespace(namespace()).withName(resourceName(id)).get())
@@ -275,6 +289,8 @@ class KubernetesWorkspaceRuntimeTest {
             new WorkspaceProperties(
                 "harness:test",
                 Duration.ofMillis(300),
+                "1Gi",
+                "",
                 new WorkspaceProperties.LocalHarness(null, null)));
     runtime.start(id, ENVIRONMENT);
     // Nothing here deletes a Deployment's pods, as a stuck node would not.

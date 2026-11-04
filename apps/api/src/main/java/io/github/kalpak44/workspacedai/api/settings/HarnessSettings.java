@@ -71,8 +71,27 @@ public class HarnessSettings {
     var desired = new LinkedHashMap<String, Harness.McpServerConfig>();
     for (var server : servers.findAllByWorkspaceIdOrderByCreatedAtAscNameAsc(workspaceId)) {
       desired.put(
-          server.getName(), new Harness.McpServerConfig(server.getUrl(), server.getHeaders()));
+          server.getName(),
+          new Harness.McpServerConfig(server.getUrl(), resolve(workspaceId, server.getHeaders())));
     }
     return desired;
+  }
+
+  private Map<String, String> resolve(UUID workspaceId, Map<String, String> headers) {
+    var resolved = new LinkedHashMap<String, String>();
+    var references = java.util.regex.Pattern.compile("\\{env:([A-Za-z_][A-Za-z0-9_]*)}");
+    headers.forEach(
+        (name, value) ->
+            resolved.put(
+                name,
+                references
+                    .matcher(value)
+                    .replaceAll(
+                        match ->
+                            java.util.regex.Matcher.quoteReplacement(
+                                runtime
+                                    .environmentValue(workspaceId, match.group(1))
+                                    .orElse("")))));
+    return resolved;
   }
 }

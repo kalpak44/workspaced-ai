@@ -8,6 +8,7 @@ export interface Session {
   readonly path: string;
   /** ISO 8601. */
   readonly createdAt: string;
+  readonly available?: boolean;
 }
 
 export interface ChatPart {
@@ -33,6 +34,7 @@ export interface SessionEvents {
   readonly status: { readonly busy: boolean };
   readonly title: { readonly title: string };
   readonly error: { readonly message: string };
+  readonly refresh: Record<string, never>;
 }
 
 // The server assigns UUIDs; anything else is refused before it becomes a path segment.

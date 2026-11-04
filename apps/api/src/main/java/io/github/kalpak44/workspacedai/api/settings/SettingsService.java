@@ -110,9 +110,9 @@ public class SettingsService {
                 () ->
                     new ResponseStatusException(
                         HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name));
+    runtime.harness(workspaceId).ifPresent(endpoint -> harness.removeMcp(endpoint, name));
     servers.delete(server);
     servers.flush();
-    settings.apply(workspaceId);
   }
 
   private HarnessEndpoint endpoint(UUID workspaceId) {

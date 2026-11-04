@@ -72,7 +72,7 @@ class SessionControllerTest {
   void setUp() {
     repository.deleteAll();
     OPENCODE.requests.clear();
-    OPENCODE.title = "New session - 2026-11-03T15:09:46.948Z";
+    OPENCODE.title = null;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -82,12 +82,13 @@ class SessionControllerTest {
     var created = send("POST", "", null);
     assertThat(created.statusCode()).isEqualTo(201);
     var session = JSON.readValue(created.body(), Session.class);
-    assertThat(session.path()).isEqualTo("/home/workspace/sessions/" + session.id());
+    assertThat(session.path()).isEqualTo("/home/workspace/project");
     assertThat(session.title()).isNull();
     assertThat(session.createdAt()).isNotNull();
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/sessions/" + session.id()));
-    assertThat(OPENCODE.requests.getFirst().directory()).isEqualTo(session.path());
+    assertThat(OPENCODE.requests)
+        .anySatisfy(r -> assertThat(r.directory()).isEqualTo(session.path()));
     assertThat(sessions.findById(session.id()))
         .hasValueSatisfying(
             e -> assertThat(e.getHarnessSessionId()).isEqualTo(FakeOpenCode.SESSION));
@@ -119,7 +120,7 @@ class SessionControllerTest {
     assertThat(send("DELETE", "/" + session.id(), null).statusCode()).isEqualTo(204);
     assertThat(sessions.findAll()).isEmpty();
     assertThat(OPENCODE.requests.getLast().method()).isEqualTo("DELETE");
-    assertThat(OPENCODE.requests.getLast().directory()).isEqualTo(session.path());
+    assertThat(OPENCODE.requests.getLast().path()).endsWith("/" + FakeOpenCode.SESSION);
     assertThat(send("DELETE", "/" + session.id(), null).statusCode()).isEqualTo(404);
   }
 
@@ -162,8 +163,8 @@ class SessionControllerTest {
     assertThat(names).contains("message", "part", "delta", "status", "title");
     assertThat(data)
         .contains(
-            "{\"messageId\":\"msg_1a1f30ff5001LcL0VbNMntCSUe\","
-                + "\"partId\":\"prt_1a1f31492001Vcb1bBKz7fR863\",\"delta\":\"second answer here\"}");
+            "{\"messageId\":\"msg_a\","
+                + "\"partId\":\"msg_a:text:0\",\"delta\":\"second answer here\"}");
     assertThat(sessions.findById(session.id()))
         .hasValueSatisfying(e -> assertThat(e.getTitle()).isEqualTo("Friendly greeting request"));
   }

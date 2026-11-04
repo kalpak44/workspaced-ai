@@ -1,33 +1,41 @@
 package io.github.kalpak44.workspacedai.api.harness;
 
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
+import java.io.OutputStream;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 
 /**
- * The agent harness running in a workspace's pod. Every call names the directory the session works
- * in, because the harness scopes everything, its event stream included, to a directory.
+ * OpenCode V2 running in a workspace's pod. Session locations are explicit; events span the
+ * service.
  */
 public interface Harness {
 
   /** The harness reads its password from this variable; no user secret may take it. */
-  String PASSWORD_VARIABLE = "OPENCODE_SERVER_PASSWORD";
+  String PASSWORD_VARIABLE = "OPENCODE_PASSWORD";
 
   /** The harness's home; requests about the whole harness rather than a session use it. */
   String HOME = "/home/workspace";
 
-  /** Where each session's directory lives inside the pod. */
-  String SESSIONS_ROOT = HOME + "/sessions";
+  /** The shared project every ordinary session and workspace terminal works in. */
+  String PROJECT_ROOT = HOME + "/project";
+
+  /** Fails when the server is not OpenCode V2 or the project location cannot be resolved. */
+  void validate(HarnessEndpoint endpoint, String directory);
+
+  /** Every root session currently held by this workspace's OpenCode service. */
+  List<HarnessSession> sessions(HarnessEndpoint endpoint);
 
   /**
-   * Creates a session working in {@code directory}, which the harness creates.
+   * Creates a session working in the existing {@code directory}.
    *
    * @return the harness's own id for it
    */
   String createSession(HarnessEndpoint endpoint, String directory, String title);
 
-  /** Deletes the session and its directory; one already gone is not an error. */
+  /** Deletes the conversation, retaining shared project files; one already gone is not an error. */
   void deleteSession(HarnessEndpoint endpoint, String directory, String sessionId);
 
   List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId);
@@ -53,9 +61,7 @@ public interface Harness {
   Map<String, String> mcpStatus(HarnessEndpoint endpoint);
 
   /**
-   * Makes the harness's MCP servers exactly {@code servers}: every session picks the change up at
-   * once. One the harness has but {@code servers} lacks is disabled, since its configuration can be
-   * merged into but not deleted from.
+   * Adds or replaces the desired runtime MCP servers at the shared project location.
    *
    * @return whether anything had to change
    */
@@ -67,14 +73,17 @@ public interface Harness {
   /** Stops the reply in progress, if there is one. */
   void abort(HarnessEndpoint endpoint, String directory, String sessionId);
 
+  /** Opens a Bash PTY through OpenCode and streams its output. */
+  WorkspaceTerminal terminal(
+      HarnessEndpoint endpoint, String directory, OutputStream output, Runnable onExit);
+
   /**
-   * Follows one session's events until the returned handle is closed or the harness ends the
-   * stream, in which case {@code onEnd} runs.
+   * Follows the workspace-wide V2 event stream until the returned handle is closed or the harness
+   * ends it. Callers fan its envelopes out to their session subscribers.
    */
   AutoCloseable stream(
-      HarnessEndpoint endpoint,
-      String directory,
-      String sessionId,
-      Consumer<HarnessEvent> onEvent,
-      Runnable onEnd);
+      HarnessEndpoint endpoint, Consumer<HarnessEventEnvelope> onEvent, Runnable onEnd);
+
+  /** Removes one runtime MCP server. Missing servers are ignored. */
+  void removeMcp(HarnessEndpoint endpoint, String name);
 }

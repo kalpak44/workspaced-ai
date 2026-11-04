@@ -91,6 +91,7 @@ export function useChat(
     void load().finally(() => active && setLoading(false));
 
     const source = new EventSource(sessionEventsUrl(workspaceId, sessionId));
+    source.addEventListener("open", () => void load());
     const on = <K extends keyof SessionEvents>(name: K, handle: (data: SessionEvents[K]) => void) =>
       source.addEventListener(name, (event) => handle(JSON.parse(event.data) as SessionEvents[K]));
     on("message", ({ id, role }) => setMessages((current) => upsertMessage(current, id, role)));
@@ -119,6 +120,7 @@ export function useChat(
     });
     on("title", ({ title }) => titled.current(sessionId, title));
     on("error", ({ message }) => setError(message));
+    on("refresh", () => void load());
 
     const prompt = queued.get(sessionId);
     if (prompt !== undefined) {

@@ -54,33 +54,32 @@ the kubeconfig points at.
 
 ### Workspace terminal
 
-`WS /api/v1/workspaces/{id}/terminal` opens an interactive TTY running `/bin/bash -l` in the workspace pod's
-`workspace` container. Browser input is sent as binary WebSocket frames; output is returned as binary frames.
+`WS /api/v1/workspaces/{id}/terminal` creates an OpenCode V2 PTY running `/bin/bash -l` in
+`/home/workspace/project`. Browser input is sent as binary WebSocket frames; output is returned as binary frames.
 Terminal resizing uses a text frame in the form `resize:<columns>:<rows>`. The connection closes when Bash exits,
 the browser leaves the page, or the pod disappears. A missing workspace or a pod that is not ready closes the
-connection with an error reason. Terminals are unavailable in the local runtime because it deliberately does not
-connect to Kubernetes.
+connection with an error reason. The local runtime supports terminals when a V2 harness is configured.
 
-The API's Kubernetes service account therefore needs `create` permission on the `pods/exec` subresource in addition
-to its existing pod read/write permissions:
+Terminal connections use short-lived OpenCode WebSocket tickets; pod credentials stay in the backend.
+The API no longer needs `pods/exec`. Persistent homes require these additional service-account permissions:
 
 ```yaml
 - apiGroups: [""]
-  resources: ["pods/exec"]
-  verbs: ["create"]
+  resources: ["persistentvolumeclaims"]
+  verbs: ["get", "list", "create", "delete"]
 ```
 
 ## Sessions
 
 Each workspace pod runs the agent harness, [opencode](https://opencode.ai) (`apps/harness`), as `opencode serve`.
-A session is one opencode session working in its own directory, `/home/workspace/sessions/<session id>`. The database
+A session is one OpenCode V2 session working in the shared directory `/home/workspace/project`. The database
 holds the session's id, that path and opencode's id for it; the conversation itself lives in the harness.
 
 | Method   | Path                                                    | Body                 | Answers                                 |
 |----------|---------------------------------------------------------|----------------------|-----------------------------------------|
 | `GET`    | `/api/v1/workspaces/{id}/sessions`                      |                      | `200` and the sessions, oldest first    |
 | `POST`   | `/api/v1/workspaces/{id}/sessions`                      |                      | `201` and the session                   |
-| `DELETE` | `/api/v1/workspaces/{id}/sessions/{sid}`                |                      | `204`; its directory goes with it       |
+| `DELETE` | `/api/v1/workspaces/{id}/sessions/{sid}`                |                      | `204`; shared project files remain     |
 | `GET`    | `/api/v1/workspaces/{id}/sessions/{sid}/messages`       |                      | `200` and the conversation              |
 | `POST`   | `/api/v1/workspaces/{id}/sessions/{sid}/messages`       | `{"text": "…"}`      | `202`; the reply streams on `/events`   |
 | `POST`   | `/api/v1/workspaces/{id}/sessions/{sid}/abort`          |                      | `204`                                   |
@@ -91,23 +90,29 @@ state, which replaces any earlier one of that id), `delta` (`{messageId, partId,
 `status` (`{busy}`), `title` (`{title}`, also stored) and `error` (`{message}`). A part is `text`, `reasoning` or a
 `tool` with its name and status. A session's `title` is null until the agent names it after the first exchange, using
 the workspace's own model; a title given while no chat was open is picked up the next time the sessions are listed.
-Each session also carries its `createdAt`.
+Each session also carries its `createdAt` and `available` flag. Listing reconciles stored rows against OpenCode's
+cursor-paginated root session API; missing conversations remain indexed with `available: false`.
+Messages are fetched through V2 cursor pages in chronological order. A workspace shares one upstream event stream
+between browser subscribers. V2 events are volatile, so clients reload history on reconnect and after execution
+ends. A `refresh` event also requests a history reload when an inbox message is delivered.
 
 The API reaches the harness through the workspace's Service, at
 `http://workspaced-ai-workspace-<id>.<namespace>.svc:4096`, with HTTP basic auth; the password is generated when the
-workspace is created and kept in its Secret as `OPENCODE_SERVER_PASSWORD`, which no user secret may replace. A
+workspace is created and kept in its Secret as `OPENCODE_PASSWORD`, which no user secret may replace. Existing
+`OPENCODE_SERVER_PASSWORD` secrets are accepted by V2 and by endpoint discovery. A
 harness that is not running, not answering, or belongs to a workspace made before the harness existed answers `503`.
 opencode is limited to the `openrouter` provider, reading the workspace's `OPENROUTER_API_KEY` and
 `OPENROUTER_BASE_URL`; its default model is set in `apps/harness/opencode/opencode.json`.
 
-A session's files live on the pod's `emptyDir` home, so they last as long as the pod does: a pod the Deployment
-replaces starts with an empty home.
+A workspace's home is a ReadWriteOnce PVC, so project files and OpenCode's conversation database survive replacement
+pods. Configure `workspaced.workspace.storage-size` (default `10Gi`) and `storage-class` (blank uses the cluster
+default). Deleting a workspace also deletes its PVC; storage reclamation follows the storage class policy.
 
 To chat outside Kubernetes, run a harness and point the API at it:
 
 ```sh
 docker build --platform linux/amd64 -t harness apps/harness
-docker run --rm -p 4096:4096 -e OPENCODE_SERVER_PASSWORD=dev \
+docker run --rm -p 4096:4096 -e OPENCODE_PASSWORD=dev \
   -e OPENROUTER_API_KEY=sk-or-… -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 harness
 WORKSPACED_WORKSPACE_LOCAL_HARNESS_URL=http://localhost:4096 \
 WORKSPACED_WORKSPACE_LOCAL_HARNESS_PASSWORD=dev WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run
@@ -130,13 +135,15 @@ returns to the default. A model the catalogue does not list is refused with `400
 as a broken reply.
 
 **MCP servers.** Remote servers only: the harness image carries no Node or Python, so a local MCP command could not
-run. The database holds them; the harness gets them through opencode's `PATCH /global/config`, which every session
-picks up at once. That configuration can be merged into but not deleted from, so a removed server is disabled.
-opencode substitutes `{env:NAME}` in a header from the pod's environment, which holds the workspace's secrets — so
+run. The database holds them; the harness receives them through V2's runtime
+`PUT /api/experimental/mcp/{server}` endpoint at the shared project location. Removing a server uses the matching
+DELETE endpoint, removing its tools immediately.
+The backend expands `{env:NAME}` in a header from the workspace's Kubernetes Secret or ConfigMap before sending
+the runtime MCP request (local development reads the API process environment), so
 a token belongs in Secrets and the header references it. Header values are never returned, and the API never writes
 back the configuration it reads, because opencode returns it with every reference already substituted. A replaced
 pod starts from the image's configuration, so the API applies a workspace's servers again each time it becomes
-ready, and writes only when they differ. `status` is the harness's (`connected`, `failed`, `needs_auth`,
+ready. `status` is the harness's (`connected`, `failed`, `needs_auth`,
 `disabled`), `pending` until it has picked a new server up, and `unknown` while it is not running.
 
 ## Workspace secrets

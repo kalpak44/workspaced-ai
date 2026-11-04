@@ -29,6 +29,17 @@ public class WorkspaceSessionEntity {
   @Column(length = 200)
   private String title;
 
+  @Column(nullable = false)
+  private boolean available = true;
+
+  public boolean isAvailable() {
+    return available;
+  }
+
+  public void setAvailable(boolean available) {
+    this.available = available;
+  }
+
   // Set here rather than left to the column default, so the row just saved can report it.
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
@@ -64,6 +75,10 @@ public class WorkspaceSessionEntity {
 
   public String getTitle() {
     return title;
+  }
+
+  public void setTitle(String title) {
+    this.title = title;
   }
 
   public Instant getCreatedAt() {

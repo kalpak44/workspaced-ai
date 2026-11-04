@@ -65,8 +65,7 @@ export function SessionList(props: Props) {
         </div>
         {!loading && sessions.length === 0 ? (
           <p className="rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            No sessions yet. Each one gets its own folder in the workspace, so tasks never
-            trip over each other.
+            No sessions yet. Start a task to work with your workspace’s files.
           </p>
         ) : (
           <ul className="flex flex-col gap-2" aria-busy={loading}>

@@ -8,6 +8,8 @@ import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,36 +38,33 @@ public class SessionService {
     this.harness = harness;
   }
 
-  /**
-   * A session still untitled may have been named while no chat was open to hear it, so its title is
-   * asked for here and kept. Best effort: a harness that does not answer leaves it untitled.
-   */
+  /** Reconciles the durable index with OpenCode before returning it. */
   @Transactional
   public List<Session> list(UUID workspaceId) {
     requireWorkspace(workspaceId);
     var endpoint = runtime.harness(workspaceId);
-    return sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId).stream()
-        .map(
-            entity ->
-                entity.getTitle() != null || endpoint.isEmpty()
-                    ? Session.of(entity)
-                    : backfill(endpoint.get(), entity))
-        .toList();
-  }
-
-  private Session backfill(HarnessEndpoint endpoint, WorkspaceSessionEntity entity) {
-    try {
-      return harness
-          .title(endpoint, entity.getPath(), entity.getHarnessSessionId())
-          .map(
-              title -> {
-                sessions.retitle(entity.getId(), title);
-                return Session.of(entity).withTitle(title);
-              })
-          .orElseGet(() -> Session.of(entity));
-    } catch (HarnessUnavailableException _) {
-      return Session.of(entity);
+    var stored = sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId);
+    if (endpoint.isPresent()) {
+      try {
+        var remote =
+            harness.sessions(endpoint.get()).stream()
+                .collect(Collectors.toMap(s -> s.id(), Function.identity()));
+        for (var entity : stored) {
+          var current = remote.get(entity.getHarnessSessionId());
+          entity.setAvailable(current != null);
+          if (current == null) {
+            continue;
+          } else if (current.title() != null && !current.title().equals(entity.getTitle())) {
+            entity.setTitle(current.title());
+          }
+        }
+        sessions.flush();
+        stored = sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId);
+      } catch (HarnessUnavailableException _) {
+        // The durable index remains useful while a replacement pod is starting.
+      }
     }
+    return stored.stream().map(Session::of).toList();
   }
 
   /**
@@ -77,7 +76,8 @@ public class SessionService {
     requireWorkspace(workspaceId);
     var endpoint = endpoint(workspaceId);
     var id = UUID.randomUUID();
-    var path = Harness.SESSIONS_ROOT + "/" + id;
+    var path = Harness.PROJECT_ROOT;
+    harness.validate(endpoint, path);
     var harnessId = harness.createSession(endpoint, path, null);
     try {
       return Session.of(
@@ -118,7 +118,9 @@ public class SessionService {
     var workspace = workspaces.findById(workspaceId).orElseThrow();
     var model =
         workspace.getModel() == null
-            ? null
+            ? new Harness.ModelRef(
+                workspace.getModelProvider(),
+                harness.models(endpoint(workspaceId), workspace.getModelProvider()).defaultModel())
             : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
     harness.prompt(
         endpoint(workspaceId), session.getPath(), session.getHarnessSessionId(), text, model);
@@ -135,10 +137,15 @@ public class SessionService {
   public Target target(UUID workspaceId, UUID sessionId) {
     var session = session(workspaceId, sessionId);
     return new Target(
-        session.getId(), endpoint(workspaceId), session.getPath(), session.getHarnessSessionId());
+        workspaceId,
+        session.getId(),
+        endpoint(workspaceId),
+        session.getPath(),
+        session.getHarnessSessionId());
   }
 
-  record Target(UUID id, HarnessEndpoint endpoint, String path, String harnessSessionId) {}
+  record Target(
+      UUID workspaceId, UUID id, HarnessEndpoint endpoint, String path, String harnessSessionId) {}
 
   private HarnessEndpoint endpoint(UUID workspaceId) {
     return runtime

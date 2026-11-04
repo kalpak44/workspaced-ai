@@ -24,7 +24,7 @@ public class SecretService {
 
   // Set by the API for the harness; a user secret of the same name would lock the API out.
   private static final Set<String> HARNESS_VARIABLES =
-      Set.of(Harness.PASSWORD_VARIABLE, "OPENCODE_SERVER_USERNAME");
+      Set.of(Harness.PASSWORD_VARIABLE, "OPENCODE_SERVER_PASSWORD", "OPENCODE_SERVER_USERNAME");
 
   private final WorkspaceRepository workspaces;
   private final WorkspaceSecretRepository secrets;

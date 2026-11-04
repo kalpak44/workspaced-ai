@@ -11,7 +11,9 @@ interface Props {
 export function TopBar({ theme, onThemeChange }: Props) {
   return (
     <header className="flex h-12 shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-zinc-800">
-      <Logo />
+      <a href="/" aria-label="Go to home" className="rounded focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-zinc-500">
+        <Logo />
+      </a>
       <div className="flex items-center gap-3">
         <IconButton label="Notifications" icon={Bell} />
         <Divider />

@@ -17,6 +17,7 @@ export function SessionCard({ session, deleting, onOpen, onDelete }: Props) {
       <button
         type="button"
         onClick={onOpen}
+        disabled={session.available === false}
         title={session.path}
         className="flex min-w-0 flex-1 items-center gap-3 px-4 py-3 text-left"
       >
@@ -28,7 +29,7 @@ export function SessionCard({ session, deleting, onOpen, onDelete }: Props) {
             {title}
           </span>
           <span className="block text-xs text-zinc-500 dark:text-zinc-400">
-            {timeAgo(session.createdAt)}
+            {session.available === false ? "Conversation unavailable" : timeAgo(session.createdAt)}
           </span>
         </span>
       </button>

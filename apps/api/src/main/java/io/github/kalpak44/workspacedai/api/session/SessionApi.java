@@ -28,7 +28,7 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
  *
  * @see SessionController
  */
-@Tag(name = "Sessions", description = "Chats with a workspace's agent, each in its own directory")
+@Tag(name = "Sessions", description = "Chats with a workspace's agent in its shared project")
 @RequestMapping("/workspaces/{workspaceId}/sessions")
 public interface SessionApi {
 
@@ -64,8 +64,8 @@ public interface SessionApi {
       operationId = "createSession",
       summary = "Start a session",
       description =
-          "Creates a harness session working in its own new directory under the workspace's "
-              + "home. Its title stays null until the agent names it after the first exchange.")
+          "Creates an OpenCode V2 session in the workspace's shared project. "
+              + "Its title stays null until the agent names it after the first exchange.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -92,7 +92,7 @@ public interface SessionApi {
   @Operation(
       operationId = "deleteSession",
       summary = "Delete a session",
-      description = "Removes the session, its conversation and its directory from the workspace.")
+      description = "Removes the session and conversation, retaining shared project files.")
   @ApiResponse(responseCode = "204", description = "Deleted.")
   @ApiResponse(
       responseCode = "404",

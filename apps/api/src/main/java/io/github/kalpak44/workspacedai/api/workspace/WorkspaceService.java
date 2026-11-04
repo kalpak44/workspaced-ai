@@ -32,16 +32,19 @@ public class WorkspaceService {
   private final WorkspaceRuntime runtime;
   private final ApplicationEventPublisher events;
   private final ApiKeyCheck keyCheck;
+  private final Harness harness;
 
   public WorkspaceService(
       WorkspaceRepository repository,
       WorkspaceRuntime runtime,
       ApplicationEventPublisher events,
-      ApiKeyCheck keyCheck) {
+      ApiKeyCheck keyCheck,
+      Harness harness) {
     this.repository = repository;
     this.runtime = runtime;
     this.events = events;
     this.keyCheck = keyCheck;
+    this.harness = harness;
   }
 
   @Transactional(readOnly = true)
@@ -110,7 +113,11 @@ public class WorkspaceService {
     if (!repository.existsById(id)) {
       throw new IllegalArgumentException("no workspace " + id);
     }
-    return runtime.terminal(id, output, onExit);
+    var endpoint =
+        runtime
+            .harness(id)
+            .orElseThrow(() -> new IllegalStateException("workspace OpenCode is not running"));
+    return harness.terminal(endpoint, Harness.PROJECT_ROOT, output, onExit);
   }
 
   private WorkspaceStatus statusOf(UUID id) {

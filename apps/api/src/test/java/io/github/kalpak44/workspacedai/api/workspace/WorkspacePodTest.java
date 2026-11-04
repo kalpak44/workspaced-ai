@@ -48,8 +48,8 @@ class WorkspacePodTest {
     // ConfigMap, and nothing else.
     var namespace = client.getNamespace();
     var secret = client.secrets().inNamespace(namespace).withName(name).get();
-    assertThat(secret.getData()).containsOnlyKeys("OPENROUTER_API_KEY", "OPENCODE_SERVER_PASSWORD");
-    assertThat(secret.getData().get("OPENCODE_SERVER_PASSWORD")).isNotBlank();
+    assertThat(secret.getData()).containsOnlyKeys("OPENROUTER_API_KEY", "OPENCODE_PASSWORD");
+    assertThat(secret.getData().get("OPENCODE_PASSWORD")).isNotBlank();
     assertThat(
             new String(
                 Base64.getDecoder().decode(secret.getData().get("OPENROUTER_API_KEY")),

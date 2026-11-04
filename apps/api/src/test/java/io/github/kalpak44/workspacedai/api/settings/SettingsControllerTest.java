@@ -95,8 +95,12 @@ class SettingsControllerTest {
     // Every reply from now on uses it.
     var session = sessions.create(workspace);
     sessions.send(workspace, session.id(), "Hello");
-    assertThat(OPENCODE.requests.getLast().body())
-        .contains("\"providerID\":\"openrouter\"", "\"modelID\":\"anthropic/claude-haiku-5.5\"");
+    assertThat(OPENCODE.requests)
+        .anySatisfy(
+            r ->
+                assertThat(r.body())
+                    .contains(
+                        "\"providerID\":\"openrouter\"", "\"id\":\"anthropic/claude-haiku-5.5\""));
 
     assertThat(send("PUT", "/model", "{\"model\":null}").statusCode()).isEqualTo(200);
     assertThat(repository.findById(workspace).orElseThrow().getModel()).isNull();
@@ -131,7 +135,7 @@ class SettingsControllerTest {
     assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).hasSize(1);
     assertThat(send("DELETE", "/mcp-servers/github", null).statusCode()).isEqualTo(204);
     assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).isEmpty();
-    assertThat(OPENCODE.globalMcp.get("github").get("enabled").asBoolean()).isFalse();
+    assertThat(OPENCODE.globalMcp.has("github")).isFalse();
     assertThat(send("DELETE", "/mcp-servers/github", null).statusCode()).isEqualTo(404);
   }
 

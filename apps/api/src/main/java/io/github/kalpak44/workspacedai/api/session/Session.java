@@ -13,15 +13,21 @@ public record Session(
         String title,
     @Schema(
             description = "The directory the agent works in, inside the workspace",
-            example = "/home/workspace/sessions/8b0e4f7c-1d2a-4c3b-9e5f-6a7b8c9d0e1f")
+            example = "/home/workspace/project")
         String path,
-    @Schema(example = "2026-11-03T15:37:24.531Z") Instant createdAt) {
+    @Schema(example = "2026-11-03T15:37:24.531Z") Instant createdAt,
+    boolean available) {
 
   Session withTitle(String title) {
-    return new Session(id, title, path, createdAt);
+    return new Session(id, title, path, createdAt, available);
   }
 
   static Session of(WorkspaceSessionEntity entity) {
-    return new Session(entity.getId(), entity.getTitle(), entity.getPath(), entity.getCreatedAt());
+    return new Session(
+        entity.getId(),
+        entity.getTitle(),
+        entity.getPath(),
+        entity.getCreatedAt(),
+        entity.isAvailable());
   }
 }

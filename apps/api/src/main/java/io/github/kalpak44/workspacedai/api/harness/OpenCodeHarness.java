@@ -1,54 +1,75 @@
 package io.github.kalpak44.workspacedai.api.harness;
 
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.io.OutputStream;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.net.http.WebSocket;
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeMap;
-import java.util.TreeSet;
+import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
-import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Talks to {@code opencode serve} over its HTTP API. */
+/** Talks only to the OpenCode V2 HTTP API. */
 @Component
 public class OpenCodeHarness implements Harness {
 
   private static final Logger LOG = LoggerFactory.getLogger(OpenCodeHarness.class);
-
-  // opencode scopes each request, the event stream included, to this directory.
-  static final String DIRECTORY_HEADER = "x-opencode-directory";
   private static final String USER = "opencode";
-  // What opencode calls a session until it generates a title from the first exchange.
-  private static final Pattern PLACEHOLDER_TITLE =
-      Pattern.compile("^(New|Child) session - \\d{4}-\\d{2}-\\d{2}T.*");
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
-  // Long enough for a busy harness to answer a plain request; replies themselves stream.
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
+  private static final String EVENT_TYPES =
+      String.join(
+          ",",
+          "session.renamed",
+          "session.inbox.delivered",
+          "session.execution.started",
+          "session.execution.succeeded",
+          "session.execution.failed",
+          "session.execution.interrupted",
+          "session.text.started",
+          "session.text.delta",
+          "session.text.ended",
+          "session.reasoning.started",
+          "session.reasoning.delta",
+          "session.reasoning.ended",
+          "session.tool.input.started",
+          "session.tool.called",
+          "session.tool.progress",
+          "session.tool.success",
+          "session.tool.failed");
 
-  private final HttpClient http = HttpClient.newBuilder().connectTimeout(CONNECT_TIMEOUT).build();
+  private final HttpClient http =
+      HttpClient.newBuilder()
+          .version(HttpClient.Version.HTTP_1_1)
+          .connectTimeout(CONNECT_TIMEOUT)
+          .build();
   private final JsonMapper json;
 
   public OpenCodeHarness(JsonMapper json) {
@@ -56,15 +77,54 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public void validate(HarnessEndpoint endpoint, String directory) {
+    var info = call(endpoint, "GET", "/api/info", null);
+    var version = text(info, "version");
+    if (version == null || !version.startsWith("2.")) {
+      throw new HarnessUnavailableException("the workspace is not running OpenCode V2");
+    }
+    call(endpoint, "GET", withLocation("/api/location", directory), null);
+  }
+
+  @Override
+  public List<HarnessSession> sessions(HarnessEndpoint endpoint) {
+    var result = new ArrayList<HarnessSession>();
+    String cursor = null;
+    do {
+      var path = "/api/session?limit=100&parentID=null";
+      if (cursor != null) {
+        path += "&cursor=" + encode(cursor);
+      } else {
+        path += "&order=asc";
+      }
+      var page = call(endpoint, "GET", path, null);
+      for (var session : page.path("data")) {
+        var created = number(session.path("time"), "created");
+        result.add(
+            new HarnessSession(
+                text(session, "id"),
+                text(session, "title"),
+                text(session.path("location"), "directory"),
+                created == null ? Instant.now() : instant(created)));
+      }
+      cursor = nullableText(page.path("cursor"), "next");
+    } while (cursor != null);
+    return result;
+  }
+
+  @Override
   public String createSession(HarnessEndpoint endpoint, String directory, String title) {
-    var body = title == null ? Map.of() : Map.of("title", title);
-    var created = call(endpoint, directory, "POST", "/session", body);
-    return created.get("id").asString();
+    var body = new LinkedHashMap<String, Object>();
+    body.put("location", Map.of("directory", directory));
+    if (title != null) {
+      body.put("title", title);
+    }
+    return text(call(endpoint, "POST", "/api/session", body).path("data"), "id");
   }
 
   @Override
   public void deleteSession(HarnessEndpoint endpoint, String directory, String sessionId) {
-    var response = send(request(endpoint, directory, "/session/" + sessionId).DELETE());
+    var response = send(request(endpoint, "/api/session/" + encode(sessionId)).DELETE());
     if (response.statusCode() != 404) {
       check(response);
     }
@@ -72,167 +132,201 @@ public class OpenCodeHarness implements Harness {
 
   @Override
   public List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId) {
-    var messages = new ArrayList<ChatMessage>();
-    for (var message :
-        call(endpoint, directory, "GET", "/session/" + sessionId + "/message", null)) {
-      var info = message.path("info");
-      var parts = new ArrayList<ChatPart>();
-      for (var part : message.path("parts")) {
-        var mapped = part(part);
+    var result = new ArrayList<ChatMessage>();
+    String cursor = null;
+    do {
+      var path = "/api/session/" + encode(sessionId) + "/message?limit=100";
+      if (cursor != null) {
+        path += "&cursor=" + encode(cursor);
+      } else {
+        path += "&order=asc";
+      }
+      var page = call(endpoint, "GET", path, null);
+      for (var message : page.path("data")) {
+        var mapped = message(message);
         if (mapped != null) {
-          parts.add(mapped);
+          result.add(mapped);
         }
       }
-      messages.add(new ChatMessage(text(info, "id"), text(info, "role"), parts));
-    }
-    return messages;
+      cursor = nullableText(page.path("cursor"), "next");
+    } while (cursor != null);
+    return result;
   }
 
   @Override
   public Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId) {
-    return Optional.ofNullable(
-            text(call(endpoint, directory, "GET", "/session/" + sessionId, null), "title"))
-        .filter(title -> !PLACEHOLDER_TITLE.matcher(title).matches());
+    var response = call(endpoint, "GET", "/api/session/" + encode(sessionId), null);
+    return Optional.ofNullable(text(response.path("data"), "title"));
   }
 
   @Override
   public void prompt(
       HarnessEndpoint endpoint, String directory, String sessionId, String text, ModelRef model) {
-    var body = new LinkedHashMap<String, Object>();
     if (model != null) {
-      body.put("model", Map.of("providerID", model.providerId(), "modelID", model.modelId()));
+      call(
+          endpoint,
+          "POST",
+          "/api/session/" + encode(sessionId) + "/model",
+          Map.of("model", Map.of("providerID", model.providerId(), "id", model.modelId())));
     }
-    body.put("parts", List.of(Map.of("type", "text", "text", text)));
-    call(endpoint, directory, "POST", "/session/" + sessionId + "/prompt_async", body);
+    call(endpoint, "POST", "/api/session/" + encode(sessionId) + "/prompt", Map.of("text", text));
   }
 
   @Override
   public ModelCatalogue models(HarnessEndpoint endpoint, String providerId) {
-    var catalogue = call(endpoint, HOME, "GET", "/config/providers", null);
+    var response = call(endpoint, "GET", withLocation("/api/model", PROJECT_ROOT), null);
     var models = new ArrayList<ModelOption>();
-    for (var provider : catalogue.path("providers")) {
-      if (!providerId.equals(text(provider, "id"))) {
+    for (var model : response.path("data")) {
+      if (!providerId.equals(text(model, "providerID"))
+          || !model.path("enabled").asBoolean(true)
+          || !model.path("capabilities").path("tools").asBoolean(false)) {
         continue;
       }
-      for (var model : provider.path("models")) {
-        if (model.path("capabilities").path("toolcall").asBoolean(false)) {
-          var cost = model.path("cost");
-          models.add(
-              new ModelOption(
-                  text(model, "id"),
-                  text(model, "name"),
-                  number(model.path("limit"), "context") == null
-                      ? null
-                      : number(model.path("limit"), "context").longValue(),
-                  number(cost, "input"),
-                  number(cost, "output")));
-        }
-      }
+      var costs = model.path("cost");
+      var cost = costs.isArray() && !costs.isEmpty() ? costs.get(0) : json.missingNode();
+      models.add(
+          new ModelOption(
+              text(model, "id"),
+              text(model, "name"),
+              longNumber(model.path("limit"), "context"),
+              number(cost, "input"),
+              number(cost, "output")));
     }
     models.sort(Comparator.comparing(ModelOption::name, String.CASE_INSENSITIVE_ORDER));
-    return new ModelCatalogue(configuredModel(endpoint, providerId, catalogue), models);
-  }
-
-  /**
-   * The model the harness's configuration names, which is the one a reply without a model uses. The
-   * catalogue's own default is only opencode's guess, and not what this harness is set to.
-   */
-  private String configuredModel(HarnessEndpoint endpoint, String providerId, JsonNode catalogue) {
-    var configured = text(call(endpoint, HOME, "GET", "/global/config", null), "model");
-    var prefix = providerId + "/";
-    return configured != null && configured.startsWith(prefix)
-        ? configured.substring(prefix.length())
-        : text(catalogue.path("default"), providerId);
+    var defaultModel =
+        call(endpoint, "GET", withLocation("/api/model/default", PROJECT_ROOT), null);
+    return new ModelCatalogue(text(defaultModel.path("data"), "id"), models);
   }
 
   @Override
   public Map<String, String> mcpStatus(HarnessEndpoint endpoint) {
     var statuses = new TreeMap<String, String>();
-    call(endpoint, HOME, "GET", "/mcp", null)
-        .properties()
-        .forEach(e -> statuses.put(e.getKey(), text(e.getValue(), "status")));
+    for (var server :
+        call(endpoint, "GET", withLocation("/api/mcp", PROJECT_ROOT), null).path("data")) {
+      statuses.put(text(server, "name"), text(server.path("status"), "status"));
+    }
     return statuses;
   }
 
-  /**
-   * Reads the harness's global configuration first and writes only when it differs, so applying the
-   * same servers twice — as every restart of the API does — leaves the harness alone.
-   *
-   * <p>The configuration comes back with every {@code {env:NAME}} already substituted, so header
-   * values cannot be compared and are never copied back: a server is compared by URL, enabled flag
-   * and header names, and one being disabled is sent only {@code enabled: false}, which opencode
-   * merges into what it has. Writing back what was read would put the secret itself into the
-   * harness's configuration file.
-   */
   @Override
   public boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers) {
-    var current = call(endpoint, HOME, "GET", "/global/config", null).path("mcp");
-    var patch = new TreeMap<String, Object>();
     servers.forEach(
-        (name, server) -> {
-          if (!matches(current.path(name), server)) {
-            var entry = new LinkedHashMap<String, Object>();
-            entry.put("type", "remote");
-            entry.put("url", server.url());
-            entry.put("headers", server.headers());
-            entry.put("enabled", true);
-            patch.put(name, entry);
-          }
-        });
-    current
-        .properties()
-        .forEach(
-            e -> {
-              if (!servers.containsKey(e.getKey())
-                  && e.getValue().path("enabled").asBoolean(true)) {
-                patch.put(e.getKey(), Map.of("enabled", false));
-              }
-            });
-    if (patch.isEmpty()) {
-      return false;
-    }
-    call(endpoint, HOME, "PATCH", "/global/config", Map.of("mcp", patch));
-    return true;
+        (name, server) ->
+            call(
+                endpoint,
+                "PUT",
+                withLocation("/api/experimental/mcp/" + encode(name), PROJECT_ROOT),
+                Map.of(
+                    "config",
+                    Map.of(
+                        "type", "remote",
+                        "url", server.url(),
+                        "headers", server.headers()))));
+    return !servers.isEmpty();
   }
 
-  private static boolean matches(JsonNode current, McpServerConfig server) {
-    if (current.isMissingNode()
-        || !current.path("enabled").asBoolean(true)
-        || !server.url().equals(text(current, "url"))) {
-      return false;
+  @Override
+  public void removeMcp(HarnessEndpoint endpoint, String name) {
+    var response =
+        send(
+            request(endpoint, withLocation("/api/experimental/mcp/" + encode(name), PROJECT_ROOT))
+                .DELETE());
+    if (response.statusCode() != 404) {
+      check(response);
     }
-    var names = new TreeSet<String>();
-    current.path("headers").properties().forEach(e -> names.add(e.getKey()));
-    return names.equals(new TreeSet<>(server.headers().keySet()));
   }
 
   @Override
   public void abort(HarnessEndpoint endpoint, String directory, String sessionId) {
-    call(endpoint, directory, "POST", "/session/" + sessionId + "/abort", Map.of());
+    call(endpoint, "POST", "/api/session/" + encode(sessionId) + "/interrupt", Map.of());
   }
 
-  /**
-   * One connection per caller, read on its own virtual thread. Closing the handle closes the
-   * connection, which is what ends the read; the harness ending it runs {@code onEnd} instead.
-   */
+  @Override
+  public WorkspaceTerminal terminal(
+      HarnessEndpoint endpoint, String directory, OutputStream output, Runnable onExit) {
+    validate(endpoint, directory);
+    var created =
+        call(
+                endpoint,
+                "POST",
+                withLocation("/api/pty", directory),
+                Map.of(
+                    "command",
+                    "/bin/bash",
+                    "args",
+                    List.of("-l"),
+                    "cwd",
+                    directory,
+                    "title",
+                    "Workspace terminal"))
+            .path("data");
+    var ptyId = text(created, "id");
+    var tokenResponse =
+        check(
+            send(
+                request(
+                        endpoint,
+                        withLocation("/api/pty/" + encode(ptyId) + "/connect-token", directory))
+                    .header("x-opencode-ticket", "1")
+                    .header("Content-Type", "application/json")
+                    .POST(BodyPublishers.ofString("{}"))));
+    var ticket = text(json.readTree(tokenResponse.body()).path("data"), "ticket");
+    var socketUri =
+        websocket(
+            endpoint.baseUrl(),
+            withLocation("/api/pty/" + encode(ptyId) + "/connect", directory)
+                + "&ticket="
+                + encode(ticket));
+    var closed = new AtomicBoolean();
+    var socket =
+        http.newWebSocketBuilder()
+            .connectTimeout(CONNECT_TIMEOUT)
+            .buildAsync(socketUri, new TerminalListener(output, closed, onExit))
+            .join();
+    return new WorkspaceTerminal() {
+      @Override
+      public void input(byte[] bytes) {
+        socket.sendBinary(ByteBuffer.wrap(bytes), true).join();
+      }
+
+      @Override
+      public void resize(int columns, int rows) {
+        call(
+            endpoint,
+            "PUT",
+            withLocation("/api/pty/" + encode(ptyId), directory),
+            Map.of("size", Map.of("cols", columns, "rows", rows)));
+      }
+
+      @Override
+      public void close() {
+        if (closed.compareAndSet(false, true)) {
+          socket.sendClose(WebSocket.NORMAL_CLOSURE, "closed");
+          var response =
+              send(
+                  request(endpoint, withLocation("/api/pty/" + encode(ptyId), directory)).DELETE());
+          if (response.statusCode() != 404) {
+            check(response);
+          }
+        }
+      }
+    };
+  }
+
   @Override
   public AutoCloseable stream(
-      HarnessEndpoint endpoint,
-      String directory,
-      String sessionId,
-      Consumer<HarnessEvent> onEvent,
-      Runnable onEnd) {
+      HarnessEndpoint endpoint, Consumer<HarnessEventEnvelope> onEvent, Runnable onEnd) {
     var closed = new AtomicBoolean();
     var body = new AtomicReference<InputStream>();
     var request =
-        request(endpoint, directory, "/event")
+        request(endpoint, "/api/event?types=" + EVENT_TYPES.replace(",", "&types="))
             .timeout(Duration.ofDays(1))
             .header("Accept", "text/event-stream")
             .GET()
             .build();
     var reader =
         Thread.ofVirtual()
-            .name("harness-events-" + sessionId)
+            .name("opencode-v2-events")
             .start(
                 () -> {
                   try {
@@ -241,10 +335,10 @@ public class OpenCodeHarness implements Harness {
                     if (response.statusCode() / 100 != 2) {
                       throw new IOException("event stream answered " + response.statusCode());
                     }
-                    read(response.body(), sessionId, onEvent, closed);
+                    read(response.body(), onEvent, closed);
                   } catch (IOException e) {
                     if (!closed.get()) {
-                      LOG.info("harness event stream for {} ended: {}", sessionId, e.getMessage());
+                      LOG.info("OpenCode V2 event stream ended: {}", e.getMessage());
                     }
                   } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
@@ -265,85 +359,199 @@ public class OpenCodeHarness implements Harness {
     };
   }
 
-  private void read(
-      InputStream body, String sessionId, Consumer<HarnessEvent> onEvent, AtomicBoolean closed)
+  private void read(InputStream body, Consumer<HarnessEventEnvelope> onEvent, AtomicBoolean closed)
       throws IOException {
+    var tools = new TreeMap<String, String>();
     try (var lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
       String line;
       while (!closed.get() && (line = lines.readLine()) != null) {
-        if (line.startsWith("data:")) {
-          var event = event(json.readTree(line.substring(5)), sessionId);
-          if (event != null) {
-            onEvent.accept(event);
-          }
+        if (line.startsWith(":")) {
+          onEvent.accept(new HarnessEventEnvelope(null, new HarnessEvent.Heartbeat()));
+        } else if (line.startsWith("data:")) {
+          events(json.readTree(line.substring(5)), tools).forEach(onEvent);
         }
       }
     }
   }
 
-  /** Null for anything about another session, or that the chat has no use for. */
-  static HarnessEvent event(JsonNode event, String sessionId) {
+  static List<HarnessEventEnvelope> events(JsonNode event, Map<String, String> tools) {
     var type = text(event, "type");
-    var properties = event.path("properties");
-    if ("server.heartbeat".equals(type)) {
-      return new HarnessEvent.Heartbeat();
+    var data = event.path("data");
+    var sessionId = text(data, "sessionID");
+    if (type == null || sessionId == null) {
+      return List.of();
     }
-    if (type == null || !sessionId.equals(text(properties, "sessionID"))) {
-      return null;
+    var result = new ArrayList<HarnessEvent>();
+    switch (type) {
+      case "session.renamed" -> result.add(new HarnessEvent.Title(text(data, "title")));
+      case "session.inbox.delivered" -> result.add(new HarnessEvent.Refresh());
+      case "session.execution.started" -> result.add(new HarnessEvent.Status(true));
+      case "session.execution.succeeded", "session.execution.interrupted" ->
+          result.add(new HarnessEvent.Status(false));
+      case "session.execution.failed" -> {
+        result.add(new HarnessEvent.Error(error(data.path("error"))));
+        result.add(new HarnessEvent.Status(false));
+      }
+      case "session.text.started", "session.reasoning.started" -> {
+        var messageId = text(data, "assistantMessageID");
+        var partType = type.contains("reasoning") ? "reasoning" : "text";
+        result.add(new HarnessEvent.Message(messageId, "assistant"));
+        result.add(
+            new HarnessEvent.Part(
+                messageId, new ChatPart(partId(partType, data), partType, "", null, null)));
+      }
+      case "session.text.delta", "session.reasoning.delta" -> {
+        var partType = type.contains("reasoning") ? "reasoning" : "text";
+        result.add(
+            new HarnessEvent.Delta(
+                text(data, "assistantMessageID"), partId(partType, data), text(data, "delta")));
+      }
+      case "session.text.ended", "session.reasoning.ended" -> {
+        var partType = type.contains("reasoning") ? "reasoning" : "text";
+        result.add(
+            new HarnessEvent.Part(
+                text(data, "assistantMessageID"),
+                new ChatPart(partId(partType, data), partType, text(data, "text"), null, null)));
+      }
+      case "session.tool.input.started" -> {
+        var id = text(data, "id");
+        var name = text(data, "name");
+        tools.put(id, name);
+        result.add(
+            new HarnessEvent.Part(
+                text(data, "assistantMessageID"), new ChatPart(id, "tool", name, name, "pending")));
+      }
+      case "session.tool.called", "session.tool.progress" -> {
+        var id = text(data, "id");
+        var name = tools.get(id);
+        result.add(
+            new HarnessEvent.Part(
+                text(data, "assistantMessageID"), new ChatPart(id, "tool", name, name, "running")));
+      }
+      case "session.tool.success", "session.tool.failed" -> {
+        var id = text(data, "id");
+        var name = tools.remove(id);
+        result.add(
+            new HarnessEvent.Part(
+                text(data, "assistantMessageID"),
+                new ChatPart(
+                    id, "tool", name, name, type.endsWith("success") ? "completed" : "error")));
+      }
+      default -> {
+        return List.of();
+      }
     }
-    return switch (type) {
-      case "message.updated" -> {
-        var info = properties.path("info");
-        yield new HarnessEvent.Message(text(info, "id"), text(info, "role"));
-      }
-      case "message.part.updated" -> {
-        var part = properties.path("part");
-        var mapped = part(part);
-        yield mapped == null ? null : new HarnessEvent.Part(text(part, "messageID"), mapped);
-      }
-      case "message.part.delta" ->
-          "text".equals(text(properties, "field"))
-              ? new HarnessEvent.Delta(
-                  text(properties, "messageID"),
-                  text(properties, "partID"),
-                  text(properties, "delta"))
-              : null;
-      case "session.status" ->
-          new HarnessEvent.Status(!"idle".equals(text(properties.path("status"), "type")));
-      case "session.idle" -> new HarnessEvent.Status(false);
-      case "session.updated" -> {
-        var title = text(properties.path("info"), "title");
-        yield title == null || PLACEHOLDER_TITLE.matcher(title).matches()
-            ? null
-            : new HarnessEvent.Title(title);
-      }
-      case "session.error" -> {
-        var error = properties.path("error");
-        yield new HarnessEvent.Error(
-            Objects.requireNonNullElse(
-                text(error.path("data"), "message"),
-                Objects.requireNonNullElse(text(error, "name"), "The reply failed")));
-      }
-      default -> null;
-    };
+    return result.stream().map(e -> new HarnessEventEnvelope(sessionId, e)).toList();
   }
 
-  /** Text, reasoning and tools; null for the bookkeeping parts a chat does not show. */
-  static ChatPart part(JsonNode part) {
-    var id = text(part, "id");
-    var type = text(part, "type");
-    if (type == null || part.path("synthetic").asBoolean(false)) {
+  static ChatMessage message(JsonNode message) {
+    var id = text(message, "id");
+    var type = text(message, "type");
+    if ("user".equals(type)) {
+      return new ChatMessage(
+          id,
+          "user",
+          List.of(new ChatPart(id + ":text", "text", text(message, "text"), null, null)));
+    }
+    if (!"assistant".equals(type)) {
       return null;
     }
-    return switch (type) {
-      case "text", "reasoning" -> new ChatPart(id, type, text(part, "text"), null, null);
-      case "tool" -> {
-        var state = part.path("state");
-        yield new ChatPart(
-            id, type, text(state, "title"), text(part, "tool"), text(state, "status"));
+    var parts = new ArrayList<ChatPart>();
+    var ordinal = 0;
+    for (var content : message.path("content")) {
+      var mapped = part(id, ordinal++, content);
+      if (mapped != null) {
+        parts.add(mapped);
       }
-      default -> null;
-    };
+    }
+    return new ChatMessage(id, "assistant", parts);
+  }
+
+  private static ChatPart part(String messageId, int ordinal, JsonNode content) {
+    var type = text(content, "type");
+    if ("text".equals(type) || "reasoning".equals(type)) {
+      return new ChatPart(
+          messageId + ":" + type + ":" + ordinal, type, text(content, "text"), null, null);
+    }
+    if (!"tool".equals(type)) {
+      return null;
+    }
+    var name = text(content, "name");
+    var status = text(content.path("state"), "status");
+    if ("streaming".equals(status)) {
+      status = "pending";
+    }
+    return new ChatPart(text(content, "id"), "tool", name, name, status);
+  }
+
+  private static String partId(String type, JsonNode data) {
+    return text(data, "assistantMessageID") + ":" + type + ":" + data.path("ordinal").asInt();
+  }
+
+  private JsonNode call(HarnessEndpoint endpoint, String method, String path, Object body) {
+    var publisher =
+        body == null
+            ? BodyPublishers.noBody()
+            : BodyPublishers.ofString(json.writeValueAsString(body));
+    var response =
+        check(
+            send(
+                request(endpoint, path)
+                    .header("Content-Type", "application/json")
+                    .method(method, publisher)));
+    return response.body() == null || response.body().isBlank()
+        ? json.nullNode()
+        : json.readTree(response.body());
+  }
+
+  private HttpRequest.Builder request(HarnessEndpoint endpoint, String path) {
+    var credentials = USER + ":" + endpoint.password();
+    return HttpRequest.newBuilder(URI.create(endpoint.baseUrl() + path))
+        .timeout(REQUEST_TIMEOUT)
+        .header(
+            "Authorization",
+            "Basic "
+                + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
+  }
+
+  private HttpResponse<String> send(HttpRequest.Builder request) {
+    try {
+      return http.send(request.build(), BodyHandlers.ofString());
+    } catch (IOException e) {
+      throw new HarnessUnavailableException("the workspace's OpenCode service is not answering", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new HarnessUnavailableException("interrupted calling OpenCode", e);
+    }
+  }
+
+  private static HttpResponse<String> check(HttpResponse<String> response) {
+    if (response.statusCode() / 100 != 2) {
+      throw new HarnessUnavailableException("OpenCode V2 answered " + response.statusCode());
+    }
+    return response;
+  }
+
+  private static String withLocation(String path, String directory) {
+    return path + (path.contains("?") ? "&" : "?") + "location%5Bdirectory%5D=" + encode(directory);
+  }
+
+  private static String encode(String value) {
+    return URLEncoder.encode(value, StandardCharsets.UTF_8);
+  }
+
+  private static URI websocket(URI base, String path) {
+    var scheme = "https".equals(base.getScheme()) ? "wss" : "ws";
+    return URI.create(scheme + "://" + base.getAuthority() + path);
+  }
+
+  private static Instant instant(Number millis) {
+    return Instant.ofEpochMilli(millis.longValue());
+  }
+
+  private static Long longNumber(JsonNode node, String field) {
+    var value = node.get(field);
+    return value == null || !value.isNumber() ? null : value.asLong();
   }
 
   private static Double number(JsonNode node, String field) {
@@ -351,52 +559,83 @@ public class OpenCodeHarness implements Harness {
     return value == null || !value.isNumber() ? null : value.asDouble();
   }
 
-  private static String text(JsonNode node, String field) {
+  private static String nullableText(JsonNode node, String field) {
     var value = node.get(field);
     return value == null || value.isNull() ? null : value.asString();
   }
 
-  private JsonNode call(
-      HarnessEndpoint endpoint, String directory, String method, String path, Object body) {
-    var publisher =
-        body == null
-            ? BodyPublishers.noBody()
-            : BodyPublishers.ofString(json.writeValueAsString(body));
-    var builder =
-        request(endpoint, directory, path)
-            .header("Content-Type", "application/json")
-            .method(method, publisher);
-    var response = check(send(builder));
-    var content = response.body();
-    return content == null || content.isBlank() ? json.nullNode() : json.readTree(content);
+  private static String text(JsonNode node, String field) {
+    return nullableText(node, field);
   }
 
-  private HttpRequest.Builder request(HarnessEndpoint endpoint, String directory, String path) {
-    var credentials = USER + ":" + endpoint.password();
-    return HttpRequest.newBuilder(URI.create(endpoint.baseUrl() + path))
-        .timeout(REQUEST_TIMEOUT)
-        .header(
-            "Authorization",
-            "Basic "
-                + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8)))
-        .header(DIRECTORY_HEADER, directory);
-  }
-
-  private HttpResponse<String> send(HttpRequest.Builder request) {
-    try {
-      return http.send(request.build(), BodyHandlers.ofString());
-    } catch (IOException e) {
-      throw new HarnessUnavailableException("the workspace's harness is not answering", e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new HarnessUnavailableException("interrupted calling the harness", e);
+  private static String error(JsonNode error) {
+    var message = text(error, "message");
+    if (message == null) {
+      message = text(error.path("data"), "message");
     }
+    return message == null ? "The reply failed" : message;
   }
 
-  private static HttpResponse<String> check(HttpResponse<String> response) {
-    if (response.statusCode() / 100 != 2) {
-      throw new HarnessUnavailableException("the harness answered " + response.statusCode());
+  private static final class TerminalListener implements WebSocket.Listener {
+    private final OutputStream output;
+    private final AtomicBoolean closed;
+    private final Runnable onExit;
+
+    private TerminalListener(OutputStream output, AtomicBoolean closed, Runnable onExit) {
+      this.output = output;
+      this.closed = closed;
+      this.onExit = onExit;
     }
-    return response;
+
+    @Override
+    public void onOpen(WebSocket webSocket) {
+      webSocket.request(1);
+    }
+
+    @Override
+    public CompletionStage<?> onText(WebSocket webSocket, CharSequence data, boolean last) {
+      write(data.toString().getBytes(StandardCharsets.UTF_8));
+      webSocket.request(1);
+      return null;
+    }
+
+    @Override
+    public CompletionStage<?> onBinary(WebSocket webSocket, ByteBuffer data, boolean last) {
+      var bytes = new byte[data.remaining()];
+      data.get(bytes);
+      if (bytes.length == 0 || bytes[0] != 0) {
+        write(bytes);
+      }
+      webSocket.request(1);
+      return null;
+    }
+
+    @Override
+    public CompletionStage<?> onClose(WebSocket webSocket, int statusCode, String reason) {
+      exited();
+      return null;
+    }
+
+    @Override
+    public void onError(WebSocket webSocket, Throwable error) {
+      exited();
+    }
+
+    private void write(byte[] bytes) {
+      try {
+        synchronized (output) {
+          output.write(bytes);
+          output.flush();
+        }
+      } catch (IOException e) {
+        throw new HarnessUnavailableException("could not relay terminal output", e);
+      }
+    }
+
+    private void exited() {
+      if (closed.compareAndSet(false, true)) {
+        onExit.run();
+      }
+    }
   }
 }

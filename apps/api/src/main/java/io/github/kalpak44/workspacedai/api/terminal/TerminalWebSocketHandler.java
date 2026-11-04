@@ -17,7 +17,7 @@ import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.AbstractWebSocketHandler;
 import org.springframework.web.socket.handler.ConcurrentWebSocketSessionDecorator;
 
-/** Bridges one browser WebSocket to one Kubernetes exec TTY. */
+/** Bridges one browser WebSocket to one OpenCode V2 PTY. */
 @Component
 public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
 

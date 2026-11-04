@@ -2,7 +2,6 @@ package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
-import java.io.OutputStream;
 import java.util.Collection;
 import java.util.Map;
 import java.util.Optional;
@@ -51,8 +50,8 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
-  public WorkspaceTerminal terminal(UUID workspaceId, OutputStream output, Runnable onExit) {
-    throw new IllegalStateException("workspace terminals are available only for Kubernetes pods");
+  public Optional<String> environmentValue(UUID workspaceId, String name) {
+    return Optional.ofNullable(System.getenv(name));
   }
 
   @Override

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.net.URI;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -16,7 +17,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 class OpenCodeHarnessTest {
 
-  static final String DIRECTORY = "/home/workspace/sessions/cccc";
+  static final String DIRECTORY = Harness.PROJECT_ROOT;
 
   FakeOpenCode opencode;
   final OpenCodeHarness harness = new OpenCodeHarness(JsonMapper.builder().build());
@@ -32,12 +33,29 @@ class OpenCodeHarnessTest {
   }
 
   @Test
-  void createsASessionInItsDirectoryWithThePassword() {
+  void validatesV2AndResolvesTheProjectLocation() {
+    harness.validate(opencode.endpoint(), DIRECTORY);
+    assertThat(opencode.requests)
+        .extracting(FakeOpenCode.Request::path, FakeOpenCode.Request::directory)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple("/api/info", null),
+            org.assertj.core.groups.Tuple.tuple("/api/location", DIRECTORY));
+  }
+
+  @Test
+  void createsAndListsASessionAtTheProjectLocation() {
     var id = harness.createSession(opencode.endpoint(), DIRECTORY, null);
     assertThat(id).isEqualTo(FakeOpenCode.SESSION);
-    var request = opencode.requests.getFirst();
-    assertThat(request.directory()).isEqualTo(DIRECTORY);
-    assertThat(request.body()).isEqualTo("{}");
+    assertThat(opencode.requests.getFirst().body())
+        .isEqualTo("{\"location\":{\"directory\":\"/home/workspace/project\"}}");
+    assertThat(harness.sessions(opencode.endpoint()))
+        .singleElement()
+        .satisfies(
+            session -> {
+              assertThat(session.id()).isEqualTo(FakeOpenCode.SESSION);
+              assertThat(session.directory()).isEqualTo(DIRECTORY);
+              assertThat(session.createdAt()).isNotNull();
+            });
   }
 
   @Test
@@ -47,30 +65,29 @@ class OpenCodeHarnessTest {
     assertThat(opencode.requests)
         .extracting(FakeOpenCode.Request::method, FakeOpenCode.Request::path)
         .containsExactly(
-            org.assertj.core.groups.Tuple.tuple("DELETE", "/session/" + FakeOpenCode.SESSION),
-            org.assertj.core.groups.Tuple.tuple("DELETE", "/session/ses_gone"));
+            org.assertj.core.groups.Tuple.tuple("DELETE", "/api/session/" + FakeOpenCode.SESSION),
+            org.assertj.core.groups.Tuple.tuple("DELETE", "/api/session/ses_gone"));
   }
 
   @Test
-  void readsTheConversationKeepingOnlyWhatAChatShows() {
-    var messages = harness.messages(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION);
-    assertThat(messages)
+  void readsProjectedConversationMessages() {
+    assertThat(harness.messages(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION))
         .containsExactly(
             new ChatMessage(
                 "msg_u",
                 "user",
-                List.of(new ChatPart("prt_u", "text", "List the files", null, null))),
+                List.of(new ChatPart("msg_u:text", "text", "List the files", null, null))),
             new ChatMessage(
                 "msg_a",
                 "assistant",
                 List.of(
-                    new ChatPart("prt_r", "reasoning", "I should run ls.", null, null),
-                    new ChatPart("prt_t", "tool", "List files", "bash", "completed"),
-                    new ChatPart("prt_x", "text", "There are none.", null, null))));
+                    new ChatPart("msg_a:reasoning:0", "reasoning", "I should run ls.", null, null),
+                    new ChatPart("tool_1", "tool", "bash", "bash", "completed"),
+                    new ChatPart("msg_a:text:2", "text", "There are none.", null, null))));
   }
 
   @Test
-  void readsTheTitleOnceItIsNoLongerThePlaceholder() {
+  void readsTheSessionTitle() {
     assertThat(harness.title(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION)).isEmpty();
     opencode.title = "Fix the login form";
     assertThat(harness.title(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION))
@@ -78,8 +95,8 @@ class OpenCodeHarnessTest {
   }
 
   @Test
-  void promptsWithoutWaitingAndAborts() {
-    harness.prompt(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, "Hi \"there\"", null);
+  void switchesTheModelThenPromptsAndInterrupts() {
+    harness.prompt(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, "Hi", null);
     harness.prompt(
         opencode.endpoint(),
         DIRECTORY,
@@ -87,21 +104,19 @@ class OpenCodeHarnessTest {
         "Again",
         new Harness.ModelRef("openrouter", "anthropic/claude-haiku-5.5"));
     harness.abort(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION);
-    assertThat(opencode.requests.get(0).path()).endsWith("/prompt_async");
-    var json = JsonMapper.builder().build();
-    assertThat(json.readTree(opencode.requests.get(0).body()))
-        .isEqualTo(
-            json.readTree("{\"parts\":[{\"type\":\"text\",\"text\":\"Hi \\\"there\\\"\"}]}"));
-    // A named model goes with the prompt, so the reply uses it without reloading anything.
-    assertThat(json.readTree(opencode.requests.get(1).body()).get("model"))
-        .isEqualTo(
-            json.readTree(
-                "{\"providerID\":\"openrouter\",\"modelID\":\"anthropic/claude-haiku-5.5\"}"));
-    assertThat(opencode.requests.get(2).path()).endsWith("/abort");
+    assertThat(opencode.requests)
+        .extracting(FakeOpenCode.Request::path)
+        .containsExactly(
+            "/api/session/" + FakeOpenCode.SESSION + "/prompt",
+            "/api/session/" + FakeOpenCode.SESSION + "/model",
+            "/api/session/" + FakeOpenCode.SESSION + "/prompt",
+            "/api/session/" + FakeOpenCode.SESSION + "/interrupt");
+    assertThat(opencode.requests.get(1).body())
+        .contains("\"providerID\":\"openrouter\"", "\"id\":\"anthropic/claude-haiku-5.5\"");
   }
 
   @Test
-  void reportsAHarnessThatRefusesFailsOrIsNotThere() {
+  void reportsAServiceThatRefusesFailsOrIsNotThere() {
     assertThatThrownBy(() -> harness.createSession(opencode.wrongPassword(), DIRECTORY, null))
         .isInstanceOf(HarnessUnavailableException.class);
     assertThatThrownBy(() -> harness.messages(opencode.endpoint(), DIRECTORY, "broken"))
@@ -113,130 +128,77 @@ class OpenCodeHarnessTest {
   }
 
   @Test
-  void streamsOneSessionsReplyAsOpencodeSendsIt() throws Exception {
-    var events = new CopyOnWriteArrayList<HarnessEvent>();
+  void streamsWorkspaceEventsWithTheirSessionIdentity() throws Exception {
+    var events = new CopyOnWriteArrayList<HarnessEventEnvelope>();
     var ended = new CountDownLatch(1);
-    try (var _ =
-        harness.stream(
-            opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, events::add, ended::countDown)) {
+    try (var _ = harness.stream(opencode.endpoint(), events::add, ended::countDown)) {
       assertThat(ended.await(5, TimeUnit.SECONDS)).isTrue();
     }
-    assertThat(opencode.requests.getFirst().directory()).isEqualTo(DIRECTORY);
-
-    assertThat(events).contains(new HarnessEvent.Status(true), new HarnessEvent.Status(false));
-    assertThat(events).contains(new HarnessEvent.Title("Friendly greeting request"));
     assertThat(events)
-        .filteredOn(HarnessEvent.Delta.class::isInstance)
-        .extracting(e -> ((HarnessEvent.Delta) e).delta())
-        .containsExactly("second answer here");
-    // The last snapshot of the text part holds the whole reply, so a missed delta heals.
-    assertThat(events)
-        .filteredOn(HarnessEvent.Part.class::isInstance)
-        .extracting(e -> ((HarnessEvent.Part) e).part())
-        .filteredOn(p -> p.type().equals("text"))
-        .last()
-        .extracting(ChatPart::text)
-        .isEqualTo("second answer here");
-    assertThat(events)
-        .anyMatch(e -> e instanceof HarnessEvent.Message m && "assistant".equals(m.role()));
-    assertThat(events).anyMatch(HarnessEvent.Heartbeat.class::isInstance);
-    assertThat(events).noneMatch(HarnessEvent.Error.class::isInstance);
+        .filteredOn(e -> FakeOpenCode.SESSION.equals(e.sessionId()))
+        .extracting(HarnessEventEnvelope::event)
+        .contains(
+            new HarnessEvent.Refresh(),
+            new HarnessEvent.Status(true),
+            new HarnessEvent.Status(false),
+            new HarnessEvent.Title("Friendly greeting request"),
+            new HarnessEvent.Delta("msg_a", "msg_a:text:0", "second answer here"));
+    assertThat(events).anyMatch(e -> e.event() instanceof HarnessEvent.Heartbeat);
   }
 
   @Test
-  void ignoresOtherSessionsAndPlaceholderTitles() throws Exception {
-    var events = new CopyOnWriteArrayList<HarnessEvent>();
-    var ended = new CountDownLatch(1);
-    try (var _ =
-        harness.stream(
-            opencode.endpoint(), DIRECTORY, "ses_other", events::add, ended::countDown)) {
-      assertThat(ended.await(5, TimeUnit.SECONDS)).isTrue();
-    }
-    assertThat(events).allMatch(HarnessEvent.Heartbeat.class::isInstance);
-
+  void mapsFailedExecutionsToAnErrorAndIdleStatus() {
     var json = JsonMapper.builder().build();
-    var placeholder =
+    var event =
         json.readTree(
-            "{\"type\":\"session.updated\",\"properties\":{\"sessionID\":\"s\",\"info\":"
-                + "{\"title\":\"New session - 2026-11-03T15:09:46.948Z\"}}}");
-    assertThat(OpenCodeHarness.event(placeholder, "s")).isNull();
-    var error =
-        json.readTree(
-            "{\"type\":\"session.error\",\"properties\":{\"sessionID\":\"s\",\"error\":"
-                + "{\"name\":\"APIError\",\"data\":{\"message\":\"User not found.\"}}}}");
-    assertThat(OpenCodeHarness.event(error, "s"))
-        .isEqualTo(new HarnessEvent.Error("User not found."));
-    var nameless =
-        json.readTree(
-            "{\"type\":\"session.error\",\"properties\":{\"sessionID\":\"s\",\"error\":{}}}");
-    assertThat(OpenCodeHarness.event(nameless, "s"))
-        .isEqualTo(new HarnessEvent.Error("The reply failed"));
+            "{\"type\":\"session.execution.failed\",\"data\":{\"sessionID\":\"s\","
+                + "\"error\":{\"message\":\"User not found.\"}}}");
+    assertThat(OpenCodeHarness.events(event, new TreeMap<>()))
+        .extracting(HarnessEventEnvelope::event)
+        .containsExactly(new HarnessEvent.Error("User not found."), new HarnessEvent.Status(false));
   }
 
   @Test
   void stopsReadingOnceClosedWithoutReportingAnEnd() throws Exception {
     opencode.holdStream = new CountDownLatch(1);
-    var events = new CopyOnWriteArrayList<HarnessEvent>();
+    var events = new CopyOnWriteArrayList<HarnessEventEnvelope>();
     var ended = new CountDownLatch(1);
-    var stream =
-        harness.stream(
-            opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION, events::add, ended::countDown);
+    var stream = harness.stream(opencode.endpoint(), events::add, ended::countDown);
     long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
     while (events.isEmpty() && System.nanoTime() < deadline) {
       Thread.sleep(10);
     }
-    assertThat(events).containsExactly(new HarnessEvent.Heartbeat());
+    assertThat(events)
+        .singleElement()
+        .extracting(HarnessEventEnvelope::event)
+        .isInstanceOf(HarnessEvent.Heartbeat.class);
     stream.close();
     stream.close();
     assertThat(ended.await(500, TimeUnit.MILLISECONDS)).isFalse();
   }
 
   @Test
-  void listsOnlyTheProvidersModelsThatCanCallTools() {
+  void listsOnlyEnabledToolCapableProviderModels() {
     var catalogue = harness.models(opencode.endpoint(), "openrouter");
-    // The configured model, not the catalogue's own guess.
     assertThat(catalogue.defaultModel()).isEqualTo("anthropic/claude-sonnet-5.5");
     assertThat(catalogue.models())
         .containsExactly(
             new ModelOption("anthropic/claude-haiku-5.5", "Claude Haiku 5.5", 200000L, 1.0, 5.0),
             new ModelOption(
                 "anthropic/claude-sonnet-5.5", "Claude Sonnet 5.5", 1000000L, 2.0, 10.0));
-    assertThat(opencode.requests.getFirst().directory()).isEqualTo(Harness.HOME);
   }
 
   @Test
-  void writesTheMcpServersOnlyWhenTheyChangeAndDisablesTheOnesRemoved() {
+  void AddsListsAndRemovesRuntimeMcpServers() {
     var github =
         new Harness.McpServerConfig(
             "https://mcp.test/github", Map.of("Authorization", "Bearer {env:GITHUB_TOKEN}"));
     assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isTrue();
-    assertThat(opencode.globalMcp.get("github").get("enabled").asBoolean()).isTrue();
-    assertThat(opencode.globalMcp.get("github").get("headers").get("Authorization").asString())
-        .isEqualTo("Bearer {env:GITHUB_TOKEN}");
-    assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "connected");
-
-    // The same servers again change nothing: an API restart does this for every workspace.
-    var patches = opencode.patches();
-    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isFalse();
-    assertThat(opencode.patches()).isEqualTo(patches);
-
-    // Gone from the wanted set: kept, but disabled, since a merge cannot delete it. Only the flag
-    // is sent, so the substituted header read back is never written into the configuration.
-    assertThat(harness.configureMcp(opencode.endpoint(), Map.of())).isTrue();
-    assertThat(opencode.requests.getLast().body())
-        .isEqualTo("{\"mcp\":{\"github\":{\"enabled\":false}}}");
-    assertThat(opencode.globalMcp.get("github").get("enabled").asBoolean()).isFalse();
-    assertThat(opencode.globalMcp.get("github").get("headers").get("Authorization").asString())
-        .isEqualTo("Bearer {env:GITHUB_TOKEN}");
-    assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "disabled");
-    assertThat(harness.configureMcp(opencode.endpoint(), Map.of())).isFalse();
-
-    // Added back, or pointed elsewhere: written again.
-    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", github))).isTrue();
-    var moved = new Harness.McpServerConfig("https://mcp.test/moved", github.headers());
-    assertThat(harness.configureMcp(opencode.endpoint(), Map.of("github", moved))).isTrue();
     assertThat(opencode.globalMcp.get("github").get("url").asString())
-        .isEqualTo("https://mcp.test/moved");
+        .isEqualTo("https://mcp.test/github");
+    assertThat(harness.mcpStatus(opencode.endpoint())).containsEntry("github", "connected");
+    harness.removeMcp(opencode.endpoint(), "github");
+    assertThat(opencode.globalMcp).isEmpty();
   }
 
   @Test
