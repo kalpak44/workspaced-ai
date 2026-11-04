@@ -39,7 +39,7 @@ export function SessionList(props: Props) {
   }, [pageCount]);
 
   return (
-    <section aria-label="Sessions" className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-6 py-8 sm:py-10">
+    <section aria-label="Sessions" className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
       {props.error && <ErrorBanner message={props.error} onDismiss={props.onDismissError} />}
       <div>
         <h2 className="mb-2 text-xl font-semibold tracking-tight">Start a session</h2>
@@ -88,7 +88,7 @@ export function SessionList(props: Props) {
           </ul>
         )}
         {!loading && pageCount > 1 && (
-          <nav aria-label="Session pages" className="mt-5 flex items-center justify-end gap-1">
+          <nav aria-label="Session pages" className="mt-5 flex flex-wrap items-center justify-end gap-1">
             <IconButton
               label="Previous session page"
               icon={ChevronLeft}

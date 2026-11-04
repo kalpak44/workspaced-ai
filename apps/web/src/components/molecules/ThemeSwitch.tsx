@@ -22,7 +22,7 @@ export function ThemeSwitch({ theme, onChange }: Props) {
           aria-label={label}
           aria-pressed={theme === value}
           onClick={() => onChange(value)}
-          className={`rounded-full p-1 ${
+          className={`inline-flex size-11 items-center justify-center rounded-full p-1 sm:size-auto ${
             theme === value
               ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
               : "text-zinc-500"

@@ -11,7 +11,7 @@ export function SettingsSection({ title, description, children }: Props) {
   return (
     <section
       aria-label={title}
-      className="flex flex-col gap-4 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800"
+      className="flex min-w-0 flex-col gap-4 rounded-xl border border-zinc-200 p-4 sm:p-6 dark:border-zinc-800"
     >
       <div>
         <h2 className="font-medium">{title}</h2>

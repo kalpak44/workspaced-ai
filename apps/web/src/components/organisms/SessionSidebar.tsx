@@ -1,6 +1,7 @@
 import { ArrowLeft, MessageSquare, Plus, Trash2 } from "lucide-react";
 import type { Session } from "../../hooks/useSessions";
 import { Button, IconButton, Spinner } from "../atoms";
+import { SessionDropdown } from "./SessionDropdown";
 
 interface Props {
   readonly workspaceName: string;
@@ -15,13 +16,15 @@ interface Props {
 
 export function SessionSidebar({ workspaceName, sessions, selectedId, loading, deleting, onBack, onOpen, onDelete }: Props) {
   return (
-    <>
-      <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
+    <div className="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] sm:flex sm:min-h-0 sm:flex-1 sm:flex-col">
+      <div className="col-span-2 flex h-12 shrink-0 sm:h-14 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
         <button type="button" aria-label="Back to workspace" onClick={onBack} className="flex min-w-0 items-center gap-2 rounded-md text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
           <ArrowLeft aria-hidden className="size-4 shrink-0" /><span className="truncate">{workspaceName}</span>
         </button>
       </div>
-      <nav aria-label="Session navigation" className="min-h-0 flex-1 overflow-y-auto p-3">
+      <nav aria-label="Session navigation" className="min-h-0 min-w-0 flex-1 p-3 sm:overflow-y-auto">
+        <div className="flex sm:hidden"><SessionDropdown sessions={sessions} selectedId={selectedId} loading={loading} deleting={deleting} onOpen={onOpen} onDelete={onDelete} /></div>
+        <div className="hidden sm:block">
         <div className="mb-3 pl-2">
           <h2 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sessions</h2>
         </div>
@@ -37,10 +40,11 @@ export function SessionSidebar({ workspaceName, sessions, selectedId, loading, d
               </li>
             ))}
           </ul>}
+        </div>
       </nav>
-      <div className="shrink-0 border-t border-zinc-200 p-3 dark:border-zinc-800 [&>button]:w-full [&>button]:justify-center">
+      <div className="shrink-0 p-3 pl-0 sm:border-t sm:border-zinc-200 sm:pl-3 dark:border-zinc-800 [&>button]:w-full [&>button]:justify-center">
         <Button label="New session" variant="secondary" icon={Plus} onClick={onBack} />
       </div>
-    </>
+    </div>
   );
 }

@@ -1,9 +1,11 @@
 import { MoreHorizontal, Pencil, Settings, SquareTerminal, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDismiss } from "../../hooks/useDismiss";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { IconButton, Spinner } from "../atoms";
 import { Menu, MenuItem } from "./Menu";
+import { Modal, ModalBody } from "./Modal";
 import { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";
 
 interface Props {
@@ -29,11 +31,12 @@ export function WorkspaceItem({
   onDelete,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
+  const mobile = useIsMobile();
   const [editing, setEditing] = useState(false);
   const ref = useRef<HTMLLIElement>(null);
   const input = useRef<HTMLInputElement>(null);
   const closeMenu = useCallback(() => setMenuOpen(false), []);
-  useDismiss(ref, menuOpen, closeMenu);
+  useDismiss(ref, menuOpen && !mobile, closeMenu);
 
   // Focus follows the user's own Rename click, so it is moved here rather than by autoFocus.
   useEffect(() => {
@@ -67,38 +70,7 @@ export function WorkspaceItem({
     );
   }
 
-  return (
-    <li
-      ref={ref}
-      className={`group relative flex items-center rounded-md ${
-        selected
-          ? "bg-zinc-100 font-medium dark:bg-zinc-800"
-          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
-      }`}
-    >
-      <button
-        type="button"
-        aria-current={selected ? "page" : undefined}
-        onClick={onSelect}
-        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left"
-      >
-        <span className="truncate">{workspace.name}</span>
-        {deleting ? (
-          <Spinner label="Deleting" className="size-3.5 shrink-0 text-zinc-400" />
-        ) : (
-          <WorkspaceStatusIcon status={workspace.status} />
-        )}
-      </button>
-      <IconButton
-        label={`Actions for ${workspace.name}`}
-        icon={MoreHorizontal}
-        aria-expanded={menuOpen}
-        disabled={deleting}
-        onClick={() => setMenuOpen(!menuOpen)}
-        className="mr-1 p-1 opacity-0 group-hover:opacity-100 aria-expanded:opacity-100"
-      />
-      {menuOpen && (
-        <Menu className="mt-1 w-36 rounded-md py-1">
+  const actions = <>
           <MenuItem
             className="gap-2 px-3 py-2"
             onClick={() => {
@@ -149,8 +121,46 @@ export function WorkspaceItem({
               Delete workspace
             </span>
           </MenuItem>
-        </Menu>
-      )}
+  </>;
+
+  return (
+    <li
+      ref={ref}
+      className={`group relative flex flex-wrap items-center rounded-md sm:flex-nowrap ${
+        selected
+          ? "bg-zinc-100 font-medium dark:bg-zinc-800"
+          : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"
+      }`}
+    >
+      <button
+        type="button"
+        aria-current={selected ? "page" : undefined}
+        onClick={onSelect}
+        className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left"
+      >
+        <span className="truncate">{workspace.name}</span>
+        {deleting ? (
+          <Spinner label="Deleting" className="size-3.5 shrink-0 text-zinc-400" />
+        ) : (
+          <WorkspaceStatusIcon status={workspace.status} />
+        )}
+      </button>
+      <IconButton
+        label={`Actions for ${workspace.name}`}
+        icon={MoreHorizontal}
+        aria-expanded={menuOpen}
+        aria-haspopup={mobile ? "dialog" : "menu"}
+        disabled={deleting}
+        onClick={() => setMenuOpen(!menuOpen)}
+        className="mr-1 p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100 aria-expanded:opacity-100"
+      />
+      {menuOpen && (mobile ? (
+        <Modal title={workspace.name} description="Workspace actions" onClose={closeMenu} portal={false}>
+          <ModalBody><div role="menu" aria-label="Workspace actions" className="space-y-1">{actions}</div></ModalBody>
+        </Modal>
+      ) : (
+        <Menu className="mt-1 w-36 rounded-md py-1">{actions}</Menu>
+      ))}
     </li>
   );
 }

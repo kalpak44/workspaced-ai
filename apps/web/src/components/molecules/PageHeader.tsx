@@ -17,12 +17,12 @@ interface Props {
 
 export function PageHeader({ title, crumbs = [], badge, actions }: Props) {
   return (
-    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 px-6 dark:border-zinc-800">
-      <div className="flex min-w-0 items-center gap-1.5 text-sm">
+    <header className="flex h-14 shrink-0 items-center justify-between gap-3 border-b border-zinc-200 px-4 sm:px-6 dark:border-zinc-800">
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 text-sm">
         {crumbs.length > 0 && (
-          <nav aria-label="Breadcrumb" className="flex min-w-0 items-center gap-1.5">
+          <nav aria-label="Breadcrumb" className="flex min-w-0 max-w-[45%] items-center gap-1.5">
             {crumbs.map((crumb) => (
-              <span key={crumb.label} className="flex min-w-0 items-center gap-1.5">
+              <span key={crumb.label} className="flex min-w-0 max-w-[45%] items-center gap-1.5">
                 <button
                   type="button"
                   onClick={crumb.onClick}

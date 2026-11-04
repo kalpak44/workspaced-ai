@@ -45,7 +45,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   }, [missing, workspace.id]);
 
   return (
-    <ContextLayout sidebar={<SessionSidebar workspaceName={workspace.name} sessions={sessions.sessions} selectedId={sessionId} loading={sessions.loading} deleting={sessions.deleting} onBack={back} onDelete={setDeleteId} onOpen={(id) => navigate({ name: "session", workspaceId: workspace.id, sessionId: id })} />}>
+    <ContextLayout compactSidebar sidebar={<SessionSidebar workspaceName={workspace.name} sessions={sessions.sessions} selectedId={sessionId} loading={sessions.loading} deleting={sessions.deleting} onBack={back} onDelete={setDeleteId} onOpen={(id) => navigate({ name: "session", workspaceId: workspace.id, sessionId: id })} />}>
       <PageHeader
         title={title}
         crumbs={[{ label: workspace.name, onClick: back }]}

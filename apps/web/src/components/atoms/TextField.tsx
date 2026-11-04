@@ -17,7 +17,7 @@ export function TextField({ label, id, error, hint, ...rest }: Readonly<Props>) 
   const noteId = `${id}-note`;
   const note = error || hint;
   return (
-    <div className="flex flex-col gap-1.5 text-sm">
+    <div className="flex min-w-0 flex-col gap-1.5 text-sm">
       <label htmlFor={id} className="font-medium text-zinc-700 dark:text-zinc-300">
         {label}
       </label>
@@ -25,7 +25,7 @@ export function TextField({ label, id, error, hint, ...rest }: Readonly<Props>) 
         id={id}
         aria-invalid={error ? true : undefined}
         aria-describedby={note ? noteId : undefined}
-        className="rounded-md border border-zinc-300 bg-transparent px-3 py-2 outline-none placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10 disabled:opacity-60 aria-invalid:border-rose-500 dark:border-zinc-700 dark:focus:border-zinc-400 dark:focus:ring-white/10"
+        className="min-w-0 w-full rounded-md border border-zinc-300 bg-transparent px-3 py-2 outline-none placeholder:text-zinc-400 focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10 disabled:opacity-60 aria-invalid:border-rose-500 dark:border-zinc-700 dark:focus:border-zinc-400 dark:focus:ring-white/10"
         {...rest}
       />
       {note && (

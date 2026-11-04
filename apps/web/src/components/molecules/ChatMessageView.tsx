@@ -87,7 +87,7 @@ export function ChatMessageEditor({ message, busy, onSave, onCancel }: {
       <p className="text-xs text-zinc-500">
         This replaces this message and all later replies. Project files stay as they are.
       </p>
-      <div className="flex justify-end gap-2">
+      <div className="flex flex-wrap justify-end gap-2">
         <Button label="Cancel" variant="secondary" disabled={saving} onClick={onCancel} />
         <Button label="Save & regenerate" busy={saving} disabled={busy || !draft.trim()} onClick={() => void save()} />
       </div>
@@ -105,7 +105,7 @@ export function ChatMessageView({ message, busy = false, onEdit }: {
       <li aria-label="You" className="group flex items-start justify-end gap-2">
         {onEdit && <IconButton label="Edit message" icon={Pencil} disabled={busy}
           className="shrink-0" onClick={onEdit} />}
-        <div className="max-w-[80%] rounded-2xl rounded-br-sm bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
+        <div className="min-w-0 max-w-[85%] [overflow-wrap:anywhere] rounded-2xl sm:max-w-[80%] rounded-br-sm bg-zinc-900 px-4 py-2 text-sm text-white dark:bg-zinc-100 dark:text-zinc-900">
           {message.parts.map((part) => (
             <Part key={part.id} part={part} markdown={false} />
           ))}
@@ -114,7 +114,7 @@ export function ChatMessageView({ message, busy = false, onEdit }: {
     );
   }
   return (
-    <li aria-label="Agent" className="flex flex-col gap-2 text-sm">
+    <li aria-label="Agent" className="flex min-w-0 flex-col gap-2 text-sm [overflow-wrap:anywhere]">
       {message.parts.map((part) => (
         <Part key={part.id} part={part} markdown />
       ))}

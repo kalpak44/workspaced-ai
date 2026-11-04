@@ -4,6 +4,27 @@
 /* The theme switcher sets .dark on <html>, so "system" is resolved in code, not by media query. */
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Keep touch controls usable and avoid focus zoom in mobile browsers. */
+@media (max-width: 639px) {
+  input:not([type="checkbox"]):not([type="radio"]), textarea, select,
+  [contenteditable="true"] {
+    font-size: 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  button, [role="menuitem"], select {
+    min-height: 44px;
+  }
+  button[aria-label] {
+    min-width: 44px;
+  }
+  /* Actions remain discoverable on touch devices, including larger tablets. */
+  button[class*="opacity-0"] {
+    opacity: 1;
+  }
+}
+
 /* The rich text editor follows the same type scale and colors as chat Markdown. */
 .instructions-editor {
   overflow-wrap: anywhere;

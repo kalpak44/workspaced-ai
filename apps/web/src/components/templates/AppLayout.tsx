@@ -12,9 +12,9 @@ interface Props {
 /** The frame every page sits in: a bar across the top, a sidebar, and the page beside it. */
 export function AppLayout({ header, sidebar, notice, children }: Props) {
   return (
-    <div className="flex h-screen flex-col">
+    <div className="flex h-dvh flex-col">
       {header}
-      <div className="flex min-h-0 flex-1">
+      <div className="flex min-h-0 flex-1 flex-col sm:flex-row">
         {sidebar}
         <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
           {notice}

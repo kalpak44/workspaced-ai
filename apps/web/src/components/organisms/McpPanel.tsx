@@ -191,7 +191,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
           {servers.map((server) => (
             <li key={server.name} className="flex items-center gap-3 px-3 py-2.5">
               <span className="min-w-0 flex-1">
-                <span className="block font-mono text-sm">{server.name}</span>
+                <span className="block font-mono text-sm [overflow-wrap:anywhere]">{server.name}</span>
               </span>
               <StatusBadge status={server.status} />
               {removing.has(server.name) ? (
@@ -256,8 +256,8 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
           />
         </div>
         {headers.map((header, index) => (
-          <div key={header.key} className="flex items-end gap-2">
-            <div className="flex-1">
+          <div key={header.key} className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 sm:flex">
+            <div className="min-w-0 sm:flex-1">
               <TextField
                 id={`mcp-header-name-${header.key}`}
                 label={`Header ${index + 1} name`}
@@ -267,7 +267,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
                 onChange={(e) => setHeader(header.key, { name: e.currentTarget.value })}
               />
             </div>
-            <div className="flex-[2]">
+            <div className="col-start-1 row-start-2 min-w-0 sm:flex-[2]">
               <TextField
                 id={`mcp-header-value-${header.key}`}
                 label={`Header ${index + 1} value`}
@@ -280,7 +280,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
             <IconButton
               label={`Remove header ${index + 1}`}
               icon={X}
-              className="mb-1.5"
+              className="col-start-2 row-start-2 mb-1.5 shrink-0"
               onClick={() => setHeaders((current) => current.filter((h) => h.key !== header.key))}
             />
           </div>
@@ -290,7 +290,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
           <code className="rounded bg-zinc-200 px-1 font-mono dark:bg-zinc-800">{"{env:NAME}"}</code>,
           so they never leave the workspace.
         </p>
-        <div className="flex justify-between gap-2">
+        <div className="flex flex-wrap justify-between gap-2">
           <Button
             label="Add header"
             variant="secondary"

@@ -100,7 +100,7 @@ export function ChatComposer({
         onKeyDown={onKeyDown}
         className="max-h-48 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed"
       />
-      <div className="flex min-w-0 items-center justify-end gap-1">
+      <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
       {modelControl}
       {dictation.supported && <IconButton
         label={dictation.listening ? "Stop dictation" : "Dictate message"}

@@ -127,7 +127,7 @@ export function CreateWorkspaceDialog({
       description="Name it and connect the model provider its agent will use."
       onClose={close}
     >
-      <form onSubmit={submit}>
+      <form onSubmit={submit} className="flex min-h-0 flex-col overflow-hidden">
         <ModalBody>
           <TextField
             ref={nameInput}
@@ -138,7 +138,7 @@ export function CreateWorkspaceDialog({
             disabled={pending}
             onChange={(e) => setName(e.currentTarget.value)}
           />
-          <fieldset className="flex flex-col gap-2">
+          <fieldset className="flex min-w-0 flex-col gap-2">
             <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">
               Model provider
             </legend>

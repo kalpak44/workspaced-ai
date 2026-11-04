@@ -49,7 +49,7 @@ const COMPONENTS: Components = {
 /** The agent writes markdown; this renders it with the page's own type scale. */
 export function Markdown({ text }: { readonly text: string }) {
   return (
-    <div className="leading-relaxed break-words">
+    <div className="min-w-0 leading-relaxed [overflow-wrap:anywhere]">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={COMPONENTS}>
         {text}
       </ReactMarkdown>

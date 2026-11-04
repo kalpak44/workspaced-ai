@@ -75,7 +75,7 @@ export function SecretsPanel({
         </ul>
       )}
       <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-start">
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <TextField
             id="secret-name"
             label="Name"
@@ -92,7 +92,7 @@ export function SecretsPanel({
             }}
           />
         </div>
-        <div className="flex-1">
+        <div className="min-w-0 flex-1">
           <TextField
             id="secret-value"
             label="Value"

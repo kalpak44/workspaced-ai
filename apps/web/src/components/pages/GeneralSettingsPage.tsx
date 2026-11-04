@@ -65,7 +65,7 @@ export function GeneralSettingsPage() {
                   <div className="flex flex-wrap items-center gap-4">
                     <Avatar src={profile.avatar} large />
                     <div className="space-y-2">
-                      <div className="flex gap-2">
+                      <div className="flex flex-wrap gap-2">
                         <Button label="Change avatar" icon={Camera} variant="secondary" onClick={() => fileInput.current?.click()} />
                         {profile.avatar && <Button label="Remove" variant="secondary" onClick={() => { setProfile((previous) => ({ ...previous, avatar: "" })); setNotice(""); }} />}
                       </div>

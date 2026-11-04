@@ -41,7 +41,7 @@ export function SessionCard({ session, deleting, onOpen, onDelete }: Props) {
             label={`Delete ${title}`}
             icon={Trash2}
             onClick={onDelete}
-            className="opacity-0 group-hover:opacity-100 focus:opacity-100"
+            className="opacity-100 sm:opacity-0 sm:group-hover:opacity-100 focus:opacity-100"
           />
         )}
       </span>

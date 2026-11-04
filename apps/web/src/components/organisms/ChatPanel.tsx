@@ -58,7 +58,7 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
     );
   } else {
     body = (
-      <ol className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-6 py-6">
+      <ol className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
         {displayed.map((message) => message.id === editing?.id ? (
           <ChatMessageEditor
             key={message.id}
@@ -92,7 +92,7 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
       <div ref={transcript} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {body}
       </div>
-      <div className="mx-auto w-full max-w-3xl px-6 pb-6">
+      <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
         <ChatComposer busy={busy} disabled={disabled || editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop} />
         <p className="mt-2 text-center text-xs text-zinc-400">
           Enter to send · Shift+Enter for a new line
