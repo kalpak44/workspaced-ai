@@ -12,6 +12,7 @@ import static org.mockito.Mockito.mock;
 import io.fabric8.kubernetes.api.model.PodBuilder;
 import io.fabric8.kubernetes.api.model.PodConditionBuilder;
 import io.fabric8.kubernetes.api.model.Secret;
+import io.fabric8.kubernetes.api.model.ServiceBuilder;
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.fabric8.kubernetes.client.KubernetesClientException;
 import io.fabric8.kubernetes.client.server.mock.KubernetesCrudDispatcher;
@@ -201,11 +202,7 @@ class KubernetesWorkspaceRuntimeTest {
         .services()
         .inNamespace(namespace())
         .resource(
-            new io.fabric8.kubernetes.api.model.ServiceBuilder()
-                .withNewMetadata()
-                .withName(resourceName(id))
-                .endMetadata()
-                .build())
+            new ServiceBuilder().withNewMetadata().withName(resourceName(id)).endMetadata().build())
         .create();
     assertThatThrownBy(() -> runtime.start(id, ENVIRONMENT))
         .isInstanceOf(KubernetesClientException.class);

@@ -33,8 +33,10 @@ import java.util.function.Consumer;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
+import tools.jackson.core.json.JsonReadFeature;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ObjectNode;
 
 /** Talks only to the OpenCode V2 HTTP API. */
 @Component
@@ -223,7 +225,7 @@ public class OpenCodeHarness implements Harness {
     return !servers.isEmpty();
   }
 
-  private tools.jackson.databind.node.ObjectNode mcpDocument(HarnessEndpoint endpoint) {
+  private ObjectNode mcpDocument(HarnessEndpoint endpoint) {
     var response =
         send(
             request(endpoint, withLocation("/api/fs/read/.opencode/opencode.json", PROJECT_ROOT))
@@ -232,18 +234,17 @@ public class OpenCodeHarness implements Harness {
     check(response);
     var document =
         JsonMapper.builder()
-            .enable(tools.jackson.core.json.JsonReadFeature.ALLOW_JAVA_COMMENTS)
-            .enable(tools.jackson.core.json.JsonReadFeature.ALLOW_TRAILING_COMMA)
+            .enable(JsonReadFeature.ALLOW_JAVA_COMMENTS)
+            .enable(JsonReadFeature.ALLOW_TRAILING_COMMA)
             .build()
             .readTree(response.body());
-    if (!(document instanceof tools.jackson.databind.node.ObjectNode object)) {
+    if (!(document instanceof ObjectNode object)) {
       throw new HarnessUnavailableException("OpenCode project configuration must be a JSON object");
     }
     return object;
   }
 
-  private void saveMcpDocument(
-      HarnessEndpoint endpoint, tools.jackson.databind.node.ObjectNode document) {
+  private void saveMcpDocument(HarnessEndpoint endpoint, ObjectNode document) {
     check(
         send(
             request(
@@ -279,7 +280,7 @@ public class OpenCodeHarness implements Harness {
   @Override
   public synchronized void removeMcp(HarnessEndpoint endpoint, String name) {
     var document = mcpDocument(endpoint);
-    if (document.path("mcp") instanceof tools.jackson.databind.node.ObjectNode mcp) {
+    if (document.path("mcp") instanceof ObjectNode mcp) {
       mcp.remove(name);
       saveMcpDocument(endpoint, document);
     }

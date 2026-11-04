@@ -5,13 +5,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 import java.io.ByteArrayOutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import org.junit.jupiter.api.RepeatedTest;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfSystemProperty;
 import tools.jackson.databind.json.JsonMapper;
 
 /** Opt-in contract smoke test against the built harness, without spending provider credits. */
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 class OpenCodeLiveTest {
-  @org.junit.jupiter.api.Test
+  @Test
   void persistsMcpReferencesAndRemovesThemThroughOpenCode() {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());
     var endpoint =
@@ -20,9 +25,8 @@ class OpenCodeLiveTest {
             System.getProperty("opencode.live.password"));
     var config =
         new Harness.McpServerConfig(
-            "https://example.invalid/mcp",
-            java.util.Map.of("Authorization", "Bearer {env:CHECK_TOKEN}"));
-    harness.configureMcp(endpoint, java.util.Map.of("contract-check", config));
+            "https://example.invalid/mcp", Map.of("Authorization", "Bearer {env:CHECK_TOKEN}"));
+    harness.configureMcp(endpoint, Map.of("contract-check", config));
     try {
       assertThat(harness.mcpConfiguration(endpoint)).containsEntry("contract-check", config);
     } finally {
@@ -31,7 +35,7 @@ class OpenCodeLiveTest {
     assertThat(harness.mcpConfiguration(endpoint)).doesNotContainKey("contract-check");
   }
 
-  @org.junit.jupiter.api.RepeatedTest(5)
+  @RepeatedTest(5)
   void createsListsAndDeletesASessionAndRunsABashPty() throws Exception {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());
     var endpoint =
@@ -39,9 +43,9 @@ class OpenCodeLiveTest {
             URI.create(System.getProperty("opencode.live.url")),
             System.getProperty("opencode.live.password"));
     harness.validate(endpoint, Harness.PROJECT_ROOT);
-    var heartbeat = new java.util.concurrent.CountDownLatch(1);
+    var heartbeat = new CountDownLatch(1);
     try (var stream = harness.stream(endpoint, event -> heartbeat.countDown(), () -> {})) {
-      assertThat(heartbeat.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      assertThat(heartbeat.await(5, TimeUnit.SECONDS)).isTrue();
     }
     var session = harness.createSession(endpoint, Harness.PROJECT_ROOT, "Contract smoke test");
     try {
@@ -51,7 +55,7 @@ class OpenCodeLiveTest {
       try (var terminal = harness.terminal(endpoint, Harness.PROJECT_ROOT, output, () -> {})) {
         terminal.resize(100, 30);
         terminal.input("printf 'LIVE_%s\\n' 'PTY_OK'\n".getBytes(StandardCharsets.UTF_8));
-        var deadline = System.nanoTime() + java.util.concurrent.TimeUnit.SECONDS.toNanos(10);
+        var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
         while (!output.toString(StandardCharsets.UTF_8).contains("LIVE_PTY_OK")
             && System.nanoTime() < deadline) {
           Thread.sleep(20);

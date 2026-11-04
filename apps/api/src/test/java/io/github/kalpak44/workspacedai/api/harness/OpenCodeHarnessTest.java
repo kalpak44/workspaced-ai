@@ -10,6 +10,7 @@ import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -37,9 +38,7 @@ class OpenCodeHarnessTest {
     harness.validate(opencode.endpoint(), DIRECTORY);
     assertThat(opencode.requests)
         .extracting(FakeOpenCode.Request::path, FakeOpenCode.Request::directory)
-        .containsExactly(
-            org.assertj.core.groups.Tuple.tuple("/api/info", null),
-            org.assertj.core.groups.Tuple.tuple("/api/location", DIRECTORY));
+        .containsExactly(Tuple.tuple("/api/info", null), Tuple.tuple("/api/location", DIRECTORY));
   }
 
   @Test
@@ -65,8 +64,8 @@ class OpenCodeHarnessTest {
     assertThat(opencode.requests)
         .extracting(FakeOpenCode.Request::method, FakeOpenCode.Request::path)
         .containsExactly(
-            org.assertj.core.groups.Tuple.tuple("DELETE", "/api/session/" + FakeOpenCode.SESSION),
-            org.assertj.core.groups.Tuple.tuple("DELETE", "/api/session/ses_gone"));
+            Tuple.tuple("DELETE", "/api/session/" + FakeOpenCode.SESSION),
+            Tuple.tuple("DELETE", "/api/session/ses_gone"));
   }
 
   @Test
