@@ -126,6 +126,38 @@ public class SessionService {
   }
 
   @Transactional(readOnly = true)
+  public AgentSelection agents(UUID workspaceId, UUID sessionId) {
+    var target = target(workspaceId, sessionId);
+    var options =
+        harness.agents(target.endpoint(), target.path()).stream()
+            .filter(
+                agent ->
+                    !agent.hidden()
+                        && ("primary".equals(agent.mode()) || "all".equals(agent.mode())))
+            .map(
+                agent ->
+                    new AgentSelection.Option(
+                        agent.id(), agent.name(), agent.description(), agent.mode()))
+            .toList();
+    return new AgentSelection(
+        harness.sessionAgent(target.endpoint(), target.harnessSessionId()), options);
+  }
+
+  @Transactional(readOnly = true)
+  public AgentSelection setAgent(UUID workspaceId, UUID sessionId, String agentId) {
+    var target = target(workspaceId, sessionId);
+    var selection = agents(workspaceId, sessionId);
+    if (selection.agents().stream().noneMatch(agent -> agent.id().equals(agentId))) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "this agent cannot be selected for a session");
+    }
+    if (!agentId.equals(selection.current())) {
+      harness.switchAgent(target.endpoint(), target.harnessSessionId(), agentId);
+    }
+    return new AgentSelection(agentId, selection.agents());
+  }
+
+  @Transactional(readOnly = true)
   public List<AgentForm> forms(UUID workspaceId, UUID sessionId) {
     var target = target(workspaceId, sessionId);
     return harness.forms(target.endpoint(), target.harnessSessionId());

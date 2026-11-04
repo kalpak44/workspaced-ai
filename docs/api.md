@@ -126,6 +126,21 @@ Messages are fetched through V2 cursor pages in chronological order. A workspace
 between browser subscribers. V2 events are volatile, so clients reload history on reconnect and after execution
 ends. A `refresh` event also requests a history reload when an inbox message is delivered.
 
+### Session agents
+
+`GET /api/v1/workspaces/{id}/sessions/{sid}/agent` returns `{current, agents}`. `current` is OpenCode's
+selected agent ID, or null while unset. Each option includes `id`, `name`, `description`, and `mode`.
+Discovery uses the session's own location; hidden agents and agents restricted to `subagent` mode are excluded.
+
+`PUT /api/v1/workspaces/{id}/sessions/{sid}/agent` accepts `{"agent":"plan"}` and returns the confirmed
+selection. It maps to OpenCode's `POST /api/session/{sessionID}/agent`, preserving conversation history,
+workspace model preference, and the session's model. Unknown, hidden, and subagent-only choices return `400`;
+a session outside the selected workspace returns `404`; an unavailable harness or refused switch returns `503`.
+
+The session composer's agent picker sits beside the model picker and reads the selection from OpenCode.
+Sending is disabled until a switch is acknowledged. Agent switching is disabled during an active reply or
+while a form awaits an answer. Failed or uncertain switches can be reconciled with **Reload agents**.
+
 The API reaches the harness through the workspace's Service, at
 `http://workspaced-ai-workspace-<id>.<namespace>.svc:4096`, with HTTP basic auth; the password is generated when the
 workspace is created and kept in its Secret as `OPENCODE_PASSWORD`, which no user secret may replace. Existing

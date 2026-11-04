@@ -75,6 +75,9 @@ class SessionControllerTest {
     repository.deleteAll();
     OPENCODE.requests.clear();
     OPENCODE.title = null;
+    OPENCODE.agent = "build";
+    OPENCODE.rejectAgentSwitch = false;
+    OPENCODE.rejectAgentList = false;
     OPENCODE.rejectRevert = false;
     OPENCODE.shellCommands.clear();
     OPENCODE.shellExit = 0;
@@ -109,6 +112,84 @@ class SessionControllerTest {
     assertThat(listed.get(0).get("createdAt").asString()).isEqualTo(session.createdAt().toString());
     assertThat(listed.get(0).get("id").asString()).isEqualTo(session.id().toString());
     assertThat(listed.get(1).get("id").asString()).isEqualTo(second.id().toString());
+  }
+
+  @Test
+  void discoversPrimaryAgentsAtTheSessionLocationAndSwitchesWithoutChangingModelOrHistory()
+      throws Exception {
+    var session = JSON.readValue(send("POST", "", null).body(), Session.class);
+    var beforeHistory = send("GET", "/" + session.id() + "/messages", null).body();
+    var beforeModel = repository.findById(workspace).orElseThrow().getModel();
+    OPENCODE.requests.clear();
+    var response = send("GET", "/" + session.id() + "/agent", null);
+    assertThat(response.statusCode()).isEqualTo(200);
+    var selection = JSON.readValue(response.body(), AgentSelection.class);
+    assertThat(selection.current()).isEqualTo("build");
+    assertThat(selection.agents())
+        .extracting(AgentSelection.Option::id)
+        .containsExactly("build", "plan", "writer");
+    assertThat(OPENCODE.requests)
+        .anySatisfy(
+            request -> {
+              assertThat(request.path()).isEqualTo("/api/agent");
+              assertThat(request.directory()).isEqualTo(session.path());
+            });
+    var switched = send("PUT", "/" + session.id() + "/agent", "{\"agent\":\"plan\"}");
+    assertThat(switched.statusCode()).isEqualTo(200);
+    assertThat(JSON.readValue(switched.body(), AgentSelection.class).current()).isEqualTo("plan");
+    assertThat(
+            JSON.readValue(
+                    send("GET", "/" + session.id() + "/agent", null).body(), AgentSelection.class)
+                .current())
+        .isEqualTo("plan");
+    assertThat(repository.findById(workspace).orElseThrow().getModel()).isEqualTo(beforeModel);
+    assertThat(send("GET", "/" + session.id() + "/messages", null).body()).isEqualTo(beforeHistory);
+    assertThat(OPENCODE.requests)
+        .filteredOn(request -> request.method().equals("POST"))
+        .singleElement()
+        .satisfies(
+            request -> {
+              assertThat(request.path())
+                  .isEqualTo("/api/session/" + FakeOpenCode.SESSION + "/agent");
+              assertThat(request.body()).isEqualTo("{\"agent\":\"plan\"}");
+            });
+    var requestCount = OPENCODE.requests.size();
+    workspace = UUID.randomUUID();
+    assertThat(send("GET", "/" + session.id() + "/agent", null).statusCode()).isEqualTo(404);
+    assertThat(OPENCODE.requests).hasSize(requestCount);
+  }
+
+  @Test
+  void rejectsUnknownHiddenAndSubagentOnlySelectionsAndReportsUpstreamFailures() throws Exception {
+    var session = JSON.readValue(send("POST", "", null).body(), Session.class);
+    OPENCODE.requests.clear();
+    for (var agent : new String[] {"explore", "title", "not-installed", " "}) {
+      assertThat(
+              send(
+                      "PUT",
+                      "/" + session.id() + "/agent",
+                      JSON.writeValueAsString(java.util.Map.of("agent", agent)))
+                  .statusCode())
+          .isEqualTo(400);
+    }
+    assertThat(OPENCODE.requests).noneMatch(request -> request.method().equals("POST"));
+    OPENCODE.rejectAgentSwitch = true;
+    assertThat(send("PUT", "/" + session.id() + "/agent", "{\"agent\":\"plan\"}").statusCode())
+        .isEqualTo(503);
+    assertThat(OPENCODE.agent).isEqualTo("build");
+    OPENCODE.rejectAgentList = true;
+    assertThat(send("GET", "/" + session.id() + "/agent", null).statusCode()).isEqualTo(503);
+  }
+
+  @Test
+  void doesNotGuessAnAgentForASessionWhoseSelectionIsUnset() throws Exception {
+    var session = JSON.readValue(send("POST", "", null).body(), Session.class);
+    OPENCODE.agent = null;
+    assertThat(
+            JSON.readValue(
+                    send("GET", "/" + session.id() + "/agent", null).body(), AgentSelection.class)
+                .current())
+        .isNull();
   }
 
   @Test

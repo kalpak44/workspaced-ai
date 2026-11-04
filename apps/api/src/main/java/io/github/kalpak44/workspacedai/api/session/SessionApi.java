@@ -34,6 +34,33 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @RequestMapping("/workspaces/{workspaceId}/sessions")
 public interface SessionApi {
 
+  @Operation(
+      operationId = "sessionAgents",
+      summary = "Get the current agent and selectable agents",
+      description =
+          "Discovers agents at this session's location. Hidden and subagent-only agents are excluded.")
+  @ApiResponse(responseCode = "404", description = "No such session in this workspace.")
+  @ApiResponse(responseCode = "503", description = "OpenCode is unavailable.")
+  @GetMapping(path = "/{sessionId}/agent", produces = JSON)
+  ResponseEntity<AgentSelection> agents(
+      @PathVariable UUID workspaceId, @PathVariable UUID sessionId);
+
+  @Operation(
+      operationId = "switchSessionAgent",
+      summary = "Switch the agent for subsequent turns",
+      description =
+          "Preserves conversation history and the selected model. Only visible primary or all-mode agents may be selected.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Unknown, hidden, subagent-only, or invalid agent.")
+  @ApiResponse(responseCode = "404", description = "No such session in this workspace.")
+  @ApiResponse(responseCode = "503", description = "OpenCode is unavailable or refused the switch.")
+  @PutMapping(path = "/{sessionId}/agent", consumes = JSON, produces = JSON)
+  ResponseEntity<AgentSelection> setAgent(
+      @PathVariable UUID workspaceId,
+      @PathVariable UUID sessionId,
+      @Valid @RequestBody AgentRequest request);
+
   @Operation(summary = "List questions awaiting an answer from the user")
   @GetMapping(path = "/{sessionId}/forms", produces = JSON)
   ResponseEntity<List<AgentForm>> forms(

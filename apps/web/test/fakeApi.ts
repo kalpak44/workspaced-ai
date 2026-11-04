@@ -5,6 +5,7 @@ import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from 
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
 import type { TerminalSession } from "../src/api/terminalsApi";
+import type { SessionAgent } from "../src/api/sessionAgentsApi";
 
 export const OPENROUTER = {
   id: "openrouter",
@@ -90,6 +91,12 @@ export function installFakeApi(
   const aborted: string[] = [];
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
+  const sessionAgents = new Map<string, string>();
+  const agentOptions: SessionAgent[] = [
+    { id: "build", name: "Build", description: "Implement changes", mode: "primary" },
+    { id: "plan", name: "Plan", description: "Plan before implementation", mode: "primary" },
+    { id: "writer", name: "Writer", description: "Write documentation", mode: "all" },
+  ];
   // Every server POSTed, as sent, so a test can check what the UI built.
   const mcpPosted: NewMcpServer[] = [];
   const catalogue: ModelCatalogue = {
@@ -112,6 +119,9 @@ export function installFakeApi(
     nextTerminal: 1,
     failTerminalDelete: false,
     failTerminalCreate: false,
+    failAgentList: false,
+    failAgentSwitch: false,
+    holdAgentSwitch: null as Promise<void> | null,
     failEditAfterTruncate: false,
     failAnswer: false,
     // Answers every session call with 503, as a workspace whose harness is down does.
@@ -154,8 +164,21 @@ export function installFakeApi(
       return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
     }
     const sessionsRoute =
-      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort|forms(?:\/[^/]+(?:\/reply)?)?))?$/.exec(url);
+      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort|agent|forms(?:\/[^/]+(?:\/reply)?)?))?$/.exec(url);
     if (sessionsRoute) {
+      if (sessionsRoute[3] === "agent") {
+        const [, workspaceId, sessionId] = sessionsRoute;
+        if (!sessions.get(workspaceId)?.some((session) => session.id === sessionId)) return json({}, 404);
+        if (state.harnessDown || state.failAgentList) return json({}, 503);
+        if (init?.method === "PUT") {
+          if (state.holdAgentSwitch) await state.holdAgentSwitch;
+          if (state.failAgentSwitch) return json({}, 503);
+          const agent = JSON.parse(String(init.body)).agent;
+          if (!agentOptions.some((option) => option.id === agent)) return json({}, 400);
+          sessionAgents.set(sessionId, agent);
+        }
+        return json({ current: sessionAgents.get(sessionId) ?? "build", agents: agentOptions });
+      }
       return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init);
     }
     const secretsRoute = /\/api\/v1\/workspaces\/([^/]+)\/secrets(?:\/(.+))?$/.exec(url);
@@ -318,5 +341,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, catalogue, state, fetchFn };
+  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

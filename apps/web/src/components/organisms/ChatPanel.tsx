@@ -10,6 +10,7 @@ interface Props {
   readonly messages: readonly ChatMessage[];
   readonly loading: boolean;
   readonly busy: boolean;
+  readonly disabled?: boolean;
   readonly error: string | null;
   readonly onDismissError: () => void;
   readonly onSend: (text: string) => Promise<boolean>;
@@ -21,7 +22,7 @@ interface Props {
 }
 
 /** One session's conversation, with the composer pinned below it. */
-export function ChatPanel({ messages, loading, busy, error, onDismissError, onSend, onStop, onEdit, modelControl, forms, onAnswer }: Props) {
+export function ChatPanel({ messages, loading, busy, disabled = false, error, onDismissError, onSend, onStop, onEdit, modelControl, forms, onAnswer }: Props) {
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   // Keep the editor mounted even if a revert event removes the original message before
   // the request settles. A failed replacement must leave the draft available to copy.
@@ -71,7 +72,7 @@ export function ChatPanel({ messages, loading, busy, error, onDismissError, onSe
             }}
           />
         ) : (
-          <ChatMessageView key={message.id} message={message} busy={busy || editing !== null}
+          <ChatMessageView key={message.id} message={message} busy={busy || disabled || editing !== null}
             onEdit={() => setEditing(message)} />
         ))}
         {forms.map((form) => <li key={form.id}><AgentQuestion form={form} onAnswer={onAnswer} /></li>)}
@@ -92,7 +93,7 @@ export function ChatPanel({ messages, loading, busy, error, onDismissError, onSe
         {body}
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-6">
-        <ChatComposer busy={busy} disabled={editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop} />
+        <ChatComposer busy={busy} disabled={disabled || editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop} />
         <p className="mt-2 text-center text-xs text-zinc-400">
           Enter to send · Shift+Enter for a new line
         </p>

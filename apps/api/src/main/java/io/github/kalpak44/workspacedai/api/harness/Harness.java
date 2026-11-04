@@ -65,6 +65,14 @@ public interface Harness {
   /** The name the harness gave the session, or empty while it still has its placeholder. */
   Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId);
 
+  List<HarnessAgent> agents(HarnessEndpoint endpoint, String directory);
+
+  /** Null while OpenCode has not yet selected an agent for the session. */
+  String sessionAgent(HarnessEndpoint endpoint, String sessionId);
+
+  /** Changes only the agent used by future turns, preserving the selected model and history. */
+  void switchAgent(HarnessEndpoint endpoint, String sessionId, String agentId);
+
   /**
    * Starts a reply and returns at once; the reply arrives on {@link #stream}.
    *

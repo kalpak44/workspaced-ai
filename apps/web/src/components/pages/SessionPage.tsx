@@ -2,9 +2,11 @@ import { useEffect, useState } from "react";
 import { useChat } from "../../hooks/useChat";
 import { navigate } from "../../hooks/useRoute";
 import { useSessions } from "../../hooks/useSessions";
+import { useSessionAgents } from "../../hooks/useSessionAgents";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
+import { ChatAgentPicker } from "../organisms/ChatAgentPicker";
 import { DeleteSessionDialog } from "../organisms/DeleteSessionDialog";
 import { SessionSidebar } from "../organisms/SessionSidebar";
 import { ContextLayout } from "../templates/ContextLayout";
@@ -24,6 +26,8 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   const ready = workspace.status === "READY" && !deleting;
   const sessions = useSessions(ready ? workspace.id : null);
   const chat = useChat(ready ? workspace.id : null, ready ? sessionId : null, sessions.retitle);
+  const agents = useSessionAgents(ready ? workspace.id : null, ready ? sessionId : null);
+  const switchingAgent = agents.saving !== null;
   const session = sessions.sessions.find((s) => s.id === sessionId);
   const title = session?.title ?? "New session";
   const back = () => navigate({ name: "workspace", workspaceId: workspace.id });
@@ -51,6 +55,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           messages={chat.messages}
           loading={chat.loading && chat.messages.length === 0}
           busy={chat.busy}
+          disabled={switchingAgent}
           forms={chat.forms}
           onAnswer={chat.answerForm}
           error={sessions.error ?? chat.error}
@@ -58,7 +63,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
             sessions.dismissError();
             chat.dismissError();
           }}
-          modelControl={<ChatModelPicker workspace={workspace} disabled={chat.busy} onChanged={onModelChanged} />}
+          modelControl={<><ChatAgentPicker agents={agents} disabled={chat.busy || chat.forms.length > 0} /><ChatModelPicker workspace={workspace} disabled={chat.busy || switchingAgent} onChanged={onModelChanged} /></>}
           onEdit={chat.edit}
           onSend={chat.send}
           onStop={chat.stop}

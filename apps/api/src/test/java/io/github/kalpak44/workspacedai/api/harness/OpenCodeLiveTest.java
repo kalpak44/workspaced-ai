@@ -19,6 +19,31 @@ import tools.jackson.databind.json.JsonMapper;
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 class OpenCodeLiveTest {
   @Test
+  void switchesAgentsWithoutReplacingTheSessionOrItsHistory() {
+    var harness = new OpenCodeHarness(JsonMapper.builder().build());
+    var endpoint =
+        new HarnessEndpoint(
+            URI.create(System.getProperty("opencode.live.url")),
+            System.getProperty("opencode.live.password"));
+    var session = harness.createSession(endpoint, Harness.PROJECT_ROOT, "Agent switch smoke test");
+    try {
+      assertThat(harness.agents(endpoint, Harness.PROJECT_ROOT))
+          .anyMatch(
+              agent ->
+                  agent.id().equals("plan") && !agent.hidden() && agent.mode().equals("primary"));
+      var history = harness.messages(endpoint, Harness.PROJECT_ROOT, session);
+      harness.switchAgent(endpoint, session, "plan");
+      assertThat(harness.sessionAgent(endpoint, session)).isEqualTo("plan");
+      harness.switchAgent(endpoint, session, "build");
+      assertThat(harness.sessionAgent(endpoint, session)).isEqualTo("build");
+      assertThat(harness.messages(endpoint, Harness.PROJECT_ROOT, session)).isEqualTo(history);
+      assertThat(harness.sessions(endpoint)).anyMatch(found -> found.id().equals(session));
+    } finally {
+      harness.deleteSession(endpoint, Harness.PROJECT_ROOT, session);
+    }
+  }
+
+  @Test
   void switchesBetweenPersistentTerminalsAndDeletesOnlyTheSelectedShell() throws Exception {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());
     var endpoint =

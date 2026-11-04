@@ -43,6 +43,9 @@ public class FakeOpenCode implements AutoCloseable {
   public volatile boolean mcpStarting;
 
   public volatile String title;
+  public volatile String agent = "build";
+  public volatile boolean rejectAgentSwitch;
+  public volatile boolean rejectAgentList;
   public volatile boolean rejectRevert;
   public volatile CountDownLatch holdStream;
   public volatile boolean sessionExists = true;
@@ -172,6 +175,15 @@ public class FakeOpenCode implements AutoCloseable {
       }
       case "DELETE /api/session/ses_gone" -> respond(exchange, 404, "{}");
       case "GET /api/session/" + SESSION -> respond(exchange, 200, "{\"data\":" + session() + "}");
+      case "GET /api/agent" -> respond(exchange, rejectAgentList ? 503 : 200, AGENTS);
+      case "POST /api/session/" + SESSION + "/agent" -> {
+        if (rejectAgentSwitch) {
+          respond(exchange, 503, "{}");
+        } else {
+          agent = JSON.readTree(requests.getLast().body()).path("agent").asString();
+          respond(exchange, 204, null);
+        }
+      }
       case "GET /api/session/" + SESSION + "/message" -> respond(exchange, 200, MESSAGES);
       case "GET /api/session/" + SESSION + "/form" ->
           respond(
@@ -246,9 +258,21 @@ public class FakeOpenCode implements AutoCloseable {
         + "\",\"projectID\":\"global\",\"cost\":0,"
         + "\"tokens\":{},\"time\":{\"created\":1793718388385,\"updated\":1793718388385},"
         + "\"location\":{\"directory\":\"/home/workspace/project\"}"
+        + (agent == null ? "" : ",\"agent\":" + JSON.writeValueAsString(agent))
         + named
         + "}";
   }
+
+  private static final String AGENTS =
+      """
+      {"data":[
+        {"id":"build","name":"Build","description":"Implement changes","mode":"primary","hidden":false},
+        {"id":"plan","name":"Plan","description":"Plan before implementation","mode":"primary","hidden":false},
+        {"id":"writer","name":"Writer","description":"Write documentation","mode":"all","hidden":false},
+        {"id":"explore","name":"Explore","mode":"subagent","hidden":false},
+        {"id":"title","name":"Title","mode":"primary","hidden":true}
+      ]}
+      """;
 
   /** The servers in the global config file, by name. */
   public ObjectNode configuredMcp() {

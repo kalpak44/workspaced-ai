@@ -143,6 +143,34 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public List<HarnessAgent> agents(HarnessEndpoint endpoint, String directory) {
+    var result = new ArrayList<HarnessAgent>();
+    for (var agent :
+        call(endpoint, "GET", withLocation("/api/agent", directory), null).path("data")) {
+      result.add(
+          new HarnessAgent(
+              text(agent, "id"),
+              text(agent, "name"),
+              text(agent, "description"),
+              text(agent, "mode"),
+              agent.path("hidden").asBoolean()));
+    }
+    return List.copyOf(result);
+  }
+
+  @Override
+  public String sessionAgent(HarnessEndpoint endpoint, String sessionId) {
+    return text(
+        call(endpoint, "GET", "/api/session/" + encode(sessionId), null).path("data"), "agent");
+  }
+
+  @Override
+  public void switchAgent(HarnessEndpoint endpoint, String sessionId, String agentId) {
+    call(
+        endpoint, "POST", "/api/session/" + encode(sessionId) + "/agent", Map.of("agent", agentId));
+  }
+
+  @Override
   public void deleteSession(HarnessEndpoint endpoint, String directory, String sessionId) {
     var response = send(request(endpoint, "/api/session/" + encode(sessionId)).DELETE());
     if (response.statusCode() != 404) {

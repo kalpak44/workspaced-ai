@@ -27,6 +27,17 @@ public class SessionController implements SessionApi {
   }
 
   @Override
+  public ResponseEntity<AgentSelection> agents(UUID workspaceId, UUID sessionId) {
+    return ResponseEntity.ok(service.agents(workspaceId, sessionId));
+  }
+
+  @Override
+  public ResponseEntity<AgentSelection> setAgent(
+      UUID workspaceId, UUID sessionId, AgentRequest request) {
+    return ResponseEntity.ok(service.setAgent(workspaceId, sessionId, request.agent()));
+  }
+
+  @Override
   public ResponseEntity<Session> create(UUID workspaceId) {
     var session = service.create(workspaceId);
     var location =
