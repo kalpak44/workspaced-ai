@@ -116,6 +116,7 @@ public class OpenCodeHarness implements Harness {
       var fresh = false;
       for (var session : page.path("data")) {
         var created = number(session.path("time"), "created");
+        var updated = number(session.path("time"), "updated");
         var id = text(session, "id");
         fresh |=
             result.put(
@@ -124,7 +125,8 @@ public class OpenCodeHarness implements Harness {
                         id,
                         text(session, "title"),
                         text(session.path("location"), "directory"),
-                        created == null ? Instant.now() : instant(created)))
+                        created == null ? Instant.now() : instant(created),
+                        updated == null ? null : instant(updated)))
                 == null;
       }
       cursor = fresh ? nullableText(page.path("cursor"), "next") : null;

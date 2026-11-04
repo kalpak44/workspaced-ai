@@ -49,6 +49,7 @@ public class FakeOpenCode implements AutoCloseable {
   public volatile boolean rejectRevert;
   public volatile CountDownLatch holdStream;
   public volatile boolean sessionExists = true;
+  public volatile Long sessionUpdatedAt = 1793718388385L;
 
   /** Runs while the session list is being answered, as another request would meanwhile. */
   public volatile Runnable whileListingSessions;
@@ -256,7 +257,9 @@ public class FakeOpenCode implements AutoCloseable {
     return "{\"id\":\""
         + SESSION
         + "\",\"projectID\":\"global\",\"cost\":0,"
-        + "\"tokens\":{},\"time\":{\"created\":1793718388385,\"updated\":1793718388385},"
+        + "\"tokens\":{},\"time\":{\"created\":1793718388385,\"updated\":"
+        + sessionUpdatedAt
+        + "},"
         + "\"location\":{\"directory\":\"/home/workspace/project\"}"
         + (agent == null ? "" : ",\"agent\":" + JSON.writeValueAsString(agent))
         + named

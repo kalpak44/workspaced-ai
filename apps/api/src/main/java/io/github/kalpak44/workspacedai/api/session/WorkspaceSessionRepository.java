@@ -1,9 +1,11 @@
 package io.github.kalpak44.workspacedai.api.session;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -15,6 +17,13 @@ public interface WorkspaceSessionRepository extends JpaRepository<WorkspaceSessi
   List<WorkspaceSessionEntity> findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(UUID workspaceId);
 
   Optional<WorkspaceSessionEntity> findByIdAndWorkspaceId(UUID id, UUID workspaceId);
+
+  @Query("select s.workspaceId from WorkspaceSessionEntity s where s.id = :id")
+  Optional<UUID> findWorkspaceId(UUID id);
+
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  @Query("select s from WorkspaceSessionEntity s where s.id = :id and s.workspaceId = :workspaceId")
+  Optional<WorkspaceSessionEntity> lockByIdAndWorkspaceId(UUID id, UUID workspaceId);
 
   /** Its own transaction: it runs on a stream's reader thread, outside any request. */
   @Transactional

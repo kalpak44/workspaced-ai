@@ -34,6 +34,16 @@ class SettingsWithoutHarnessTest {
   }
 
   @Test
+  void sessionTtlDoesNotRequireARunningHarnessAndIsWorkspaceScoped() {
+    assertThat(service.sessionTtl(workspace)).isEqualTo(new SessionTtlSettings(false, 168));
+    assertThat(service.setSessionTtl(workspace, new SessionTtlSettings(true, 6)))
+        .isEqualTo(new SessionTtlSettings(true, 6));
+    var other = workspaces.save(new WorkspaceEntity("Other", "openrouter")).getId();
+    assertThat(service.sessionTtl(other)).isEqualTo(new SessionTtlSettings(false, 168));
+    assertThat(service.sessionTtl(workspace)).isEqualTo(new SessionTtlSettings(true, 6));
+  }
+
+  @Test
   void requiresTheWorkspaceForMcpConfiguration() {
     assertThatThrownBy(
             () ->

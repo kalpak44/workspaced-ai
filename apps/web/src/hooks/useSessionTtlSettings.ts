@@ -1,7 +1,6 @@
-import { useMemo, useSyncExternalStore } from "react";
-import { readStored } from "../lib/storage";
+import { useEffect, useRef, useState } from "react";
+import { getSessionTtl, setSessionTtl, type SessionTtlSettings } from "../api/settingsApi";
 
-const CHANGED = "workspaced:session-ttl-settings-changed";
 export const SESSION_TTL_OPTIONS = [
   { hours: 1, label: "1 hour" },
   { hours: 6, label: "6 hours" },
@@ -11,45 +10,41 @@ export const SESSION_TTL_OPTIONS = [
   { hours: 720, label: "30 days" },
 ] as const;
 
-interface SessionTtlSettings {
-  readonly sessionTtlEnabled: boolean;
-  readonly sessionTtlHours: number;
-}
-const DEFAULTS: SessionTtlSettings = { sessionTtlEnabled: false, sessionTtlHours: 168 };
-
-function subscribe(listener: () => void) {
-  globalThis.addEventListener(CHANGED, listener);
-  globalThis.addEventListener("storage", listener);
-  return () => {
-    globalThis.removeEventListener(CHANGED, listener);
-    globalThis.removeEventListener("storage", listener);
-  };
-}
-
-/** Browser-only preferences scoped to one workspace; deletion is not enforced yet. */
+/** Workspace retention preferences persisted by the API. */
 export function useSessionTtlSettings(workspaceId: string) {
-  const key = `workspaced:session-ttl:${workspaceId}`;
-  const raw = useSyncExternalStore(subscribe, () => readStored(key));
-  const settings = useMemo<SessionTtlSettings>(() => {
-    try {
-      const parsed = JSON.parse(raw ?? "{}");
-      return {
-        sessionTtlEnabled: typeof parsed?.sessionTtlEnabled === "boolean" ? parsed.sessionTtlEnabled : DEFAULTS.sessionTtlEnabled,
-        sessionTtlHours: SESSION_TTL_OPTIONS.some(({ hours }) => hours === parsed?.sessionTtlHours) ? parsed.sessionTtlHours : DEFAULTS.sessionTtlHours,
-      };
-    } catch {
-      return DEFAULTS;
-    }
-  }, [raw]);
+  const [settings, setSettings] = useState<SessionTtlSettings | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const generation = useRef(0);
 
-  function update(patch: Partial<SessionTtlSettings>): boolean {
+  useEffect(() => {
+    const current = ++generation.current;
+    setSettings(null);
+    setLoading(true);
+    setError(null);
+    setSaving(false);
+    getSessionTtl(workspaceId)
+      .then((value) => { if (generation.current === current) setSettings(value); })
+      .catch(() => { if (generation.current === current) setError("Could not load session settings."); })
+      .finally(() => { if (generation.current === current) setLoading(false); });
+    return () => { generation.current++; };
+  }, [workspaceId, attempt]);
+
+  async function update(value: SessionTtlSettings): Promise<boolean> {
+    const current = generation.current;
+    setSaving(true);
     try {
-      globalThis.localStorage.setItem(key, JSON.stringify({ ...settings, ...patch }));
-      globalThis.dispatchEvent(new Event(CHANGED));
+      const saved = await setSessionTtl(workspaceId, value);
+      if (generation.current !== current) return false;
+      setSettings(saved);
       return true;
     } catch {
       return false;
+    } finally {
+      if (generation.current === current) setSaving(false);
     }
   }
-  return { settings, update };
+  return { settings, loading, saving, error, update, retry: () => setAttempt((value) => value + 1) };
 }

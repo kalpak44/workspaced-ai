@@ -1,6 +1,21 @@
 import { send } from "./http";
 import { workspaceUrl } from "./workspacesApi";
 
+export interface SessionTtlSettings {
+  readonly sessionTtlEnabled: boolean;
+  readonly sessionTtlHours: number;
+}
+
+export async function getSessionTtl(workspaceId: string): Promise<SessionTtlSettings> {
+  return (await send(`${workspaceUrl(workspaceId)}/session-ttl`)).json();
+}
+
+export async function setSessionTtl(workspaceId: string, settings: SessionTtlSettings): Promise<SessionTtlSettings> {
+  return (await send(`${workspaceUrl(workspaceId)}/session-ttl`, {
+    method: "PUT", body: JSON.stringify(settings),
+  })).json();
+}
+
 export interface ModelOption {
   readonly id: string;
   readonly name: string;

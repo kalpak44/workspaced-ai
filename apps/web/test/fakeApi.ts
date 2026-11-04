@@ -89,6 +89,7 @@ export function installFakeApi(
   const answers: { sessionId: string; formId: string; answer?: FormAnswer }[] = [];
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
+  const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
   const sessionAgents = new Map<string, string>();
@@ -140,7 +141,7 @@ export function installFakeApi(
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
     }
-    const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers)(?:\/(.+))?$/.exec(url);
+    const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers|session-ttl)(?:\/(.+))?$/.exec(url);
     const terminalRoute = /\/api\/v1\/workspaces\/([^/]+)\/terminals(?:\/([^/]+))?$/.exec(url);
     if (terminalRoute) {
       const [, workspaceId, terminalId] = terminalRoute;
@@ -222,6 +223,10 @@ export function installFakeApi(
     const index = rows.findIndex((w) => w.id === workspaceId);
     if (index < 0) return json({}, 404);
     const method = init?.method ?? "GET";
+    if (kind === "session-ttl") {
+      if (method === "PUT") sessionTtl.set(workspaceId, JSON.parse(String(init?.body)));
+      return json(sessionTtl.get(workspaceId) ?? { sessionTtlEnabled: false, sessionTtlHours: 168 });
+    }
     if (kind === "models") return state.harnessDown ? json({}, 503) : json(catalogue);
     if (kind === "model") {
       const { model } = JSON.parse(String(init!.body)) as { model: string | null };
@@ -341,5 +346,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

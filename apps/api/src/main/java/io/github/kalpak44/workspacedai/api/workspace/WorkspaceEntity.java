@@ -31,6 +31,25 @@ public class WorkspaceEntity {
   @Column(length = 200)
   private String model;
 
+  @Column(name = "session_ttl_enabled", nullable = false)
+  private boolean sessionTtlEnabled;
+
+  @Column(name = "session_ttl_hours", nullable = false)
+  private int sessionTtlHours = 168;
+
+  public boolean isSessionTtlEnabled() {
+    return sessionTtlEnabled;
+  }
+
+  public int getSessionTtlHours() {
+    return sessionTtlHours;
+  }
+
+  public void setSessionTtl(boolean enabled, int hours) {
+    this.sessionTtlEnabled = enabled;
+    this.sessionTtlHours = hours;
+  }
+
   // Set by the column default; read only to order the list.
   @Column(name = "created_at", insertable = false, updatable = false)
   private Instant createdAt;

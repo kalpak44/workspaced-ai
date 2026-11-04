@@ -81,6 +81,8 @@ class OpenCodeHarnessTest {
               assertThat(session.id()).isEqualTo(FakeOpenCode.SESSION);
               assertThat(session.directory()).isEqualTo(DIRECTORY);
               assertThat(session.createdAt()).isNotNull();
+              assertThat(session.updatedAt())
+                  .isEqualTo(java.time.Instant.ofEpochMilli(opencode.sessionUpdatedAt));
             });
   }
 

@@ -22,6 +22,9 @@ class SessionWithoutHarnessTest {
   @Autowired SessionService service;
   @Autowired WorkspaceRepository workspaces;
   @Autowired WorkspaceSessionRepository sessions;
+  @Autowired SessionExpiryService expiry;
+  @Autowired SessionExpiryScheduler cleanup;
+  @Autowired io.github.kalpak44.workspacedai.api.settings.SettingsService settings;
 
   UUID workspace;
 
@@ -29,6 +32,18 @@ class SessionWithoutHarnessTest {
   void setUp() {
     workspaces.deleteAll();
     workspace = workspaces.save(new WorkspaceEntity("Research", "openrouter")).getId();
+  }
+
+  @Test
+  void defersAutomaticDeletionUntilTheHarnessCanCleanUpItsFiles() {
+    var stored =
+        sessions.save(new WorkspaceSessionEntity(UUID.randomUUID(), workspace, "/p", "ses_1"));
+    settings.setSessionTtl(
+        workspace, new io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings(true, 1));
+    assertThat(expiry.candidates(workspace)).isEmpty();
+    assertThat(expiry.expire(stored.getId())).isFalse();
+    cleanup.cleanup();
+    assertThat(sessions.existsById(stored.getId())).isTrue();
   }
 
   @Test

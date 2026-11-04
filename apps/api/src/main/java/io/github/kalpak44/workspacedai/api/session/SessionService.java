@@ -104,7 +104,7 @@ public class SessionService {
    */
   @Transactional
   public void delete(UUID workspaceId, UUID sessionId) {
-    var session = session(workspaceId, sessionId);
+    var session = sessionForUpdate(workspaceId, sessionId);
     sessions.delete(session);
     sessions.flush();
     runtime
@@ -143,8 +143,9 @@ public class SessionService {
         harness.sessionAgent(target.endpoint(), target.harnessSessionId()), options);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public AgentSelection setAgent(UUID workspaceId, UUID sessionId, String agentId) {
+    sessionForUpdate(workspaceId, sessionId);
     var target = target(workspaceId, sessionId);
     var selection = agents(workspaceId, sessionId);
     if (selection.agents().stream().noneMatch(agent -> agent.id().equals(agentId))) {
@@ -163,23 +164,25 @@ public class SessionService {
     return harness.forms(target.endpoint(), target.harnessSessionId());
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public void replyForm(
       UUID workspaceId, UUID sessionId, String formId, Map<String, Object> answer) {
+    sessionForUpdate(workspaceId, sessionId);
     var target = target(workspaceId, sessionId);
     harness.replyForm(target.endpoint(), target.harnessSessionId(), formId, answer);
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public void cancelForm(UUID workspaceId, UUID sessionId, String formId) {
+    sessionForUpdate(workspaceId, sessionId);
     var target = target(workspaceId, sessionId);
     harness.cancelForm(target.endpoint(), target.harnessSessionId(), formId);
   }
 
   /** With the workspace's chosen model, so a change of model applies from the next message. */
-  @Transactional(readOnly = true)
+  @Transactional
   public void send(UUID workspaceId, UUID sessionId, String text) {
-    var session = session(workspaceId, sessionId);
+    var session = sessionForUpdate(workspaceId, sessionId);
     harness.prompt(
         endpoint(workspaceId),
         session.getPath(),
@@ -188,9 +191,9 @@ public class SessionService {
         model(workspaceId));
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public void edit(UUID workspaceId, UUID sessionId, String messageId, String text) {
-    var session = session(workspaceId, sessionId);
+    var session = sessionForUpdate(workspaceId, sessionId);
     var endpoint = endpoint(workspaceId);
     var message =
         harness.messages(endpoint, session.getPath(), session.getHarnessSessionId()).stream()
@@ -219,9 +222,9 @@ public class SessionService {
         : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
   }
 
-  @Transactional(readOnly = true)
+  @Transactional
   public void abort(UUID workspaceId, UUID sessionId) {
-    var session = session(workspaceId, sessionId);
+    var session = sessionForUpdate(workspaceId, sessionId);
     harness.abort(endpoint(workspaceId), session.getPath(), session.getHarnessSessionId());
   }
 
@@ -251,6 +254,17 @@ public class SessionService {
     if (!workspaces.existsById(workspaceId)) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + workspaceId);
     }
+  }
+
+  private WorkspaceSessionEntity sessionForUpdate(UUID workspaceId, UUID sessionId) {
+    var session =
+        sessions
+            .lockByIdAndWorkspaceId(sessionId, workspaceId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "the workspace has no session " + sessionId));
+    return session;
   }
 
   private WorkspaceSessionEntity session(UUID workspaceId, UUID sessionId) {

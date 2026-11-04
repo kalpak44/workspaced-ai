@@ -81,6 +81,35 @@ class SettingsControllerTest {
   }
 
   @Test
+  void persistsSessionTtlAndValidatesThePolicy() throws Exception {
+    var initial = send("GET", "/session-ttl", null);
+    assertThat(initial.statusCode()).isEqualTo(200);
+    assertThat(JSON.readValue(initial.body(), SessionTtlSettings.class))
+        .isEqualTo(new SessionTtlSettings(false, 168));
+    var chosen = "{\"sessionTtlEnabled\":true,\"sessionTtlHours\":24}";
+    assertThat(send("PUT", "/session-ttl", chosen).statusCode()).isEqualTo(200);
+    assertThat(JSON.readValue(send("GET", "/session-ttl", null).body(), SessionTtlSettings.class))
+        .isEqualTo(new SessionTtlSettings(true, 24));
+    for (var invalid :
+        java.util.List.of(
+            "{}",
+            "{\"sessionTtlEnabled\":null,\"sessionTtlHours\":24}",
+            "{\"sessionTtlEnabled\":true,\"sessionTtlHours\":0}",
+            "{\"sessionTtlEnabled\":false,\"sessionTtlHours\":999}")) {
+      assertThat(send("PUT", "/session-ttl", invalid).statusCode()).isEqualTo(400);
+    }
+    assertThat(JSON.readValue(send("GET", "/session-ttl", null).body(), SessionTtlSettings.class))
+        .isEqualTo(new SessionTtlSettings(true, 24));
+    assertThat(
+            send("PUT", "/session-ttl", "{\"sessionTtlEnabled\":false,\"sessionTtlHours\":24}")
+                .statusCode())
+        .isEqualTo(200);
+    workspace = UUID.randomUUID();
+    assertThat(send("GET", "/session-ttl", null).statusCode()).isEqualTo(404);
+    assertThat(send("PUT", "/session-ttl", chosen).statusCode()).isEqualTo(404);
+  }
+
+  @Test
   void listsTheAgentModelsAndKeepsTheOneChosen() throws Exception {
     var catalogue = JSON.readTree(send("GET", "/models", null).body());
     assertThat(catalogue.get("defaultModel").asString()).isEqualTo("anthropic/claude-sonnet-5.5");

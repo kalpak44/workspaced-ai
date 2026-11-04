@@ -35,6 +35,30 @@ public class SettingsService {
     this.harness = harness;
   }
 
+  @Transactional(readOnly = true)
+  public SessionTtlSettings sessionTtl(UUID workspaceId) {
+    var workspace = workspace(workspaceId);
+    return new SessionTtlSettings(workspace.isSessionTtlEnabled(), workspace.getSessionTtlHours());
+  }
+
+  @Transactional
+  public SessionTtlSettings setSessionTtl(UUID workspaceId, SessionTtlSettings request) {
+    if (request.sessionTtlEnabled() == null
+        || request.sessionTtlHours() == null
+        || !List.of(1, 6, 24, 72, 168, 720).contains(request.sessionTtlHours())) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unsupported session TTL");
+    }
+    var workspace =
+        workspaces
+            .lockById(workspaceId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "no workspace " + workspaceId));
+    workspace.setSessionTtl(request.sessionTtlEnabled(), request.sessionTtlHours());
+    return request;
+  }
+
   /** The catalogue lives in the harness, so it needs one running. */
   @Transactional(readOnly = true)
   public ModelCatalogue models(UUID workspaceId) {

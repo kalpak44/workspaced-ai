@@ -9,6 +9,8 @@ import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
+import io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings;
+import io.github.kalpak44.workspacedai.api.settings.SettingsService;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
 import java.net.URI;
@@ -17,6 +19,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.UUID;
 import org.assertj.core.groups.Tuple;
@@ -29,6 +32,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
@@ -46,6 +50,10 @@ class SessionControllerTest {
   @Autowired WorkspaceService workspaces;
   @Autowired WorkspaceRepository repository;
   @Autowired WorkspaceSessionRepository sessions;
+  @Autowired SessionExpiryScheduler cleanup;
+  @Autowired SessionExpiryService expiry;
+  @Autowired SettingsService settings;
+  @Autowired JdbcTemplate jdbc;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -83,8 +91,72 @@ class SessionControllerTest {
     OPENCODE.shellExit = 0;
     OPENCODE.whileListingSessions = null;
     OPENCODE.sessionExists = true;
+    OPENCODE.sessionUpdatedAt = Instant.now().toEpochMilli();
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+  }
+
+  @Test
+  void expiresByHarnessLastUpdateIncludingModelResponsesAndRechecksBeforeDeleting()
+      throws Exception {
+    var session = create();
+    var policy = new SessionTtlSettings(true, 1);
+    settings.setSessionTtl(workspace, policy);
+    jdbc.update(
+        "update workspace_session set created_at = now() - interval '2 hours' where id = ?",
+        session.id());
+    // An old creation time is irrelevant when a model has just responded.
+    cleanup.cleanup();
+    assertThat(sessions.existsById(session.id())).isTrue();
+    OPENCODE.sessionUpdatedAt = Instant.now().minusSeconds(7200).toEpochMilli();
+    assertThat(expiry.candidates(workspace)).containsExactly(session.id());
+    // A response arriving after the candidate scan rescues the session.
+    OPENCODE.sessionUpdatedAt = Instant.now().toEpochMilli();
+    assertThat(expiry.expire(session.id())).isFalse();
+    OPENCODE.sessionUpdatedAt = Instant.now().minusSeconds(7200).toEpochMilli();
+    cleanup.cleanup();
+    assertThat(sessions.existsById(session.id())).isFalse();
+    assertThat(OPENCODE.shellCommands).contains("rm -rf -- '" + session.path() + "'");
+    assertThat(expiry.expire(session.id())).isFalse();
+  }
+
+  @Test
+  void disablingTtlPreservesPreviouslyExpiredCandidates() throws Exception {
+    var session = create();
+    OPENCODE.sessionUpdatedAt = Instant.now().minusSeconds(7200).toEpochMilli();
+    assertThat(expiry.candidates(workspace)).isEmpty();
+    settings.setSessionTtl(workspace, new SessionTtlSettings(true, 1));
+    assertThat(expiry.candidates(workspace)).containsExactly(session.id());
+    settings.setSessionTtl(workspace, new SessionTtlSettings(false, 1));
+    assertThat(expiry.expire(session.id())).isFalse();
+    assertThat(sessions.existsById(session.id())).isTrue();
+  }
+
+  @Test
+  void retriesFailedCleanupWithoutLosingTheSessionIndex() throws Exception {
+    var session = create();
+    settings.setSessionTtl(workspace, new SessionTtlSettings(true, 1));
+    OPENCODE.sessionUpdatedAt = Instant.now().minusSeconds(7200).toEpochMilli();
+    OPENCODE.shellExit = 1;
+    cleanup.cleanup();
+    assertThat(sessions.existsById(session.id())).isTrue();
+    // Even though deleting the conversation succeeded, its folder must still be retried.
+    // A missing conversation uses the stored creation time; age the row for the retry.
+    jdbc.update(
+        "update workspace_session set created_at = now() - interval '2 hours' where id = ?",
+        session.id());
+    OPENCODE.shellExit = 0;
+    cleanup.cleanup();
+    assertThat(sessions.existsById(session.id())).isFalse();
+  }
+
+  @Test
+  void preservesSessionsWhenHarnessUpdateMetadataIsMissing() throws Exception {
+    var session = create();
+    settings.setSessionTtl(workspace, new SessionTtlSettings(true, 1));
+    OPENCODE.sessionUpdatedAt = null;
+    cleanup.cleanup();
+    assertThat(sessions.existsById(session.id())).isTrue();
   }
 
   @Test

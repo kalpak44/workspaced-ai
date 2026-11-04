@@ -18,6 +18,17 @@ public class SettingsController implements SettingsApi {
   }
 
   @Override
+  public ResponseEntity<SessionTtlSettings> sessionTtl(UUID workspaceId) {
+    return ResponseEntity.ok(service.sessionTtl(workspaceId));
+  }
+
+  @Override
+  public ResponseEntity<SessionTtlSettings> setSessionTtl(
+      UUID workspaceId, SessionTtlSettings request) {
+    return ResponseEntity.ok(service.setSessionTtl(workspaceId, request));
+  }
+
+  @Override
   public ResponseEntity<ModelCatalogue> models(UUID workspaceId) {
     return ResponseEntity.ok(service.models(workspaceId));
   }

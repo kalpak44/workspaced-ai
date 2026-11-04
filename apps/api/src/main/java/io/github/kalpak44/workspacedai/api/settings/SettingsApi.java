@@ -30,6 +30,30 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @RequestMapping("/workspaces/{workspaceId}")
 public interface SettingsApi {
 
+  @Operation(
+      operationId = "getSessionTtl",
+      summary = "Get the workspace's session TTL",
+      description =
+          "Available even when the workspace is stopped. Disabled by default, with a seven-day timeout.")
+  @GetMapping(path = "/session-ttl", produces = "application/json")
+  ResponseEntity<SessionTtlSettings> sessionTtl(@PathVariable UUID workspaceId);
+
+  @Operation(
+      operationId = "setSessionTtl",
+      summary = "Set the workspace's session TTL",
+      description =
+          "Deletes inactive sessions and their private files. Cleanup runs every minute and retries unavailable workspaces. "
+              + "User session actions and the harness's last update (including model output) reset inactivity; background reads do not. "
+              + "Allowed durations in hours: 1, 6, 24, 72, 168, 720. Changes apply to existing sessions using their last activity time.")
+  @ApiResponse(responseCode = "200", description = "Saved.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Both fields are required; the duration must be one of the supported hours.")
+  @ApiResponse(responseCode = "404", description = "No such workspace.")
+  @PutMapping(path = "/session-ttl", consumes = "application/json", produces = "application/json")
+  ResponseEntity<SessionTtlSettings> setSessionTtl(
+      @PathVariable UUID workspaceId, @Valid @RequestBody SessionTtlSettings request);
+
   String JSON = "application/json";
   String PROBLEM_JSON = "application/problem+json";
   String WORKSPACE_ID = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11";

@@ -441,6 +441,7 @@ describe("App", () => {
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Sessions" }));
+    await screen.findByRole("button", { name: "Enabled" });
     expect(screen.getByRole("region", { name: "Session TTL" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Enabled" }));
     await user.selectOptions(screen.getByRole("combobox", { name: "Delete after inactivity of" }), "24");
@@ -448,7 +449,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Sessions" }));
     expect(screen.getByRole("combobox", { name: "Delete after inactivity of" })).toHaveValue("24");
     await user.click(screen.getByRole("button", { name: "Save session settings" }));
-    expect(JSON.parse(localStorage.getItem("workspaced:session-ttl:starter")!)).toEqual({ sessionTtlEnabled: true, sessionTtlHours: 24 });
+    expect(api.sessionTtl.get("starter")).toEqual({ sessionTtlEnabled: true, sessionTtlHours: 24 });
 
     await user.click(screen.getByRole("button", { name: "Back to workspace" }));
     expect(path()).toBe("/workspaces/starter");
