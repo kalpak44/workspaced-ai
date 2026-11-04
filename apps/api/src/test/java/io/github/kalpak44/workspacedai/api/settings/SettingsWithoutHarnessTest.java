@@ -7,8 +7,6 @@ import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatusChanged;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -36,15 +34,14 @@ class SettingsWithoutHarnessTest {
   }
 
   @Test
-  void keepsAServerForWhenTheHarnessIsUpAndSaysItsStatusIsUnknown() {
-    var added =
-        service.addMcpServer(
-            workspace, new McpServerRequest("github", "https://mcp.test/g", Map.of()));
-    assertThat(added.status()).isEqualTo("unknown");
-    // Ready with no harness to reach is tolerated, and retried on the next report.
-    events.publishEvent(new WorkspaceStatusChanged(workspace, WorkspaceStatus.READY));
-    service.removeMcpServer(workspace, "github");
-    assertThat(service.mcpServers(workspace)).isEmpty();
+  void requiresTheWorkspaceForMcpConfiguration() {
+    assertThatThrownBy(
+            () ->
+                service.addMcpServer(
+                    workspace, new McpServerRequest("github", "https://mcp.test/g", Map.of())))
+        .isInstanceOf(HarnessUnavailableException.class);
+    assertThatThrownBy(() -> service.mcpServers(workspace))
+        .isInstanceOf(HarnessUnavailableException.class);
   }
 
   @Test

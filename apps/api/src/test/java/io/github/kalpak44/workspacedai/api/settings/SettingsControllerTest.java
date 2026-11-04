@@ -11,15 +11,12 @@ import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.session.SessionService;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatusChanged;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
-import java.time.Duration;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -165,20 +162,14 @@ class SettingsControllerTest {
   }
 
   @Test
-  void givesAReplacedPodItsServersBackOnceItIsReady() throws Exception {
+  void readsConfigurationFromOpenCodeWithoutDatabaseCopies() throws Exception {
     send(
         "POST",
         "/mcp-servers",
         "{\"name\":\"github\",\"url\":\"https://mcp.test/g\",\"headers\":{}}");
-    // The new pod starts from the image's configuration, without them.
-    OPENCODE.globalMcp.removeAll();
-    events.publishEvent(new WorkspaceStatusChanged(workspace, WorkspaceStatus.INITIALIZING));
-    events.publishEvent(new WorkspaceStatusChanged(workspace, WorkspaceStatus.READY));
-    long deadline = System.nanoTime() + Duration.ofSeconds(5).toNanos();
-    while (!OPENCODE.globalMcp.has("github") && System.nanoTime() < deadline) {
-      Thread.sleep(20);
-    }
     assertThat(OPENCODE.globalMcp.has("github")).isTrue();
+    assertThat(JSON.readTree(send("GET", "/mcp-servers", null).body())).hasSize(1);
+    assertThat(OPENCODE.requests).anyMatch(r -> r.path().equals("/api/experimental/fs/write"));
   }
 
   @Test
@@ -186,6 +177,18 @@ class SettingsControllerTest {
     workspace = UUID.randomUUID();
     assertThat(send("GET", "/mcp-servers", null).statusCode()).isEqualTo(404);
     assertThat(send("PUT", "/model", "{\"model\":null}").statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void rejectsLiteralCredentialsBeforePersistingAnything() throws Exception {
+    assertThat(
+            send(
+                    "POST",
+                    "/mcp-servers",
+                    "{\"name\":\"unsafe\",\"url\":\"https://mcp.test/g\",\"headers\":{\"Authorization\":\"Bearer raw-token\"}}")
+                .statusCode())
+        .isEqualTo(400);
+    assertThat(OPENCODE.globalMcp.has("unsafe")).isFalse();
   }
 
   private HttpResponse<String> send(String method, String path, String json) throws Exception {

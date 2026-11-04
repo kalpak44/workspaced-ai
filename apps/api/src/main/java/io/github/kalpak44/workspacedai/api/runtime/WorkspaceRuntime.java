@@ -29,9 +29,6 @@ public interface WorkspaceRuntime {
   /** Where the workspace's harness answers; empty while it has none running. */
   Optional<HarnessEndpoint> harness(UUID workspaceId);
 
-  /** Resolves a runtime environment reference without returning it through the public API. */
-  Optional<String> environmentValue(UUID workspaceId, String name);
-
   /** One status per id, in a single lookup however many there are. */
   Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds);
 

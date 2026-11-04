@@ -16,30 +16,20 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * A workspace's agent settings: its model, and its MCP servers. The database is the source of truth
- * and the harness a copy, so a change is stored and applied in one transaction: a harness that
- * refuses it rolls the change back.
+ * Stores the workspace's model preference and wraps OpenCode's durable project MCP configuration.
  */
 @Service
 public class SettingsService {
 
   private final WorkspaceRepository workspaces;
-  private final McpServerRepository servers;
   private final WorkspaceRuntime runtime;
   private final Harness harness;
-  private final HarnessSettings settings;
 
   public SettingsService(
-      WorkspaceRepository workspaces,
-      McpServerRepository servers,
-      WorkspaceRuntime runtime,
-      Harness harness,
-      HarnessSettings settings) {
+      WorkspaceRepository workspaces, WorkspaceRuntime runtime, Harness harness) {
     this.workspaces = workspaces;
-    this.servers = servers;
     this.runtime = runtime;
     this.harness = harness;
-    this.settings = settings;
   }
 
   /** The catalogue lives in the harness, so it needs one running. */
@@ -62,38 +52,34 @@ public class SettingsService {
     return model;
   }
 
-  /** Statuses come from the harness when it is running, and read "unknown" when it is not. */
-  @Transactional(readOnly = true)
+  @Transactional
   public List<McpServer> mcpServers(UUID workspaceId) {
     workspace(workspaceId);
-    Map<String, String> statuses;
-    try {
-      statuses = runtime.harness(workspaceId).map(harness::mcpStatus).orElse(null);
-    } catch (HarnessUnavailableException _) {
-      statuses = null;
-    }
-    var known = statuses;
-    return servers.findAllByWorkspaceIdOrderByCreatedAtAscNameAsc(workspaceId).stream()
+    var endpoint = endpoint(workspaceId);
+    var statuses = harness.mcpStatus(endpoint);
+    return harness.mcpConfiguration(endpoint).entrySet().stream()
         .map(
-            s ->
+            e ->
                 new McpServer(
-                    s.getName(),
-                    s.getUrl(),
-                    s.getHeaders().keySet().stream().sorted().toList(),
-                    known == null ? "unknown" : known.getOrDefault(s.getName(), "pending")))
+                    e.getKey(),
+                    e.getValue().url(),
+                    e.getValue().headers().keySet().stream().sorted().toList(),
+                    statuses.getOrDefault(e.getKey(), "pending")))
         .toList();
   }
 
   @Transactional
   public McpServer addMcpServer(UUID workspaceId, McpServerRequest request) {
     workspace(workspaceId);
-    if (servers.findByWorkspaceIdAndName(workspaceId, request.name()).isPresent()) {
+    var endpoint = endpoint(workspaceId);
+    if (harness.mcpConfiguration(endpoint).containsKey(request.name())) {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "the workspace already has an MCP server " + request.name());
     }
-    servers.saveAndFlush(
-        new McpServerEntity(workspaceId, request.name(), request.url(), request.headers()));
-    settings.apply(workspaceId);
+    validateHeaders(request.headers());
+    harness.configureMcp(
+        endpoint,
+        Map.of(request.name(), new Harness.McpServerConfig(request.url(), request.headers())));
     return mcpServers(workspaceId).stream()
         .filter(s -> s.name().equals(request.name()))
         .findFirst()
@@ -103,16 +89,23 @@ public class SettingsService {
   @Transactional
   public void removeMcpServer(UUID workspaceId, String name) {
     workspace(workspaceId);
-    var server =
-        servers
-            .findByWorkspaceIdAndName(workspaceId, name)
-            .orElseThrow(
-                () ->
-                    new ResponseStatusException(
-                        HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name));
-    runtime.harness(workspaceId).ifPresent(endpoint -> harness.removeMcp(endpoint, name));
-    servers.delete(server);
-    servers.flush();
+    var endpoint = endpoint(workspaceId);
+    if (!harness.mcpConfiguration(endpoint).containsKey(name)) {
+      throw new ResponseStatusException(
+          HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name);
+    }
+    harness.removeMcp(endpoint, name);
+  }
+
+  private static void validateHeaders(Map<String, String> headers) {
+    headers.forEach(
+        (name, value) -> {
+          if (!value.matches("(?:(?:Bearer|Basic) )?\\{env:[A-Za-z_][A-Za-z0-9_]*}")) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST,
+                "MCP header values must reference a workspace secret using {env:SECRET_NAME}");
+          }
+        });
   }
 
   private HarnessEndpoint endpoint(UUID workspaceId) {

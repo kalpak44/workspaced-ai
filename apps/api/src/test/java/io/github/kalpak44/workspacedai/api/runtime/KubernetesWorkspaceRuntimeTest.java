@@ -142,9 +142,6 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void keepsTheEnvironmentInALabelledSecretAndConfigMap() {
     runtime.start(id, ENVIRONMENT);
-    assertThat(runtime.environmentValue(id, "API_KEY")).hasValue("sk-1");
-    assertThat(runtime.environmentValue(id, "BASE_URL")).hasValue("https://x.test");
-    assertThat(runtime.environmentValue(id, "MISSING")).isEmpty();
 
     var configMap = client.configMaps().inNamespace(namespace()).withName(resourceName(id)).get();
     assertThat(configMap.getData()).containsExactlyEntriesOf(Map.of("BASE_URL", "https://x.test"));

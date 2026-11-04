@@ -207,26 +207,6 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   }
 
   @Override
-  public Optional<String> environmentValue(UUID workspaceId, String name) {
-    var secret = client.secrets().inNamespace(namespace).withName(resourceName(workspaceId)).get();
-    if (secret != null && secret.getData() != null && secret.getData().containsKey(name)) {
-      return Optional.of(
-          new String(
-              Base64.getDecoder().decode(secret.getData().get(name)), StandardCharsets.UTF_8));
-    }
-    var config =
-        client.configMaps().inNamespace(namespace).withName(resourceName(workspaceId)).get();
-    return config == null || config.getData() == null
-        ? Optional.empty()
-        : Optional.ofNullable(config.getData().get(name));
-  }
-
-  /**
-   * Two lists however many workspaces there are: every managed pod and every managed Deployment. A
-   * workspace whose Deployment exists is starting until one of its pods is ready, since the
-   * Deployment replaces any pod that goes; one with no Deployment is judged by its bare pod.
-   */
-  @Override
   public Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds) {
     var pods =
         client

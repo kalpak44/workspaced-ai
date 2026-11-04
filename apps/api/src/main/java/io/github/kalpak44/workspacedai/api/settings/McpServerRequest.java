@@ -9,8 +9,7 @@ import java.util.Map;
 
 /**
  * The name is what the agent's tools are prefixed with, so it is kept to a short slug. A header
- * value is stored as sent: reference a workspace secret as {@code {env:NAME}} rather than pasting a
- * token, and the token never leaves the workspace's Secret.
+ * value must reference a workspace secret as {@code {env:NAME}}; credentials stay in Secrets.
  */
 @Schema(description = "A remote MCP server to add to a workspace")
 public record McpServerRequest(

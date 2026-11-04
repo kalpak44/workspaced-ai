@@ -209,30 +209,79 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
-  public boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers) {
+  public synchronized boolean configureMcp(
+      HarnessEndpoint endpoint, Map<String, McpServerConfig> servers) {
+    var document = mcpDocument(endpoint);
+    var mcp = document.withObject("/mcp");
     servers.forEach(
         (name, server) ->
-            call(
-                endpoint,
-                "PUT",
-                withLocation("/api/experimental/mcp/" + encode(name), PROJECT_ROOT),
-                Map.of(
-                    "config",
-                    Map.of(
-                        "type", "remote",
-                        "url", server.url(),
-                        "headers", server.headers()))));
+            mcp.set(
+                name,
+                json.valueToTree(
+                    Map.of("type", "remote", "url", server.url(), "headers", server.headers()))));
+    if (!servers.isEmpty()) saveMcpDocument(endpoint, document);
     return !servers.isEmpty();
   }
 
-  @Override
-  public void removeMcp(HarnessEndpoint endpoint, String name) {
+  private tools.jackson.databind.node.ObjectNode mcpDocument(HarnessEndpoint endpoint) {
     var response =
         send(
-            request(endpoint, withLocation("/api/experimental/mcp/" + encode(name), PROJECT_ROOT))
-                .DELETE());
-    if (response.statusCode() != 404) {
-      check(response);
+            request(endpoint, withLocation("/api/fs/read/.opencode/opencode.json", PROJECT_ROOT))
+                .GET());
+    if (response.statusCode() == 404) return json.createObjectNode();
+    check(response);
+    var document =
+        JsonMapper.builder()
+            .enable(tools.jackson.core.json.JsonReadFeature.ALLOW_JAVA_COMMENTS)
+            .enable(tools.jackson.core.json.JsonReadFeature.ALLOW_TRAILING_COMMA)
+            .build()
+            .readTree(response.body());
+    if (!(document instanceof tools.jackson.databind.node.ObjectNode object)) {
+      throw new HarnessUnavailableException("OpenCode project configuration must be a JSON object");
+    }
+    return object;
+  }
+
+  private void saveMcpDocument(
+      HarnessEndpoint endpoint, tools.jackson.databind.node.ObjectNode document) {
+    check(
+        send(
+            request(
+                    endpoint,
+                    withLocation("/api/experimental/fs/write", PROJECT_ROOT)
+                        + "&path="
+                        + encode(".opencode/opencode.json"))
+                .header("Content-Type", "application/octet-stream")
+                .POST(BodyPublishers.ofString(json.writeValueAsString(document)))));
+    call(endpoint, "POST", "/api/location/reload", Map.of());
+  }
+
+  @Override
+  public Map<String, McpServerConfig> mcpConfiguration(HarnessEndpoint endpoint) {
+    var result = new TreeMap<String, McpServerConfig>();
+    mcpDocument(endpoint)
+        .path("mcp")
+        .properties()
+        .forEach(
+            entry -> {
+              var config = entry.getValue();
+              if (!"remote".equals(text(config, "type"))) return;
+              var headers = new TreeMap<String, String>();
+              config
+                  .path("headers")
+                  .properties()
+                  .forEach(h -> headers.put(h.getKey(), h.getValue().asString()));
+              result.put(entry.getKey(), new McpServerConfig(text(config, "url"), headers));
+            });
+    return result;
+  }
+
+  @Override
+  public synchronized void removeMcp(HarnessEndpoint endpoint, String name) {
+    var document = mcpDocument(endpoint);
+    if (document.path("mcp") instanceof tools.jackson.databind.node.ObjectNode mcp) {
+      mcp.remove(name);
+      saveMcpDocument(endpoint, document);
     }
   }
 

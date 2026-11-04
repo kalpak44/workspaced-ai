@@ -11,6 +11,26 @@ import tools.jackson.databind.json.JsonMapper;
 /** Opt-in contract smoke test against the built harness, without spending provider credits. */
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 class OpenCodeLiveTest {
+  @org.junit.jupiter.api.Test
+  void persistsMcpReferencesAndRemovesThemThroughOpenCode() {
+    var harness = new OpenCodeHarness(JsonMapper.builder().build());
+    var endpoint =
+        new HarnessEndpoint(
+            URI.create(System.getProperty("opencode.live.url")),
+            System.getProperty("opencode.live.password"));
+    var config =
+        new Harness.McpServerConfig(
+            "https://example.invalid/mcp",
+            java.util.Map.of("Authorization", "Bearer {env:CHECK_TOKEN}"));
+    harness.configureMcp(endpoint, java.util.Map.of("contract-check", config));
+    try {
+      assertThat(harness.mcpConfiguration(endpoint)).containsEntry("contract-check", config);
+    } finally {
+      harness.removeMcp(endpoint, "contract-check");
+    }
+    assertThat(harness.mcpConfiguration(endpoint)).doesNotContainKey("contract-check");
+  }
+
   @org.junit.jupiter.api.RepeatedTest(5)
   void createsListsAndDeletesASessionAndRunsABashPty() throws Exception {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());

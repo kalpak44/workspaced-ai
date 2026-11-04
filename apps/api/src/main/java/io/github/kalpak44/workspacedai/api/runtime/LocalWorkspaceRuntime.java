@@ -50,11 +50,6 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
-  public Optional<String> environmentValue(UUID workspaceId, String name) {
-    return Optional.ofNullable(System.getenv(name));
-  }
-
-  @Override
   public Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds) {
     return workspaceIds.stream()
         .collect(Collectors.toMap(Function.identity(), id -> WorkspaceStatus.READY));

@@ -134,17 +134,19 @@ and sent with every prompt, so it applies from the next message in every session
 returns to the default. A model the catalogue does not list is refused with `400`, so a typo fails here rather than
 as a broken reply.
 
-**MCP servers.** Remote servers only: the harness image carries no Node or Python, so a local MCP command could not
-run. The database holds them; the harness receives them through V2's runtime
-`PUT /api/experimental/mcp/{server}` endpoint at the shared project location. Removing a server uses the matching
-DELETE endpoint, removing its tools immediately.
-The backend expands `{env:NAME}` in a header from the workspace's Kubernetes Secret or ConfigMap before sending
-the runtime MCP request (local development reads the API process environment), so
-a token belongs in Secrets and the header references it. Header values are never returned, and the API never writes
-back the configuration it reads, because opencode returns it with every reference already substituted. A replaced
-pod starts from the image's configuration, so the API applies a workspace's servers again each time it becomes
-ready. `status` is the harness's (`connected`, `failed`, `needs_auth`,
-`disabled`), `pending` until it has picked a new server up, and `unknown` while it is not running.
+**MCP servers.** OpenCode owns the durable configuration in
+`/home/workspace/project/.opencode/opencode.json` on the workspace PVC. The API reads that file and merges MCP
+changes while preserving other configuration fields. It then calls `POST /api/location/reload`; OpenCode handles
+configuration discovery, secret reference expansion and connections on every restart. Reload rebuilds loaded
+locations and cancels pending permissions/forms; running sessions pick up fresh services at their next step boundary.
+
+The UI manages remote servers. Header values must be `{env:SECRET_NAME}`, optionally prefixed with `Bearer `
+or `Basic `. Store actual credentials in Kubernetes Secrets; header values are never returned by the API.
+A newly added environment secret requires a workspace restart before OpenCode can read it. MCP operations require
+a reachable workspace, so they return 503 while OpenCode is unavailable.
+
+PostgreSQL holds no MCP settings or references. Migration V6 drops the old MCP table without importing its entries.
+Existing settings must already be present in the OpenCode project config or be re-added through the UI.
 
 ## Workspace secrets
 
