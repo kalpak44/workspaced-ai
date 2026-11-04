@@ -85,6 +85,14 @@ class OpenCodeHarnessTest {
   }
 
   @Test
+  void listsASessionUpdatedBetweenPagesOnceWithItsLatestTitle() {
+    opencode.sessionBusy = true;
+    assertThat(harness.sessions(opencode.endpoint()))
+        .singleElement()
+        .satisfies(session -> assertThat(session.title()).isEqualTo("Renamed while listing"));
+  }
+
+  @Test
   void deletesASessionAndToleratesOneAlreadyGone() {
     harness.deleteSession(opencode.endpoint(), DIRECTORY, FakeOpenCode.SESSION);
     harness.deleteSession(opencode.endpoint(), DIRECTORY, "ses_gone");

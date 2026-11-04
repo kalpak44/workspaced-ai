@@ -30,6 +30,9 @@ public class FakeOpenCode implements AutoCloseable {
   public volatile CountDownLatch holdStream;
   public volatile boolean sessionExists = true;
 
+  /** Every page points at another that repeats the session, as for one updated mid-listing. */
+  public volatile boolean sessionBusy;
+
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private final HttpServer server;
 
@@ -87,7 +90,8 @@ public class FakeOpenCode implements AutoCloseable {
               200,
               "{\"directory\":\"/home/workspace/project\",\"project\":{\"id\":\"global\","
                   + "\"directory\":\"/home/workspace/project\",\"canonical\":\"/home/workspace/project\"}}");
-      case "GET /api/session" -> respond(exchange, 200, sessions());
+      case "GET /api/session" ->
+          respond(exchange, 200, sessions(exchange.getRequestURI().getRawQuery()));
       case "POST /api/session" -> {
         sessionExists = true;
         respond(exchange, 200, "{\"data\":" + session() + "}");
@@ -130,10 +134,19 @@ public class FakeOpenCode implements AutoCloseable {
     }
   }
 
-  private String sessions() {
+  private String sessions(String query) {
+    var next = "null";
+    if (sessionBusy) {
+      next = "\"later\"";
+      if (query.contains("cursor=")) {
+        title = "Renamed while listing";
+      }
+    }
     return "{\"data\":"
         + (sessionExists ? "[" + session() + "]" : "[]")
-        + ",\"cursor\":{\"previous\":null,\"next\":null}}";
+        + ",\"cursor\":{\"previous\":null,\"next\":"
+        + next
+        + "}}";
   }
 
   private String session() {

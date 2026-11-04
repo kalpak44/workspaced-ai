@@ -90,9 +90,13 @@ public class OpenCodeHarness implements Harness {
     call(endpoint, "GET", withLocation("/api/location", directory), null);
   }
 
+  /**
+   * The cursor anchors on each session's last update, so a session that changes while the pages
+   * are read comes back on a later page. The later copy wins, and a page with nothing new ends it.
+   */
   @Override
   public List<HarnessSession> sessions(HarnessEndpoint endpoint) {
-    var result = new ArrayList<HarnessSession>();
+    var result = new LinkedHashMap<String, HarnessSession>();
     String cursor = null;
     do {
       var path = "/api/session?limit=100&parentID=null";
@@ -102,18 +106,23 @@ public class OpenCodeHarness implements Harness {
         path += "&order=asc";
       }
       var page = call(endpoint, "GET", path, null);
+      var fresh = false;
       for (var session : page.path("data")) {
         var created = number(session.path("time"), "created");
-        result.add(
-            new HarnessSession(
-                text(session, "id"),
-                text(session, "title"),
-                text(session.path("location"), "directory"),
-                created == null ? Instant.now() : instant(created)));
+        var id = text(session, "id");
+        fresh |=
+            result.put(
+                    id,
+                    new HarnessSession(
+                        id,
+                        text(session, "title"),
+                        text(session.path("location"), "directory"),
+                        created == null ? Instant.now() : instant(created)))
+                == null;
       }
-      cursor = nullableText(page.path("cursor"), "next");
+      cursor = fresh ? nullableText(page.path("cursor"), "next") : null;
     } while (cursor != null);
-    return result;
+    return List.copyOf(result.values());
   }
 
   @Override
