@@ -16,9 +16,9 @@ import java.util.Map;
  */
 @Schema(description = "An MCP server to add to a workspace: either url or command")
 public record McpServerRequest(
-    @Schema(example = "github", pattern = McpServerRequest.NAME)
+    @Schema(example = "github", pattern = McpServerRequest.NAME_PATTERN)
         @NotBlank
-        @Pattern(regexp = McpServerRequest.NAME)
+        @Pattern(regexp = McpServerRequest.NAME_PATTERN)
         String name,
     @Schema(
             description = "A remote server's endpoint",
@@ -52,7 +52,7 @@ public record McpServerRequest(
         @Size(max = 50)
         Map<@Pattern(regexp = ENV_NAME) String, @NotNull @Size(max = 200) String> env) {
 
-  static final String NAME = "^[a-z0-9][a-z0-9_-]{0,63}$";
+  static final String NAME_PATTERN = "^[a-z0-9][a-z0-9_-]{0,63}$";
   static final String ENV_NAME = "^[A-Za-z_][A-Za-z0-9_]{0,99}$";
 
   /** The remote form, as the API took it before local servers. */

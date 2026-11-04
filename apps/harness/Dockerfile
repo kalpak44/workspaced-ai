@@ -7,6 +7,12 @@
 # ARGs: the hex of `npm view opencode-linux-x64-musl@<version> dist.integrity`.
 ARG OPENCODE_VERSION=2.2.5
 ARG OPENCODE_SHA512=5e2e262ba044001d04e642096ed33aa4a93e9a0b4c8dba3782b5f87aef8d0e97d61a9e1e32e02fb1a5e7858609bf1ca27b695240123661d8bb437b28e323f6ba
+# Alpine 3.24 packages npm 11.12.1, whose bundled tar, brace-expansion, ip-address,
+# pacote, picomatch and sigstore versions have published vulnerabilities. The latest npm
+# in the same major line carries those fixes; pin and verify it rather than trusting a
+# mutable registry tag. Bumping NPM_VERSION means recomputing the tarball's SHA-512.
+ARG NPM_VERSION=11.21.1
+ARG NPM_SHA512=613ccbe90044257c87713bb426251ced128ca7e9b3949b65eeb18b98445a5d441e14720c73d6ad76be86f4cf42f2f0d66efe347a9a13400ccd2f6fcfb5954385
 
 FROM alpine:3.24 AS fetch
 ARG OPENCODE_VERSION
@@ -26,14 +32,25 @@ RUN HOME=/stage opencode debug config > /dev/null
 
 FROM alpine:3.24
 ARG OPENCODE_VERSION
+ARG NPM_VERSION
+ARG NPM_SHA512
 LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai" \
-      io.workspaced.opencode.version="${OPENCODE_VERSION}"
+      io.workspaced.opencode.version="${OPENCODE_VERSION}" \
+      io.workspaced.npm.version="${NPM_VERSION}"
 
 # The agent's own tools: git and ripgrep, which opencode would otherwise download at run
 # time into a home that does not survive the pod, curl, and a shell for its bash tool.
 # tini reaps the processes that tool leaves behind. Node.js and npm run MCP servers started
 # with npx; nodejs-current is Alpine's Node 26, the active LTS line, where nodejs is still 24.
-RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ nodejs-current npm ripgrep tini \
+RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
+ && curl -fsSL -o /tmp/npm.tgz \
+      "https://registry.npmjs.org/npm/-/npm-${NPM_VERSION}.tgz" \
+ && echo "${NPM_SHA512}  /tmp/npm.tgz" | sha512sum -c - \
+ && mkdir -p /usr/local/lib/node_modules/npm \
+ && tar -xzf /tmp/npm.tgz -C /usr/local/lib/node_modules/npm --strip-components=1 \
+ && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
+ && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
+ && rm /tmp/npm.tgz \
  && adduser -D -u 1000 -h /home/workspace workspace
 
 COPY --from=fetch /opencode /usr/local/bin/opencode

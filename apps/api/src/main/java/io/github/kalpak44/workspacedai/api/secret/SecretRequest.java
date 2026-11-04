@@ -11,13 +11,13 @@ import jakarta.validation.constraints.Size;
  */
 @Schema(description = "A secret to add to a workspace")
 public record SecretRequest(
-    @Schema(example = "GITHUB_TOKEN", maxLength = 100, pattern = SecretRequest.NAME)
+    @Schema(example = "GITHUB_TOKEN", maxLength = 100, pattern = SecretRequest.NAME_PATTERN)
         @NotEmpty
         @Size(max = 100)
-        @Pattern(regexp = SecretRequest.NAME)
+        @Pattern(regexp = SecretRequest.NAME_PATTERN)
         String name,
     // A Kubernetes Secret holds 1 MiB in all, so one value cannot be allowed to fill it.
     @Schema(example = "ghp_…", maxLength = 65536) @NotEmpty @Size(max = 65536) String value) {
 
-  static final String NAME = "^[A-Za-z_][A-Za-z0-9_]*$";
+  static final String NAME_PATTERN = "^[A-Za-z_][A-Za-z0-9_]*$";
 }
