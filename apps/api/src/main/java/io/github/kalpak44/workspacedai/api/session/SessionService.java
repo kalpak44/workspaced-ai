@@ -9,6 +9,7 @@ import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -51,16 +52,16 @@ public class SessionService {
         var remote =
             harness.sessions(endpoint.get()).stream()
                 .collect(Collectors.toMap(s -> s.id(), Function.identity()));
-        for (var entity : stored) {
+        // Updated by query, not by changing the entities: a session deleted while this runs
+        // would otherwise fail the whole list when its row turns out to be gone.
+        for (var entity : List.copyOf(stored)) {
           var current = remote.get(entity.getHarnessSessionId());
-          entity.setAvailable(current != null);
-          if (current == null) {
-            continue;
-          } else if (current.title() != null && !current.title().equals(entity.getTitle())) {
-            entity.setTitle(current.title());
+          var available = current != null;
+          var title = available && current.title() != null ? current.title() : entity.getTitle();
+          if (available != entity.isAvailable() || !Objects.equals(title, entity.getTitle())) {
+            sessions.reconcile(entity.getId(), available, title);
           }
         }
-        sessions.flush();
         stored = sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId);
       } catch (HarnessUnavailableException _) {
         // The durable index remains useful while a replacement pod is starting.

@@ -78,6 +78,8 @@ class SessionControllerTest {
     OPENCODE.rejectRevert = false;
     OPENCODE.shellCommands.clear();
     OPENCODE.shellExit = 0;
+    OPENCODE.whileListingSessions = null;
+    OPENCODE.sessionExists = true;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -131,6 +133,20 @@ class SessionControllerTest {
         .contains(Tuple.tuple("DELETE", "/api/session/" + FakeOpenCode.SESSION));
     assertThat(OPENCODE.shellCommands).last().isEqualTo("rm -rf -- '" + session.path() + "'");
     assertThat(send("DELETE", "/" + session.id(), null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void listsTheSessionsLeftWhenOneIsDeletedMeanwhile() throws Exception {
+    var deleted = create();
+    var kept = create();
+    OPENCODE.sessionExists = false;
+    OPENCODE.whileListingSessions = () -> sessions.deleteById(deleted.id());
+    var listed = send("GET", "", null);
+    assertThat(listed.statusCode()).isEqualTo(200);
+    var body = JSON.readTree(listed.body());
+    assertThat(body).hasSize(1);
+    assertThat(body.get(0).get("id").asString()).isEqualTo(kept.id().toString());
+    assertThat(body.get(0).get("available").asBoolean()).isFalse();
   }
 
   @Test

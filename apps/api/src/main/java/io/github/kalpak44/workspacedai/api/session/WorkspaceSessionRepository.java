@@ -21,4 +21,15 @@ public interface WorkspaceSessionRepository extends JpaRepository<WorkspaceSessi
   @Modifying
   @Query("update WorkspaceSessionEntity s set s.title = :title where s.id = :id")
   int retitle(@Param("id") UUID id, @Param("title") String title);
+
+  /**
+   * A row deleted meanwhile is skipped rather than failing, as a dirty entity's update would. It
+   * clears the loaded entities, so a read that follows sees the change.
+   */
+  @Modifying(clearAutomatically = true)
+  @Query(
+      "update WorkspaceSessionEntity s set s.available = :available, s.title = :title"
+          + " where s.id = :id")
+  int reconcile(
+      @Param("id") UUID id, @Param("available") boolean available, @Param("title") String title);
 }

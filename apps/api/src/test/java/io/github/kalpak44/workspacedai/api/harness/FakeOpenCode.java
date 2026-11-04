@@ -43,6 +43,9 @@ public class FakeOpenCode implements AutoCloseable {
   public volatile CountDownLatch holdStream;
   public volatile boolean sessionExists = true;
 
+  /** Runs while the session list is being answered, as another request would meanwhile. */
+  public volatile Runnable whileListingSessions;
+
   /** Every page points at another that repeats the session, as for one updated mid-listing. */
   public volatile boolean sessionBusy;
 
@@ -109,8 +112,13 @@ public class FakeOpenCode implements AutoCloseable {
               200,
               "{\"directory\":\"/home/workspace/project\",\"project\":{\"id\":\"global\","
                   + "\"directory\":\"/home/workspace/project\",\"canonical\":\"/home/workspace/project\"}}");
-      case "GET /api/session" ->
-          respond(exchange, 200, sessions(exchange.getRequestURI().getRawQuery()));
+      case "GET /api/session" -> {
+        var meanwhile = whileListingSessions;
+        if (meanwhile != null) {
+          meanwhile.run();
+        }
+        respond(exchange, 200, sessions(exchange.getRequestURI().getRawQuery()));
+      }
       case "POST /api/session" -> {
         sessionExists = true;
         respond(exchange, 200, "{\"data\":" + session() + "}");
