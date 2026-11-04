@@ -74,10 +74,11 @@ export function SecretsPanel({
           ))}
         </ul>
       )}
-      <form onSubmit={submit} className="flex flex-col gap-3 sm:flex-row sm:items-start">
+      <form onSubmit={submit} className="flex flex-col gap-3 rounded-md bg-zinc-50 p-4 sm:flex-row sm:items-start dark:bg-zinc-900/60">
         <div className="min-w-0 flex-1">
           <TextField
             id="secret-name"
+            surface="solid"
             label="Name"
             placeholder="GITHUB_TOKEN"
             autoComplete="off"
@@ -95,6 +96,7 @@ export function SecretsPanel({
         <div className="min-w-0 flex-1">
           <TextField
             id="secret-value"
+            surface="solid"
             label="Value"
             type="password"
             autoComplete="off"

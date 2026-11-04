@@ -1,11 +1,11 @@
-import { ArrowLeft, KeyRound, Plug } from "lucide-react";
+import { ArrowLeft, Clock, KeyRound, Plug } from "lucide-react";
 import { useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { navigate } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { PageHeader } from "../molecules";
 import { McpPanel, SecretsPanel } from "../organisms";
+import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { ContextLayout } from "../templates/ContextLayout";
 
 interface Props {
@@ -15,11 +15,12 @@ interface Props {
 const SECTIONS = [
   { id: "mcp", label: "MCP servers", Icon: Plug },
   { id: "secrets", label: "Secrets", Icon: KeyRound },
+  { id: "sessions", label: "Sessions", Icon: Clock },
 ] as const;
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
 export function SettingsPage({ workspace }: Props) {
-  const [section, setSection] = useState<"mcp" | "secrets">("mcp");
+  const [section, setSection] = useState<"mcp" | "secrets" | "sessions">("mcp");
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id);
   const back = () => navigate({ name: "workspace", workspaceId: workspace.id });
@@ -39,7 +40,7 @@ export function SettingsPage({ workspace }: Props) {
               <span className="truncate">{workspace.name}</span>
             </button>
           </div>
-          <nav aria-label="Workspace settings sections" className="flex gap-1 p-3 sm:flex-col">
+          <nav aria-label="Workspace settings sections" className="flex flex-wrap gap-1 p-3 sm:flex-col">
             {SECTIONS.map(({ id, label, Icon }) => (
               <button
                 key={id}
@@ -60,8 +61,10 @@ export function SettingsPage({ workspace }: Props) {
         </>
       }
     >
-      <PageHeader title="Workspace settings" crumbs={[{ label: workspace.name, onClick: back }]} />
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
+        <div hidden={section !== "sessions"}>
+          <SessionTtlPanel key={workspace.id} workspaceId={workspace.id} />
+        </div>
         <div hidden={section !== "mcp"}>
           <McpPanel
             servers={mcp.servers}

@@ -433,13 +433,24 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     const secrets = await openSettings(user);
-    expect(heading()).toHaveTextContent("Workspace settings");
+    expect(screen.getByRole("navigation", { name: "Workspace settings sections" })).toBeVisible();
+    expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).not.toBeInTheDocument();
     expect(path()).toBe("/workspaces/starter/settings");
     expect(document.title).toBe("Settings · Starter — workspaced-ai");
     expect(within(secrets).getByText("Model provider")).toBeInTheDocument();
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
 
-    await user.click(within(screen.getByRole("navigation", { name: "Breadcrumb" })).getByRole("button", { name: "Starter" }));
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
+    expect(screen.getByRole("region", { name: "Session TTL" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Enabled" }));
+    await user.selectOptions(screen.getByRole("combobox", { name: "Delete after inactivity of" }), "24");
+    await user.click(screen.getByRole("button", { name: "Secrets" }));
+    await user.click(screen.getByRole("button", { name: "Sessions" }));
+    expect(screen.getByRole("combobox", { name: "Delete after inactivity of" })).toHaveValue("24");
+    await user.click(screen.getByRole("button", { name: "Save session settings" }));
+    expect(JSON.parse(localStorage.getItem("workspaced:session-ttl:starter")!)).toEqual({ sessionTtlEnabled: true, sessionTtlHours: 24 });
+
+    await user.click(screen.getByRole("button", { name: "Back to workspace" }));
     expect(path()).toBe("/workspaces/starter");
     await sessionsHere();
   });
@@ -518,7 +529,8 @@ describe("App", () => {
 
   it("reports secrets that cannot be loaded", async () => {
     visit("/workspaces/starter/settings");
-    await renderLoaded();
+    render(<App />);
+    await screen.findByRole("button", { name: "Back to workspace" });
     api.state.fail = 500;
     // Loaded before the failure, so reopen the page to load again.
     act(() => {
@@ -549,7 +561,7 @@ describe("App", () => {
     FakeEventSource.emit("starter", "FAILED");
     expect(screen.getByText("Workspace unavailable")).toBeInTheDocument();
     await openSettings(user);
-    expect(heading()).toHaveTextContent("Workspace settings");
+    expect(screen.getByRole("navigation", { name: "Workspace settings sections" })).toBeVisible();
   });
 
   it("starts a session from a typed task and streams the reply into its own page", async () => {
