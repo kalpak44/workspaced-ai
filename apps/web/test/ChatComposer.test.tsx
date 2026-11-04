@@ -14,9 +14,13 @@ class Speech {
   start = vi.fn();
   stop = vi.fn(() => this.onend?.());
   abort = vi.fn(() => this.onend?.());
+  heard: { isFinal: boolean; 0: { transcript: string } }[] = [];
   constructor() { Speech.latest = this; }
-  result(text: string) {
-    act(() => this.onresult?.({ resultIndex: 0, results: [{ isFinal: true, 0: { transcript: text } }] }));
+  result(text: string, isFinal = true) {
+    const last = this.heard.at(-1);
+    if (last && !last.isFinal) this.heard.pop();
+    this.heard.push({ isFinal, 0: { transcript: text } });
+    act(() => this.onresult?.({ resultIndex: this.heard.length - 1, results: [...this.heard] }));
   }
 }
 
@@ -30,16 +34,35 @@ describe("voice dictation", () => {
     await user.click(screen.getByRole("button", { name: "Dictate message" }));
     expect(Speech.latest.start).toHaveBeenCalledOnce();
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
+    expect(screen.getByRole("status")).toHaveTextContent("0:00");
+    Speech.latest.result("list the", false);
     Speech.latest.result("list the files");
-    expect(screen.getByRole("textbox")).toHaveValue("Please list the files");
+    expect(screen.getByRole("status")).toHaveTextContent("list the files");
+    expect(screen.getByRole("textbox")).toHaveValue("Please");
     expect(send).not.toHaveBeenCalled();
     await user.click(screen.getByRole("button", { name: "Stop dictation" }));
+    expect(screen.queryByRole("status")).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox")).toHaveValue("Please list the files");
+    expect(screen.getByRole("textbox")).toHaveFocus();
     await user.click(screen.getByRole("button", { name: "Send" }));
     expect(send).toHaveBeenCalledWith("Please list the files");
     await user.click(screen.getByRole("button", { name: "Dictate message" }));
     unmount();
     expect(Speech.latest.abort).toHaveBeenCalled();
     expect(Speech.latest.onresult).toBeNull();
+  });
+
+  it("keeps the last phrase on stop even when the browser never marked it final", async () => {
+    vi.stubGlobal("SpeechRecognition", Speech);
+    const user = userEvent.setup();
+    render(<ChatComposer busy={false} onSend={vi.fn()} onStop={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "Dictate message" }));
+    expect(Speech.latest.interimResults).toBe(true);
+    Speech.latest.result("open the", true);
+    Speech.latest.result("readme", false);
+    expect(screen.getByRole("status")).toHaveTextContent("open the readme");
+    await user.click(screen.getByRole("button", { name: "Stop dictation" }));
+    expect(screen.getByRole("textbox")).toHaveValue("open the readme");
   });
 
   it("reports denied microphone access and retains the typed draft", async () => {

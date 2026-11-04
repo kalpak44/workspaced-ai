@@ -14,7 +14,11 @@ interface Recognition {
 
 type RecognitionConstructor = new () => Recognition;
 
-/** Browser dictation produces ordinary text; no audio is sent to the chat model. */
+/**
+ * Browser dictation produces ordinary text; no audio is sent to the chat model. What is heard
+ * shows as a live transcript while recording and is handed over once, when recording ends.
+ * Interim results count too, since some browsers never mark the last phrase final.
+ */
 export function useDictation(onText: (text: string) => void, disabled: boolean) {
   const browser = globalThis as typeof globalThis & {
     SpeechRecognition?: RecognitionConstructor;
@@ -22,8 +26,11 @@ export function useDictation(onText: (text: string) => void, disabled: boolean) 
   };
   const Constructor = browser.SpeechRecognition ?? browser.webkitSpeechRecognition;
   const [listening, setListening] = useState(false);
+  const [transcript, setTranscript] = useState("");
+  const [seconds, setSeconds] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const recognition = useRef<Recognition | null>(null);
+  const heard = useRef("");
   const receive = useRef(onText);
   receive.current = onText;
 
@@ -32,6 +39,13 @@ export function useDictation(onText: (text: string) => void, disabled: boolean) 
   useEffect(() => {
     if (disabled) recognition.current?.abort();
   }, [disabled]);
+
+  useEffect(() => {
+    if (!listening) return undefined;
+    setSeconds(0);
+    const timer = setInterval(() => setSeconds((current) => current + 1), 1000);
+    return () => clearInterval(timer);
+  }, [listening]);
 
   useEffect(() => () => {
     const current = recognition.current;
@@ -51,16 +65,20 @@ export function useDictation(onText: (text: string) => void, disabled: boolean) 
     if (!Constructor || disabled) return;
     const current = new Constructor();
     recognition.current = current;
+    heard.current = "";
+    setTranscript("");
     current.lang = navigator.language;
     current.continuous = true;
-    current.interimResults = false;
+    current.interimResults = true;
     current.onresult = (event) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (event.results[i].isFinal) receive.current(event.results[i][0].transcript);
-      }
+      // A continuous session lists every result since it started, so the whole text is rebuilt.
+      heard.current = Array.from(event.results, (result) => result[0].transcript.trim())
+        .filter(Boolean)
+        .join(" ");
+      setTranscript(heard.current);
     };
     current.onerror = (event) => {
-      if (event.error !== "aborted") {
+      if (event.error !== "aborted" && event.error !== "no-speech") {
         setError(event.error === "not-allowed" || event.error === "service-not-allowed"
           ? "Microphone access was denied. Allow it in your browser to dictate."
           : "Voice recognition is unavailable. You can still type your message.");
@@ -71,6 +89,9 @@ export function useDictation(onText: (text: string) => void, disabled: boolean) 
       if (recognition.current === current) {
         recognition.current = null;
         setListening(false);
+        setTranscript("");
+        if (heard.current) receive.current(heard.current);
+        heard.current = "";
       }
     };
     setError(null);
@@ -84,5 +105,5 @@ export function useDictation(onText: (text: string) => void, disabled: boolean) 
     }
   };
 
-  return { supported: !!Constructor, listening, error, toggle, stop };
+  return { supported: !!Constructor, listening, transcript, seconds, error, toggle, stop };
 }

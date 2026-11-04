@@ -31,8 +31,11 @@ export function ChatComposer({
 }: Props) {
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
-  const dictation = useDictation((spoken) => setText((current) => `${current}${current && !/\s$/.test(current) ? " " : ""}${spoken}`.slice(0, MAX_TEXT)), disabled || busy || pending);
   const field = useRef<HTMLTextAreaElement>(null);
+  const dictation = useDictation((spoken) => {
+    setText((current) => `${current}${current && !/\s$/.test(current) ? " " : ""}${spoken}`.slice(0, MAX_TEXT));
+    field.current?.focus();
+  }, disabled || busy || pending);
 
   useEffect(() => {
     if (autoFocus) {
@@ -71,6 +74,20 @@ export function ChatComposer({
       }}
       className="flex flex-col gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
     >
+      {dictation.listening && (
+        <div role="status" className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm dark:bg-rose-950/40">
+          <span className="relative mt-1.5 flex size-2.5 shrink-0">
+            <span className="absolute inline-flex size-full animate-ping rounded-full bg-rose-400 opacity-75" />
+            <span className="relative inline-flex size-2.5 rounded-full bg-rose-500" />
+          </span>
+          <span className="shrink-0 font-medium tabular-nums text-rose-600">
+            {Math.floor(dictation.seconds / 60)}:{String(dictation.seconds % 60).padStart(2, "0")}
+          </span>
+          <span className={`min-w-0 flex-1 break-words ${dictation.transcript ? "text-zinc-700 dark:text-zinc-200" : "text-zinc-500"}`}>
+            {dictation.transcript || "Listening… Stop to add what you said to your message."}
+          </span>
+        </div>
+      )}
       <textarea
         ref={field}
         aria-label="Message"
@@ -104,7 +121,6 @@ export function ChatComposer({
       )}
       </div>
     </form>
-    {dictation.listening && <p role="status" className="mt-2 text-xs text-rose-600">Listening… Stop dictation to review and send.</p>}
     {dictation.error && <p role="alert" className="mt-2 text-xs text-rose-600">{dictation.error}</p>}
     </>
   );
