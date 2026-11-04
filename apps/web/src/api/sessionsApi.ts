@@ -26,6 +26,38 @@ export interface ChatMessage {
   readonly parts: readonly ChatPart[];
 }
 
+export type FormValue = string | number | boolean | readonly string[];
+export type FormAnswer = Readonly<Record<string, FormValue>>;
+
+export interface FormField {
+  readonly key: string;
+  readonly type: "string" | "number" | "integer" | "boolean" | "multiselect" | "external";
+  readonly title?: string;
+  readonly description?: string;
+  readonly required?: boolean;
+  readonly hidden?: boolean;
+  readonly when?: readonly { readonly key: string; readonly op: "eq" | "neq"; readonly value: FormValue }[];
+  readonly default?: FormValue;
+  readonly options?: readonly { readonly value: string; readonly label: string; readonly description?: string }[];
+  readonly custom?: boolean;
+  readonly placeholder?: string;
+  readonly format?: "email" | "uri" | "date" | "date-time";
+  readonly minimum?: number;
+  readonly maximum?: number;
+  readonly minLength?: number;
+  readonly maxLength?: number;
+  readonly pattern?: string;
+  readonly minItems?: number;
+  readonly maxItems?: number;
+  readonly url?: string;
+}
+
+export interface AgentForm {
+  readonly id: string;
+  readonly title: string;
+  readonly fields: readonly FormField[];
+}
+
 /** The events a session's stream sends, by event name. */
 export interface SessionEvents {
   readonly message: { readonly id: string; readonly role: ChatMessage["role"] };
@@ -35,6 +67,7 @@ export interface SessionEvents {
   readonly title: { readonly title: string };
   readonly error: { readonly message: string };
   readonly refresh: Record<string, never>;
+  readonly forms: Record<string, never>;
 }
 
 // The server assigns UUIDs; anything else is refused before it becomes a path segment.
@@ -78,6 +111,18 @@ export async function sendMessage(workspaceId: string, sessionId: string, text: 
 
 export async function abortSession(workspaceId: string, sessionId: string): Promise<void> {
   await send(`${sessionUrl(workspaceId, sessionId)}/abort`, { method: "POST" });
+}
+
+export async function listForms(workspaceId: string, sessionId: string): Promise<AgentForm[]> {
+  return (await send(`${sessionUrl(workspaceId, sessionId)}/forms`)).json();
+}
+
+export async function settleForm(workspaceId: string, sessionId: string, formId: string, answer?: FormAnswer): Promise<void> {
+  if (!SAFE_ID.test(formId)) throw new Error("Invalid form id");
+  const url = `${sessionUrl(workspaceId, sessionId)}/forms/${encodeURIComponent(formId)}`;
+  await send(answer === undefined ? url : `${url}/reply`, answer === undefined
+    ? { method: "DELETE" }
+    : { method: "POST", body: JSON.stringify({ answer }) });
 }
 
 /** Replaces a user turn and later history, then generates a fresh response. */

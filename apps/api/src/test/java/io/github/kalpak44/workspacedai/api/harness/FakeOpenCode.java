@@ -108,6 +108,16 @@ public class FakeOpenCode implements AutoCloseable {
       case "DELETE /api/session/ses_gone" -> respond(exchange, 404, "{}");
       case "GET /api/session/" + SESSION -> respond(exchange, 200, "{\"data\":" + session() + "}");
       case "GET /api/session/" + SESSION + "/message" -> respond(exchange, 200, MESSAGES);
+      case "GET /api/session/" + SESSION + "/form" ->
+          respond(
+              exchange,
+              200,
+              "{\"data\":[{\"id\":\"frm_age\",\"sessionID\":\""
+                  + SESSION
+                  + "\",\"title\":\"Your age\",\"fields\":[{\"key\":\"age\",\"type\":\"integer\",\"required\":true}]}]}");
+      case "POST /api/session/" + SESSION + "/form/frm_age/reply",
+          "DELETE /api/session/" + SESSION + "/form/frm_age" ->
+          respond(exchange, 204, null);
       case "GET /api/session/broken/message" -> respond(exchange, 500, "{}");
       case "POST /api/session/" + SESSION + "/model" -> respond(exchange, 204, null);
       case "POST /api/session/" + SESSION + "/prompt" ->

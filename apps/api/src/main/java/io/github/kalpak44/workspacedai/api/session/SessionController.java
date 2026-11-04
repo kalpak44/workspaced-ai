@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.session;
 
+import io.github.kalpak44.workspacedai.api.harness.AgentForm;
 import io.github.kalpak44.workspacedai.api.harness.ChatMessage;
 import java.util.List;
 import java.util.UUID;
@@ -63,6 +64,24 @@ public class SessionController implements SessionApi {
   @Override
   public ResponseEntity<Void> abort(UUID workspaceId, UUID sessionId) {
     service.abort(workspaceId, sessionId);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<List<AgentForm>> forms(UUID workspaceId, UUID sessionId) {
+    return ResponseEntity.ok(service.forms(workspaceId, sessionId));
+  }
+
+  @Override
+  public ResponseEntity<Void> replyForm(
+      UUID workspaceId, UUID sessionId, String formId, FormReply request) {
+    service.replyForm(workspaceId, sessionId, formId, request.answer());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<Void> cancelForm(UUID workspaceId, UUID sessionId, String formId) {
+    service.cancelForm(workspaceId, sessionId, formId);
     return ResponseEntity.noContent().build();
   }
 

@@ -8,9 +8,14 @@ import {
   sendMessage,
   sessionEventsUrl,
   type SessionEvents,
+  type AgentForm,
+  type FormAnswer,
+  listForms,
+  settleForm,
 } from "../api/sessionsApi";
 
 export type { ChatMessage, ChatPart } from "../api/sessionsApi";
+export type { AgentForm, FormAnswer, FormField, FormValue } from "../api/sessionsApi";
 
 type Messages = readonly ChatMessage[];
 
@@ -68,6 +73,9 @@ export function useChat(
 ) {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
+  const [forms, setForms] = useState<AgentForm[]>([]);
+  const reloadForms = useRef<() => Promise<unknown>>(() => Promise.resolve());
+  const formRevision = useRef(0);
   // Loading from the first render, so an empty conversation is never shown for a full one.
   const [loading, setLoading] = useState(workspaceId !== null && sessionId !== null);
   const [error, setError] = useState<string | null>(null);
@@ -82,6 +90,7 @@ export function useChat(
   useEffect(() => {
     setMessages([]);
     setBusy(false);
+    setForms([]);
     setError(null);
     if (workspaceId === null || sessionId === null) {
       return undefined;
@@ -105,11 +114,25 @@ export function useChat(
       );
     };
     reload.current = () => load(true);
+    const loadForms = () => {
+      const version = ++formRevision.current;
+      return listForms(workspaceId, sessionId).then(
+        (pending) => {
+          if (active && version === formRevision.current) {
+            setForms(pending);
+            if (pending.length) setBusy(true);
+          }
+        },
+        () => active && version === formRevision.current && setError("Could not load the agent's questions. Reconnect to try again."),
+      );
+    };
+    reloadForms.current = loadForms;
+    void loadForms();
     setLoading(true);
     void load().finally(() => active && setLoading(false));
 
     const source = new EventSource(sessionEventsUrl(workspaceId, sessionId));
-    source.addEventListener("open", () => void load());
+    source.addEventListener("open", () => { void load(); void loadForms(); });
     const on = <K extends keyof SessionEvents>(name: K, handle: (data: SessionEvents[K]) => void) =>
       source.addEventListener(name, (event) => handle(JSON.parse(event.data) as SessionEvents[K]));
     on("message", ({ id, role }) => setMessages((current) => upsertMessage(current, id, role)));
@@ -139,6 +162,7 @@ export function useChat(
     on("title", ({ title }) => titled.current(sessionId, title));
     on("error", ({ message }) => setError(message));
     on("refresh", () => void load(true));
+    on("forms", () => void loadForms());
 
     const prompt = queued.get(sessionId);
     if (prompt !== undefined) {
@@ -205,5 +229,20 @@ export function useChat(
     }
   };
 
-  return { messages, busy, loading, error, dismissError: () => setError(null), send, edit, stop };
+  const answerForm = async (formId: string, answer?: FormAnswer): Promise<boolean> => {
+    if (workspaceId === null || sessionId === null) return false;
+    try {
+      await settleForm(workspaceId, sessionId, formId, answer);
+      ++formRevision.current;
+      setForms((current) => current.filter((form) => form.id !== formId));
+      void reloadForms.current();
+      return true;
+    } catch {
+      // Keep the question and its draft available so the user can retry.
+      void reloadForms.current();
+      return false;
+    }
+  };
+
+  return { messages, forms, answerForm, busy, loading, error, dismissError: () => setError(null), send, edit, stop };
 }

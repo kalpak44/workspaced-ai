@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.session;
 
+import io.github.kalpak44.workspacedai.api.harness.AgentForm;
 import io.github.kalpak44.workspacedai.api.harness.ChatMessage;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
@@ -7,6 +8,7 @@ import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -109,6 +111,25 @@ public class SessionService {
     var session = session(workspaceId, sessionId);
     return harness.messages(
         endpoint(workspaceId), session.getPath(), session.getHarnessSessionId());
+  }
+
+  @Transactional(readOnly = true)
+  public List<AgentForm> forms(UUID workspaceId, UUID sessionId) {
+    var target = target(workspaceId, sessionId);
+    return harness.forms(target.endpoint(), target.harnessSessionId());
+  }
+
+  @Transactional(readOnly = true)
+  public void replyForm(
+      UUID workspaceId, UUID sessionId, String formId, Map<String, Object> answer) {
+    var target = target(workspaceId, sessionId);
+    harness.replyForm(target.endpoint(), target.harnessSessionId(), formId, answer);
+  }
+
+  @Transactional(readOnly = true)
+  public void cancelForm(UUID workspaceId, UUID sessionId, String formId) {
+    var target = target(workspaceId, sessionId);
+    harness.cancelForm(target.endpoint(), target.harnessSessionId(), formId);
   }
 
   /** With the workspace's chosen model, so a change of model applies from the next message. */

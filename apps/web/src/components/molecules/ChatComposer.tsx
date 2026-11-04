@@ -1,5 +1,5 @@
 import { Mic, MicOff, SendHorizontal, Square } from "lucide-react";
-import { type KeyboardEvent, type SubmitEvent, useEffect, useRef, useState } from "react";
+import { type KeyboardEvent, type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useDictation } from "../../hooks/useDictation";
 import { IconButton } from "../atoms";
 
@@ -13,6 +13,7 @@ interface Props {
   readonly placeholder?: string;
   /** Focus on mount, for a page whose whole point is typing. */
   readonly autoFocus?: boolean;
+  readonly modelControl?: ReactNode;
   /** Resolves true once accepted; the text is kept on false so nothing typed is lost. */
   readonly onSend: (text: string) => Promise<boolean>;
   readonly onStop: () => void;
@@ -24,6 +25,7 @@ export function ChatComposer({
   disabled = false,
   placeholder = "Ask the agent to do something…",
   autoFocus = false,
+  modelControl,
   onSend,
   onStop,
 }: Props) {
@@ -67,7 +69,7 @@ export function ChatComposer({
         event.preventDefault();
         void submit();
       }}
-      className="flex items-center gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
+      className="flex flex-col gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
     >
       <textarea
         ref={field}
@@ -79,8 +81,10 @@ export function ChatComposer({
         placeholder={placeholder}
         onChange={(e) => setText(e.currentTarget.value)}
         onKeyDown={onKeyDown}
-        className="max-h-48 flex-1 resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed"
+        className="max-h-48 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed"
       />
+      <div className="flex min-w-0 items-center justify-end gap-1">
+      {modelControl}
       {dictation.supported && <IconButton
         label={dictation.listening ? "Stop dictation" : "Dictate message"}
         title={dictation.listening ? "Stop dictation" : "Dictate message"}
@@ -98,6 +102,7 @@ export function ChatComposer({
           disabled={disabled || pending || dictation.listening || !text.trim()}
         />
       )}
+      </div>
     </form>
     {dictation.listening && <p role="status" className="mt-2 text-xs text-rose-600">Listening… Stop dictation to review and send.</p>}
     {dictation.error && <p role="alert" className="mt-2 text-xs text-rose-600">{dictation.error}</p>}

@@ -46,9 +46,9 @@ export function SessionList(props: Props) {
           New task
         </p>
         <h2 className="mb-4 text-2xl font-semibold tracking-tight">Start a session</h2>
-        <div className="mb-2">{props.modelControl}</div>
         <ChatComposer
           busy={false}
+          modelControl={props.modelControl}
           autoFocus
           placeholder="Describe a task, and a new session starts on it…"
           onSend={props.onStart}

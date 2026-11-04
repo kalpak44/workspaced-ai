@@ -805,6 +805,47 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
   });
 
+  it("recovers a pending question on opening chat, retains a failed answer and resumes after submission", async () => {
+    const user = userEvent.setup();
+    api.sessions.set("starter", [{ id: "question-chat", title: "Question", path: "/project", createdAt: "2026-01-01" }]);
+    api.forms.set("question-chat", [{ id: "frm_age", title: "Your age", fields: [{ key: "age", title: "How old are you?", type: "integer", required: true, minimum: 0 }] }]);
+    visit("/workspaces/starter/sessions/question-chat");
+    await renderLoaded();
+    const age = await screen.findByRole("spinbutton", { name: /How old are you/ });
+    expect(screen.queryByText("Working…")).not.toBeInTheDocument();
+    await user.type(age, "35");
+    api.state.failAnswer = true;
+    await user.click(screen.getByRole("button", { name: "Submit answer" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not send your response");
+    expect(age).toHaveValue(35);
+    api.state.failAnswer = false;
+    await user.click(screen.getByRole("button", { name: "Submit answer" }));
+    await waitFor(() => expect(screen.queryByRole("spinbutton")).not.toBeInTheDocument());
+    expect(api.answers).toContainEqual({ sessionId: "question-chat", formId: "frm_age", answer: { age: 35 } });
+    expect(api.prompts).toEqual([]);
+    FakeEventSource.emitSession("status", { busy: false });
+    expect(screen.getByRole("textbox", { name: "Message" })).toBeEnabled();
+  });
+
+  it("shows streamed questions and clears them when dismissed or answered in another client", async () => {
+    const user = userEvent.setup();
+    api.sessions.set("starter", [{ id: "question-chat", title: "Question", path: "/project", createdAt: "2026-01-01" }]);
+    visit("/workspaces/starter/sessions/question-chat");
+    await renderLoaded();
+    await screen.findByRole("textbox", { name: "Message" });
+    const question = { id: "frm_choice", title: "Choose a color", fields: [{ key: "color", type: "string" as const }] };
+    api.forms.set("question-chat", [question]);
+    FakeEventSource.emitSession("forms", {});
+    await user.click(await screen.findByRole("button", { name: "Dismiss question" }));
+    await waitFor(() => expect(api.answers).toContainEqual({ sessionId: "question-chat", formId: "frm_choice" }));
+    api.forms.set("question-chat", [question]);
+    FakeEventSource.emitSession("forms", {});
+    await screen.findByRole("button", { name: "Submit answer" });
+    api.forms.set("question-chat", []);
+    FakeEventSource.emitSession("forms", {});
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Submit answer" })).not.toBeInTheDocument());
+  });
+
   it("chooses the agent's model from a searchable list, and goes back to the default", async () => {
     const user = userEvent.setup();
     await renderLoaded();

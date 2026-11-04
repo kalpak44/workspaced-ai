@@ -66,7 +66,10 @@ public class OpenCodeHarness implements Harness {
           "session.tool.called",
           "session.tool.progress",
           "session.tool.success",
-          "session.tool.failed");
+          "session.tool.failed",
+          "form.created",
+          "form.replied",
+          "form.cancelled");
 
   private final HttpClient http =
       HttpClient.newBuilder()
@@ -160,6 +163,31 @@ public class OpenCodeHarness implements Harness {
   public Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId) {
     var response = call(endpoint, "GET", "/api/session/" + encode(sessionId), null);
     return Optional.ofNullable(text(response.path("data"), "title"));
+  }
+
+  @Override
+  public List<AgentForm> forms(HarnessEndpoint endpoint, String sessionId) {
+    var result = new ArrayList<AgentForm>();
+    for (var form :
+        call(endpoint, "GET", "/api/session/" + encode(sessionId) + "/form", null).path("data")) {
+      result.add(new AgentForm(text(form, "id"), text(form, "title"), form.path("fields")));
+    }
+    return result;
+  }
+
+  @Override
+  public void replyForm(
+      HarnessEndpoint endpoint, String sessionId, String formId, Map<String, Object> answer) {
+    call(
+        endpoint,
+        "POST",
+        "/api/session/" + encode(sessionId) + "/form/" + encode(formId) + "/reply",
+        Map.of("answer", answer));
+  }
+
+  @Override
+  public void cancelForm(HarnessEndpoint endpoint, String sessionId, String formId) {
+    call(endpoint, "DELETE", "/api/session/" + encode(sessionId) + "/form/" + encode(formId), null);
   }
 
   @Override
@@ -449,12 +477,13 @@ public class OpenCodeHarness implements Harness {
   static List<HarnessEventEnvelope> events(JsonNode event, Map<String, String> tools) {
     var type = text(event, "type");
     var data = event.path("data");
-    var sessionId = text(data, "sessionID");
+    var sessionId = text("form.created".equals(type) ? data.path("form") : data, "sessionID");
     if (type == null || sessionId == null) {
       return List.of();
     }
     var result = new ArrayList<HarnessEvent>();
     switch (type) {
+      case "form.created", "form.replied", "form.cancelled" -> result.add(new HarnessEvent.Forms());
       case "session.renamed" -> result.add(new HarnessEvent.Title(text(data, "title")));
       case "session.inbox.delivered", "session.revert.committed" ->
           result.add(new HarnessEvent.Refresh());

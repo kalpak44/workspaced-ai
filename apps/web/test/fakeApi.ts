@@ -1,7 +1,7 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Secret } from "../src/api/secretsApi";
-import type { ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
+import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
 
@@ -83,6 +83,8 @@ export function installFakeApi(
   const sent: { name: string; value: string }[] = [];
   const sessions = new Map<string, Session[]>();
   const messages = new Map<string, ChatMessage[]>();
+  const forms = new Map<string, AgentForm[]>();
+  const answers: { sessionId: string; formId: string; answer?: FormAnswer }[] = [];
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
   const mcp = new Map<string, McpServer[]>();
@@ -104,6 +106,7 @@ export function installFakeApi(
     holdSecretRemove: null as Promise<void> | null,
     nextSession: 1,
     failEditAfterTruncate: false,
+    failAnswer: false,
     // Answers every session call with 503, as a workspace whose harness is down does.
     harnessDown: false,
   };
@@ -125,7 +128,7 @@ export function installFakeApi(
       return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
     }
     const sessionsRoute =
-      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort))?$/.exec(url);
+      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort|forms(?:\/[^/]+(?:\/reply)?)?))?$/.exec(url);
     if (sessionsRoute) {
       return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init);
     }
@@ -219,6 +222,14 @@ export function installFakeApi(
       return json(list);
     }
     if (!list.some((s) => s.id === sessionId)) return json({}, 404);
+    if (action === "forms") return json(forms.get(sessionId) ?? []);
+    if (action?.startsWith("forms/")) {
+      if (state.failAnswer) return json({}, 503);
+      const formId = action.split("/")[1];
+      answers.push({ sessionId, formId, ...(method === "POST" ? JSON.parse(String(init?.body)) : {}) });
+      forms.set(sessionId, (forms.get(sessionId) ?? []).filter((form) => form.id !== formId));
+      return new Response(null, { status: 204 });
+    }
     if (action?.startsWith("messages/") && method === "PUT") {
       const id = action.slice("messages/".length);
       const history = messages.get(sessionId) ?? [];
@@ -280,5 +291,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { rows, secrets, sent, sessions, messages, prompts, aborted, mcp, catalogue, state, fetchFn };
+  return { rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, catalogue, state, fetchFn };
 }

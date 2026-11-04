@@ -42,6 +42,33 @@ class OpenCodeHarnessTest {
   }
 
   @Test
+  void readsAnswersAndCancelsPendingQuestions() {
+    var form = harness.forms(opencode.endpoint(), FakeOpenCode.SESSION).getFirst();
+    assertThat(form.id()).isEqualTo("frm_age");
+    assertThat(form.fields().get(0).path("type").asString()).isEqualTo("integer");
+    harness.replyForm(opencode.endpoint(), FakeOpenCode.SESSION, form.id(), Map.of("age", 35));
+    assertThat(opencode.requests.getLast().body()).isEqualTo("{\"answer\":{\"age\":35}}");
+    harness.cancelForm(opencode.endpoint(), FakeOpenCode.SESSION, form.id());
+    assertThat(opencode.requests.getLast().method()).isEqualTo("DELETE");
+  }
+
+  @Test
+  void routesFormEventsToTheirOwningSession() {
+    var json = JsonMapper.builder().build();
+    for (var type : List.of("form.created", "form.replied", "form.cancelled")) {
+      var data =
+          type.equals("form.created")
+              ? "{\"form\":{\"id\":\"frm_age\",\"sessionID\":\"ses_1\"}}"
+              : "{\"id\":\"frm_age\",\"sessionID\":\"ses_1\"}";
+      assertThat(
+              OpenCodeHarness.events(
+                  json.readTree("{\"type\":\"" + type + "\",\"data\":" + data + "}"),
+                  new TreeMap<>()))
+          .containsExactly(new HarnessEventEnvelope("ses_1", new HarnessEvent.Forms()));
+    }
+  }
+
+  @Test
   void createsAndListsASessionAtTheProjectLocation() {
     var id = harness.createSession(opencode.endpoint(), DIRECTORY, null);
     assertThat(id).isEqualTo(FakeOpenCode.SESSION);

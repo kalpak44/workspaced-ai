@@ -40,6 +40,13 @@ public interface Harness {
 
   List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId);
 
+  List<AgentForm> forms(HarnessEndpoint endpoint, String sessionId);
+
+  void replyForm(
+      HarnessEndpoint endpoint, String sessionId, String formId, Map<String, Object> answer);
+
+  void cancelForm(HarnessEndpoint endpoint, String sessionId, String formId);
+
   /** The name the harness gave the session, or empty while it still has its placeholder. */
   Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId);
 

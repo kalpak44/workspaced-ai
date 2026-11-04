@@ -8,6 +8,13 @@ public sealed interface HarnessEvent {
 
   String name();
 
+  /** A question was created, answered or cancelled; reconcile pending forms. */
+  record Forms() implements HarnessEvent {
+    public String name() {
+      return "forms";
+    }
+  }
+
   /** A message started, or its role became known. */
   record Message(String id, String role) implements HarnessEvent {
     public String name() {

@@ -1,6 +1,8 @@
 import { Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../../hooks/useChat";
+import type { AgentForm, FormAnswer } from "../../hooks/useChat";
+import { AgentQuestion } from "../molecules/AgentQuestion";
 import { Spinner } from "../atoms";
 import { ChatComposer, ChatMessageEditor, ChatMessageView, ErrorBanner } from "../molecules";
 
@@ -14,10 +16,12 @@ interface Props {
   readonly onStop: () => void;
   readonly onEdit: (messageId: string, text: string) => Promise<boolean>;
   readonly modelControl?: ReactNode;
+  readonly forms: readonly AgentForm[];
+  readonly onAnswer: (id: string, answer?: FormAnswer) => Promise<boolean>;
 }
 
 /** One session's conversation, with the composer pinned below it. */
-export function ChatPanel({ messages, loading, busy, error, onDismissError, onSend, onStop, onEdit, modelControl }: Props) {
+export function ChatPanel({ messages, loading, busy, error, onDismissError, onSend, onStop, onEdit, modelControl, forms, onAnswer }: Props) {
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   // Keep the editor mounted even if a revert event removes the original message before
   // the request settles. A failed replacement must leave the draft available to copy.
@@ -31,7 +35,7 @@ export function ChatPanel({ messages, loading, busy, error, onDismissError, onSe
     if (element) {
       element.scrollTop = element.scrollHeight;
     }
-  }, [messages, busy]);
+  }, [messages, busy, forms]);
 
   let body;
   if (loading) {
@@ -70,7 +74,8 @@ export function ChatPanel({ messages, loading, busy, error, onDismissError, onSe
           <ChatMessageView key={message.id} message={message} busy={busy || editing !== null}
             onEdit={() => setEditing(message)} />
         ))}
-        {busy && (
+        {forms.map((form) => <li key={form.id}><AgentQuestion form={form} onAnswer={onAnswer} /></li>)}
+        {busy && forms.length === 0 && (
           <li className="flex items-center gap-2 text-xs text-zinc-500">
             <Spinner label="Agent is working" className="size-3.5" />
             Working…
@@ -87,8 +92,7 @@ export function ChatPanel({ messages, loading, busy, error, onDismissError, onSe
         {body}
       </div>
       <div className="mx-auto w-full max-w-3xl px-6 pb-6">
-        <div className="mb-2 flex items-center gap-2">{modelControl}</div>
-        <ChatComposer busy={busy} disabled={editing !== null} autoFocus onSend={onSend} onStop={onStop} />
+        <ChatComposer busy={busy} disabled={editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop} />
         <p className="mt-2 text-center text-xs text-zinc-400">
           Enter to send · Shift+Enter for a new line
         </p>

@@ -1,3 +1,4 @@
+import { ChevronDown } from "lucide-react";
 import { useState } from "react";
 import { useModelSettings } from "../../hooks/useModelSettings";
 import type { Workspace } from "../../hooks/useWorkspaces";
@@ -20,8 +21,19 @@ export function ChatModelPicker({ workspace, disabled = false, onChanged }: Prop
   const name = models.catalogue?.models.find((m) => m.id === selected)?.name ?? selected ?? "Default model";
   return (
     <>
-      <Button label={`Model: ${name}`} variant="secondary" disabled={disabled || models.saving !== undefined}
-        onClick={() => setOpen(true)} />
+      <button
+        type="button"
+        aria-label={`Model: ${name}`}
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        title={`Choose a model · ${name}`}
+        disabled={disabled || models.saving !== undefined}
+        onClick={() => setOpen(true)}
+        className="flex min-w-0 items-center gap-1.5 rounded-md px-2 py-1.5 text-sm font-normal text-zinc-600 transition-colors hover:bg-zinc-100 hover:text-zinc-950 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 disabled:cursor-not-allowed disabled:opacity-40 dark:text-zinc-300 dark:hover:bg-zinc-800 dark:hover:text-zinc-100"
+      >
+        <span className="truncate">{name}</span>
+        <ChevronDown aria-hidden className="size-3 shrink-0 text-zinc-400" />
+      </button>
       {open && (
         <Modal title="Choose a model" onClose={() => setOpen(false)}>
           <ModalBody>

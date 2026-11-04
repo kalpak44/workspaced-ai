@@ -60,6 +60,8 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           messages={chat.messages}
           loading={chat.loading && chat.messages.length === 0}
           busy={chat.busy}
+          forms={chat.forms}
+          onAnswer={chat.answerForm}
           error={sessions.error ?? chat.error}
           onDismissError={() => {
             sessions.dismissError();

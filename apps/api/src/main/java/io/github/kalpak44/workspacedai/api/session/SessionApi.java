@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.session;
 
+import io.github.kalpak44.workspacedai.api.harness.AgentForm;
 import io.github.kalpak44.workspacedai.api.harness.ChatMessage;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -32,6 +33,24 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 @Tag(name = "Sessions", description = "Chats with a workspace's agent in its shared project")
 @RequestMapping("/workspaces/{workspaceId}/sessions")
 public interface SessionApi {
+
+  @Operation(summary = "List questions awaiting an answer from the user")
+  @GetMapping(path = "/{sessionId}/forms", produces = JSON)
+  ResponseEntity<List<AgentForm>> forms(
+      @PathVariable UUID workspaceId, @PathVariable UUID sessionId);
+
+  @Operation(summary = "Answer an agent question and allow execution to continue")
+  @PostMapping(path = "/{sessionId}/forms/{formId}/reply", consumes = JSON)
+  ResponseEntity<Void> replyForm(
+      @PathVariable UUID workspaceId,
+      @PathVariable UUID sessionId,
+      @PathVariable String formId,
+      @Valid @RequestBody FormReply request);
+
+  @Operation(summary = "Dismiss an agent question")
+  @DeleteMapping(path = "/{sessionId}/forms/{formId}")
+  ResponseEntity<Void> cancelForm(
+      @PathVariable UUID workspaceId, @PathVariable UUID sessionId, @PathVariable String formId);
 
   String JSON = "application/json";
   String PROBLEM_JSON = "application/problem+json";
@@ -218,7 +237,8 @@ public interface SessionApi {
               + "starts; `part` ({messageId, part}) with a part's whole current state, which "
               + "replaces any earlier one of that id; `delta` ({messageId, partId, delta}) with "
               + "text appended to a part; `status` ({busy}); `title` ({title}); `error` "
-              + "({message}). A `keepalive` comment is sent about every 10 seconds.")
+              + "({message}); `forms` ({}) when pending questions change (reload /forms). "
+              + "A `keepalive` comment is sent about every 10 seconds.")
   @ApiResponse(
       responseCode = "200",
       description = "An open event stream.",
