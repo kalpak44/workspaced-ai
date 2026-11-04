@@ -91,8 +91,8 @@ public class OpenCodeHarness implements Harness {
   }
 
   /**
-   * The cursor anchors on each session's last update, so a session that changes while the pages
-   * are read comes back on a later page. The later copy wins, and a page with nothing new ends it.
+   * The cursor anchors on each session's last update, so a session that changes while the pages are
+   * read comes back on a later page. The later copy wins, and a page with nothing new ends it.
    */
   @Override
   public List<HarnessSession> sessions(HarnessEndpoint endpoint) {
