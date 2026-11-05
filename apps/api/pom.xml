@@ -170,6 +170,12 @@
                             <BPE_OVERRIDE_BPL_JVM_THREAD_COUNT>50</BPE_OVERRIDE_BPL_JVM_THREAD_COUNT>
                             <!-- Links the published package back to this repository. -->
                             <BP_OCI_SOURCE>https://github.com/kalpak44/workspaced-ai</BP_OCI_SOURCE>
+                            <!-- GitHub's release-asset CDN intermittently takes longer than the
+                                 buildpack's 5s default to answer a redirect, which fails the image
+                                 build with "timeout awaiting response headers" while fetching the
+                                 JRE or Syft. Give that one timeout room; the download itself is
+                                 still checksum-verified. -->
+                            <BP_RESPONSE_HEADER_TIMEOUT>60</BP_RESPONSE_HEADER_TIMEOUT>
                         </env>
                     </image>
                 </configuration>
