@@ -11,8 +11,8 @@ ARG OPENCODE_SHA512=5e2e262ba044001d04e642096ed33aa4a93e9a0b4c8dba3782b5f87aef8d
 # pacote, picomatch and sigstore versions have published vulnerabilities. The latest npm
 # in the same major line carries those fixes; pin and verify it rather than trusting a
 # mutable registry tag. Bumping NPM_VERSION means recomputing the tarball's SHA-512.
-ARG NPM_VERSION=11.21.1
-ARG NPM_SHA512=613ccbe90044257c87713bb426251ced128ca7e9b3949b65eeb18b98445a5d441e14720c73d6ad76be86f4cf42f2f0d66efe347a9a13400ccd2f6fcfb5954385
+ARG NPM_VERSION=11.21.2
+ARG NPM_SHA512=ec73c0a64f807e53146af4ac78bd4f9ba0a762a3081e4e77c7e2a6ba1aa64c3a8f9233cc8312294cf713aac13dd4428dc3880504957d7e75e249d1a6d435eaf4
 
 FROM alpine:3.24 AS fetch
 ARG OPENCODE_VERSION
