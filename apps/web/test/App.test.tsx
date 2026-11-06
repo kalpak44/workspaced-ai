@@ -333,6 +333,15 @@ describe("App", () => {
     );
   });
 
+  it("offers no restart while the workspace is starting", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    FakeEventSource.emit("starter", "INITIALIZING");
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    expect(screen.getByRole("menuitem", { name: "Restart" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Delete workspace" })).toBeEnabled();
+  });
+
   it("puts the status back when a restart is refused", async () => {
     api.state.failRestart = true;
     const user = userEvent.setup();

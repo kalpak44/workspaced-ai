@@ -129,6 +129,9 @@ export function useWorkspaces() {
   // to READY, and a refused restart puts back the status it had.
   const restart = (id: string) => {
     const before = workspaces.find((w) => w.id === id)?.status;
+    if (before === "INITIALIZING") {
+      return;
+    }
     patch(id, { status: "INITIALIZING" });
     restartWorkspace(id).catch(() => {
       if (before) {

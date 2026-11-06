@@ -111,6 +111,8 @@ export function WorkspaceItem({
           </MenuItem>
           <MenuItem
             className="gap-2 px-3 py-2"
+            // A pod that is still starting has nothing to restart yet.
+            disabled={workspace.status === "INITIALIZING"}
             onClick={() => {
               setMenuOpen(false);
               onRestart();

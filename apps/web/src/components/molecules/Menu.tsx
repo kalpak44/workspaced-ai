@@ -21,16 +21,18 @@ interface MenuItemProps {
   readonly onClick: () => void;
   readonly children: ReactNode;
   readonly danger?: boolean;
+  readonly disabled?: boolean;
   readonly className?: string;
 }
 
-export function MenuItem({ onClick, children, danger = false, className = "" }: MenuItemProps) {
+export function MenuItem({ onClick, children, danger = false, disabled = false, className = "" }: MenuItemProps) {
   return (
     <button
       type="button"
       role="menuitem"
       onClick={onClick}
-      className={`flex w-full items-center justify-between text-left hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+      disabled={disabled}
+      className={`flex w-full items-center justify-between text-left hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:bg-transparent dark:hover:bg-zinc-800 dark:disabled:hover:bg-transparent ${
         danger ? "text-rose-600 dark:text-rose-400" : ""
       } ${className}`}
     >
