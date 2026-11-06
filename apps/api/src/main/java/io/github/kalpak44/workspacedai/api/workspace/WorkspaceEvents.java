@@ -71,7 +71,7 @@ public class WorkspaceEvents {
    * calls it on every instance once the delete has committed, whichever one made it. Without it,
    * another open tab would only see the pod disappear and show the workspace as failed.
    */
-  void deleted(UUID id, UUID ownerId) {
+  void publishDeleted(UUID id, UUID ownerId) {
     sendTo(ownerId, () -> SseEmitter.event().name(DELETED).data(Map.of("id", id)));
   }
 

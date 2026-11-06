@@ -135,7 +135,7 @@ class WorkspaceDeletions implements SmartLifecycle {
   private void deliver(String payload) {
     var parts = payload.split(":", 2);
     try {
-      events.deleted(UUID.fromString(parts[0]), UUID.fromString(parts[1]));
+      events.publishDeleted(UUID.fromString(parts[0]), UUID.fromString(parts[1]));
     } catch (IllegalArgumentException | ArrayIndexOutOfBoundsException e) {
       LOG.warn("ignored a malformed workspace deletion notice {}", payload, e);
     }
