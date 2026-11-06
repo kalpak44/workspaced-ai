@@ -18,9 +18,10 @@ describe("workspacesApi", () => {
     await deleteWorkspace(created.id);
     expect(api.rows).toEqual([]);
 
-    const [, init] = api.fetchFn.mock.calls[0];
+    const [, init] = api.apiCalls()[0];
     expect(init?.method).toBe("POST");
     expect(new Headers(init?.headers).get("Content-Type")).toBe("application/json");
+    expect(new Headers(init?.headers).get("X-XSRF-TOKEN")).toBe("csrf-token");
   });
 
   it("turns an error status into an ApiError carrying it", async () => {

@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
@@ -9,6 +10,8 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -53,6 +56,20 @@ public interface AuthApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/login", consumes = JSON, produces = JSON)
   ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request);
+
+  @Operation(
+      operationId = "getCsrfToken",
+      summary = "Get a CSRF token",
+      description =
+          "For browsers signed in by cookie: a change they send (any method but GET) must carry "
+              + "this token in the header named here. Sets the HttpOnly XSRF-TOKEN cookie it is "
+              + "checked against. Clients sending a bearer token need none.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "OK.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = CsrfResponse.class)))
+  @GetMapping(path = "/csrf", produces = JSON)
+  ResponseEntity<CsrfResponse> csrf(@Parameter(hidden = true) CsrfToken token);
 
   @Operation(
       operationId = "logout",

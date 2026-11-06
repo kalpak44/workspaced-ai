@@ -6,6 +6,7 @@ import java.time.Instant;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.RestController;
 
 /** Routes, validation and documentation are declared on {@link AuthApi}. */
@@ -28,6 +29,11 @@ public class AuthController implements AuthApi {
     return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookie(token.value(), lifetime).toString())
         .body(new LoginResponse(signIn.account(), token.value(), token.expiresAt()));
+  }
+
+  @Override
+  public ResponseEntity<CsrfResponse> csrf(CsrfToken token) {
+    return ResponseEntity.ok(new CsrfResponse(token.getHeaderName(), token.getToken()));
   }
 
   @Override

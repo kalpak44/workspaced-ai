@@ -13,9 +13,9 @@ database has one account, **admin / admin** (created by `V9__users.sql`); change
 by the API (Spring Security's OAuth2 resource server validates it); its subject is the user's id. The same token is set
 as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over HTTPS — which is how the
 browser authenticates, EventSource and the terminal WebSocket included, since neither can set a header. Other clients
-send `Authorization: Bearer <token>`. A change (any method but GET) authenticated by the cookie must also carry the
-CSRF token: the API sets it in the readable `XSRF-TOKEN` cookie and expects it back in `X-XSRF-TOKEN`, else `403`.
-Bearer requests and sign-in need none. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
+send `Authorization: Bearer <token>`. A change (any method but GET) sent with that cookie must also carry the CSRF
+token, else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `XSRF-TOKEN` cookie it is checked against, and the
+change sends it back in `X-XSRF-TOKEN`. Requests without the sign-in cookie, bearer requests included, need none. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
 stays valid until it expires. A missing, invalid or expired token answers `401` as a problem detail.
 
 `GET /account` returns the signed-in user (`id`, `username`, `firstName`, `lastName`, `avatar`).

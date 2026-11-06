@@ -13,7 +13,7 @@ describe("secretsApi", () => {
     ]);
     await removeSecret("starter", "TOKEN");
     expect(api.secrets.get("starter")).toEqual([]);
-    expect(String(api.fetchFn.mock.calls[0][0])).toBe("/api/v1/workspaces/starter/secrets");
+    expect(String(api.apiCalls()[0][0])).toBe("/api/v1/workspaces/starter/secrets");
   });
 
   it("refuses a name or workspace id that would escape the route", async () => {

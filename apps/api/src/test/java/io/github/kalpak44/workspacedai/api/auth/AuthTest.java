@@ -94,14 +94,16 @@ class AuthTest {
   @Test
   void requiresTheCsrfTokenForChangesMadeWithTheCookie() throws Exception {
     var token = TestUsers.login(port, "admin", "admin");
-    var account = sendWithCookie("/account", token);
+    var issued = sendWithCookie("/auth/csrf", token);
+    assertThat(issued.statusCode()).isEqualTo(200);
     var csrf =
-        account.headers().allValues("Set-Cookie").stream()
+        issued.headers().allValues("Set-Cookie").stream()
             .filter(c -> c.startsWith("XSRF-TOKEN="))
             .findFirst()
             .orElseThrow();
-    assertThat(csrf).contains("Path=/", "SameSite=Strict").doesNotContain("HttpOnly");
-    var value = csrf.substring("XSRF-TOKEN=".length(), csrf.indexOf(';'));
+    assertThat(csrf).contains("HttpOnly", "SameSite=Strict");
+    var cookie = csrf.substring(0, csrf.indexOf(';'));
+    var value = JSON.readTree(issued.body()).get("token").asString();
     var body = "{\"firstName\":\"\",\"lastName\":\"\",\"avatar\":\"\"}";
 
     var forged =
@@ -116,7 +118,7 @@ class AuthTest {
 
     var genuine =
         HttpRequest.newBuilder(url("/account/profile"))
-            .header("Cookie", "workspaced_token=" + token + "; XSRF-TOKEN=" + value)
+            .header("Cookie", "workspaced_token=" + token + "; " + cookie)
             .header("X-XSRF-TOKEN", value)
             .header("Content-Type", "application/json")
             .PUT(BodyPublishers.ofString(body))
@@ -126,9 +128,19 @@ class AuthTest {
 
   @Test
   void aStaleCookieDoesNotBlockSigningInOrHealth() throws Exception {
+    // As the browser does it: the CSRF token first, since the stale cookie still goes along.
+    var issued = sendWithCookie("/auth/csrf", "expired");
+    assertThat(issued.statusCode()).isEqualTo(200);
+    var csrf =
+        issued.headers().allValues("Set-Cookie").stream()
+            .filter(c -> c.startsWith("XSRF-TOKEN="))
+            .map(c -> c.substring(0, c.indexOf(';')))
+            .findFirst()
+            .orElseThrow();
     var request =
         HttpRequest.newBuilder(url("/auth/login"))
-            .header("Cookie", "workspaced_token=expired")
+            .header("Cookie", "workspaced_token=expired; " + csrf)
+            .header("X-XSRF-TOKEN", JSON.readTree(issued.body()).get("token").asString())
             .header("Content-Type", "application/json")
             .POST(BodyPublishers.ofString("{\"username\":\"admin\",\"password\":\"admin\"}"))
             .build();

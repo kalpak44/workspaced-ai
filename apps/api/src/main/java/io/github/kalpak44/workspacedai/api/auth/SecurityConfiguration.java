@@ -54,7 +54,9 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
+import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
+import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -68,9 +70,10 @@ import tools.jackson.databind.json.JsonMapper;
  * <p>The token is a JWT the API signs itself. Browsers carry it in an HttpOnly cookie, because
  * EventSource and WebSocket cannot set an Authorization header; other clients send it as a bearer
  * token. The cookie is SameSite=Strict, but that does not cover a sibling subdomain on the same
- * site, so a cookie-authenticated change also needs the CSRF token: the API sets it in the readable
- * XSRF-TOKEN cookie and the web app echoes it in X-XSRF-TOKEN. A bearer request needs none, since a
- * browser never adds that header on its own.
+ * site, so a change sent with that cookie also needs the CSRF token: the page reads it from GET
+ * /auth/csrf and echoes it in X-XSRF-TOKEN, and it is checked against the HttpOnly XSRF-TOKEN
+ * cookie. A request without the sign-in cookie has no ambient credential to forge, and a bearer
+ * request needs none, since a browser never adds that header on its own.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AuthProperties.class)
@@ -84,6 +87,7 @@ public class SecurityConfiguration {
   private static final String[] PUBLIC = {
     "/auth/login",
     "/auth/logout",
+    "/auth/csrf",
     "/actuator/health/**",
     "/v3/api-docs/**",
     "/swagger-ui/**",
@@ -96,11 +100,11 @@ public class SecurityConfiguration {
     var publicPaths = publicPaths();
     http.csrf(
             csrf ->
-                csrf.spa()
-                    .csrfTokenRepository(csrfCookie())
-                    // Signing in and out carry no credential a forged request could ride on.
-                    // Bearer requests are exempted by the resource server itself.
-                    .ignoringRequestMatchers("/auth/login", "/auth/logout"))
+                csrf.csrfTokenRepository(csrfCookie())
+                    .requireCsrfProtectionMatcher(
+                        new AndRequestMatcher(
+                            CsrfFilter.DEFAULT_CSRF_MATCHER,
+                            SecurityConfiguration::hasTokenCookie)))
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
@@ -181,15 +185,15 @@ public class SecurityConfiguration {
     return decoder;
   }
 
-  /**
-   * Readable by the page, which lives at the host root, so the cookie is scoped to the whole host
-   * rather than the API's path.
-   */
+  /** HttpOnly like the sign-in cookie; the page learns the token from GET /auth/csrf instead. */
   private static CookieCsrfTokenRepository csrfCookie() {
-    var repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
-    repository.setCookiePath("/");
+    var repository = new CookieCsrfTokenRepository();
     repository.setCookieCustomizer(cookie -> cookie.sameSite("Strict"));
     return repository;
+  }
+
+  private static boolean hasTokenCookie(HttpServletRequest request) {
+    return CookieToken.cookie(request) != null;
   }
 
   private static RequestMatcher publicPaths() {

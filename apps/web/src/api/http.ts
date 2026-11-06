@@ -11,25 +11,43 @@ export class ApiError extends Error {
 /** Announced on any 401, so an expired sign-in returns the app to the sign-in page. */
 export const UNAUTHORIZED = "workspaced:unauthorized";
 
-/**
- * The API's CSRF token, which it keeps in a cookie this page can read. Echoing it in a header
- * proves a change comes from this page and not from another site riding on the sign-in cookie.
- */
-function csrfToken(): string | undefined {
-  const cookie = document.cookie.split("; ").find((c) => c.startsWith("XSRF-TOKEN="));
-  return cookie ? decodeURIComponent(cookie.slice("XSRF-TOKEN=".length)) : undefined;
+// The API's CSRF token, fetched once and kept for the page's lifetime. It proves a change comes
+// from this page and not from another site riding on the sign-in cookie.
+let csrf: Promise<string> | null = null;
+
+function csrfToken(): Promise<string> {
+  csrf ??= fetch("/api/v1/auth/csrf")
+    .then((response) => {
+      if (!response.ok) throw new ApiError(response.status);
+      return response.json();
+    })
+    .then((body: { token: string }) => body.token)
+    .catch((error: unknown) => {
+      csrf = null;
+      throw error;
+    });
+  return csrf;
 }
 
-export async function send(url: string, init?: RequestInit): Promise<Response> {
-  const token = init?.method && init.method !== "GET" ? csrfToken() : undefined;
-  const response = await fetch(url, {
+async function request(url: string, init?: RequestInit): Promise<Response> {
+  const change = init?.method !== undefined && init.method !== "GET";
+  return fetch(url, {
     ...init,
     headers: {
       "Content-Type": "application/json",
-      ...(token ? { "X-XSRF-TOKEN": token } : {}),
+      ...(change ? { "X-XSRF-TOKEN": await csrfToken() } : {}),
       ...init?.headers,
     },
   });
+}
+
+export async function send(url: string, init?: RequestInit): Promise<Response> {
+  let response = await request(url, init);
+  // The token's cookie is gone, e.g. cleared with the browser's site data: fetch a fresh one once.
+  if (response.status === 403 && init?.method && init.method !== "GET") {
+    csrf = null;
+    response = await request(url, init);
+  }
   if (!response.ok) {
     if (response.status === 401) {
       globalThis.dispatchEvent(new Event(UNAUTHORIZED));
@@ -37,4 +55,9 @@ export async function send(url: string, init?: RequestInit): Promise<Response> {
     throw new ApiError(response.status);
   }
   return response;
+}
+
+/** Forgets the CSRF token; for tests. */
+export function resetCsrfToken(): void {
+  csrf = null;
 }

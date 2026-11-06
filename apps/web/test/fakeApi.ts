@@ -143,6 +143,9 @@ export function installFakeApi(
   };
 
   function accountResponse(url: string, init?: RequestInit): Response | null {
+    if (url.endsWith("/api/v1/auth/csrf")) {
+      return json({ headerName: "X-XSRF-TOKEN", token: "csrf-token" });
+    }
     if (url.endsWith("/api/v1/auth/login")) {
       const { username, password } = JSON.parse(String(init?.body));
       if (username !== auth.account.username || password !== auth.password) return json({}, 401);
@@ -405,5 +408,7 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
+  const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
+  return { apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }
