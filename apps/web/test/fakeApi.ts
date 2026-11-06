@@ -117,6 +117,8 @@ export function installFakeApi(
     // When set, POST or DELETE waits on it, so a test can look at the UI mid-request.
     holdCreate: null as Promise<void> | null,
     holdDelete: null as Promise<void> | null,
+    holdRestart: null as Promise<void> | null,
+    failRestart: false,
     holdSecretRemove: null as Promise<void> | null,
     nextSession: 1,
     nextTerminal: 1,
@@ -190,7 +192,9 @@ export function installFakeApi(
     }
     const restartRoute = /\/api\/v1\/workspaces\/([^/]+)\/restart$/.exec(url);
     if (restartRoute) {
+      if (state.holdRestart) await state.holdRestart;
       if (!rows.some((workspace) => workspace.id === restartRoute[1])) return json({}, 404);
+      if (state.failRestart) return json({}, 503);
       restarted.push(restartRoute[1]);
       return new Response(null, { status: 202 });
     }

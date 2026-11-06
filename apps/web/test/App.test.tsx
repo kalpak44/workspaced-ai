@@ -312,6 +312,39 @@ describe("App", () => {
     expect(api.rows).toHaveLength(1);
   });
 
+  it("shows the workspace starting from the restart click, before the API answers", async () => {
+    let release = () => {};
+    api.state.holdRestart = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Restart" }));
+    await user.click(screen.getByRole("button", { name: "Restart workspace" }));
+
+    expect(within(sidebar()).getByRole("status", { name: "Initializing" })).toBeInTheDocument();
+    expect(screen.getByText("Starting the workspace")).toBeInTheDocument();
+    release();
+    await waitFor(() => expect(api.restarted).toEqual(["starter"]));
+    FakeEventSource.emit("starter", "READY");
+    await waitFor(() =>
+      expect(within(sidebar()).queryByRole("status", { name: "Initializing" })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("puts the status back when a restart is refused", async () => {
+    api.state.failRestart = true;
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Restart" }));
+    await user.click(screen.getByRole("button", { name: "Restart workspace" }));
+
+    expect(await screen.findByText("Could not restart the workspace")).toBeInTheDocument();
+    expect(within(sidebar()).queryByRole("status", { name: "Initializing" })).not.toBeInTheDocument();
+  });
+
   it("cancels workspace deletion from Cancel, Escape, or the backdrop", async () => {
     const user = userEvent.setup();
     await renderLoaded();

@@ -125,12 +125,17 @@ export function useWorkspaces() {
     );
   };
 
-  // Shown starting at once; the event stream then follows the new pod to READY.
+  // Shown starting from the click, ahead of the API: the event stream then follows the new pod
+  // to READY, and a refused restart puts back the status it had.
   const restart = (id: string) => {
-    restartWorkspace(id).then(
-      () => patch(id, { status: "INITIALIZING" }),
-      () => setError("Could not restart the workspace"),
-    );
+    const before = workspaces.find((w) => w.id === id)?.status;
+    patch(id, { status: "INITIALIZING" });
+    restartWorkspace(id).catch(() => {
+      if (before) {
+        patch(id, { status: latest.current.get(id) ?? before });
+      }
+      setError("Could not restart the workspace");
+    });
   };
 
   const remove = (id: string) => {
