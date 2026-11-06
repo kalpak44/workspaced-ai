@@ -66,7 +66,8 @@ public final class SseOutbox {
         emitter.send(event);
       }
     } catch (InterruptedException _) {
-      // Closed: nothing more is sent.
+      // Closed: nothing more is sent, and the thread ends with its interrupt kept.
+      Thread.currentThread().interrupt();
     } catch (IOException | IllegalStateException e) {
       fail(e);
     }

@@ -35,6 +35,7 @@ import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.BiConsumer;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -69,7 +70,8 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   // working one out costs no call to the API server.
   private SharedIndexInformer<Pod> pods;
   private SharedIndexInformer<Deployment> deployments;
-  private volatile BiConsumer<UUID, WorkspaceStatus> listener;
+  private final AtomicReference<BiConsumer<UUID, WorkspaceStatus>> listener =
+      new AtomicReference<>();
 
   public KubernetesWorkspaceRuntime(KubernetesClient client, WorkspaceProperties properties) {
     this.client = client;
@@ -272,7 +274,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
    */
   @Override
   public void watch(BiConsumer<UUID, WorkspaceStatus> listener) {
-    this.listener = listener;
+    this.listener.set(listener);
     informers();
   }
 
@@ -349,7 +351,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
    * into the informer: the next change or the next client's snapshot reports the status again.
    */
   private void report(Pod pod) {
-    var listener = this.listener;
+    var listener = this.listener.get();
     var label = workspaceOf(pod);
     if (listener == null || label.isEmpty()) {
       return;

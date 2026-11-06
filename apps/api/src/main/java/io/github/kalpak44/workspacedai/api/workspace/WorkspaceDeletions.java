@@ -5,6 +5,7 @@ import java.sql.DriverManager;
 import java.sql.SQLException;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.LockSupport;
 import org.postgresql.PGConnection;
 import org.slf4j.Logger;
@@ -41,7 +42,7 @@ class WorkspaceDeletions implements SmartLifecycle {
   private final WorkspaceEvents events;
 
   private volatile boolean running;
-  private volatile Connection connection;
+  private final AtomicReference<Connection> connection = new AtomicReference<>();
   private Thread receiver;
 
   WorkspaceDeletions(JdbcTemplate jdbc, JdbcConnectionDetails database, WorkspaceEvents events) {
@@ -68,7 +69,7 @@ class WorkspaceDeletions implements SmartLifecycle {
   public synchronized void start() {
     running = true;
     try {
-      connection = listen();
+      connection.set(listen());
     } catch (SQLException e) {
       LOG.warn("could not listen for workspace deletions yet; retrying", e);
     }
@@ -92,14 +93,16 @@ class WorkspaceDeletions implements SmartLifecycle {
   private void receive() {
     while (running) {
       try {
-        if (connection == null) {
-          connection = listen();
+        var current = connection.get();
+        if (current == null) {
+          current = listen();
+          connection.set(current);
           if (!running) {
             close();
             return;
           }
         }
-        var notifications = connection.unwrap(PGConnection.class).getNotifications(POLL_MILLIS);
+        var notifications = current.unwrap(PGConnection.class).getNotifications(POLL_MILLIS);
         if (notifications != null) {
           for (var notification : notifications) {
             deliver(notification.getParameter());
@@ -139,8 +142,7 @@ class WorkspaceDeletions implements SmartLifecycle {
   }
 
   private void close() {
-    var current = connection;
-    connection = null;
+    var current = connection.getAndSet(null);
     if (current != null) {
       try {
         current.close();
