@@ -41,6 +41,18 @@ public class WorkspaceEntity {
   @Column(name = "session_ttl_hours", nullable = false)
   private int sessionTtlHours = 168;
 
+  // Markdown given to the agent in this workspace, after its owner's general instructions.
+  @Column(name = "ai_instructions", nullable = false, columnDefinition = "text")
+  private String instructions = "";
+
+  public String getInstructions() {
+    return instructions;
+  }
+
+  public void setInstructions(String instructions) {
+    this.instructions = instructions;
+  }
+
   // Secrets changed since the pod started; it sees them only once it restarts.
   @Column(name = "secrets_pending_restart", nullable = false)
   private boolean secretsPendingRestart;

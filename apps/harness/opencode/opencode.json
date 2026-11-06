@@ -11,6 +11,11 @@
     }
   },
   "update": "disable",
+  "instructions": [
+    "/home/workspace/.config/workspaced/guide.md",
+    "/home/workspace/.config/workspaced/general.md",
+    "/home/workspace/.config/workspaced/workspace.md"
+  ],
   "share": "disabled",
   "permissions": [
     { "action": "edit", "resource": "*", "effect": "allow" },

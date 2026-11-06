@@ -338,6 +338,30 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
+  void movesAWorkspaceOnAnOlderHarnessToTheCurrentOneOnRestart() {
+    var older =
+        new KubernetesWorkspaceRuntime(
+            client,
+            new WorkspaceProperties(
+                "harness:old", Duration.ofSeconds(5), "10Gi", "fast", PROPERTIES.localHarness()));
+    older.start(id, ENVIRONMENT);
+    older.close();
+    replica("a", "Running", "True");
+
+    runtime.restart(id);
+
+    var deployment =
+        client.apps().deployments().inNamespace(namespace()).withName(resourceName(id)).get();
+    assertThat(deployment.getSpec().getTemplate().getSpec().getContainers().getFirst().getImage())
+        .isEqualTo("harness:test");
+    // The Deployment replaces the pod itself; nothing else of the workspace is touched.
+    assertThat(client.pods().inNamespace(namespace()).withName(resourceName(id) + "-a").get())
+        .isNotNull();
+    assertThat(client.secrets().inNamespace(namespace()).withName(resourceName(id)).get())
+        .isNotNull();
+  }
+
+  @Test
   void refusesToRestartTheBarePodAWorkspaceRanAsBeforeDeployments() {
     bare("Running", "True");
     assertThatThrownBy(() -> runtime.restart(id)).isInstanceOf(IllegalStateException.class);

@@ -1,7 +1,7 @@
 import { ArrowLeft, Camera, Sparkles, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
-import { useGeneralSettings } from "../../hooks/useGeneralSettings";
+import { useGeneralInstructions } from "../../hooks/useInstructions";
 import { navigate } from "../../hooks/useRoute";
 import { Avatar, Button, TextField } from "../atoms";
 import { PageHeader, SettingsSection } from "../molecules";
@@ -9,7 +9,8 @@ import { InstructionsEditor } from "../molecules/InstructionsEditor";
 import { ContextLayout } from "../templates/ContextLayout";
 
 export function GeneralSettingsPage() {
-  const { settings, update } = useGeneralSettings();
+  const general = useGeneralInstructions();
+  const [savingInstructions, setSavingInstructions] = useState(false);
   const [section, setSection] = useState<"profile" | "ai">("profile");
   const { account, saveProfile, changePassword: savePassword } = useAccount();
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "", avatar: account?.avatar ?? "" };
@@ -18,7 +19,6 @@ export function GeneralSettingsPage() {
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
-  const [instructions, setInstructions] = useState(settings.instructions);
   const [changePassword, setChangePassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [avatarError, setAvatarError] = useState("");
@@ -95,7 +95,7 @@ export function GeneralSettingsPage() {
       </>}>
       <PageHeader title="General settings" />
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
-        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">Your profile is saved to your account. AI instructions are saved only in this browser and are not applied to agents yet.</p>
+        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">Your profile and AI instructions are saved to your account.</p>
           <div className="min-w-0 flex-1">
             <div hidden={section !== "profile"} className="space-y-6">
               <SettingsSection title="Profile" description="Your photo and name, all in one place.">
@@ -140,11 +140,17 @@ export function GeneralSettingsPage() {
               </SettingsSection>
             </div>
             <div hidden={section !== "ai"}>
-              <SettingsSection title="General AI instructions" description={<>Define your preferences, working style, and rules for your general <code className="font-mono text-xs">AGENTS.md</code>.</>}>
-                <InstructionsEditor value={instructions} onChange={(value) => { setInstructions(value); setNotice(""); }} />
+              <SettingsSection title="General AI instructions" description="Your preferences, working style and rules. The agent is given them in every one of your workspaces, after the workspace guide and before each workspace's own instructions.">
+                {general.error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{general.error}</p>}
+                <InstructionsEditor value={general.draft} onChange={(value) => { general.setDraft(value); setNotice(""); }} />
                 <div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{instructions.length.toLocaleString()} characters</p>
-                  <Button label="Save instructions" disabled={instructions === settings.instructions} onClick={() => setNotice(update({ instructions }) ? "Instructions saved in this browser." : "Could not save. Your browser storage may be full or unavailable.")} />
+                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{general.draft.length.toLocaleString()} characters</p>
+                  <Button label="Save instructions" busy={savingInstructions} disabled={general.loading || general.saved === null || general.draft === general.saved}
+                    onClick={async () => {
+                      setSavingInstructions(true);
+                      setNotice(await general.save(general.draft) ? "Instructions saved. Running workspaces get them within moments." : "Could not save the instructions. Please try again.");
+                      setSavingInstructions(false);
+                    }} />
                 </div>
               </SettingsSection>
             </div>

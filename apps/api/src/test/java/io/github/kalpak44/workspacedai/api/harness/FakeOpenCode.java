@@ -35,6 +35,9 @@ public class FakeOpenCode implements AutoCloseable {
   /** The global opencode.jsonc the API writes MCP servers to; null while it does not exist. */
   public volatile String mcpConfigFile;
 
+  /** Every other file, by absolute path, as the file API reads and writes them. */
+  public final Map<String, String> files = new java.util.concurrent.ConcurrentHashMap<>();
+
   public final List<String> shellCommands = new CopyOnWriteArrayList<>();
   public volatile int shellExit;
   public volatile int reloads;
@@ -223,8 +226,11 @@ public class FakeOpenCode implements AutoCloseable {
         respond(exchange, config == null ? 404 : 200, config == null ? "{}" : config);
       }
       case "POST /api/experimental/fs/write" -> {
-        if (CONFIG_FILE.equals(query(exchange.getRequestURI(), "path"))) {
+        var written = query(exchange.getRequestURI(), "path");
+        if (CONFIG_FILE.equals(written)) {
           mcpConfigFile = requests.getLast().body();
+        } else {
+          files.put(written, requests.getLast().body());
         }
         respond(exchange, 200, "{\"data\":{}}");
       }
@@ -233,7 +239,18 @@ public class FakeOpenCode implements AutoCloseable {
         respond(exchange, 204, null);
       }
       case "DELETE /api/debug/location" -> respond(exchange, 204, null);
-      default -> respond(exchange, 404, "{}");
+      default -> {
+        if ((method + " " + path).startsWith("GET /api/fs/read/")) {
+          var file =
+              query(exchange.getRequestURI(), "location[directory]")
+                  + "/"
+                  + path.substring("/api/fs/read/".length());
+          var content = files.get(file);
+          respond(exchange, content == null ? 404 : 200, content == null ? "{}" : content);
+        } else {
+          respond(exchange, 404, "{}");
+        }
+      }
     }
   }
 

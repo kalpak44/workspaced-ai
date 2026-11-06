@@ -42,7 +42,11 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 # time into a home that does not survive the pod, curl, and a shell for its bash tool.
 # tini reaps the processes that tool leaves behind. Node.js and npm run MCP servers started
 # with npx; nodejs-current is Alpine's Node 26, the active LTS line, where nodejs is still 24.
+# Python, uv (which runs Python MCP servers with uvx), jq and yq, make, an editor, an SSH
+# client for git, SQLite and the usual archive and file tools come with the image; anything
+# else, the agent installs itself with apk (see apk.sh), into the persistent home.
 RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
+      file jq make nano openssh-client py3-pip python3 sqlite tree uv yq-go zip \
  && curl -fsSL -o /tmp/npm.tgz \
       "https://registry.npmjs.org/npm/-/npm-${NPM_VERSION}.tgz" \
  && echo "${NPM_SHA512}  /tmp/npm.tgz" | sha512sum -c - \
@@ -50,18 +54,39 @@ RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ nodejs-cur
  && tar -xzf /tmp/npm.tgz -C /usr/local/lib/node_modules/npm --strip-components=1 \
  && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
- && rm /tmp/npm.tgz \
- && adduser -D -u 1000 -h /home/workspace workspace
+ && rm -r /tmp/npm.tgz /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
+ && adduser -D -u 1000 -h /home/workspace workspace \
+ && rm /var/log/apk.log
 
 COPY --from=fetch /opencode /usr/local/bin/opencode
 # Kept out of the home: the pod mounts a fresh volume over it, which would hide anything
 # baked in there. start.sh copies it across instead. Not /etc/opencode: opencode reads that
 # as a managed config directory of its own, loading the plugin twice and writing into it.
 COPY --from=config /stage/.config/opencode/opencode.json /usr/share/harness/opencode/opencode.json
+# The guide every agent is given about this container: what survives a restart and where to
+# put things. start.sh copies it into the home, where OpenCode's `instructions` reads it.
+COPY workspace-guide.md /usr/share/harness/workspace-guide.md
 COPY start.sh /usr/local/bin/start-harness
+# Ahead of /sbin/apk on PATH, so a plain `apk add` installs into the home without root.
+COPY apk.sh /usr/local/bin/apk
+# The musl loader looks in the image's library folders first, then in the home's package
+# root, so a program installed there finds its libraries and the image's own are never
+# shadowed by them.
+RUN printf '%s\n' /lib /usr/local/lib /usr/lib \
+      /home/workspace/.local/alpine/lib /home/workspace/.local/alpine/usr/lib \
+      > /etc/ld-musl-x86_64.path
 COPY terminal.sh /etc/profile.d/workspaced-terminal.sh
 
-ENV HOME=/home/workspace TERM=xterm-256color COLORTERM=truecolor
+# The root filesystem is read-only and only the home survives a restart, so a global npm
+# install goes into the home, and what it installs is on PATH. terminal.sh restores this PATH
+# for login shells, whose /etc/profile resets it.
+# pip and uv install into the home too; pip is told Alpine's own Python may take user packages.
+# The home's apk root comes after the image's folders on PATH, so the image's tools win.
+ENV HOME=/home/workspace TERM=xterm-256color COLORTERM=truecolor \
+    NPM_CONFIG_PREFIX=/home/workspace/.local \
+    PIP_USER=1 PIP_BREAK_SYSTEM_PACKAGES=1 PYTHONUSERBASE=/home/workspace/.local \
+    UV_TOOL_BIN_DIR=/home/workspace/.local/bin \
+    PATH=/home/workspace/.local/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/home/workspace/.local/alpine/usr/bin:/home/workspace/.local/alpine/bin:/home/workspace/.local/alpine/usr/sbin
 
 USER 1000
 WORKDIR /home/workspace

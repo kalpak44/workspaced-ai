@@ -50,6 +50,9 @@ public class OpenCodeHarness implements Harness {
   private static final Duration SHELL_POLL = Duration.ofMillis(200);
   private static final String CONFIG_DIRECTORY = HOME + "/.config/opencode";
   private static final String MCP_CONFIG = "opencode.jsonc";
+  private static final String GUIDE = "guide.md";
+  private static final String GENERAL_INSTRUCTIONS = "general.md";
+  private static final String WORKSPACE_INSTRUCTIONS = "workspace.md";
   private static final String EVENT_TYPES =
       String.join(
           ",",
@@ -399,6 +402,43 @@ public class OpenCodeHarness implements Harness {
         null);
   }
 
+  @Override
+  public String workspaceGuide(HarnessEndpoint endpoint) {
+    return readFile(endpoint, INSTRUCTIONS_DIRECTORY, GUIDE);
+  }
+
+  @Override
+  public boolean writeInstructions(HarnessEndpoint endpoint, String general, String workspace) {
+    var changed = writeIfChanged(endpoint, GENERAL_INSTRUCTIONS, general);
+    changed |= writeIfChanged(endpoint, WORKSPACE_INSTRUCTIONS, workspace);
+    if (changed) {
+      call(endpoint, "POST", "/api/location/reload", null);
+    }
+    return changed;
+  }
+
+  private boolean writeIfChanged(HarnessEndpoint endpoint, String name, String content) {
+    if (content.equals(readFile(endpoint, INSTRUCTIONS_DIRECTORY, name))) {
+      return false;
+    }
+    writeFile(endpoint, INSTRUCTIONS_DIRECTORY + "/" + name, content);
+    return true;
+  }
+
+  /** The file's text, empty while it does not exist. */
+  private String readFile(HarnessEndpoint endpoint, String directory, String name) {
+    var response = send(request(endpoint, withLocation("/api/fs/read/" + name, directory)).GET());
+    return response.statusCode() == 404 ? "" : check(response).body();
+  }
+
+  private void writeFile(HarnessEndpoint endpoint, String path, String content) {
+    check(
+        send(
+            request(endpoint, "/api/experimental/fs/write?path=" + encode(path))
+                .header("Content-Type", "application/octet-stream")
+                .POST(BodyPublishers.ofString(content))));
+  }
+
   /** An object, empty while the file does not exist yet. */
   private ObjectNode readConfig(HarnessEndpoint endpoint) {
     var response =
@@ -417,16 +457,10 @@ public class OpenCodeHarness implements Harness {
   }
 
   private void writeConfig(HarnessEndpoint endpoint, ObjectNode config) {
-    check(
-        send(
-            request(
-                    endpoint,
-                    "/api/experimental/fs/write?path="
-                        + encode(CONFIG_DIRECTORY + "/" + MCP_CONFIG))
-                .header("Content-Type", "application/octet-stream")
-                .POST(
-                    BodyPublishers.ofString(
-                        json.writerWithDefaultPrettyPrinter().writeValueAsString(config)))));
+    writeFile(
+        endpoint,
+        CONFIG_DIRECTORY + "/" + MCP_CONFIG,
+        json.writerWithDefaultPrettyPrinter().writeValueAsString(config));
   }
 
   @Override

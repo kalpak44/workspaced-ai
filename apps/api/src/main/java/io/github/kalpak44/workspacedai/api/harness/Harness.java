@@ -28,6 +28,13 @@ public interface Harness {
   /** Each session's own folder is made here; OpenCode treats every folder as a separate project. */
   String SESSIONS_ROOT = HOME + "/sessions";
 
+  /**
+   * The instruction files the harness image's config gives OpenCode, in order: the image's own
+   * guide to the workspace, which start.sh refreshes on every start, then the user's general
+   * instructions and the workspace's own, which the API writes.
+   */
+  String INSTRUCTIONS_DIRECTORY = HOME + "/.config/workspaced";
+
   /** Fails when the server is not OpenCode V2 or the project location cannot be resolved. */
   void validate(HarnessEndpoint endpoint, String directory);
 
@@ -108,6 +115,18 @@ public interface Harness {
    * @return whether anything had to change
    */
   boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers);
+
+  /** The image's guide to the workspace, as the agent is given it; empty while it has none. */
+  String workspaceGuide(HarnessEndpoint endpoint);
+
+  /**
+   * Writes the user's general instructions and the workspace's own where the agent reads them,
+   * leaving a file that already holds them untouched. Reloads only when one changed, since a reload
+   * cancels questions the agent is waiting on.
+   *
+   * @return whether anything had to change
+   */
+  boolean writeInstructions(HarnessEndpoint endpoint, String general, String workspace);
 
   /** An MCP server the harness reaches over HTTP, or one it starts in the workspace. */
   sealed interface McpServerConfig {

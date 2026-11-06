@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
+import io.fabric8.kubernetes.api.model.Container;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
 import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.IntOrString;
@@ -58,6 +59,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   // The user the harness image runs as, which owns the home it works in.
   private static final long HARNESS_USER = 1000L;
   private static final String BY_WORKSPACE = "workspace";
+  private static final String CONTAINER = "workspace";
   private static final long SYNC_TIMEOUT_SECONDS = 30;
 
   private final KubernetesClient client;
@@ -83,6 +85,13 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     if (namespace == null) {
       throw new IllegalStateException("cannot tell which namespace the API runs in");
     }
+  }
+
+  private static Container harnessContainer(Deployment deployment) {
+    return deployment.getSpec().getTemplate().getSpec().getContainers().stream()
+        .filter(c -> CONTAINER.equals(c.getName()))
+        .findFirst()
+        .orElseThrow(() -> new IllegalStateException("the Deployment has no harness container"));
   }
 
   /**
@@ -166,15 +175,26 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
 
   /**
    * Deletes the pods and lets the Deployment bring up the next, which mounts the same home and
-   * reads the Secret afresh. The bare pod a workspace ran as before Deployments has nothing to
-   * replace it, so it is left alone.
+   * reads the Secret afresh. A workspace still on an older harness image is moved to the current
+   * one instead, and the Deployment replaces its pod by itself; a restart is how a workspace made
+   * before a harness release picks it up. The bare pod a workspace ran as before Deployments has
+   * nothing to replace it, so it is left alone.
    */
   @Override
   public void restart(UUID workspaceId) {
     var deployment =
         client.apps().deployments().inNamespace(namespace).withName(resourceName(workspaceId));
-    if (deployment.get() == null) {
+    var current = deployment.get();
+    if (current == null) {
       throw new IllegalStateException("workspace " + workspaceId + " has no Deployment");
+    }
+    if (!image.equals(harnessContainer(current).getImage())) {
+      deployment.edit(
+          d -> {
+            harnessContainer(d).setImage(image);
+            return d;
+          });
+      return;
     }
     client
         .pods()
@@ -486,7 +506,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .endSeccompProfile()
         .endSecurityContext()
         .addNewContainer()
-        .withName("workspace")
+        .withName(CONTAINER)
         .withImage(image)
         .addNewPort()
         .withName("harness")

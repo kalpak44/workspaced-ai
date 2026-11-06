@@ -1,11 +1,12 @@
-import { ArrowLeft, Clock, KeyRound, Plug } from "lucide-react";
-import { useState } from "react";
+import { ArrowLeft, Clock, KeyRound, Plug, Sparkles } from "lucide-react";
+import { lazy, Suspense, useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { navigate } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { McpPanel, SecretsPanel } from "../organisms";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
+import { Spinner } from "../atoms";
 import { ContextLayout } from "../templates/ContextLayout";
 
 interface Props {
@@ -19,11 +20,17 @@ const SECTIONS = [
   { id: "mcp", label: "MCP servers", Icon: Plug },
   { id: "secrets", label: "Secrets", Icon: KeyRound },
   { id: "sessions", label: "Sessions", Icon: Clock },
+  { id: "instructions", label: "AI instructions", Icon: Sparkles },
 ] as const;
+
+// The instructions editor is large, so it is only loaded once its section is opened.
+const InstructionsPanel = lazy(() =>
+  import("../organisms/InstructionsPanel").then((panel) => ({ default: panel.InstructionsPanel })),
+);
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
 export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) {
-  const [section, setSection] = useState<"mcp" | "secrets" | "sessions">("mcp");
+  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("mcp");
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id, onSecretsChanged);
   const back = () => navigate({ name: "workspace", workspaceId: workspace.id });
@@ -65,6 +72,11 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
       }
     >
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
+        {section === "instructions" && (
+          <Suspense fallback={<Spinner label="Loading instructions" className="size-5 text-zinc-400" />}>
+            <InstructionsPanel key={workspace.id} workspaceId={workspace.id} />
+          </Suspense>
+        )}
         <div hidden={section !== "sessions"}>
           <SessionTtlPanel key={workspace.id} workspaceId={workspace.id} />
         </div>

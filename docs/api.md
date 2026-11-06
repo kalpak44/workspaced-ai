@@ -244,6 +244,42 @@ require a reachable workspace, so they return 503 while OpenCode is unavailable.
 
 PostgreSQL holds no MCP settings or references. Migration V6 drops the old MCP table without importing its entries.
 
+## AI instructions
+
+Every session's agent is given three Markdown files, in this order, through OpenCode's `instructions` config in the
+harness image:
+
+1. **The workspace guide**, `apps/harness/workspace-guide.md`, from the image: that it is Alpine with musl and
+   BusyBox, which tools it has, what survives a restart (only `/home/workspace`), how to install more so it lasts, and
+   that MCP servers go in `opencode.jsonc`, never in the `opencode.json` the image replaces on every start.
+   `start.sh` refreshes it on every start; nobody can edit it.
+2. **The user's general instructions**: `GET`/`PUT /api/v1/account/instructions`, `{"instructions": "…"}`.
+3. **The workspace's own instructions**: `GET /api/v1/workspaces/{id}/instructions` answers `instructions` and the
+   read-only `guide` (null while the workspace is not running); `PUT` takes `{"instructions": "…"}` and answers
+   `applied`, whether the running workspace already has them.
+
+Both are Markdown of at most 100,000 characters, stored in the database, which is the source of truth. The API writes
+them to `~/.config/workspaced/general.md` and `workspace.md` in the workspace's home whenever they change and whenever
+the workspace becomes ready, so a new or replaced pod has them before its first message. A file that already holds the
+text is left alone; when one changes, OpenCode is reloaded, which cancels a question the agent is waiting on. Changing
+the general instructions updates every running workspace of the user's in the background.
+
+The harness image carries Python, `uv`/`uvx`, `jq`, `yq`, `make`, an SSH client, SQLite and the usual file tools
+besides Node.js and git. Anything else installs into the persistent home, without root:
+
+| Command | Where it installs | How it is found |
+|---------|-------------------|-----------------|
+| `apk add <package>` | `~/.local/alpine`, its own Alpine root (`apps/harness/apk.sh` wraps `/sbin/apk` with `--root`, a user-mode database and `--no-scripts`) | `PATH` and the musl loader's path (`/etc/ld-musl-x86_64.path`) reach into it, after the image's own folders, so the image's tools are never shadowed |
+| `npm install -g` | `~/.local` (`NPM_CONFIG_PREFIX`) | `~/.local/bin` on `PATH` |
+| `pip install` | `~/.local` (`PIP_USER`, `PYTHONUSERBASE`) | `~/.local/bin` on `PATH` |
+| `uv tool install`, `uvx` | `~/.local/share/uv`, commands in `~/.local/bin` (`UV_TOOL_BIN_DIR`) | `~/.local/bin` on `PATH` |
+
+Package install scripts cannot run without root, so a package that relies on one may leave its command under
+`~/.local/alpine/usr/libexec` (PostgreSQL's `psql`, for one); the guide tells the agent to link it into `~/.local/bin`.
+
+Workspaces keep the harness image they were created with. **Restart** moves a workspace on an older image to the
+current one, keeping its home; that is how existing workspaces pick up a new harness, the guide included.
+
 ## Workspace secrets
 
 Environment variables a workspace keeps secret. The database holds their names only; each value lives in the

@@ -90,6 +90,7 @@ export function installFakeApi(
   const answers: { sessionId: string; formId: string; answer?: FormAnswer }[] = [];
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
+  const instructions = new Map<string, string>();
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
@@ -139,6 +140,7 @@ export function installFakeApi(
     signedIn: true,
     password: "admin",
     failProfile: false,
+    instructions: "",
     account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null } as Account,
   };
 
@@ -155,6 +157,11 @@ export function installFakeApi(
     if (url.endsWith("/api/v1/auth/logout")) {
       auth.signedIn = false;
       return new Response(null, { status: 204 });
+    }
+    if (url.endsWith("/api/v1/account/instructions")) {
+      if (!auth.signedIn) return json({}, 401);
+      if (init?.method === "PUT") auth.instructions = JSON.parse(String(init.body)).instructions;
+      return json({ instructions: auth.instructions });
     }
     if (!/\/api\/v1\/account(\/|$)/.test(url)) return null;
     if (!auth.signedIn) return json({}, 401);
@@ -185,6 +192,16 @@ export function installFakeApi(
     }
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
+    }
+    const instructionsRoute = /\/api\/v1\/workspaces\/([^/]+)\/instructions$/.exec(url);
+    if (instructionsRoute) {
+      const id = instructionsRoute[1];
+      if (!rows.some((workspace) => workspace.id === id)) return json({}, 404);
+      if (init?.method === "PUT") {
+        instructions.set(id, JSON.parse(String(init.body)).instructions);
+        return json({ instructions: instructions.get(id), applied: !state.harnessDown });
+      }
+      return json({ instructions: instructions.get(id) ?? "", guide: state.harnessDown ? null : "# How this workspace works\n\nOnly the home directory survives a restart." });
     }
     const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers|session-ttl)(?:\/(.+))?$/.exec(url);
     const terminalRoute = /\/api\/v1\/workspaces\/([^/]+)\/terminals(?:\/([^/]+))?$/.exec(url);
@@ -410,5 +427,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { instructions, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

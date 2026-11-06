@@ -46,9 +46,11 @@ describe("general settings", () => {
     expect(screen.getByRole("button", { name: "Update profile" })).toBeDisabled();
   });
 
-  it("round trips raw Markdown through the rich editor without losing unsaved edits", async () => {
+  it("round trips raw Markdown through the rich editor and saves it to the account", async () => {
+    const api = installFakeApi();
     const user = userEvent.setup();
     render(<GeneralSettingsPage />);
+    await waitFor(() => expect(api.apiCalls().some(([url]) => String(url).endsWith("/account/instructions"))).toBe(true));
     await user.click(screen.getByRole("button", { name: "General AI" }));
     await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
     const markdown = "## Working style\n\nUse **clear language**.\n\n- Run tests\n- Be concise";
@@ -59,8 +61,23 @@ describe("general settings", () => {
     await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
     expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue(markdown);
     await user.click(screen.getByRole("button", { name: "Save instructions" }));
-    expect(JSON.parse(localStorage.getItem("workspaced:general-settings")!).instructions).toBe(markdown);
+    expect(await screen.findByText(/Instructions saved/)).toBeInTheDocument();
+    expect(api.auth.instructions).toBe(markdown);
     expect(screen.getByRole("button", { name: "Save instructions" })).toBeDisabled();
+  });
+
+  it("offers instructions this browser kept before as a draft until they are saved", async () => {
+    localStorage.setItem("workspaced:general-settings", JSON.stringify({ instructions: "Be kind." }));
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage />);
+    await user.click(screen.getByRole("button", { name: "General AI" }));
+    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("Be kind."));
+    expect(api.auth.instructions).toBe("");
+    await user.click(screen.getByRole("button", { name: "Save instructions" }));
+    await waitFor(() => expect(api.auth.instructions).toBe("Be kind."));
+    expect(localStorage.getItem("workspaced:general-settings")).toBeNull();
   });
 
   it("updates the formatted document and serializes real edits as Markdown", async () => {

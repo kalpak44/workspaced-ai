@@ -30,7 +30,9 @@ src/
 The app first asks the API who is signed in (`GET /api/v1/account`) and shows a sign-in page until someone is; a fresh
 install accepts admin/admin. The session itself is an HttpOnly cookie the code never reads. Any `401` from the API
 returns the app to the sign-in page, and Logout in the account menu clears the cookie. The profile on the settings page
-(names and avatar) and the password change are saved to the account; the general AI instructions stay in this browser.
+(names and avatar), the password change and the general AI instructions are saved to the account. A workspace's
+settings have an AI instructions section: the read-only workspace guide, and an editor for that workspace's own
+instructions, which the agent is given after the general ones.
 
 Creating a workspace is a short wizard: the name, then a model provider picked from cards (radios underneath), whose
 key field appears once one is chosen.
