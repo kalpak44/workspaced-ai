@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -48,6 +48,20 @@ describe("workspace AI instructions", () => {
     fireEvent.change(screen.getByRole("textbox", { name: "AI instructions Markdown" }), { target: { value: "Use pnpm." } });
     await user.click(screen.getByRole("button", { name: "Save instructions" }));
     expect(await screen.findByText(/gets them when it next starts/)).toBeInTheDocument();
+  });
+
+  it("shows an example while empty, which is never saved", async () => {
+    const user = userEvent.setup();
+    await openInstructions(user);
+    const editor = screen.getByRole("textbox", { name: "AI instructions editor" });
+    await waitFor(() => expect(editor.querySelector("[data-placeholder]")?.getAttribute("data-placeholder")).toContain("Use pnpm, not npm"));
+    expect(screen.getByRole("button", { name: "Save instructions" })).toBeDisabled();
+
+    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
+    const raw = screen.getByRole("textbox", { name: "AI instructions Markdown" });
+    expect(raw).toHaveValue("");
+    expect(raw.getAttribute("placeholder")).toContain("Use pnpm, not npm");
+    expect(api.instructions.has("starter")).toBe(false);
   });
 
   it("links to the general instructions it builds on", async () => {

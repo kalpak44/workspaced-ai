@@ -2,6 +2,7 @@ import { ArrowLeft, Camera, Sparkles, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { useGeneralInstructions } from "../../hooks/useInstructions";
+import { GENERAL_INSTRUCTIONS_EXAMPLE } from "../../lib/instructionExamples";
 import { navigate } from "../../hooks/useRoute";
 import { Avatar, Button, TextField } from "../atoms";
 import { PageHeader, SettingsSection } from "../molecules";
@@ -142,7 +143,7 @@ export function GeneralSettingsPage() {
             <div hidden={section !== "ai"}>
               <SettingsSection title="General AI instructions" description="Your preferences, working style and rules. The agent is given them in every one of your workspaces, after the workspace guide and before each workspace's own instructions.">
                 {general.error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{general.error}</p>}
-                <InstructionsEditor value={general.draft} onChange={(value) => { general.setDraft(value); setNotice(""); }} />
+                <InstructionsEditor value={general.draft} placeholder={GENERAL_INSTRUCTIONS_EXAMPLE} onChange={(value) => { general.setDraft(value); setNotice(""); }} />
                 <div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                   <p className="text-xs text-zinc-500 dark:text-zinc-400">{general.draft.length.toLocaleString()} characters</p>
                   <Button label="Save instructions" busy={savingInstructions} disabled={general.loading || general.saved === null || general.draft === general.saved}

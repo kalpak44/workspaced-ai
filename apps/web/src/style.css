@@ -51,6 +51,16 @@
   & hr { margin-block: 1rem; border-color: var(--color-zinc-200); }
   & p:only-child:empty::before { content: "Describe how you want your AI to work…"; color: var(--color-zinc-400); pointer-events: none; float: left; height: 0; }
 }
+/* The example shown in an empty editor, as tiptap's Placeholder marks it. Its line breaks are kept. */
+.instructions-editor p.is-editor-empty:first-child::before {
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+  white-space: pre-wrap;
+  color: var(--color-zinc-400);
+}
+
 .dark .instructions-editor {
   & pre, & code { background: var(--color-zinc-800); }
   & pre code { background: transparent; }

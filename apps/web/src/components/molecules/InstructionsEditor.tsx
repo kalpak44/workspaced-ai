@@ -2,6 +2,7 @@ import { Markdown } from "@tiptap/markdown";
 import Image from "@tiptap/extension-image";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import { TableKit } from "@tiptap/extension-table";
+import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { Bold, Code, Heading2, Italic, List, ListOrdered, Quote, Redo2, Undo2 } from "lucide-react";
@@ -10,13 +11,15 @@ import { useEffect, useState } from "react";
 interface Props {
   readonly value: string;
   readonly onChange: (value: string) => void;
+  /** An example shown while the document is empty; it is never part of the value. */
+  readonly placeholder?: string;
 }
 
 /** One Markdown document, edited as formatted text or source. All styling belongs to the app. */
-export function InstructionsEditor({ value, onChange }: Props) {
+export function InstructionsEditor({ value, onChange, placeholder = "" }: Props) {
   const [mode, setMode] = useState<"editor" | "raw">("editor");
   const editor = useEditor({
-    extensions: [StarterKit, Markdown, Image, TableKit, TaskList, TaskItem.configure({ nested: true })],
+    extensions: [StarterKit, Markdown, Image, TableKit, TaskList, TaskItem.configure({ nested: true }), Placeholder.configure({ placeholder })],
     content: value,
     contentType: "markdown",
     shouldRerenderOnTransaction: true,
@@ -72,7 +75,7 @@ export function InstructionsEditor({ value, onChange }: Props) {
           ))}
         </div>
         <EditorContent editor={editor} />
-      </> : <textarea aria-label="AI instructions Markdown" value={value} onChange={(event) => onChange(event.target.value)} placeholder={"# General instructions\n\nDescribe how you want your AI to work…"} spellCheck={false} className="block min-h-80 w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-relaxed outline-none placeholder:text-zinc-400" />}
+      </> : <textarea aria-label="AI instructions Markdown" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} spellCheck={false} className="block min-h-80 w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-relaxed outline-none placeholder:text-zinc-400" />}
       <div className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">{mode === "editor" ? "Format with the toolbar or use Markdown shortcuts as you type." : "Edit Markdown source. Switch to Editor to see and edit formatted text."}</div>
     </div>
   );

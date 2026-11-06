@@ -2,6 +2,7 @@ import { BookOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useWorkspaceInstructions } from "../../hooks/useInstructions";
 import { navigate } from "../../hooks/useRoute";
+import { WORKSPACE_INSTRUCTIONS_EXAMPLE } from "../../lib/instructionExamples";
 import { Button, Spinner } from "../atoms";
 import { Markdown, SettingsSection } from "../molecules";
 // Imported directly, not through the index: the editor is large and only loaded with this panel.
@@ -78,7 +79,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
           </>
         }
       >
-        <InstructionsEditor value={draft} onChange={(value) => { setDraft(value); setNotice(""); }} />
+        <InstructionsEditor value={draft} placeholder={WORKSPACE_INSTRUCTIONS_EXAMPLE} onChange={(value) => { setDraft(value); setNotice(""); }} />
         <div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
           <p className="text-xs text-zinc-500 dark:text-zinc-400">{draft.length.toLocaleString()} characters</p>
           <Button label="Save instructions" busy={saving} disabled={draft === saved} onClick={() => void submit()} />
