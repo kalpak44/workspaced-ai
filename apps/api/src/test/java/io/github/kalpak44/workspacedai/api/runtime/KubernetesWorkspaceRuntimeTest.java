@@ -298,8 +298,7 @@ class KubernetesWorkspaceRuntimeTest {
             .endMetadata()
             .withNewStatus()
             .withPhase("Running")
-            .addToConditions(
-                new PodConditionBuilder().withType("Ready").withStatus("True").build())
+            .addToConditions(new PodConditionBuilder().withType("Ready").withStatus("True").build())
             .endStatus()
             .build();
     assertThat(KubernetesWorkspaceRuntime.statusOf(terminating))

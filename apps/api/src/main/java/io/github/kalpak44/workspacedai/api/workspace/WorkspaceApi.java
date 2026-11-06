@@ -229,7 +229,8 @@ public interface WorkspaceApi {
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
   @ApiResponse(
       responseCode = "409",
-      description = "The workspace runs as a bare pod from before Deployments, which nothing would bring back.",
+      description =
+          "The workspace runs as a bare pod from before Deployments, which nothing would bring back.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
