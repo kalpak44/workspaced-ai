@@ -13,7 +13,9 @@ database has one account, **admin / admin** (created by `V9__users.sql`); change
 by the API (Spring Security's OAuth2 resource server validates it); its subject is the user's id. The same token is set
 as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over HTTPS — which is how the
 browser authenticates, EventSource and the terminal WebSocket included, since neither can set a header. Other clients
-send `Authorization: Bearer <token>`. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
+send `Authorization: Bearer <token>`. A change (any method but GET) authenticated by the cookie must also carry the
+CSRF token: the API sets it in the readable `XSRF-TOKEN` cookie and expects it back in `X-XSRF-TOKEN`, else `403`.
+Bearer requests and sign-in need none. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
 stays valid until it expires. A missing, invalid or expired token answers `401` as a problem detail.
 
 `GET /account` returns the signed-in user (`id`, `username`, `firstName`, `lastName`, `avatar`).
@@ -28,7 +30,7 @@ Workspaces created before accounts belong to admin.
 
 | Variable                | Default | Meaning                                                                       |
 |-------------------------|---------|-------------------------------------------------------------------------------|
-| `WORKSPACED_JWT_SECRET` | random  | HS256 signing key, at least 32 bytes. Unset, a random key is made per start, so a restart signs everyone out and replicas reject each other's tokens: set it in any real deployment. |
+| `WORKSPACED_JWT_SECRET` | none    | HS256 signing key, at least 32 bytes, the same on every instance. Required: the API does not start without it. |
 | `WORKSPACED_TOKEN_TTL`  | `12h`   | How long a sign-in lasts.                                                     |
 
 ## OpenCode API reference
@@ -272,7 +274,8 @@ Docker, so `verify` needs a running Docker daemon.
 docker run -d --name workspaced-db -p 5432:5432 \
   -e POSTGRES_DB=workspaced -e POSTGRES_USER=workspaced -e POSTGRES_PASSWORD=workspaced postgres:18-alpine
 cd apps/api
-WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run    # http://localhost:8080/api/v1/swagger-ui, sign in as admin/admin
+WORKSPACED_DB_PASSWORD=workspaced WORKSPACED_JWT_SECRET=local-dev-signing-key-at-least-32-bytes \
+  mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui, admin/admin
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor
 mvn -DskipTests spring-boot:build-image                   # buildpacks image, no Dockerfile

@@ -92,6 +92,39 @@ class AuthTest {
   }
 
   @Test
+  void requiresTheCsrfTokenForChangesMadeWithTheCookie() throws Exception {
+    var token = TestUsers.login(port, "admin", "admin");
+    var account = sendWithCookie("/account", token);
+    var csrf =
+        account.headers().allValues("Set-Cookie").stream()
+            .filter(c -> c.startsWith("XSRF-TOKEN="))
+            .findFirst()
+            .orElseThrow();
+    assertThat(csrf).contains("Path=/", "SameSite=Strict").doesNotContain("HttpOnly");
+    var value = csrf.substring("XSRF-TOKEN=".length(), csrf.indexOf(';'));
+    var body = "{\"firstName\":\"\",\"lastName\":\"\",\"avatar\":\"\"}";
+
+    var forged =
+        HttpRequest.newBuilder(url("/account/profile"))
+            .header("Cookie", "workspaced_token=" + token)
+            .header("Content-Type", "application/json")
+            .PUT(BodyPublishers.ofString(body))
+            .build();
+    var refused = http.send(forged, BodyHandlers.ofString());
+    assertThat(refused.statusCode()).isEqualTo(403);
+    assertThat(JSON.readTree(refused.body()).get("detail").asString()).contains("CSRF");
+
+    var genuine =
+        HttpRequest.newBuilder(url("/account/profile"))
+            .header("Cookie", "workspaced_token=" + token + "; XSRF-TOKEN=" + value)
+            .header("X-XSRF-TOKEN", value)
+            .header("Content-Type", "application/json")
+            .PUT(BodyPublishers.ofString(body))
+            .build();
+    assertThat(http.send(genuine, BodyHandlers.ofString()).statusCode()).isEqualTo(200);
+  }
+
+  @Test
   void aStaleCookieDoesNotBlockSigningInOrHealth() throws Exception {
     var request =
         HttpRequest.newBuilder(url("/auth/login"))
@@ -209,6 +242,42 @@ class AuthTest {
         .isEqualTo(200);
     assertThat(workspaces.findById(id))
         .hasValueSatisfying(w -> assertThat(w.getName()).isEqualTo("Admin's"));
+  }
+
+  @Test
+  void guardsTheTerminalWebSocketLikeEveryOtherRoute() throws Exception {
+    var admin = TestUsers.bearer(port);
+    var created =
+        send(
+            "POST",
+            "/workspaces",
+            admin,
+            "{\"name\":\"Shell\",\"modelProvider\":\"openrouter\",\"apiKey\":\"sk-or-1\"}");
+    var id = JSON.readTree(created.body()).get("id").asString();
+    var path = "/workspaces/" + id + "/terminals/pty_1/connect";
+
+    assertThat(handshake(path, null)).isEqualTo(401);
+    assertThat(handshake(path, bearerFor("ada", "password1"))).isEqualTo(404);
+    // The owner gets through to the handler; there is no harness here, so it closes at once.
+    assertThat(handshake(path, admin)).isEqualTo(101);
+  }
+
+  /** The status the WebSocket upgrade answered with: 101 when it was accepted. */
+  private int handshake(String path, String bearer) {
+    var builder = http.newWebSocketBuilder();
+    if (bearer != null) {
+      builder.header("Authorization", bearer);
+    }
+    var uri = URI.create("ws://localhost:" + port + "/api/v1" + path);
+    try {
+      builder.buildAsync(uri, new java.net.http.WebSocket.Listener() {}).join().abort();
+      return 101;
+    } catch (java.util.concurrent.CompletionException e) {
+      if (e.getCause() instanceof java.net.http.WebSocketHandshakeException refused) {
+        return refused.getResponse().statusCode();
+      }
+      throw e;
+    }
   }
 
   private String bearerFor(String username, String password) {

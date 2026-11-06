@@ -3,24 +3,29 @@ package io.github.kalpak44.workspacedai.api.auth;
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.FilterChain;
+import jakarta.servlet.ServletException;
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequestWrapper;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
-import java.security.SecureRandom;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.Enumeration;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.UUID;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -44,11 +49,15 @@ import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
+import org.springframework.security.oauth2.server.resource.web.authentication.BearerTokenAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
+import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
+import org.springframework.security.web.csrf.CsrfException;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
+import org.springframework.web.filter.OncePerRequestFilter;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -58,8 +67,10 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>The token is a JWT the API signs itself. Browsers carry it in an HttpOnly cookie, because
  * EventSource and WebSocket cannot set an Authorization header; other clients send it as a bearer
- * token. The cookie is SameSite=Strict, so another site cannot make the browser send it, which is
- * what CSRF protection would otherwise be for.
+ * token. The cookie is SameSite=Strict, but that does not cover a sibling subdomain on the same
+ * site, so a cookie-authenticated change also needs the CSRF token: the API sets it in the readable
+ * XSRF-TOKEN cookie and the web app echoes it in X-XSRF-TOKEN. A bearer request needs none, since a
+ * browser never adds that header on its own.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AuthProperties.class)
@@ -67,7 +78,6 @@ public class SecurityConfiguration {
 
   static final String COOKIE = "workspaced_token";
 
-  private static final Logger LOG = LoggerFactory.getLogger(SecurityConfiguration.class);
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final int MIN_SECRET_BYTES = 32;
 
@@ -84,7 +94,13 @@ public class SecurityConfiguration {
   @Bean
   SecurityFilterChain api(HttpSecurity http, WorkspaceRepository workspaces) throws Exception {
     var publicPaths = publicPaths();
-    http.csrf(AbstractHttpConfigurer::disable)
+    http.csrf(
+            csrf ->
+                csrf.spa()
+                    .csrfTokenRepository(csrfCookie())
+                    // Signing in and out carry no credential a forged request could ride on.
+                    // Bearer requests are exempted by the resource server itself.
+                    .ignoringRequestMatchers("/auth/login", "/auth/logout"))
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
@@ -108,16 +124,15 @@ public class SecurityConfiguration {
         .oauth2ResourceServer(
             server ->
                 server
-                    .bearerTokenResolver(tokenResolver(publicPaths))
+                    .bearerTokenResolver(headerResolver(publicPaths))
                     .authenticationEntryPoint(SecurityConfiguration::unauthorized)
-                    .jwt(jwt -> {}))
+                    .jwt(_ -> {}))
+        .addFilterBefore(new CookieToken(publicPaths), BearerTokenAuthenticationFilter.class)
         .exceptionHandling(
             exceptions ->
                 exceptions
                     .authenticationEntryPoint(SecurityConfiguration::unauthorized)
-                    .accessDeniedHandler(
-                        (request, response, denied) ->
-                            problem(request, response, HttpStatus.NOT_FOUND, "no such workspace")));
+                    .accessDeniedHandler(SecurityConfiguration::denied));
     return http.build();
   }
 
@@ -145,14 +160,9 @@ public class SecurityConfiguration {
 
   @Bean
   SecretKey jwtKey(AuthProperties properties) {
-    var configured = properties.jwtSecret().getBytes(StandardCharsets.UTF_8);
-    if (configured.length == 0) {
-      LOG.warn(
-          "WORKSPACED_JWT_SECRET is not set: signing tokens with a random key, so every restart "
-              + "signs everyone out");
-      configured = new byte[MIN_SECRET_BYTES];
-      new SecureRandom().nextBytes(configured);
-    } else if (configured.length < MIN_SECRET_BYTES) {
+    var secret = properties.jwtSecret();
+    var configured = secret == null ? new byte[0] : secret.getBytes(StandardCharsets.UTF_8);
+    if (configured.length < MIN_SECRET_BYTES) {
       throw new IllegalStateException(
           "WORKSPACED_JWT_SECRET must be at least " + MIN_SECRET_BYTES + " bytes for HS256");
     }
@@ -171,31 +181,84 @@ public class SecurityConfiguration {
     return decoder;
   }
 
+  /**
+   * Readable by the page, which lives at the host root, so the cookie is scoped to the whole host
+   * rather than the API's path.
+   */
+  private static CookieCsrfTokenRepository csrfCookie() {
+    var repository = CookieCsrfTokenRepository.withHttpOnlyFalse();
+    repository.setCookiePath("/");
+    repository.setCookieCustomizer(cookie -> cookie.sameSite("Strict"));
+    return repository;
+  }
+
   private static RequestMatcher publicPaths() {
     var matchers = PathPatternRequestMatcher.withDefaults();
     return new OrRequestMatcher(Arrays.stream(PUBLIC).map(matchers::matcher).toList());
   }
 
   /**
-   * The header first, then the cookie. A public route ignores both, so a stale cookie cannot turn
-   * signing in, or the health check, into a 401.
+   * The Authorization header only. A public route ignores it, so a stale token cannot turn signing
+   * in, or the health check, into a 401. The resource server also exempts from CSRF every request
+   * this resolves a token for, which is why the cookie is not read here but by {@link CookieToken}.
    */
-  private static BearerTokenResolver tokenResolver(RequestMatcher publicPaths) {
+  private static BearerTokenResolver headerResolver(RequestMatcher publicPaths) {
     var header = new DefaultBearerTokenResolver();
-    return request -> {
-      if (publicPaths.matches(request)) {
-        return null;
+    return request -> publicPaths.matches(request) ? null : header.resolve(request);
+  }
+
+  /**
+   * Presents the cookie's token as a bearer header. It runs after the CSRF check, so a request that
+   * authenticates by cookie has had to pass it first.
+   */
+  private static final class CookieToken extends OncePerRequestFilter {
+
+    private final RequestMatcher publicPaths;
+
+    private CookieToken(RequestMatcher publicPaths) {
+      this.publicPaths = publicPaths;
+    }
+
+    @Override
+    protected void doFilterInternal(
+        HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+        throws ServletException, IOException {
+      var token = cookie(request);
+      if (token == null
+          || request.getHeader(HttpHeaders.AUTHORIZATION) != null
+          || publicPaths.matches(request)) {
+        chain.doFilter(request, response);
+        return;
       }
-      var token = header.resolve(request);
-      if (token != null || request.getCookies() == null) {
-        return token;
+      chain.doFilter(
+          new HttpServletRequestWrapper(request) {
+            @Override
+            public String getHeader(String name) {
+              return HttpHeaders.AUTHORIZATION.equalsIgnoreCase(name)
+                  ? "Bearer " + token
+                  : super.getHeader(name);
+            }
+
+            @Override
+            public Enumeration<String> getHeaders(String name) {
+              return HttpHeaders.AUTHORIZATION.equalsIgnoreCase(name)
+                  ? Collections.enumeration(List.of("Bearer " + token))
+                  : super.getHeaders(name);
+            }
+          },
+          response);
+    }
+
+    private static String cookie(HttpServletRequest request) {
+      if (request.getCookies() == null) {
+        return null;
       }
       return Arrays.stream(request.getCookies())
           .filter(c -> COOKIE.equals(c.getName()) && !c.getValue().isBlank())
-          .map(jakarta.servlet.http.Cookie::getValue)
+          .map(Cookie::getValue)
           .findFirst()
           .orElse(null);
-    };
+    }
   }
 
   /**
@@ -231,6 +294,20 @@ public class SecurityConfiguration {
       throws IOException {
     response.setHeader(HttpHeaders.WWW_AUTHENTICATE, "Bearer");
     problem(request, response, HttpStatus.UNAUTHORIZED, "sign in first");
+  }
+
+  /**
+   * A missing CSRF token is the client's to fix, so it says so. Any other denial is a workspace the
+   * user does not own, which answers as one that does not exist.
+   */
+  private static void denied(
+      HttpServletRequest request, HttpServletResponse response, AccessDeniedException denied)
+      throws IOException {
+    if (denied instanceof CsrfException) {
+      problem(request, response, HttpStatus.FORBIDDEN, "missing or invalid CSRF token");
+    } else {
+      problem(request, response, HttpStatus.NOT_FOUND, "no such workspace");
+    }
   }
 
   /** The RFC 9457 shape every other error has, written here because no controller is involved. */

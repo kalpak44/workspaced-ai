@@ -37,10 +37,10 @@ spring:
 
 workspaced:
   auth:
-    # Signs the login tokens (HS256), so it must be at least 32 bytes. Left empty, a random key is
-    # made at startup: safe, but every restart signs everyone out and replicas reject each
-    # other's tokens.
-    jwt-secret: ${WORKSPACED_JWT_SECRET:}
+    # Signs the login tokens (HS256), so it must be at least 32 bytes. No default, like the
+    # database password: every instance has to sign with the same key, or a token from one
+    # is a 401 at the next.
+    jwt-secret: ${WORKSPACED_JWT_SECRET}
     token-ttl: ${WORKSPACED_TOKEN_TTL:12h}
 
 management:
