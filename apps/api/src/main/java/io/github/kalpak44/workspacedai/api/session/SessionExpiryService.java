@@ -36,7 +36,7 @@ public class SessionExpiryService {
     this.harness = harness;
   }
 
-  @Transactional(readOnly = true)
+  /** Outside a transaction: listing the harness's sessions is a remote call. */
   public List<UUID> candidates(UUID workspaceId) {
     var workspace = workspaces.findById(workspaceId).orElse(null);
     if (workspace == null || !workspace.isSessionTtlEnabled()) return List.of();
@@ -52,7 +52,12 @@ public class SessionExpiryService {
         .toList();
   }
 
-  /** One expiry per transaction; a failure retains the index entry for a later retry. */
+  /**
+   * One expiry per transaction; a failure retains the index entry for a later retry. Unlike the
+   * request paths, this one keeps its locks across the harness calls: it is what makes a TTL
+   * disabled, or a message sent, while it runs win over the deletion. It runs on a single scheduler
+   * thread, so it holds at most one connection.
+   */
   @Transactional
   public boolean expire(UUID id) {
     var workspaceId = sessions.findWorkspaceId(id).orElse(null);

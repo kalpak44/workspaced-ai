@@ -6,7 +6,10 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
+import org.springframework.transaction.annotation.Transactional;
 
 public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID> {
 
@@ -19,6 +22,12 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
 
   /** Oldest first; the id breaks ties between workspaces created in the same instant. */
   List<WorkspaceEntity> findAllByOwnerIdOrderByCreatedAtAscIdAsc(UUID ownerId);
+
+  /** Its own transaction, for a caller that must not hold one while it asks the harness. */
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.model = :model where w.id = :id")
+  int updateModel(@Param("id") UUID id, @Param("model") String model);
 
   @Query("select w.ownerId from WorkspaceEntity w where w.id = :id")
   Optional<UUID> findOwnerIdById(UUID id);

@@ -18,12 +18,14 @@ import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Keeps the stored workspace and its runtime together. The runtime call happens inside the
- * transaction, after the change is flushed, so a pod that cannot be started or stopped rolls the
- * database back, and a database error never leaves a pod behind.
+ * Keeps the stored workspace and its runtime together. Creating one starts the runtime inside the
+ * transaction, after the row is flushed, so a pod that cannot be started rolls the database back;
+ * those Kubernetes calls are quick. The slow calls (checking the provider's key, waiting for a pod
+ * to be gone) run outside any transaction, so they never hold a database connection.
  */
 @Service
 public class WorkspaceService {
@@ -35,18 +37,21 @@ public class WorkspaceService {
   private final ApplicationEventPublisher events;
   private final ApiKeyCheck keyCheck;
   private final Harness harness;
+  private final TransactionTemplate transactions;
 
   public WorkspaceService(
       WorkspaceRepository repository,
       WorkspaceRuntime runtime,
       ApplicationEventPublisher events,
       ApiKeyCheck keyCheck,
-      Harness harness) {
+      Harness harness,
+      TransactionTemplate transactions) {
     this.repository = repository;
     this.runtime = runtime;
     this.events = events;
     this.keyCheck = keyCheck;
     this.harness = harness;
+    this.transactions = transactions;
   }
 
   /** The workspaces one user owns; nobody sees another user's. */
@@ -62,17 +67,26 @@ public class WorkspaceService {
    * workspace receives it as a secret and the base URL as config; neither is kept in the database.
    * The harness gets a password of its own, which only the API and the pod ever see.
    */
-  @Transactional
   public Workspace create(UUID ownerId, String name, ModelProvider provider, String apiKey) {
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
-    var entity = repository.saveAndFlush(new WorkspaceEntity(ownerId, name, provider.id()));
-    runtime.start(
-        entity.getId(),
-        new WorkspaceEnvironment(
-            Map.of(provider.baseUrlVariable(), provider.baseUrl()),
-            Map.of(provider.apiKeyVariable(), apiKey, Harness.PASSWORD_VARIABLE, password())));
+    var entity =
+        transactions.execute(
+            _ -> {
+              var saved =
+                  repository.saveAndFlush(new WorkspaceEntity(ownerId, name, provider.id()));
+              runtime.start(
+                  saved.getId(),
+                  new WorkspaceEnvironment(
+                      Map.of(provider.baseUrlVariable(), provider.baseUrl()),
+                      Map.of(
+                          provider.apiKeyVariable(),
+                          apiKey,
+                          Harness.PASSWORD_VARIABLE,
+                          password())));
+              return saved;
+            });
     return Workspace.of(entity, statusOf(entity.getId()));
   }
 
@@ -95,18 +109,21 @@ public class WorkspaceService {
 
   /**
    * Returns once the workspace's runtime is gone, so the caller can show it deleting until then.
-   * False when no workspace has that id.
+   * The runtime is stopped first, outside any transaction, since that waits for its pod; if it does
+   * not stop in time the row is kept, so the delete can be retried. False when no workspace has
+   * that id.
    */
-  @Transactional
   public boolean delete(UUID id) {
-    var entity = repository.findById(id);
-    if (entity.isEmpty()) {
+    var owner = repository.findOwnerIdById(id);
+    if (owner.isEmpty()) {
       return false;
     }
-    repository.delete(entity.get());
-    repository.flush();
     runtime.stop(id);
-    events.publishEvent(new WorkspaceDeleted(id, entity.get().getOwnerId()));
+    transactions.executeWithoutResult(
+        _ -> {
+          repository.deleteById(id);
+          events.publishEvent(new WorkspaceDeleted(id, owner.get()));
+        });
     return true;
   }
 
@@ -131,7 +148,6 @@ public class WorkspaceService {
   }
 
   /** Opens a terminal only for a workspace that still exists in this application. */
-  @Transactional(readOnly = true)
   public WorkspaceTerminal terminal(UUID id, OutputStream output, Runnable onExit) {
     if (!repository.existsById(id)) {
       throw new IllegalArgumentException("no workspace " + id);

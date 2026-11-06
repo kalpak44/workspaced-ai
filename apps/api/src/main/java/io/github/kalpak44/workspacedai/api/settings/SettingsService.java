@@ -18,7 +18,10 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Stores the workspace's model preference and delegates MCP management to OpenCode. */
+/**
+ * Stores the workspace's model preference and delegates MCP management to OpenCode. The harness is
+ * never called inside a transaction, so a slow one cannot hold a database connection.
+ */
 @Service
 public class SettingsService {
 
@@ -60,26 +63,28 @@ public class SettingsService {
   }
 
   /** The catalogue lives in the harness, so it needs one running. */
-  @Transactional(readOnly = true)
   public ModelCatalogue models(UUID workspaceId) {
     var workspace = workspace(workspaceId);
     return harness.models(endpoint(workspaceId), workspace.getModelProvider());
   }
 
-  /** Checked against the catalogue, so a typo is a 400 here rather than a failed reply later. */
-  @Transactional
+  /**
+   * Checked against the catalogue, so a typo is a 400 here rather than a failed reply later. The
+   * check asks the harness, so it happens before the short update rather than inside it.
+   */
   public String setModel(UUID workspaceId, String model) {
-    var workspace = workspace(workspaceId);
+    workspace(workspaceId);
     if (model != null
         && models(workspaceId).models().stream().noneMatch(m -> m.id().equals(model))) {
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "the workspace's provider offers no agent model " + model);
     }
-    workspace.setModel(model);
+    if (workspaces.updateModel(workspaceId, model) == 0) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + workspaceId);
+    }
     return model;
   }
 
-  @Transactional
   public List<McpServer> mcpServers(UUID workspaceId) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
@@ -88,7 +93,6 @@ public class SettingsService {
         .toList();
   }
 
-  @Transactional
   public McpServer addMcpServer(UUID workspaceId, McpServerRequest request) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
@@ -104,7 +108,6 @@ public class SettingsService {
         .orElse(new McpServer(request.name(), "pending"));
   }
 
-  @Transactional
   public void removeMcpServer(UUID workspaceId, String name) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
