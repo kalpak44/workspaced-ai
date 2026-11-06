@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 
 import io.fabric8.kubernetes.client.KubernetesClient;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.MockKubernetes;
@@ -38,7 +39,8 @@ class WorkspacePodTest {
 
   @Test
   void runsEachWorkspaceAsADeploymentBehindAServiceAndRemovesThem() {
-    var workspace = service.create("Research", ModelProvider.OPENROUTER, "sk-or-1");
+    var workspace =
+        service.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1");
     assertThat(workspace.status()).isEqualTo(WorkspaceStatus.INITIALIZING);
     var name = "workspaced-ai-workspace-" + workspace.id();
     assertThat(deployments()).containsExactly(name);
@@ -58,7 +60,7 @@ class WorkspacePodTest {
     assertThat(client.configMaps().inNamespace(namespace).withName(name).get().getData())
         .containsExactlyEntriesOf(Map.of("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1"));
 
-    assertThat(service.list())
+    assertThat(service.list(TestUsers.ADMIN))
         .extracting(Workspace::status)
         .containsExactly(WorkspaceStatus.INITIALIZING);
     assertThat(service.rename(workspace.id(), "Notes"))

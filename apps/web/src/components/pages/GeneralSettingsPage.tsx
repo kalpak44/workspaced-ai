@@ -1,5 +1,6 @@
 import { ArrowLeft, Camera, Sparkles, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
+import { useAccount } from "../../hooks/useAccount";
 import { useGeneralSettings } from "../../hooks/useGeneralSettings";
 import { navigate } from "../../hooks/useRoute";
 import { Avatar, Button, TextField } from "../atoms";
@@ -10,13 +11,54 @@ import { ContextLayout } from "../templates/ContextLayout";
 export function GeneralSettingsPage() {
   const { settings, update } = useGeneralSettings();
   const [section, setSection] = useState<"profile" | "ai">("profile");
-  const [profile, setProfile] = useState({ firstName: settings.firstName, lastName: settings.lastName, avatar: settings.avatar });
+  const { account, saveProfile, changePassword: savePassword } = useAccount();
+  const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "", avatar: account?.avatar ?? "" };
+  const [profile, setProfile] = useState(saved);
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
+  const [passwordError, setPasswordError] = useState("");
+  const [savingPassword, setSavingPassword] = useState(false);
   const [instructions, setInstructions] = useState(settings.instructions);
   const [changePassword, setChangePassword] = useState(false);
   const [notice, setNotice] = useState("");
   const [avatarError, setAvatarError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
-  const profileChanged = profile.firstName !== settings.firstName || profile.lastName !== settings.lastName || profile.avatar !== settings.avatar;
+  const profileChanged = profile.firstName !== saved.firstName || profile.lastName !== saved.lastName || profile.avatar !== saved.avatar;
+
+  async function submitProfile() {
+    const trimmed = { ...profile, firstName: profile.firstName.trim(), lastName: profile.lastName.trim() };
+    setSavingProfile(true);
+    try {
+      await saveProfile({ ...trimmed, avatar: trimmed.avatar || null });
+      setProfile(trimmed);
+      setNotice("Profile updated.");
+    } catch {
+      setNotice("Could not save the profile. Please try again.");
+    } finally {
+      setSavingProfile(false);
+    }
+  }
+
+  async function submitPassword() {
+    if (passwords.next.length < 8) return setPasswordError("Use at least 8 characters.");
+    if (passwords.next.length > 72) return setPasswordError("Use at most 72 characters.");
+    if (passwords.next !== passwords.confirm) return setPasswordError("The new passwords do not match.");
+    setPasswordError("");
+    setSavingPassword(true);
+    try {
+      if (!(await savePassword(passwords.current, passwords.next))) {
+        setPasswordError("The current password is wrong.");
+        return;
+      }
+      setPasswords({ current: "", next: "", confirm: "" });
+      setChangePassword(false);
+      setNotice("Password changed.");
+    } catch {
+      setPasswordError("Could not change the password. Please try again.");
+    } finally {
+      setSavingPassword(false);
+    }
+  }
 
   function changeAvatar(file: File | undefined) {
     if (!file) return;
@@ -53,17 +95,13 @@ export function GeneralSettingsPage() {
       </>}>
       <PageHeader title="General settings" />
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
-        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">Preview · Settings are saved only in this browser. AI instructions are not applied to agents yet.</p>
+        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">Your profile is saved to your account. AI instructions are saved only in this browser and are not applied to agents yet.</p>
           <div className="min-w-0 flex-1">
             <div hidden={section !== "profile"} className="space-y-6">
               <SettingsSection title="Profile" description="Your photo and name, all in one place.">
-                <form className="space-y-6" onSubmit={(event) => {
-                  event.preventDefault();
-                  setNotice(update({ ...profile, firstName: profile.firstName.trim(), lastName: profile.lastName.trim() }) ? "Profile updated in this browser." : "Could not save. Your browser storage may be full or unavailable.");
-                  setProfile((previous) => ({ ...previous, firstName: previous.firstName.trim(), lastName: previous.lastName.trim() }));
-                }}>
+                <form className="space-y-6" onSubmit={(event) => { event.preventDefault(); void submitProfile(); }}>
                   <div className="flex flex-wrap items-center gap-4">
-                    <Avatar src={profile.avatar} large />
+                    <Avatar src={profile.avatar || undefined} large />
                     <div className="space-y-2">
                       <div className="flex flex-wrap gap-2">
                         <Button label="Change avatar" icon={Camera} variant="secondary" onClick={() => fileInput.current?.click()} />
@@ -79,7 +117,7 @@ export function GeneralSettingsPage() {
                     <TextField id="last-name" label="Last name" autoComplete="family-name" maxLength={100} value={profile.lastName} onChange={(event) => { setProfile({ ...profile, lastName: event.target.value }); setNotice(""); }} />
                   </div>
                   <div className="flex justify-end border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                    <Button label="Update profile" type="submit" disabled={!profileChanged} />
+                    <Button label="Update profile" type="submit" disabled={!profileChanged} busy={savingProfile} />
                   </div>
                 </form>
               </SettingsSection>
@@ -90,12 +128,15 @@ export function GeneralSettingsPage() {
                     <span className={`size-5 rounded-full shadow-sm transition-transform ${changePassword ? "translate-x-4 bg-white dark:bg-zinc-900" : "bg-white dark:bg-zinc-300"}`} />
                   </button>
                 </div>
-                {changePassword && <div className="space-y-4">
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">Password changes will be available when accounts are connected. These fields are a preview; passwords are never saved.</p>
-                  <TextField id="current-password" label="Current password" type="password" autoComplete="current-password" />
-                  <TextField id="new-password" label="New password" type="password" autoComplete="new-password" />
-                  <TextField id="confirm-password" label="Confirm new password" type="password" autoComplete="new-password" />
-                </div>}
+                {changePassword && <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
+                  <TextField id="current-password" label="Current password" type="password" autoComplete="current-password" required value={passwords.current} onChange={(event) => setPasswords({ ...passwords, current: event.target.value })} />
+                  <TextField id="new-password" label="New password" type="password" autoComplete="new-password" required hint="8 to 72 characters." value={passwords.next} onChange={(event) => setPasswords({ ...passwords, next: event.target.value })} />
+                  <TextField id="confirm-password" label="Confirm new password" type="password" autoComplete="new-password" required value={passwords.confirm} onChange={(event) => setPasswords({ ...passwords, confirm: event.target.value })} />
+                  {passwordError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{passwordError}</p>}
+                  <div className="flex justify-end border-t border-zinc-200 pt-4 dark:border-zinc-800">
+                    <Button label="Change password" type="submit" busy={savingPassword} disabled={!passwords.current || !passwords.next || !passwords.confirm} />
+                  </div>
+                </form>}
               </SettingsSection>
             </div>
             <div hidden={section !== "ai"}>

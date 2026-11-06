@@ -49,9 +49,10 @@ public class WorkspaceService {
     this.harness = harness;
   }
 
+  /** The workspaces one user owns; nobody sees another user's. */
   @Transactional(readOnly = true)
-  public List<Workspace> list() {
-    var entities = repository.findAllByOrderByCreatedAtAscIdAsc();
+  public List<Workspace> list(UUID ownerId) {
+    var entities = repository.findAllByOwnerIdOrderByCreatedAtAscIdAsc(ownerId);
     var statuses = runtime.statuses(entities.stream().map(WorkspaceEntity::getId).toList());
     return entities.stream().map(e -> Workspace.of(e, statuses.get(e.getId()))).toList();
   }
@@ -62,11 +63,11 @@ public class WorkspaceService {
    * The harness gets a password of its own, which only the API and the pod ever see.
    */
   @Transactional
-  public Workspace create(String name, ModelProvider provider, String apiKey) {
+  public Workspace create(UUID ownerId, String name, ModelProvider provider, String apiKey) {
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
-    var entity = repository.saveAndFlush(new WorkspaceEntity(name, provider.id()));
+    var entity = repository.saveAndFlush(new WorkspaceEntity(ownerId, name, provider.id()));
     runtime.start(
         entity.getId(),
         new WorkspaceEnvironment(
@@ -105,7 +106,7 @@ public class WorkspaceService {
     repository.delete(entity.get());
     repository.flush();
     runtime.stop(id);
-    events.publishEvent(new WorkspaceDeleted(id));
+    events.publishEvent(new WorkspaceDeleted(id, entity.get().getOwnerId()));
     return true;
   }
 
@@ -140,6 +141,12 @@ public class WorkspaceService {
             .harness(id)
             .orElseThrow(() -> new IllegalStateException("workspace OpenCode is not running"));
     return harness.terminal(endpoint, Harness.PROJECT_ROOT, output, onExit);
+  }
+
+  /** Empty when no workspace has that id. */
+  @Transactional(readOnly = true)
+  public Optional<UUID> ownerOf(UUID id) {
+    return repository.findOwnerIdById(id);
   }
 
   private WorkspaceStatus statusOf(UUID id) {

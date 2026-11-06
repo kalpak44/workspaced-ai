@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
@@ -39,7 +40,8 @@ class WorkspaceRollbackTest {
   @Test
   void keepsNoWorkspaceWhosePodCouldNotStart() {
     doThrow(new IllegalStateException("cluster down")).when(runtime).start(any(), any());
-    assertThatThrownBy(() -> service.create("Orphan", ModelProvider.OPENROUTER, "sk-or-1"))
+    assertThatThrownBy(
+            () -> service.create(TestUsers.ADMIN, "Orphan", ModelProvider.OPENROUTER, "sk-or-1"))
         .hasMessage("cluster down");
     assertThat(repository.findAll()).isEmpty();
   }
@@ -47,7 +49,8 @@ class WorkspaceRollbackTest {
   @Test
   void startsNothingForARejectedKey() {
     when(keyCheck.accepts(ModelProvider.OPENROUTER, "sk-bad")).thenReturn(false);
-    assertThatThrownBy(() -> service.create("Nope", ModelProvider.OPENROUTER, "sk-bad"))
+    assertThatThrownBy(
+            () -> service.create(TestUsers.ADMIN, "Nope", ModelProvider.OPENROUTER, "sk-bad"))
         .isInstanceOf(ApiKeyRejectedException.class);
     assertThat(repository.findAll()).isEmpty();
     verify(runtime, never()).start(any(), any());
@@ -55,7 +58,7 @@ class WorkspaceRollbackTest {
 
   @Test
   void keepsTheWorkspaceWhosePodCouldNotStop() {
-    var kept = repository.save(new WorkspaceEntity("Kept", "openrouter"));
+    var kept = repository.save(new WorkspaceEntity(TestUsers.ADMIN, "Kept", "openrouter"));
     doThrow(new IllegalStateException("cluster down")).when(runtime).stop(any());
     assertThatThrownBy(() -> service.delete(kept.getId())).hasMessage("cluster down");
     assertThat(repository.findAll())

@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import java.util.List;
 import java.util.UUID;
@@ -24,12 +25,12 @@ public class WorkspaceController implements WorkspaceApi {
 
   @Override
   public ResponseEntity<SseEmitter> events() {
-    return ResponseEntity.ok(events.subscribe());
+    return ResponseEntity.ok(events.subscribe(CurrentUser.id()));
   }
 
   @Override
   public ResponseEntity<List<Workspace>> list() {
-    return ResponseEntity.ok(service.list());
+    return ResponseEntity.ok(service.list(CurrentUser.id()));
   }
 
   @Override
@@ -41,7 +42,8 @@ public class WorkspaceController implements WorkspaceApi {
                     new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "unknown model provider " + request.modelProvider()));
-    var workspace = service.create(request.trimmedName(), provider, request.trimmedApiKey());
+    var workspace =
+        service.create(CurrentUser.id(), request.trimmedName(), provider, request.trimmedApiKey());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")

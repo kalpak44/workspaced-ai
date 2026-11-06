@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -30,7 +31,8 @@ class SettingsWithoutHarnessTest {
   @BeforeEach
   void setUp() {
     workspaces.deleteAll();
-    workspace = workspaces.save(new WorkspaceEntity("Research", "openrouter")).getId();
+    workspace =
+        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
   }
 
   @Test
@@ -38,7 +40,8 @@ class SettingsWithoutHarnessTest {
     assertThat(service.sessionTtl(workspace)).isEqualTo(new SessionTtlSettings(false, 168));
     assertThat(service.setSessionTtl(workspace, new SessionTtlSettings(true, 6)))
         .isEqualTo(new SessionTtlSettings(true, 6));
-    var other = workspaces.save(new WorkspaceEntity("Other", "openrouter")).getId();
+    var other =
+        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Other", "openrouter")).getId();
     assertThat(service.sessionTtl(other)).isEqualTo(new SessionTtlSettings(false, 168));
     assertThat(service.sessionTtl(workspace)).isEqualTo(new SessionTtlSettings(true, 6));
   }

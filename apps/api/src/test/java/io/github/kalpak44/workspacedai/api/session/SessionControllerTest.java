@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
@@ -93,7 +94,8 @@ class SessionControllerTest {
     OPENCODE.sessionExists = true;
     OPENCODE.sessionUpdatedAt = Instant.now().toEpochMilli();
     when(keyCheck.accepts(any(), any())).thenReturn(true);
-    workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+    workspace =
+        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
 
   @Test
@@ -381,6 +383,7 @@ class SessionControllerTest {
     var session = create();
     var request =
         HttpRequest.newBuilder(url("/" + session.id() + "/events"))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Accept", "text/event-stream")
             .build();
     var response = http.send(request, BodyHandlers.ofLines());
@@ -434,6 +437,7 @@ class SessionControllerTest {
     var body = json == null ? BodyPublishers.noBody() : BodyPublishers.ofString(json);
     var request =
         HttpRequest.newBuilder(url(path))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Content-Type", "application/json")
             .method(method, body)
             .build();

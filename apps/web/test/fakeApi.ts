@@ -1,5 +1,6 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
+import type { Account } from "../src/api/accountApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
@@ -133,11 +134,48 @@ export function installFakeApi(
     harnessDown: false,
   };
   FakeEventSource.instances.length = 0;
+  // admin/admin, signed in unless a test signs out first; `password` is what changes it.
+  const auth = {
+    signedIn: true,
+    password: "admin",
+    failProfile: false,
+    account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null } as Account,
+  };
+
+  function accountResponse(url: string, init?: RequestInit): Response | null {
+    if (url.endsWith("/api/v1/auth/login")) {
+      const { username, password } = JSON.parse(String(init?.body));
+      if (username !== auth.account.username || password !== auth.password) return json({}, 401);
+      auth.signedIn = true;
+      return json({ account: auth.account, token: "jwt", expiresAt: "2099-01-01T00:00:00Z" });
+    }
+    if (url.endsWith("/api/v1/auth/logout")) {
+      auth.signedIn = false;
+      return new Response(null, { status: 204 });
+    }
+    if (!/\/api\/v1\/account(\/|$)/.test(url)) return null;
+    if (!auth.signedIn) return json({}, 401);
+    if (url.endsWith("/account/profile")) {
+      if (auth.failProfile) return json({}, 500);
+      const { avatar, ...names } = JSON.parse(String(init?.body));
+      auth.account = { ...auth.account, ...names, avatar: avatar || null };
+    } else if (url.endsWith("/account/password")) {
+      const { currentPassword, newPassword } = JSON.parse(String(init?.body));
+      if (currentPassword !== auth.password) return json({}, 422);
+      auth.password = newPassword;
+      return new Response(null, { status: 204 });
+    }
+    return json(auth.account);
+  }
 
   const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/actuator/health/readiness")) {
       return new Response(null, { status: 200 });
+    }
+    const accountAnswer = accountResponse(url, init);
+    if (accountAnswer) {
+      return accountAnswer;
     }
     if (state.fail) {
       return new Response(null, { status: state.fail });
@@ -367,5 +405,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

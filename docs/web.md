@@ -27,6 +27,11 @@ src/
 | Only `hooks/` imports `api/`                       | Every request has one owner, and components stay mockable |
 | Each layer exports through its `index.ts`          | Moving a file inside a layer changes no imports elsewhere  |
 
+The app first asks the API who is signed in (`GET /api/v1/account`) and shows a sign-in page until someone is; a fresh
+install accepts admin/admin. The session itself is an HttpOnly cookie the code never reads. Any `401` from the API
+returns the app to the sign-in page, and Logout in the account menu clears the cookie. The profile on the settings page
+(names and avatar) and the password change are saved to the account; the general AI instructions stay in this browser.
+
 Creating a workspace is a short wizard: the name, then a model provider picked from cards (radios underneath), whose
 key field appears once one is chosen.
 A key the provider refuses keeps the dialog open and marks the key field; anything else goes to the page's error

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -31,7 +32,8 @@ class SessionWithoutHarnessTest {
   @BeforeEach
   void setUp() {
     workspaces.deleteAll();
-    workspace = workspaces.save(new WorkspaceEntity("Research", "openrouter")).getId();
+    workspace =
+        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
   }
 
   @Test

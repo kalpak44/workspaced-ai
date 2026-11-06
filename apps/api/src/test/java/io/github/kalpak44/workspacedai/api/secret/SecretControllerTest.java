@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -47,7 +48,7 @@ class SecretControllerTest {
   void setUp() {
     repository.deleteAll();
     when(keyCheck.accepts(any(), any())).thenReturn(true);
-    id = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+    id = workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
 
   @Test
@@ -91,7 +92,7 @@ class SecretControllerTest {
   }
 
   private boolean pendingRestart() {
-    return workspaces.list().getFirst().restartRequired();
+    return workspaces.list(TestUsers.ADMIN).getFirst().restartRequired();
   }
 
   @Test
@@ -162,6 +163,7 @@ class SecretControllerTest {
         HttpRequest.newBuilder(
                 URI.create(
                     "http://localhost:" + port + "/api/v1/workspaces/" + id + "/secrets" + path))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Content-Type", "application/json")
             .method(method, body)
             .build();

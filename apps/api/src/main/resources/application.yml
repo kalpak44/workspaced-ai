@@ -35,6 +35,14 @@ spring:
     # transaction, where it can be seen.
     open-in-view: false
 
+workspaced:
+  auth:
+    # Signs the login tokens (HS256), so it must be at least 32 bytes. Left empty, a random key is
+    # made at startup: safe, but every restart signs everyone out and replicas reject each
+    # other's tokens.
+    jwt-secret: ${WORKSPACED_JWT_SECRET:}
+    token-ttl: ${WORKSPACED_TOKEN_TTL:12h}
+
 management:
   endpoints:
     web:

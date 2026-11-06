@@ -7,6 +7,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.provider.ProviderUnreachableException;
@@ -98,6 +99,7 @@ class WorkspaceControllerTest {
   void listsTheSupportedModelProviders() throws Exception {
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/model-providers"))
+            .header("Authorization", TestUsers.bearer(port))
             .build();
     var providers = JSON.readTree(http.send(request, BodyHandlers.ofString()).body());
     assertThat(providers).hasSize(1);
@@ -181,6 +183,7 @@ class WorkspaceControllerTest {
     var body = json == null ? BodyPublishers.noBody() : BodyPublishers.ofString(json);
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces" + path))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Content-Type", "application/json")
             .method(method, body)
             .build();

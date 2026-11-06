@@ -2,7 +2,7 @@ import { ChevronsUpDown, LogOut } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDismiss } from "../../hooks/useDismiss";
-import { useGeneralSettings } from "../../hooks/useGeneralSettings";
+import { useAccount } from "../../hooks/useAccount";
 import { navigate } from "../../hooks/useRoute";
 import type { Theme } from "../../hooks/useTheme";
 import { Avatar } from "../atoms";
@@ -17,7 +17,8 @@ interface Props {
 }
 
 export function UserMenu({ theme, onThemeChange }: Props) {
-  const { settings } = useGeneralSettings();
+  const { account, signOut } = useAccount();
+  const name = [account?.firstName, account?.lastName].filter(Boolean).join(" ");
   const [open, setOpen] = useState(false);
   const mobile = useIsMobile();
   const ref = useRef<HTMLDivElement>(null);
@@ -25,6 +26,13 @@ export function UserMenu({ theme, onThemeChange }: Props) {
   useDismiss(ref, open && !mobile, close);
 
   const items = <>
+          <div className={`${ROW} ${SEPARATED} justify-start gap-3`}>
+            <Avatar src={account?.avatar ?? undefined} />
+            <div className="min-w-0">
+              <p className="truncate font-medium">{name || account?.username}</p>
+              {name && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.username}</p>}
+            </div>
+          </div>
           <div className={ROW}>
             <span>Version</span>
             <span className="text-emerald-500">{import.meta.env.VITE_APP_VERSION ?? "dev"}</span>
@@ -39,7 +47,7 @@ export function UserMenu({ theme, onThemeChange }: Props) {
             <span>Theme</span>
             <ThemeSwitch theme={theme} onChange={onThemeChange} />
           </div>
-          <MenuItem className={ROW} onClick={close}>
+          <MenuItem className={ROW} onClick={() => { close(); void signOut(); }}>
             Logout
             <LogOut className="size-4" />
           </MenuItem>
@@ -55,7 +63,7 @@ export function UserMenu({ theme, onThemeChange }: Props) {
         onClick={() => setOpen(!open)}
         className="flex items-center gap-1 rounded-md p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800"
       >
-        <Avatar src={settings.avatar} />
+        <Avatar src={account?.avatar ?? undefined} />
         <ChevronsUpDown className="size-3.5 text-zinc-400" />
       </button>
       {open && (mobile ? (

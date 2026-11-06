@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.terminal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
@@ -58,7 +59,10 @@ class TerminalControllerTest {
   @BeforeEach
   void setUp() {
     workspaces.deleteAll();
-    workspace = workspaces.save(new WorkspaceEntity("Terminal tests", "openrouter")).getId();
+    workspace =
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Terminal tests", "openrouter"))
+            .getId();
     OPENCODE.terminals.clear();
     OPENCODE.requests.clear();
     OPENCODE.rejectTerminals = false;
@@ -121,6 +125,7 @@ class TerminalControllerTest {
                         + workspace
                         + "/terminals"
                         + suffix))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Content-Type", "application/json")
             .method(method, body == null ? BodyPublishers.noBody() : BodyPublishers.ofString(body))
             .build(),

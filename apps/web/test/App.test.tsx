@@ -456,9 +456,18 @@ describe("App", () => {
 
   it("shows a loading state, then an error the user can dismiss", async () => {
     api.state.fail = 500;
+    // Held until the loading state has been seen; the account check runs before it.
+    let release!: () => void;
+    const held = new Promise<void>((resolve) => (release = resolve));
+    const answer = api.fetchFn.getMockImplementation()!;
+    api.fetchFn.mockImplementation(async (input, init) => {
+      if (String(input).endsWith("/api/v1/workspaces")) await held;
+      return answer(input, init);
+    });
     render(<App />);
-    expect(screen.getByText("Loading workspaces…")).toBeInTheDocument();
+    expect(await screen.findByText("Loading workspaces…")).toBeInTheDocument();
     expect(within(screen.getByRole("main")).getByText("Loading workspaces…").parentElement?.querySelector(".animate-spin")).not.toBeNull();
+    release();
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("Could not load workspaces");
     await userEvent.setup().click(within(alert).getByRole("button", { name: "Dismiss" }));
@@ -1181,5 +1190,42 @@ describe("App", () => {
     await waitFor(() => expect(name).toHaveAccessibleDescription("Could not add the server"));
     await user.click(within(panel).getByRole("button", { name: "Remove github" }));
     expect(await within(panel).findByText("Could not remove github")).toBeInTheDocument();
+  });
+});
+
+describe("signing in", () => {
+  it("asks for credentials, refuses wrong ones, and opens the app with right ones", async () => {
+    api.auth.signedIn = false;
+    const user = userEvent.setup();
+    render(<App />);
+    await user.type(await screen.findByLabelText("Username"), "admin");
+    await user.type(screen.getByLabelText("Password"), "wrong");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong username or password");
+
+    await user.clear(screen.getByLabelText("Password"));
+    await user.type(screen.getByLabelText("Password"), "admin");
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(await screen.findAllByRole("button", { name: "Starter" })).not.toHaveLength(0);
+  });
+
+  it("signs out from the account menu", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByRole("button", { name: "Starter" });
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Logout" }));
+    expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
+    expect(api.auth.signedIn).toBe(false);
+  });
+
+  it("returns to sign-in when the API stops accepting the session", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByRole("button", { name: "Starter" });
+    api.state.fail = 401;
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Settings" }));
+    expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
   });
 });

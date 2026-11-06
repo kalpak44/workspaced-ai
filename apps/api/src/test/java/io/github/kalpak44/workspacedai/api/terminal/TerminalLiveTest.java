@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.terminal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.net.URI;
@@ -51,7 +52,10 @@ class TerminalLiveTest {
 
   @Test
   void createsSwitchesReconnectsAndDeletesThroughThePublicApi() throws Exception {
-    workspace = workspaces.save(new WorkspaceEntity("Live terminal test", "openrouter")).getId();
+    workspace =
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Live terminal test", "openrouter"))
+            .getId();
     String first = null;
     String second = null;
     WebSocket socket = null;
@@ -109,6 +113,7 @@ class TerminalLiveTest {
                         + workspace
                         + "/terminals"
                         + suffix))
+            .header("Authorization", TestUsers.bearer(port))
             .timeout(Duration.ofSeconds(15))
             .header("Content-Type", "application/json")
             .method(method, body == null ? BodyPublishers.noBody() : BodyPublishers.ofString(body))
@@ -118,6 +123,7 @@ class TerminalLiveTest {
 
   private WebSocket connect(String id, Output output) {
     return http.newWebSocketBuilder()
+        .header("Authorization", TestUsers.bearer(port))
         .connectTimeout(Duration.ofSeconds(10))
         .buildAsync(
             URI.create(

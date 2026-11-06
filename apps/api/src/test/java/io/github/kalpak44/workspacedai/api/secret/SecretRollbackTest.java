@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -32,7 +33,7 @@ class SecretRollbackTest {
   @BeforeEach
   void setUp() {
     workspaces.deleteAll();
-    id = workspaces.save(new WorkspaceEntity("Research", "openrouter")).getId();
+    id = workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
   }
 
   @Test

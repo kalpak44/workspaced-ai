@@ -20,6 +20,10 @@ public class WorkspaceEntity {
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
+  // The user it belongs to; its sessions, secrets and settings are reachable only by them.
+  @Column(name = "owner_id", nullable = false, updatable = false)
+  private UUID ownerId;
+
   @Column(nullable = false, length = 100)
   private String name;
 
@@ -70,13 +74,18 @@ public class WorkspaceEntity {
     // For JPA.
   }
 
-  public WorkspaceEntity(String name, String modelProvider) {
+  public WorkspaceEntity(UUID ownerId, String name, String modelProvider) {
+    this.ownerId = ownerId;
     this.name = name;
     this.modelProvider = modelProvider;
   }
 
   public UUID getId() {
     return id;
+  }
+
+  public UUID getOwnerId() {
+    return ownerId;
   }
 
   public String getName() {

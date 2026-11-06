@@ -4,12 +4,9 @@ import { readStored } from "../lib/storage";
 const KEY = "workspaced:general-settings";
 const CHANGED = "workspaced:general-settings-changed";
 interface GeneralSettings {
-  readonly firstName: string;
-  readonly lastName: string;
-  readonly avatar: string;
   readonly instructions: string;
 }
-const EMPTY: GeneralSettings = { firstName: "", lastName: "", avatar: "", instructions: "" };
+const EMPTY: GeneralSettings = { instructions: "" };
 
 function subscribe(listener: () => void) {
   globalThis.addEventListener(CHANGED, listener);
@@ -20,7 +17,7 @@ function subscribe(listener: () => void) {
   };
 }
 
-/** Browser-only preferences. Passwords never enter this store. */
+/** Browser-only preferences; the profile lives on the account instead. */
 export function useGeneralSettings() {
   const raw = useSyncExternalStore(subscribe, () => readStored(KEY));
   const settings = useMemo<GeneralSettings>(() => {

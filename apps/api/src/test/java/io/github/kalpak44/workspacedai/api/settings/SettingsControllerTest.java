@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
@@ -77,7 +78,8 @@ class SettingsControllerTest {
     OPENCODE.mcpConfigFile = null;
     OPENCODE.mcpStarting = false;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
-    workspace = workspaces.create("Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+    workspace =
+        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
 
   @Test
@@ -291,6 +293,7 @@ class SettingsControllerTest {
     var request =
         HttpRequest.newBuilder(
                 URI.create("http://localhost:" + port + "/api/v1/workspaces/" + workspace + path))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Content-Type", "application/json")
             .method(method, body)
             .build();

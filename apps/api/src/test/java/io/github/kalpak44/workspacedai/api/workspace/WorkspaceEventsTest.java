@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import java.net.URI;
@@ -41,9 +42,11 @@ class WorkspaceEventsTest {
   @Test
   @Timeout(10)
   void sendsASnapshotOnConnectThenEachChange() throws Exception {
-    var workspace = service.create("Research", ModelProvider.OPENROUTER, "sk-test");
+    var workspace =
+        service.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-test");
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
+            .header("Authorization", TestUsers.bearer(port))
             .header("Accept", "text/event-stream")
             .build();
     var response = HttpClient.newHttpClient().send(request, BodyHandlers.ofLines());

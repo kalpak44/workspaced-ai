@@ -18,5 +18,8 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   Optional<WorkspaceEntity> lockById(UUID id);
 
   /** Oldest first; the id breaks ties between workspaces created in the same instant. */
-  List<WorkspaceEntity> findAllByOrderByCreatedAtAscIdAsc();
+  List<WorkspaceEntity> findAllByOwnerIdOrderByCreatedAtAscIdAsc(UUID ownerId);
+
+  @Query("select w.ownerId from WorkspaceEntity w where w.id = :id")
+  Optional<UUID> findOwnerIdById(UUID id);
 }

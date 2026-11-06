@@ -3,6 +3,34 @@
 The whole app is served under the `/api/v1` context path, so the host root is free for the frontend: Swagger UI is at
 `/api/v1/swagger-ui`, the OpenAPI 3.0 document at `/api/v1/v3/api-docs`, health at `/api/v1/actuator/health`.
 
+## Authentication and tenancy
+
+Every route needs a signed-in user except `POST /auth/login`, `POST /auth/logout`, health and the API docs. A fresh
+database has one account, **admin / admin** (created by `V9__users.sql`); change its password from the settings page or
+`PUT /account/password` after the first sign-in.
+
+`POST /auth/login` with `{"username","password"}` answers `{account, token, expiresAt}`. The token is an HS256 JWT signed
+by the API (Spring Security's OAuth2 resource server validates it); its subject is the user's id. The same token is set
+as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over HTTPS — which is how the
+browser authenticates, EventSource and the terminal WebSocket included, since neither can set a header. Other clients
+send `Authorization: Bearer <token>`. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
+stays valid until it expires. A missing, invalid or expired token answers `401` as a problem detail.
+
+`GET /account` returns the signed-in user (`id`, `username`, `firstName`, `lastName`, `avatar`).
+`PUT /account/profile` replaces the names (at most 100 characters, trimmed) and the avatar, a JPG/PNG/WebP/GIF `data:`
+URL of at most 2 MB (empty removes it). `PUT /account/password` takes `currentPassword` and `newPassword` (8–72
+characters): `204`, or `422` when the current password is wrong.
+
+The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
+show only the caller's, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
+against the owner before it runs. Another user's workspace answers `404`, exactly as one that does not exist.
+Workspaces created before accounts belong to admin.
+
+| Variable                | Default | Meaning                                                                       |
+|-------------------------|---------|-------------------------------------------------------------------------------|
+| `WORKSPACED_JWT_SECRET` | random  | HS256 signing key, at least 32 bytes. Unset, a random key is made per start, so a restart signs everyone out and replicas reject each other's tokens: set it in any real deployment. |
+| `WORKSPACED_TOKEN_TTL`  | `12h`   | How long a sign-in lasts.                                                     |
+
 ## OpenCode API reference
 
 The workspace harness uses the [OpenCode V2 HTTP API documentation](https://dev.opencode.ai/v2/docs/api).
@@ -244,7 +272,7 @@ Docker, so `verify` needs a running Docker daemon.
 docker run -d --name workspaced-db -p 5432:5432 \
   -e POSTGRES_DB=workspaced -e POSTGRES_USER=workspaced -e POSTGRES_PASSWORD=workspaced postgres:18-alpine
 cd apps/api
-WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run    # http://localhost:8080/api/v1/swagger-ui
+WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run    # http://localhost:8080/api/v1/swagger-ui, sign in as admin/admin
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor
 mvn -DskipTests spring-boot:build-image                   # buildpacks image, no Dockerfile
