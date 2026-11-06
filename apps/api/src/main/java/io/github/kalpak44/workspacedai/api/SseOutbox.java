@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api;
 import java.io.IOException;
 import java.util.concurrent.ArrayBlockingQueue;
 import java.util.concurrent.BlockingQueue;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -25,6 +26,7 @@ public final class SseOutbox {
   private final BlockingQueue<SseEmitter.SseEventBuilder> queue =
       new ArrayBlockingQueue<>(CAPACITY);
   private final Thread sender;
+  private final AtomicBoolean failed = new AtomicBoolean();
   private volatile boolean closed;
 
   public SseOutbox(SseEmitter emitter, String name) {
@@ -74,6 +76,9 @@ public final class SseOutbox {
   }
 
   private void fail(Exception cause) {
+    if (!failed.compareAndSet(false, true)) {
+      return;
+    }
     closed = true;
     sender.interrupt();
     emitter.completeWithError(cause);
