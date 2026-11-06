@@ -1,4 +1,4 @@
-import { ArrowLeft, Plus, SquareTerminal, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Settings, SquareTerminal, Trash2 } from "lucide-react";
 import type { TerminalSession } from "../../hooks/useTerminals";
 import { Button, IconButton, Spinner } from "../atoms";
 import { useState } from "react";
@@ -12,17 +12,19 @@ interface Props {
   readonly disabled: boolean;
   readonly removing: string | null;
   readonly onBack: () => void;
+  readonly onSettings: () => void;
   readonly onCreate: () => void;
   readonly onSelect: (id: string) => void;
   readonly onDelete: (id: string) => void;
 }
 
-export function TerminalSidebar({ workspaceName, terminals, selectedId, loading, creating, disabled, removing, onBack, onCreate, onSelect, onDelete }: Props) {
+export function TerminalSidebar({ workspaceName, terminals, selectedId, loading, creating, disabled, removing, onBack, onSettings, onCreate, onSelect, onDelete }: Props) {
   const [query, setQuery] = useState("");
   const filtered = terminals.filter((terminal) => `${terminal.title} ${terminal.cwd}`.toLowerCase().includes(query.toLowerCase()));
   return <>
-    <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
+    <div className="flex h-14 shrink-0 items-center justify-between gap-2 border-b border-zinc-200 px-4 dark:border-zinc-800">
       <button type="button" aria-label="Back to workspace" onClick={onBack} className="flex min-w-0 items-center gap-2 text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"><ArrowLeft aria-hidden className="size-4 shrink-0" /><span className="truncate">{workspaceName}</span></button>
+      <IconButton label="Workspace settings" title="Workspace settings" icon={Settings} onClick={onSettings} className="shrink-0" />
     </div>
     <nav aria-label="Terminal sessions" className="flex min-h-0 flex-1 flex-col p-3">
       <h2 className="mb-3 px-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">Terminals <span className="ml-1 text-zinc-400">{terminals.length}</span></h2>

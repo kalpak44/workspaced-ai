@@ -36,7 +36,7 @@ export function TerminalPage({ workspace, terminalId, deleting }: Props) {
     if (terminal) open(terminal.id);
   }
 
-  return <ContextLayout sidebar={<TerminalSidebar workspaceName={workspace.name} terminals={terminals.terminals} selectedId={selected?.id} loading={terminals.loading} creating={terminals.creating} removing={terminals.removing} disabled={!ready || terminals.loading || terminals.removing !== null} onBack={() => navigate({ name: "workspace", workspaceId: workspace.id })} onCreate={() => { void create(); }} onSelect={(id) => { setDeleteTarget(null); open(id); }} onDelete={(id) => setDeleteTarget(terminals.terminals.find((terminal) => terminal.id === id) ?? null)} />}>
+  return <ContextLayout sidebar={<TerminalSidebar workspaceName={workspace.name} terminals={terminals.terminals} selectedId={selected?.id} loading={terminals.loading} creating={terminals.creating} removing={terminals.removing} disabled={!ready || terminals.loading || terminals.removing !== null} onBack={() => navigate({ name: "workspace", workspaceId: workspace.id })} onSettings={() => navigate({ name: "settings", workspaceId: workspace.id })} onCreate={() => { void create(); }} onSelect={(id) => { setDeleteTarget(null); open(id); }} onDelete={(id) => setDeleteTarget(terminals.terminals.find((terminal) => terminal.id === id) ?? null)} />}>
     <PageHeader title={selected?.title ?? "Terminals"} crumbs={[{ label: workspace.name, onClick: () => navigate({ name: "workspace", workspaceId: workspace.id }) }]} actions={<>
       <IconButton label="Refresh terminals" title="Refresh terminals" icon={RefreshCw} disabled={!ready || terminals.creating || terminals.removing !== null} onClick={() => { terminals.dismissError(); void terminals.refresh(); }} />
     </>} />
