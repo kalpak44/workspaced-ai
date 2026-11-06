@@ -11,7 +11,6 @@ import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
-import org.springframework.transaction.event.TransactionalEventListener;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** Fans each workspace status change out to the open event streams of the user who owns it. */
@@ -64,12 +63,12 @@ public class WorkspaceEvents {
   }
 
   /**
-   * Tells the owner's clients the workspace is gone, once its delete has committed. Without it,
+   * Tells the owner's clients on this instance the workspace is gone. {@link WorkspaceDeletions}
+   * calls it on every instance once the delete has committed, whichever one made it. Without it,
    * another open tab would only see the pod disappear and show the workspace as failed.
    */
-  @TransactionalEventListener
-  void onDeleted(WorkspaceDeleted deleted) {
-    sendTo(deleted.ownerId(), SseEmitter.event().name(DELETED).data(Map.of("id", deleted.id())));
+  void deleted(UUID id, UUID ownerId) {
+    sendTo(ownerId, SseEmitter.event().name(DELETED).data(Map.of("id", id)));
   }
 
   /** A comment line every half minute, so a proxy never sees the stream as idle. */

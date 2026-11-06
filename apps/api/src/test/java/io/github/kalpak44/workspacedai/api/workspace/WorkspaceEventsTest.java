@@ -13,6 +13,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.Iterator;
+import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.Timeout;
@@ -21,6 +22,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
@@ -31,6 +34,7 @@ class WorkspaceEventsTest {
   @Autowired WorkspaceService service;
   @Autowired WorkspaceEvents events;
   @Autowired WorkspaceRepository repository;
+  @Autowired JdbcTemplate jdbc;
   @MockitoBean ApiKeyCheck keyCheck;
 
   @BeforeEach
@@ -70,6 +74,39 @@ class WorkspaceEventsTest {
     while (lines.hasNext()) {
       assertThat(lines.next()).isEmpty();
     }
+  }
+
+  /**
+   * A deletion another API instance handled reaches this instance's browsers through the database,
+   * as a NOTIFY committed by that instance.
+   */
+  @Test
+  @Timeout(10)
+  void relaysADeletionAnotherInstanceAnnounced() throws Exception {
+    // A workspace of its own, so the stream opens with a snapshot rather than on a heartbeat.
+    var mine = service.create(TestUsers.ADMIN, "Mine", ModelProvider.OPENROUTER, "sk-test");
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
+            .header("Authorization", TestUsers.bearer(port))
+            .header("Accept", "text/event-stream")
+            .build();
+    var lines = HttpClient.newHttpClient().send(request, BodyHandlers.ofLines()).body().iterator();
+    assertThat(nextData(lines)).contains(mine.id().toString());
+    var elsewhere = UUID.randomUUID();
+    // Someone else's workspace first: it must not reach this user's stream.
+    jdbc.query(
+        "select pg_notify(?, ?)",
+        (RowCallbackHandler) _ -> {},
+        WorkspaceDeletions.CHANNEL,
+        UUID.randomUUID() + ":" + UUID.randomUUID());
+    jdbc.query(
+        "select pg_notify(?, ?)",
+        (RowCallbackHandler) _ -> {},
+        WorkspaceDeletions.CHANNEL,
+        elsewhere + ":" + TestUsers.ADMIN);
+
+    assertThat(nextNonBlank(lines)).isEqualTo("event:" + WorkspaceEvents.DELETED);
+    assertThat(lines.next()).contains(elsewhere.toString());
   }
 
   private static String nextNonBlank(Iterator<String> lines) {

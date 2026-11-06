@@ -89,11 +89,11 @@
             <artifactId>flyway-database-postgresql</artifactId>
             <scope>runtime</scope>
         </dependency>
-        <!-- Version comes from the Boot BOM, so a Boot upgrade moves the driver with it. -->
+        <!-- Version comes from the Boot BOM, so a Boot upgrade moves the driver with it. Compile
+             scope, not runtime: WorkspaceDeletions listens with its LISTEN/NOTIFY API. -->
         <dependency>
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
-            <scope>runtime</scope>
         </dependency>
         <!-- Starts and stops each workspace's pod in the namespace the API runs in. On the
              JDK's own HTTP client rather than the default Vert.x one: Vert.x's threads keep
