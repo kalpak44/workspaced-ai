@@ -224,33 +224,65 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void isStartingUntilAReplicaIsReady() {
     runtime.start(id, ENVIRONMENT);
-    // The Deployment exists but has no pod yet.
+    // The Deployment exists but has no pod yet; asked at once, before the cache has it.
     assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.INITIALIZING);
     replica("a", "Running", "False");
-    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.INITIALIZING);
+    awaitStatusOf(id, WorkspaceStatus.INITIALIZING);
     replica("a", "Running", "True");
-    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.READY);
+    awaitStatusOf(id, WorkspaceStatus.READY);
   }
 
   @Test
   void isStartingAgainWhileTheDeploymentReplacesAPodThatFailed() {
     runtime.start(id, ENVIRONMENT);
     replica("a", "Failed", "False");
-    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.INITIALIZING);
+    awaitStatusOf(id, WorkspaceStatus.INITIALIZING);
     // A ready replica wins over one that is on its way out.
     replica("b", "Running", "True");
-    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.READY);
+    awaitStatusOf(id, WorkspaceStatus.READY);
   }
 
   @Test
   void judgesAWorkspaceWithNoDeploymentByItsBarePodOrFailsIt() {
     var missing = UUID.randomUUID();
     bare("Running", "True");
-    assertThat(runtime.statuses(List.of(id, missing)))
-        .containsEntry(id, WorkspaceStatus.READY)
-        .containsEntry(missing, WorkspaceStatus.FAILED);
+    awaitStatusOf(id, WorkspaceStatus.READY);
+    assertThat(runtime.statuses(List.of(missing))).containsEntry(missing, WorkspaceStatus.FAILED);
     bare("Failed", "False");
-    assertThat(runtime.statuses(List.of(id))).containsEntry(id, WorkspaceStatus.FAILED);
+    awaitStatusOf(id, WorkspaceStatus.FAILED);
+  }
+
+  @Test
+  void answersStatusesFromItsCacheWithoutAskingTheApiServer() {
+    runtime.start(id, ENVIRONMENT);
+    replica("a", "Running", "True");
+    awaitStatusOf(id, WorkspaceStatus.READY);
+    var others = new java.util.ArrayList<UUID>();
+    for (var i = 0; i < 20; i++) {
+      var other = UUID.randomUUID();
+      runtime.start(other, ENVIRONMENT);
+      others.add(other);
+    }
+    for (var other : others) {
+      awaitStatusOf(other, WorkspaceStatus.INITIALIZING);
+    }
+    var all = new java.util.ArrayList<>(others);
+    all.add(id);
+
+    var before = server.getRequestCount();
+    for (var i = 0; i < 10; i++) {
+      assertThat(runtime.statuses(all)).hasSize(21).containsEntry(id, WorkspaceStatus.READY);
+    }
+    assertThat(server.getRequestCount()).isEqualTo(before);
+  }
+
+  /** The cache follows the API server a moment behind, so a status is waited for, not read once. */
+  private void awaitStatusOf(UUID workspace, WorkspaceStatus expected) {
+    var deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
+    while (runtime.statuses(List.of(workspace)).get(workspace) != expected) {
+      assertThat(System.nanoTime()).as("status of %s", workspace).isLessThan(deadline);
+      java.util.concurrent.locks.LockSupport.parkNanos(TimeUnit.MILLISECONDS.toNanos(20));
+    }
   }
 
   @Test

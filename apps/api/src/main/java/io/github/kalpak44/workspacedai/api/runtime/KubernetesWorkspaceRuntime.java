@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.fabric8.kubernetes.api.model.ConfigMapBuilder;
 import io.fabric8.kubernetes.api.model.DeletionPropagation;
+import io.fabric8.kubernetes.api.model.HasMetadata;
 import io.fabric8.kubernetes.api.model.IntOrString;
 import io.fabric8.kubernetes.api.model.ObjectMeta;
 import io.fabric8.kubernetes.api.model.ObjectMetaBuilder;
@@ -55,6 +56,8 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   static final int HARNESS_PORT = 4096;
   // The user the harness image runs as, which owns the home it works in.
   private static final long HARNESS_USER = 1000L;
+  private static final String BY_WORKSPACE = "workspace";
+  private static final long SYNC_TIMEOUT_SECONDS = 30;
 
   private final KubernetesClient client;
   private final String namespace;
@@ -62,7 +65,11 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   private final long stopTimeoutMillis;
   private final String storageSize;
   private final String storageClass;
-  private SharedIndexInformer<Pod> informer;
+  // Started on first use and kept for the runtime's life: every status is read from them, so
+  // working one out costs no call to the API server.
+  private SharedIndexInformer<Pod> pods;
+  private SharedIndexInformer<Deployment> deployments;
+  private volatile BiConsumer<UUID, WorkspaceStatus> listener;
 
   public KubernetesWorkspaceRuntime(KubernetesClient client, WorkspaceProperties properties) {
     this.client = client;
@@ -225,36 +232,22 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     return Optional.of(new HarnessEndpoint(URI.create(url), password));
   }
 
+  /**
+   * Read from the informers' caches, which the API server keeps current, rather than by listing
+   * every workspace's pods and Deployments on each call. A workspace with no Deployment in the
+   * cache is looked up by name, in case it was made a moment ago and the cache has not caught up;
+   * that is one small read, and only for a workspace being created or one already gone.
+   */
   @Override
   public Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds) {
-    var pods =
-        client
-            .pods()
-            .inNamespace(namespace)
-            .withLabel(MANAGED_BY_LABEL, MANAGED_BY)
-            .list()
-            .getItems()
-            .stream()
-            .collect(
-                Collectors.groupingBy(p -> p.getMetadata().getLabels().get(WORKSPACE_ID_LABEL)));
-    var deployments =
-        client
-            .apps()
-            .deployments()
-            .inNamespace(namespace)
-            .withLabel(MANAGED_BY_LABEL, MANAGED_BY)
-            .list()
-            .getItems()
-            .stream()
-            .map(d -> d.getMetadata().getLabels().get(WORKSPACE_ID_LABEL))
-            .collect(Collectors.toSet());
+    informers();
     var statuses = new HashMap<UUID, WorkspaceStatus>();
     for (var id : workspaceIds) {
-      var own = pods.getOrDefault(id.toString(), List.of());
+      var own = pods.getIndexer().byIndex(BY_WORKSPACE, id.toString());
       WorkspaceStatus status;
       if (own.stream().anyMatch(p -> statusOf(p) == WorkspaceStatus.READY)) {
         status = WorkspaceStatus.READY;
-      } else if (deployments.contains(id.toString())) {
+      } else if (hasDeployment(id)) {
         status = WorkspaceStatus.INITIALIZING;
       } else if (!own.isEmpty()) {
         status = statusOf(own.getFirst());
@@ -266,57 +259,102 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     return statuses;
   }
 
+  private boolean hasDeployment(UUID id) {
+    return !deployments.getIndexer().byIndex(BY_WORKSPACE, id.toString()).isEmpty()
+        || client.apps().deployments().inNamespace(namespace).withName(resourceName(id)).get()
+            != null;
+  }
+
   /**
-   * An informer rather than polling: the API server pushes each pod change as it happens. The
-   * workspace's status is worked out again on each, because one pod going is not the workspace
-   * going while its Deployment brings up the next.
+   * The API server pushes each pod change as it happens. The workspace's status is worked out again
+   * on each, because one pod going is not the workspace going while its Deployment brings up the
+   * next. A later call replaces the listener.
    */
   @Override
-  public synchronized void watch(BiConsumer<UUID, WorkspaceStatus> listener) {
-    if (informer != null) {
-      informer.close();
-    }
-    informer =
-        client
-            .pods()
-            .inNamespace(namespace)
-            .withLabel(MANAGED_BY_LABEL, MANAGED_BY)
-            .inform(
-                new ResourceEventHandler<>() {
-                  @Override
-                  public void onAdd(Pod pod) {
-                    report(listener, pod);
-                  }
-
-                  @Override
-                  public void onUpdate(Pod oldPod, Pod pod) {
-                    report(listener, pod);
-                  }
-
-                  @Override
-                  public void onDelete(Pod pod, boolean finalStateUnknown) {
-                    report(listener, pod);
-                  }
-                });
+  public void watch(BiConsumer<UUID, WorkspaceStatus> listener) {
+    this.listener = listener;
+    informers();
   }
 
   @Override
   public synchronized void close() {
-    if (informer != null) {
-      informer.close();
+    if (pods != null) {
+      pods.close();
     }
+    if (deployments != null) {
+      deployments.close();
+    }
+  }
+
+  /** Both caches, filled before this returns, so a status read straight after is complete. */
+  private synchronized void informers() {
+    if (pods != null) {
+      return;
+    }
+    var podInformer =
+        client
+            .pods()
+            .inNamespace(namespace)
+            .withLabel(MANAGED_BY_LABEL, MANAGED_BY)
+            .runnableInformer(0);
+    podInformer.addIndexers(Map.of(BY_WORKSPACE, KubernetesWorkspaceRuntime::workspaceOf));
+    podInformer.addEventHandler(
+        new ResourceEventHandler<>() {
+          @Override
+          public void onAdd(Pod pod) {
+            report(pod);
+          }
+
+          @Override
+          public void onUpdate(Pod oldPod, Pod pod) {
+            report(pod);
+          }
+
+          @Override
+          public void onDelete(Pod pod, boolean finalStateUnknown) {
+            report(pod);
+          }
+        });
+    var deploymentInformer =
+        client
+            .apps()
+            .deployments()
+            .inNamespace(namespace)
+            .withLabel(MANAGED_BY_LABEL, MANAGED_BY)
+            .runnableInformer(0);
+    deploymentInformer.addIndexers(Map.of(BY_WORKSPACE, KubernetesWorkspaceRuntime::workspaceOf));
+    try {
+      deploymentInformer.start().toCompletableFuture().get(SYNC_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+      podInformer.start().toCompletableFuture().get(SYNC_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new IllegalStateException("interrupted watching workspaces", e);
+    } catch (ExecutionException | TimeoutException e) {
+      podInformer.close();
+      deploymentInformer.close();
+      throw new IllegalStateException("could not watch workspaces", e);
+    }
+    deployments = deploymentInformer;
+    pods = podInformer;
+  }
+
+  private static List<String> workspaceOf(HasMetadata resource) {
+    var labels = resource.getMetadata().getLabels();
+    var id = labels == null ? null : labels.get(WORKSPACE_ID_LABEL);
+    return id == null ? List.of() : List.of(id);
   }
 
   /**
    * A lookup that fails, as one does while the client shuts down, is skipped rather than thrown
    * into the informer: the next change or the next client's snapshot reports the status again.
    */
-  private void report(BiConsumer<UUID, WorkspaceStatus> listener, Pod pod) {
-    var label = pod.getMetadata().getLabels().get(WORKSPACE_ID_LABEL);
-    if (label == null) {
+  private void report(Pod pod) {
+    var listener = this.listener;
+    var label = workspaceOf(pod);
+    if (listener == null || label.isEmpty()) {
       return;
     }
-    var id = UUID.fromString(label);
+    var id = UUID.fromString(label.getFirst());
     try {
       listener.accept(id, statuses(List.of(id)).get(id));
     } catch (KubernetesClientException e) {
