@@ -31,6 +31,7 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -50,9 +51,8 @@ public class OpenCodeHarness implements Harness {
   private static final Duration SHELL_POLL = Duration.ofMillis(200);
   private static final String CONFIG_DIRECTORY = HOME + "/.config/opencode";
   private static final String MCP_CONFIG = "opencode.jsonc";
-  private static final String GUIDE = "guide.md";
-  private static final String GENERAL_INSTRUCTIONS = "general.md";
-  private static final String WORKSPACE_INSTRUCTIONS = "workspace.md";
+  private static final String MARKDOWN = ".md";
+  private static final Pattern INSTRUCTION_NAME = Pattern.compile(INSTRUCTION_NAME_PATTERN);
   private static final String EVENT_TYPES =
       String.join(
           ",",
@@ -403,32 +403,66 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
-  public String workspaceGuide(HarnessEndpoint endpoint) {
-    return readFile(endpoint, INSTRUCTIONS_DIRECTORY, GUIDE);
+  public List<String> instructionFiles(HarnessEndpoint endpoint) {
+    var response =
+        send(request(endpoint, withLocation("/api/fs/list", INSTRUCTIONS_DIRECTORY)).GET());
+    if (response.statusCode() == 404) {
+      return List.of();
+    }
+    var names = new ArrayList<String>();
+    for (var entry : json.readTree(check(response).body()).path("data")) {
+      var path = entry.path("path").asString("");
+      if ("file".equals(entry.path("type").asString(""))
+          && path.endsWith(MARKDOWN)
+          && INSTRUCTION_NAME
+              .matcher(path.substring(0, path.length() - MARKDOWN.length()))
+              .matches()) {
+        names.add(path.substring(0, path.length() - MARKDOWN.length()));
+      }
+    }
+    names.sort(null);
+    return names;
   }
 
   @Override
-  public boolean writeInstructions(HarnessEndpoint endpoint, String general, String workspace) {
-    var changed = writeIfChanged(endpoint, GENERAL_INSTRUCTIONS, general);
-    changed |= writeIfChanged(endpoint, WORKSPACE_INSTRUCTIONS, workspace);
-    if (changed) {
-      call(endpoint, "POST", "/api/location/reload", null);
-    }
-    return changed;
+  public Optional<String> readInstructions(HarnessEndpoint endpoint, String name) {
+    return readFile(endpoint, INSTRUCTIONS_DIRECTORY, instructionFile(name));
   }
 
-  private boolean writeIfChanged(HarnessEndpoint endpoint, String name, String content) {
-    if (content.equals(readFile(endpoint, INSTRUCTIONS_DIRECTORY, name))) {
-      return false;
+  /**
+   * OpenCode reads every instruction file afresh for each message, so an edit or a delete applies
+   * from the next one, in every session. Which files there are, it settles when a session's folder
+   * is first loaded: a new file reaches new sessions, each of which has a folder of its own, but
+   * sessions already open only after the workspace restarts. A reload does not change that, and
+   * would cancel questions the agent is waiting on, so none is made.
+   */
+  @Override
+  public void writeInstructions(HarnessEndpoint endpoint, String name, String content) {
+    var file = instructionFile(name);
+    // A workspace from before instructions has no folder yet.
+    if (!instructionFiles(endpoint).contains(name)) {
+      shell(endpoint, "mkdir -p -- " + quote(INSTRUCTIONS_DIRECTORY));
     }
-    writeFile(endpoint, INSTRUCTIONS_DIRECTORY + "/" + name, content);
-    return true;
+    writeFile(endpoint, INSTRUCTIONS_DIRECTORY + "/" + file, content);
   }
 
-  /** The file's text, empty while it does not exist. */
-  private String readFile(HarnessEndpoint endpoint, String directory, String name) {
+  @Override
+  public void deleteInstructions(HarnessEndpoint endpoint, String name) {
+    shell(endpoint, "rm -f -- " + quote(INSTRUCTIONS_DIRECTORY + "/" + instructionFile(name)));
+  }
+
+  /** Refuses any name that is not a plain file name, so no other path can be reached. */
+  private static String instructionFile(String name) {
+    if (name == null || !INSTRUCTION_NAME.matcher(name).matches()) {
+      throw new IllegalArgumentException("not an instruction file name: " + name);
+    }
+    return name + MARKDOWN;
+  }
+
+  /** The file's text, or empty when it does not exist. */
+  private Optional<String> readFile(HarnessEndpoint endpoint, String directory, String name) {
     var response = send(request(endpoint, withLocation("/api/fs/read/" + name, directory)).GET());
-    return response.statusCode() == 404 ? "" : check(response).body();
+    return response.statusCode() == 404 ? Optional.empty() : Optional.of(check(response).body());
   }
 
   private void writeFile(HarnessEndpoint endpoint, String path, String content) {

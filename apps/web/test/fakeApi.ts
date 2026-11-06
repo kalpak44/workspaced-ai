@@ -90,7 +90,8 @@ export function installFakeApi(
   const answers: { sessionId: string; formId: string; answer?: FormAnswer }[] = [];
   const prompts: { sessionId: string; text: string }[] = [];
   const aborted: string[] = [];
-  const instructions = new Map<string, string>();
+  // Each workspace's instruction files, by name; filled on first use as the harness seeds them.
+  const instructions = new Map<string, Map<string, string>>();
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
@@ -140,7 +141,6 @@ export function installFakeApi(
     signedIn: true,
     password: "admin",
     failProfile: false,
-    instructions: "",
     account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null } as Account,
   };
 
@@ -157,11 +157,6 @@ export function installFakeApi(
     if (url.endsWith("/api/v1/auth/logout")) {
       auth.signedIn = false;
       return new Response(null, { status: 204 });
-    }
-    if (url.endsWith("/api/v1/account/instructions")) {
-      if (!auth.signedIn) return json({}, 401);
-      if (init?.method === "PUT") auth.instructions = JSON.parse(String(init.body)).instructions;
-      return json({ instructions: auth.instructions });
     }
     if (!/\/api\/v1\/account(\/|$)/.test(url)) return null;
     if (!auth.signedIn) return json({}, 401);
@@ -193,15 +188,23 @@ export function installFakeApi(
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
     }
-    const instructionsRoute = /\/api\/v1\/workspaces\/([^/]+)\/instructions$/.exec(url);
+    const instructionsRoute = /\/api\/v1\/workspaces\/([^/]+)\/instructions(?:\/([^/]+))?$/.exec(url);
     if (instructionsRoute) {
-      const id = instructionsRoute[1];
+      const [, id, name] = instructionsRoute;
       if (!rows.some((workspace) => workspace.id === id)) return json({}, 404);
+      if (state.harnessDown) return json({}, 503);
+      // A workspace's first start seeds the harness image's default.
+      const files = instructions.get(id) ?? new Map([["working-style", "- Keep answers short."]]);
+      instructions.set(id, files);
       if (init?.method === "PUT") {
-        instructions.set(id, JSON.parse(String(init.body)).instructions);
-        return json({ instructions: instructions.get(id), applied: !state.harnessDown });
+        files.set(name, JSON.parse(String(init.body)).content);
+        return json({ name, content: files.get(name) });
       }
-      return json({ instructions: instructions.get(id) ?? "", guide: state.harnessDown ? null : "# How this workspace works\n\nOnly the home directory survives a restart." });
+      if (init?.method === "DELETE") {
+        if (!files.delete(name)) return json({}, 404);
+        return new Response(null, { status: 204 });
+      }
+      return json([...files].sort(([a], [b]) => a.localeCompare(b)).map(([n, content]) => ({ name: n, content })));
     }
     const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers|session-ttl)(?:\/(.+))?$/.exec(url);
     const terminalRoute = /\/api\/v1\/workspaces\/([^/]+)\/terminals(?:\/([^/]+))?$/.exec(url);

@@ -44,7 +44,9 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - Refer to a secret as `{env:NAME}` in MCP configuration instead of copying its value.
 - Never write a secret's value into a file, a commit or a chat message.
 
-## Files in this folder
+## The user's instructions
 
-- `~/.config/workspaced/guide.md` is this guide. It is replaced from the image on every start; do not edit it.
-- `~/.config/workspaced/general.md` and `~/.config/workspaced/workspace.md` hold the user's own instructions. The app writes them; do not edit them yourself.
+- Besides this guide, you are given every Markdown file in `~/.config/workspaced/instructions/`: the user's own instructions for this workspace, one topic per file. They apply from the next message, in every session.
+- They are the user's. The user manages them in the app (the workspace's Instructions page). Add or change a file there only when the user asks you to remember something or to change how you work: keep each file short Markdown on one topic, named for it, like `code-review.md`.
+- A change to an existing file, or deleting one, applies from your next message. A new file is given to new sessions only; this one and others already open see it after the workspace restarts. So prefer adding to the file that fits best, and when you do add one, tell the user it applies to new sessions.
+- This guide is read-only, in `/usr/share/harness/instructions/`. Never try to change it.

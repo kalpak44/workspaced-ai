@@ -1,18 +1,13 @@
-import { ArrowLeft, Camera, Sparkles, UserRound } from "lucide-react";
+import { ArrowLeft, Camera, UserRound } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
-import { useGeneralInstructions } from "../../hooks/useInstructions";
-import { GENERAL_INSTRUCTIONS_EXAMPLE } from "../../lib/instructionExamples";
 import { navigate } from "../../hooks/useRoute";
 import { Avatar, Button, TextField } from "../atoms";
 import { PageHeader, SettingsSection } from "../molecules";
-import { InstructionsEditor } from "../molecules/InstructionsEditor";
 import { ContextLayout } from "../templates/ContextLayout";
 
 export function GeneralSettingsPage() {
-  const general = useGeneralInstructions();
-  const [savingInstructions, setSavingInstructions] = useState(false);
-  const [section, setSection] = useState<"profile" | "ai">("profile");
+  const [section, setSection] = useState<"profile">("profile");
   const { account, saveProfile, changePassword: savePassword } = useAccount();
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "", avatar: account?.avatar ?? "" };
   const [profile, setProfile] = useState(saved);
@@ -85,7 +80,7 @@ export function GeneralSettingsPage() {
           </button>
         </div>
           <nav aria-label="Settings sections" className="flex gap-1 p-3 sm:flex-col">
-            {([{ id: "profile", label: "Profile", Icon: UserRound }, { id: "ai", label: "General AI", Icon: Sparkles }] as const).map(({ id, label, Icon }) => (
+            {([{ id: "profile", label: "Profile", Icon: UserRound }] as const).map(({ id, label, Icon }) => (
               <button key={id} type="button" aria-current={section === id ? "page" : undefined}
                 onClick={() => { setSection(id); setNotice(""); }}
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${section === id ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"}`}>
@@ -96,7 +91,7 @@ export function GeneralSettingsPage() {
       </>}>
       <PageHeader title="General settings" />
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
-        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">Your profile and AI instructions are saved to your account.</p>
+        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">Your profile is saved to your account.</p>
           <div className="min-w-0 flex-1">
             <div hidden={section !== "profile"} className="space-y-6">
               <SettingsSection title="Profile" description="Your photo and name, all in one place.">
@@ -138,21 +133,6 @@ export function GeneralSettingsPage() {
                     <Button label="Change password" type="submit" busy={savingPassword} disabled={!passwords.current || !passwords.next || !passwords.confirm} />
                   </div>
                 </form>}
-              </SettingsSection>
-            </div>
-            <div hidden={section !== "ai"}>
-              <SettingsSection title="General AI instructions" description="Your preferences, working style and rules. The agent is given them in every one of your workspaces, after the workspace guide and before each workspace's own instructions.">
-                {general.error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{general.error}</p>}
-                <InstructionsEditor value={general.draft} placeholder={GENERAL_INSTRUCTIONS_EXAMPLE} onChange={(value) => { general.setDraft(value); setNotice(""); }} />
-                <div className="flex items-center justify-between gap-4 border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                  <p className="text-xs text-zinc-500 dark:text-zinc-400">{general.draft.length.toLocaleString()} characters</p>
-                  <Button label="Save instructions" busy={savingInstructions} disabled={general.loading || general.saved === null || general.draft === general.saved}
-                    onClick={async () => {
-                      setSavingInstructions(true);
-                      setNotice(await general.save(general.draft) ? "Instructions saved. Running workspaces get them within moments." : "Could not save the instructions. Please try again.");
-                      setSavingInstructions(false);
-                    }} />
-                </div>
               </SettingsSection>
             </div>
             <p role="status" className="mt-4 min-h-5 text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>

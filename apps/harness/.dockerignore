@@ -2,6 +2,6 @@
 !opencode/
 !start.sh
 !terminal.sh
-!workspace-guide.md
+!instructions/
 !apk.sh
 **/.DS_Store

@@ -37,10 +37,6 @@ public class UserEntity {
   @Column(columnDefinition = "text")
   private String avatar;
 
-  // Markdown given to the agent in every one of the user's workspaces.
-  @Column(name = "ai_instructions", nullable = false, columnDefinition = "text")
-  private String instructions = "";
-
   protected UserEntity() {
     // For JPA.
   }
@@ -76,14 +72,6 @@ public class UserEntity {
 
   public String getAvatar() {
     return avatar;
-  }
-
-  public String getInstructions() {
-    return instructions;
-  }
-
-  public void setInstructions(String instructions) {
-    this.instructions = instructions;
   }
 
   public void setProfile(String firstName, String lastName, String avatar) {

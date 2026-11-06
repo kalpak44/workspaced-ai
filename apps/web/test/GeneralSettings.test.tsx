@@ -1,7 +1,6 @@
-import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
-import { GeneralSettingsPage } from "../src/components/pages/GeneralSettingsPage";
 import { UserMenu } from "../src/components/organisms/UserMenu";
 import { App } from "../src/App";
 import { resetAccount } from "../src/hooks/useAccount";
@@ -25,16 +24,13 @@ describe("general settings", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("keeps drafts across sections and saves names to the account when updated", async () => {
+  it("saves names to the account when updated", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     const view = await renderSettings();
     await user.type(screen.getByLabelText("First name"), "Ada");
     await user.type(screen.getByLabelText("Last name"), "Lovelace");
     expect(api.auth.account.firstName).toBe("");
-    await user.click(screen.getByRole("button", { name: "General AI" }));
-    await user.click(screen.getByRole("button", { name: "Profile" }));
-    expect(screen.getByLabelText("First name")).toHaveValue("Ada");
     await user.click(screen.getByRole("button", { name: "Update profile" }));
     expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
     expect(api.auth.account).toMatchObject({ firstName: "Ada", lastName: "Lovelace" });
@@ -44,54 +40,6 @@ describe("general settings", () => {
     await renderSettings();
     expect(screen.getByLabelText("Last name")).toHaveValue("Lovelace");
     expect(screen.getByRole("button", { name: "Update profile" })).toBeDisabled();
-  });
-
-  it("round trips raw Markdown through the rich editor and saves it to the account", async () => {
-    const api = installFakeApi();
-    const user = userEvent.setup();
-    render(<GeneralSettingsPage />);
-    await waitFor(() => expect(api.apiCalls().some(([url]) => String(url).endsWith("/account/instructions"))).toBe(true));
-    await user.click(screen.getByRole("button", { name: "General AI" }));
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    const markdown = "## Working style\n\nUse **clear language**.\n\n- Run tests\n- Be concise";
-    fireEvent.change(screen.getByRole("textbox", { name: "AI instructions Markdown" }), { target: { value: markdown } });
-    await user.click(screen.getByRole("button", { name: "Editor" }));
-    expect(screen.getByRole("textbox", { name: "AI instructions editor" })).toHaveTextContent("Working style");
-    expect(screen.getByText("clear language").tagName).toBe("STRONG");
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue(markdown);
-    await user.click(screen.getByRole("button", { name: "Save instructions" }));
-    expect(await screen.findByText(/Instructions saved/)).toBeInTheDocument();
-    expect(api.auth.instructions).toBe(markdown);
-    expect(screen.getByRole("button", { name: "Save instructions" })).toBeDisabled();
-  });
-
-  it("offers instructions this browser kept before as a draft until they are saved", async () => {
-    localStorage.setItem("workspaced:general-settings", JSON.stringify({ instructions: "Be kind." }));
-    const api = installFakeApi();
-    const user = userEvent.setup();
-    render(<GeneralSettingsPage />);
-    await user.click(screen.getByRole("button", { name: "General AI" }));
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("Be kind."));
-    expect(api.auth.instructions).toBe("");
-    await user.click(screen.getByRole("button", { name: "Save instructions" }));
-    await waitFor(() => expect(api.auth.instructions).toBe("Be kind."));
-    expect(localStorage.getItem("workspaced:general-settings")).toBeNull();
-  });
-
-  it("updates the formatted document and serializes real edits as Markdown", async () => {
-    const user = userEvent.setup();
-    render(<GeneralSettingsPage />);
-    await user.click(screen.getByRole("button", { name: "General AI" }));
-    const textbox = screen.getByRole("textbox", { name: "AI instructions editor" });
-    // ProseMirror observes DOM mutations, like a native browser edit.
-    await act(async () => {
-      textbox.innerHTML = "<h2>Preferences</h2><p>Write <strong>clearly</strong>.</p>";
-      fireEvent.input(textbox);
-    });
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    await waitFor(() => expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("## Preferences\n\nWrite **clearly**."));
   });
 
   it("previews and saves an avatar in the account menu, then restores the default", async () => {
@@ -108,32 +56,6 @@ describe("general settings", () => {
     await user.click(screen.getByRole("button", { name: "Update profile" }));
     await waitFor(() => expect(screen.queryByAltText("Your avatar")).not.toBeInTheDocument());
     expect(api.auth.account.avatar).toBeNull();
-  });
-
-  it("preserves tables, checklists, and code when formatted text is edited", async () => {
-    const user = userEvent.setup();
-    render(<GeneralSettingsPage />);
-    await user.click(screen.getByRole("button", { name: "General AI" }));
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "AI instructions Markdown" }), { target: {
-      value: "| Rule | Value |\n| --- | --- |\n| Style | Clear |\n\n- [x] Run tests\n\n```sh\nnpm test\n```",
-    } });
-    await user.click(screen.getByRole("button", { name: "Editor" }));
-    const textbox = screen.getByRole("textbox", { name: "AI instructions editor" });
-    expect(textbox.querySelector("table")).toHaveTextContent("Clear");
-    expect(textbox.querySelector('input[type="checkbox"]')).toBeChecked();
-    await act(async () => {
-      const paragraph = document.createElement("p");
-      paragraph.textContent = "Be concise.";
-      textbox.append(paragraph);
-      fireEvent.input(textbox);
-    });
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    const source = (screen.getByRole("textbox", { name: "AI instructions Markdown" }) as HTMLTextAreaElement).value;
-    expect(source).toContain("| Style | Clear |");
-    expect(source).toContain("[x] Run tests");
-    expect(source).toContain("```sh\nnpm test\n```");
-    expect(source).toContain("Be concise.");
   });
 
   it("rejects oversized avatars and reports save failures honestly", async () => {

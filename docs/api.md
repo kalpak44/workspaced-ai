@@ -244,25 +244,40 @@ require a reachable workspace, so they return 503 while OpenCode is unavailable.
 
 PostgreSQL holds no MCP settings or references. Migration V6 drops the old MCP table without importing its entries.
 
-## AI instructions
+## Instructions
 
-Every session's agent is given three Markdown files, in this order, through OpenCode's `instructions` config in the
-harness image:
+Every session's agent is given, through OpenCode's `instructions` config in the harness image:
 
-1. **The workspace guide**, `apps/harness/workspace-guide.md`, from the image: that it is Alpine with musl and
-   BusyBox, which tools it has, what survives a restart (only `/home/workspace`), how to install more so it lasts, and
-   that MCP servers go in `opencode.jsonc`, never in the `opencode.json` the image replaces on every start.
-   `start.sh` refreshes it on every start; nobody can edit it.
-2. **The user's general instructions**: `GET`/`PUT /api/v1/account/instructions`, `{"instructions": "…"}`.
-3. **The workspace's own instructions**: `GET /api/v1/workspaces/{id}/instructions` answers `instructions` and the
-   read-only `guide` (null while the workspace is not running); `PUT` takes `{"instructions": "…"}` and answers
-   `applied`, whether the running workspace already has them.
+1. **The system guide**, `/usr/share/harness/instructions/system.md`, read-only in the image (source:
+   `apps/harness/instructions/system.md`). It tells the agent that this is Alpine with musl and BusyBox, which tools it
+   has, that only `/home/workspace` survives a restart, how to install more so it lasts, and where MCP servers go
+   (`opencode.jsonc`, never the `opencode.json` the image replaces on every start). Nobody can edit it, and the app does
+   not show it.
+2. **The workspace's instructions**: every `*.md` in `~/.config/workspaced/instructions/`, in the persistent home. A new
+   workspace starts with the image's defaults (`apps/harness/instructions/defaults/`), copied by `start.sh` on the first
+   start only. From then on the folder is the user's: they edit it in the app, and the agent may edit it too. Nothing is
+   kept in the database; the files are the only copy.
 
-Both are Markdown of at most 100,000 characters, stored in the database, which is the source of truth. The API writes
-them to `~/.config/workspaced/general.md` and `workspace.md` in the workspace's home whenever they change and whenever
-the workspace becomes ready, so a new or replaced pod has them before its first message. A file that already holds the
-text is left alone; when one changes, OpenCode is reloaded, which cancels a question the agent is waiting on. Changing
-the general instructions updates every running workspace of the user's in the background.
+| Method   | Path                                            | Body              | Answers                                     |
+|----------|-------------------------------------------------|-------------------|---------------------------------------------|
+| `GET`    | `/api/v1/workspaces/{id}/instructions`          |                   | `[{name, content}]` in name order           |
+| `PUT`    | `/api/v1/workspaces/{id}/instructions/{name}`   | `{"content": …}`  | `{name, content}`; creates or replaces      |
+| `DELETE` | `/api/v1/workspaces/{id}/instructions/{name}`   |                   | `204`, or `404` for no such file            |
+
+A name is the file's without `.md`: up to 63 letters, digits, `-` and `_`, starting with a letter or digit, else `400`;
+content is Markdown of at most 100,000 characters. All three read or write the workspace itself, so a workspace that is
+not running answers `503`.
+
+When the agent sees a change was measured against OpenCode 2.2.5 by recording the requests it sends the model:
+
+| Change                | New sessions | Sessions already open                 |
+|-----------------------|--------------|---------------------------------------|
+| A file edited         | yes          | from their next message               |
+| A file deleted        | yes          | from their next message               |
+| A file added          | yes          | only once the workspace restarts      |
+
+Each session has a folder of its own, so a new session always sees every file. OpenCode settles which files there are
+when a session's folder first loads; its reload does not change that, so the API never reloads it for instructions.
 
 The harness image carries Python, `uv`/`uvx`, `jq`, `yq`, `make`, an SSH client, SQLite and the usual file tools
 besides Node.js and git. Anything else installs into the persistent home, without root:

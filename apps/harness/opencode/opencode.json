@@ -12,9 +12,8 @@
   },
   "update": "disable",
   "instructions": [
-    "/home/workspace/.config/workspaced/guide.md",
-    "/home/workspace/.config/workspaced/general.md",
-    "/home/workspace/.config/workspaced/workspace.md"
+    "/usr/share/harness/instructions/system.md",
+    "/home/workspace/.config/workspaced/instructions/*.md"
   ],
   "share": "disabled",
   "permissions": [

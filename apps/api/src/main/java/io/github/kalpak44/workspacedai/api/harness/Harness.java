@@ -29,11 +29,13 @@ public interface Harness {
   String SESSIONS_ROOT = HOME + "/sessions";
 
   /**
-   * The instruction files the harness image's config gives OpenCode, in order: the image's own
-   * guide to the workspace, which start.sh refreshes on every start, then the user's general
-   * instructions and the workspace's own, which the API writes.
+   * The user's own instructions: every Markdown file here is given to the agent, after the image's
+   * read-only guide. The user edits them in the app; the agent can edit them too.
    */
-  String INSTRUCTIONS_DIRECTORY = HOME + "/.config/workspaced";
+  String INSTRUCTIONS_DIRECTORY = HOME + "/.config/workspaced/instructions";
+
+  /** An instruction file's name, without ".md": a plain file name, never a path. */
+  String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
 
   /** Fails when the server is not OpenCode V2 or the project location cannot be resolved. */
   void validate(HarnessEndpoint endpoint, String directory);
@@ -116,17 +118,19 @@ public interface Harness {
    */
   boolean configureMcp(HarnessEndpoint endpoint, Map<String, McpServerConfig> servers);
 
-  /** The image's guide to the workspace, as the agent is given it; empty while it has none. */
-  String workspaceGuide(HarnessEndpoint endpoint);
+  /** The names of the workspace's instruction files, without ".md", in name order. */
+  List<String> instructionFiles(HarnessEndpoint endpoint);
+
+  /** One instruction file's Markdown; empty when there is no such file. */
+  Optional<String> readInstructions(HarnessEndpoint endpoint, String name);
 
   /**
-   * Writes the user's general instructions and the workspace's own where the agent reads them,
-   * leaving a file that already holds them untouched. Reloads only when one changed, since a reload
-   * cancels questions the agent is waiting on.
-   *
-   * @return whether anything had to change
+   * Creates or replaces an instruction file. A replaced one applies from the next message in every
+   * session; a new one in new sessions, and in those already open once the workspace restarts.
    */
-  boolean writeInstructions(HarnessEndpoint endpoint, String general, String workspace);
+  void writeInstructions(HarnessEndpoint endpoint, String name, String content);
+
+  void deleteInstructions(HarnessEndpoint endpoint, String name);
 
   /** An MCP server the harness reaches over HTTP, or one it starts in the workspace. */
   sealed interface McpServerConfig {

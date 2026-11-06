@@ -1,165 +1,82 @@
 package io.github.kalpak44.workspacedai.api.instructions;
 
-import io.github.kalpak44.workspacedai.api.ClusterLocks;
-import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
+import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
-import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatusChanged;
+import java.util.List;
 import java.util.UUID;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * The instructions every agent is given, on top of the harness image's own guide: a user's general
- * instructions, which apply to all their workspaces, and each workspace's own.
- *
- * <p>The database holds them; the harness reads them from files in the workspace's home. Those are
- * written whenever either changes and whenever the workspace becomes ready, so a new or replaced
- * pod has them before its first message. Writing compares first, so a pod that already has them is
- * not reloaded. No transaction is open while the harness is called.
+ * A workspace's instructions: Markdown files in its home, every one of which its agent is given in
+ * every session, after the harness image's read-only guide. They exist only as those files, so the
+ * user edits here exactly what the agent reads, and the agent can edit them as well. Each needs the
+ * workspace running.
  */
 @Service
 public class InstructionsService {
 
-  private static final Logger LOG = LoggerFactory.getLogger(InstructionsService.class);
-
-  private final UserRepository users;
   private final WorkspaceRepository workspaces;
   private final WorkspaceRuntime runtime;
   private final Harness harness;
-  private final ClusterLocks locks;
-  private final TransactionTemplate transactions;
-  // Writes nobody waits on: a user's workspaces after their general instructions change, and a
-  // workspace that has just become ready, which is reported on the Kubernetes informer's thread.
-  private final ExecutorService background = Executors.newVirtualThreadPerTaskExecutor();
 
   public InstructionsService(
-      UserRepository users,
-      WorkspaceRepository workspaces,
-      WorkspaceRuntime runtime,
-      Harness harness,
-      ClusterLocks locks,
-      TransactionTemplate transactions) {
-    this.users = users;
+      WorkspaceRepository workspaces, WorkspaceRuntime runtime, Harness harness) {
     this.workspaces = workspaces;
     this.runtime = runtime;
     this.harness = harness;
-    this.locks = locks;
-    this.transactions = transactions;
   }
 
-  public String general(UUID userId) {
-    return users.findById(userId).orElseThrow(InstructionsService::signedOut).getInstructions();
+  /** In name order. A file removed between listing and reading is left out. */
+  public List<InstructionFile> list(UUID workspaceId) {
+    var endpoint = endpoint(workspaceId);
+    return harness.instructionFiles(endpoint).stream()
+        .flatMap(
+            name ->
+                harness
+                    .readInstructions(endpoint, name)
+                    .map(content -> new InstructionFile(name, content))
+                    .stream())
+        .toList();
   }
 
-  /** Saved at once; every workspace of the user's that is running gets them in the background. */
-  public String setGeneral(UUID userId, String instructions) {
-    transactions.executeWithoutResult(
-        _ ->
-            users
-                .findById(userId)
-                .orElseThrow(InstructionsService::signedOut)
-                .setInstructions(instructions));
-    for (var workspace : workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(userId)) {
-      background.execute(() -> applyQuietly(workspace.getId()));
+  /** Creates the file, or replaces it whole: of two saves at once, one wins, never a mix. */
+  public InstructionFile save(UUID workspaceId, String name, String content) {
+    validate(name);
+    harness.writeInstructions(endpoint(workspaceId), name, content);
+    return new InstructionFile(name, content);
+  }
+
+  public void delete(UUID workspaceId, String name) {
+    validate(name);
+    var endpoint = endpoint(workspaceId);
+    if (!harness.instructionFiles(endpoint).contains(name)) {
+      throw new ResponseStatusException(
+          HttpStatus.NOT_FOUND, "the workspace has no instructions " + name);
     }
-    return instructions;
+    harness.deleteInstructions(endpoint, name);
   }
 
-  /** The workspace's own instructions, and the guide its harness gives the agent. */
-  public WorkspaceInstructions workspace(UUID workspaceId) {
-    var entity = workspaceEntity(workspaceId);
-    var guide =
-        runtime
-            .harness(workspaceId)
-            .map(
-                endpoint -> {
-                  try {
-                    return harness.workspaceGuide(endpoint);
-                  } catch (HarnessUnavailableException _) {
-                    return null;
-                  }
-                })
-            .orElse(null);
-    return new WorkspaceInstructions(entity.getInstructions(), guide);
-  }
-
-  /**
-   * Saved at once and written to the running workspace before this returns. A workspace that is not
-   * running gets them when it next starts; {@code applied} says which happened.
-   */
-  public SavedInstructions setWorkspace(UUID workspaceId, String instructions) {
-    transactions.executeWithoutResult(
-        _ -> workspaceEntity(workspaceId).setInstructions(instructions));
-    return new SavedInstructions(instructions, apply(workspaceId));
-  }
-
-  /** Whatever this instance hears of a workspace becoming ready, as every instance does. */
-  @EventListener
-  void onStatusChanged(WorkspaceStatusChanged changed) {
-    if (changed.status() == WorkspaceStatus.READY) {
-      background.execute(() -> applyQuietly(changed.id()));
+  private static void validate(String name) {
+    if (name == null || !name.matches(Harness.INSTRUCTION_NAME_PATTERN)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "an instruction file's name is up to 63 letters, digits, - and _, starting with a letter"
+              + " or digit");
     }
   }
 
-  /**
-   * Reads what to write inside the workspace's lock, so of two writes racing, the one that writes
-   * last also read last: an older version can never overwrite a newer one.
-   *
-   * @return false when the workspace is not running, or is gone
-   */
-  boolean apply(UUID workspaceId) {
-    var endpoint = runtime.harness(workspaceId);
-    if (endpoint.isEmpty()) {
-      return false;
+  private HarnessEndpoint endpoint(UUID workspaceId) {
+    if (!workspaces.existsById(workspaceId)) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + workspaceId);
     }
-    return locks.call(
-        "instructions:" + workspaceId,
-        () -> {
-          var workspace = workspaces.findById(workspaceId);
-          if (workspace.isEmpty()) {
-            return false;
-          }
-          var general =
-              users.findById(workspace.get().getOwnerId()).map(u -> u.getInstructions()).orElse("");
-          try {
-            harness.writeInstructions(endpoint.get(), general, workspace.get().getInstructions());
-            return true;
-          } catch (HarnessUnavailableException _) {
-            return false;
-          }
-        });
-  }
-
-  private void applyQuietly(UUID workspaceId) {
-    try {
-      apply(workspaceId);
-    } catch (RuntimeException e) {
-      LOG.warn(
-          "could not write the instructions of workspace {}; it gets them on its next start",
-          workspaceId,
-          e);
-    }
-  }
-
-  private WorkspaceEntity workspaceEntity(UUID id) {
-    return workspaces
-        .findById(id)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + id));
-  }
-
-  private static ResponseStatusException signedOut() {
-    return new ResponseStatusException(HttpStatus.UNAUTHORIZED, "sign in first");
+    return runtime
+        .harness(workspaceId)
+        .orElseThrow(
+            () -> new HarnessUnavailableException("the workspace's harness is not running"));
   }
 }

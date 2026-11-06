@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -15,59 +15,86 @@ beforeEach(() => {
 
 type User = ReturnType<typeof userEvent.setup>;
 
+/** Workspace settings, Instructions section, once its files have loaded. */
 async function openInstructions(user: User) {
   globalThis.history.replaceState(null, "", "/workspaces/starter/settings");
   render(<App />);
-  await user.click(await screen.findByRole("button", { name: "AI instructions" }));
-  return screen.findByRole("region", { name: "Workspace instructions" });
+  await user.click(await screen.findByRole("button", { name: "Instructions" }));
+  return screen.findByRole("navigation", { name: "Instruction files" });
 }
 
-describe("workspace AI instructions", () => {
-  it("shows the read-only guide and saves the workspace's own instructions to it", async () => {
-    const user = userEvent.setup();
-    await openInstructions(user);
-    await user.click(screen.getByText("Show the guide"));
-    expect(screen.getByText("Only the home directory survives a restart.")).toBeInTheDocument();
+async function typeRaw(user: User, value: string) {
+  await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "AI instructions Markdown" }), { target: { value } });
+}
 
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "AI instructions Markdown" }), { target: { value: "Use pnpm." } });
-    await user.click(screen.getByRole("button", { name: "Save instructions" }));
+describe("workspace instructions", () => {
+  it("opens with the workspace's files and saves an edited one", async () => {
+    const user = userEvent.setup();
+    const files = await openInstructions(user);
+    await waitFor(() => expect(within(files).getByRole("button", { name: /working-style/ })).toHaveAttribute("aria-current", "page"));
+
+    await typeRaw(user, "- Keep answers very short.");
+    expect(within(files).getByLabelText("Unsaved changes")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save" }));
 
     expect(await screen.findByText(/uses them from its next message/)).toBeInTheDocument();
-    expect(api.instructions.get("starter")).toBe("Use pnpm.");
-    expect(screen.getByRole("button", { name: "Save instructions" })).toBeDisabled();
+    expect(api.instructions.get("starter")?.get("working-style")).toBe("- Keep answers very short.");
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 
-  it("says a stopped workspace gets them when it next starts", async () => {
+  it("adds a new file, refusing a name that is not a plain file name", async () => {
+    const user = userEvent.setup();
+    await openInstructions(user);
+    await user.click(screen.getByRole("button", { name: "New instructions" }));
+    const form = screen.getByRole("form", { name: "New instructions" });
+    await user.type(within(form).getByLabelText("Name"), "../secrets");
+    expect(screen.getByText(/Use up to 63 letters/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create" })).toBeDisabled();
+
+    await user.clear(within(form).getByLabelText("Name"));
+    await user.type(within(form).getByLabelText("Name"), "code-review");
+    await user.click(screen.getByRole("button", { name: "Create" }));
+    const files = screen.getByRole("navigation", { name: "Instruction files" });
+    expect(await within(files).findByRole("button", { name: /code-review/ })).toHaveAttribute("aria-current", "page");
+
+    await typeRaw(user, "- Point out missing tests.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText(/uses them from its next message/);
+    expect(api.instructions.get("starter")?.get("code-review")).toBe("- Point out missing tests.");
+  });
+
+  it("keeps unsaved edits per file while switching between them", async () => {
+    api.instructions.set("starter", new Map([["a-file", "A"], ["b-file", "B"]]));
+    const user = userEvent.setup();
+    const files = await openInstructions(user);
+    await waitFor(() => expect(within(files).getByRole("button", { name: /a-file/ })).toHaveAttribute("aria-current", "page"));
+    await typeRaw(user, "A changed");
+    await user.click(within(files).getByRole("button", { name: /b-file/ }));
+    expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("B");
+    await user.click(within(files).getByRole("button", { name: /a-file/ }));
+    expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("A changed");
+  });
+
+  it("deletes a file only once confirmed", async () => {
+    const user = userEvent.setup();
+    await openInstructions(user);
+    await user.click(await screen.findByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Keep" }));
+    expect(api.instructions.get("starter")?.has("working-style")).toBe(true);
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    await user.click(screen.getByRole("button", { name: "Delete working-style" }));
+    expect(await screen.findByText("No instructions yet. Add some with New instructions.")).toBeInTheDocument();
+    expect(api.instructions.get("starter")?.size).toBe(0);
+  });
+
+  it("asks to start a workspace that is not running", async () => {
     api.state.harnessDown = true;
     const user = userEvent.setup();
-    await openInstructions(user);
-    expect(screen.getByText("Start the workspace to see its guide.")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    fireEvent.change(screen.getByRole("textbox", { name: "AI instructions Markdown" }), { target: { value: "Use pnpm." } });
-    await user.click(screen.getByRole("button", { name: "Save instructions" }));
-    expect(await screen.findByText(/gets them when it next starts/)).toBeInTheDocument();
-  });
-
-  it("shows an example while empty, which is never saved", async () => {
-    const user = userEvent.setup();
-    await openInstructions(user);
-    const editor = screen.getByRole("textbox", { name: "AI instructions editor" });
-    await waitFor(() => expect(editor.querySelector("[data-placeholder]")?.getAttribute("data-placeholder")).toContain("Ask before deleting or replacing anything."));
-    expect(screen.getByRole("button", { name: "Save instructions" })).toBeDisabled();
-
-    await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
-    const raw = screen.getByRole("textbox", { name: "AI instructions Markdown" });
-    expect(raw).toHaveValue("");
-    expect(raw.getAttribute("placeholder")).toContain("Ask before deleting or replacing anything.");
-    expect(api.instructions.has("starter")).toBe(false);
-  });
-
-  it("links to the general instructions it builds on", async () => {
-    const user = userEvent.setup();
-    await openInstructions(user);
-    await user.click(screen.getByRole("button", { name: "general AI instructions" }));
-    expect(globalThis.location.pathname).toBe("/settings");
+    globalThis.history.replaceState(null, "", "/workspaces/starter/settings");
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Instructions" }));
+    expect(await screen.findByText(/Start it to see and edit them/)).toBeInTheDocument();
   });
 });

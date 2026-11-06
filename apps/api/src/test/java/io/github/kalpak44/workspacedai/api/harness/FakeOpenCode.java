@@ -146,7 +146,11 @@ public class FakeOpenCode implements AutoCloseable {
       return;
     }
     if (method.equals("POST") && path.equals("/api/shell")) {
-      shellCommands.add(JSON.readTree(requests.getLast().body()).path("command").asString());
+      var command = JSON.readTree(requests.getLast().body()).path("command").asString();
+      shellCommands.add(command);
+      if (command.startsWith("rm -f -- '") && command.endsWith("'")) {
+        files.remove(command.substring("rm -f -- '".length(), command.length() - 1));
+      }
       respond(exchange, 200, "{\"data\":{\"id\":\"sh_1\",\"status\":\"running\"}}");
       return;
     }
@@ -240,7 +244,18 @@ public class FakeOpenCode implements AutoCloseable {
       }
       case "DELETE /api/debug/location" -> respond(exchange, 204, null);
       default -> {
-        if ((method + " " + path).startsWith("GET /api/fs/read/")) {
+        if ((method + " " + path).equals("GET /api/fs/list")) {
+          var directory = query(exchange.getRequestURI(), "location[directory]") + "/";
+          var entries =
+              files.keySet().stream()
+                  .filter(
+                      f ->
+                          f.startsWith(directory) && !f.substring(directory.length()).contains("/"))
+                  .sorted()
+                  .map(f -> Map.of("path", f.substring(directory.length()), "type", "file"))
+                  .toList();
+          respond(exchange, 200, JSON.writeValueAsString(Map.of("data", entries)));
+        } else if ((method + " " + path).startsWith("GET /api/fs/read/")) {
           var file =
               query(exchange.getRequestURI(), "location[directory]")
                   + "/"

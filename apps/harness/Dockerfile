@@ -63,9 +63,10 @@ COPY --from=fetch /opencode /usr/local/bin/opencode
 # baked in there. start.sh copies it across instead. Not /etc/opencode: opencode reads that
 # as a managed config directory of its own, loading the plugin twice and writing into it.
 COPY --from=config /stage/.config/opencode/opencode.json /usr/share/harness/opencode/opencode.json
-# The guide every agent is given about this container: what survives a restart and where to
-# put things. start.sh copies it into the home, where OpenCode's `instructions` reads it.
-COPY workspace-guide.md /usr/share/harness/workspace-guide.md
+# What every agent is told: system.md, the guide to this container, which OpenCode reads from
+# here, read-only; and defaults/, the user's starting instructions, which start.sh copies into
+# the home on the first start, where the user and the agent can change them.
+COPY instructions/ /usr/share/harness/instructions/
 COPY start.sh /usr/local/bin/start-harness
 # Ahead of /sbin/apk on PATH, so a plain `apk add` installs into the home without root.
 COPY apk.sh /usr/local/bin/apk

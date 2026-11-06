@@ -1,35 +1,33 @@
 import { send } from "./http";
 import { workspaceUrl } from "./workspacesApi";
 
-/** A workspace's own instructions, and the read-only guide its harness gives the agent first. */
-export interface WorkspaceInstructions {
-  readonly instructions: string;
-  /** Null while the workspace is not running, since the guide comes from its harness. */
-  readonly guide: string | null;
+/** A Markdown file in the workspace that its agent is given in every session. */
+export interface InstructionFile {
+  /** The file's name, without ".md". */
+  readonly name: string;
+  readonly content: string;
 }
 
-export interface SavedInstructions {
-  readonly instructions: string;
-  /** Whether the running workspace has them already; otherwise it gets them on its next start. */
-  readonly applied: boolean;
+// The API's rule, checked here too so a name never becomes a path: up to 63 letters, digits,
+// - and _, starting with a letter or digit.
+export const INSTRUCTION_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,62}$/;
+
+function fileUrl(workspaceId: string, name: string): string {
+  if (!INSTRUCTION_NAME.test(name)) {
+    throw new Error("Invalid instructions name");
+  }
+  return `${workspaceUrl(workspaceId)}/instructions/${name}`;
 }
 
-const GENERAL_URL = "/api/v1/account/instructions";
-
-export async function getGeneralInstructions(): Promise<string> {
-  return (await (await send(GENERAL_URL)).json()).instructions;
-}
-
-export async function setGeneralInstructions(instructions: string): Promise<string> {
-  const body = JSON.stringify({ instructions });
-  return (await (await send(GENERAL_URL, { method: "PUT", body })).json()).instructions;
-}
-
-export async function getWorkspaceInstructions(workspaceId: string): Promise<WorkspaceInstructions> {
+export async function listInstructions(workspaceId: string): Promise<InstructionFile[]> {
   return (await send(`${workspaceUrl(workspaceId)}/instructions`)).json();
 }
 
-export async function setWorkspaceInstructions(workspaceId: string, instructions: string): Promise<SavedInstructions> {
-  const body = JSON.stringify({ instructions });
-  return (await send(`${workspaceUrl(workspaceId)}/instructions`, { method: "PUT", body })).json();
+export async function saveInstructions(workspaceId: string, name: string, content: string): Promise<InstructionFile> {
+  const body = JSON.stringify({ content });
+  return (await send(fileUrl(workspaceId, name), { method: "PUT", body })).json();
+}
+
+export async function deleteInstructions(workspaceId: string, name: string): Promise<void> {
+  await send(fileUrl(workspaceId, name), { method: "DELETE" });
 }

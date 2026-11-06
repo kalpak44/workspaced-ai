@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, KeyRound, Plug, Sparkles } from "lucide-react";
+import { ArrowLeft, Clock, FileText, KeyRound, Plug } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { navigate } from "../../hooks/useRoute";
@@ -20,7 +20,7 @@ const SECTIONS = [
   { id: "mcp", label: "MCP servers", Icon: Plug },
   { id: "secrets", label: "Secrets", Icon: KeyRound },
   { id: "sessions", label: "Sessions", Icon: Clock },
-  { id: "instructions", label: "AI instructions", Icon: Sparkles },
+  { id: "instructions", label: "Instructions", Icon: FileText },
 ] as const;
 
 // The instructions editor is large, so it is only loaded once its section is opened.

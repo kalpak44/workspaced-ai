@@ -1,6 +1,6 @@
 package io.github.kalpak44.workspacedai.api.instructions;
 
-import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
+import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,24 +16,19 @@ public class InstructionsController implements InstructionsApi {
   }
 
   @Override
-  public ResponseEntity<GeneralInstructions> general() {
-    return ResponseEntity.ok(new GeneralInstructions(service.general(CurrentUser.id())));
+  public ResponseEntity<List<InstructionFile>> list(UUID workspaceId) {
+    return ResponseEntity.ok(service.list(workspaceId));
   }
 
   @Override
-  public ResponseEntity<GeneralInstructions> setGeneral(InstructionsRequest request) {
-    return ResponseEntity.ok(
-        new GeneralInstructions(service.setGeneral(CurrentUser.id(), request.instructions())));
+  public ResponseEntity<InstructionFile> save(
+      UUID workspaceId, String name, InstructionsRequest request) {
+    return ResponseEntity.ok(service.save(workspaceId, name, request.content()));
   }
 
   @Override
-  public ResponseEntity<WorkspaceInstructions> workspace(UUID workspaceId) {
-    return ResponseEntity.ok(service.workspace(workspaceId));
-  }
-
-  @Override
-  public ResponseEntity<SavedInstructions> setWorkspace(
-      UUID workspaceId, InstructionsRequest request) {
-    return ResponseEntity.ok(service.setWorkspace(workspaceId, request.instructions()));
+  public ResponseEntity<Void> delete(UUID workspaceId, String name) {
+    service.delete(workspaceId, name);
+    return ResponseEntity.noContent().build();
   }
 }
