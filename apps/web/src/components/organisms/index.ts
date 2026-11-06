@@ -10,3 +10,4 @@ export { SessionList } from "./SessionList";
 export { Sidebar } from "./Sidebar";
 export { TopBar } from "./TopBar";
 export { UserMenu } from "./UserMenu";
+export { UsersPanel } from "./UsersPanel";

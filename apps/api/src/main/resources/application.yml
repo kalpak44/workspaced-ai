@@ -35,6 +35,12 @@ spring:
     # transaction, where it can be seen.
     open-in-view: false
 
+  # A page of users holds at most this many, whatever the client asks for.
+  data:
+    web:
+      pageable:
+        max-page-size: 100
+
 workspaced:
   auth:
     # Signs the login tokens (HS256), so it must be at least 32 bytes. No default, like the

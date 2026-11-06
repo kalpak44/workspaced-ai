@@ -23,6 +23,15 @@ stays valid until it expires. A missing, invalid or expired token answers `401` 
 URL of at most 2 MB (empty removes it). `PUT /account/password` takes `currentPassword` and `newPassword` (8–72
 characters): `204`, or `422` when the current password is wrong.
 
+`GET /users` lists everyone who can sign in, a page at a time, as Spring Data's paged model:
+`{"content": [{id, username, firstName, lastName, avatar}], "page": {size, number, totalElements, totalPages}}`. It
+takes `page` (from 0), `size` (default 20, at most 100) and `sort` as `field,direction`, repeatable, over `username`,
+`firstName`, `lastName` and `createdAt` (default `createdAt,desc`); any other field is a `400`. The id breaks ties, so
+pages never overlap. `POST /users` takes `{username, password, firstName, lastName}` (names at most 100 characters,
+trimmed; password 8–72) and answers `201`, or `409` when the username is taken. `DELETE /users/{id}` stops and deletes
+each of the user's workspaces, then the user: `204`, `404` for no such user, or `409` for the signed-in user, who cannot
+delete themselves. Any signed-in user may manage users; there are no roles yet.
+
 The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
 show only the caller's, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
 against the owner before it runs. Another user's workspace answers `404`, exactly as one that does not exist.

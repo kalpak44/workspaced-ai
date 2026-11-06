@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.UUID;
 
 /** An account that signs in and owns workspaces. */
@@ -37,6 +38,10 @@ public class UserEntity {
   @Column(columnDefinition = "text")
   private String avatar;
 
+  // Set by the column default; read only to order the user list.
+  @Column(name = "created_at", insertable = false, updatable = false)
+  private Instant createdAt;
+
   protected UserEntity() {
     // For JPA.
   }
@@ -44,6 +49,12 @@ public class UserEntity {
   public UserEntity(String username, String passwordHash) {
     this.username = username;
     this.passwordHash = passwordHash;
+  }
+
+  public UserEntity(String username, String passwordHash, String firstName, String lastName) {
+    this(username, passwordHash);
+    this.firstName = firstName;
+    this.lastName = lastName;
   }
 
   public UUID getId() {
@@ -72,6 +83,10 @@ public class UserEntity {
 
   public String getAvatar() {
     return avatar;
+  }
+
+  public Instant getCreatedAt() {
+    return createdAt;
   }
 
   public void setProfile(String firstName, String lastName, String avatar) {

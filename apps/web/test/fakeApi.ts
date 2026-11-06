@@ -2,6 +2,7 @@ import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
 import type { Secret } from "../src/api/secretsApi";
+import type { User } from "../src/api/usersApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
@@ -143,6 +144,58 @@ export function installFakeApi(
     failProfile: false,
     account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null } as Account,
   };
+  // Everyone else who can sign in; the signed-in account is always listed first.
+  const users = {
+    others: [{ id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper", avatar: null }] as User[],
+    nextId: 1,
+    failDelete: false,
+    // Every list URL asked for, to see which pages and orders were fetched.
+    listed: [] as string[],
+  };
+
+  // Spring's paging: `sort` is "field,direction", repeated, most significant first. The list
+  // order stands in for creation order, oldest first, with the signed-in account the oldest.
+  function usersResponse(url: string, init?: RequestInit): Response | null {
+    const route = /\/api\/v1\/users(?:\/([^/?]+))?(?:\?(.*))?$/.exec(url);
+    if (!route) return null;
+    if (!auth.signedIn) return json({}, 401);
+    const [, id, query] = route;
+    if (init?.method === "POST") {
+      const { username, firstName, lastName } = JSON.parse(String(init.body));
+      if (username === auth.account.username || users.others.some((u) => u.username === username)) return json({}, 409);
+      const user: User = { id: `user-${users.nextId++}`, username, firstName, lastName, avatar: null };
+      users.others.push(user);
+      return json(user, 201);
+    }
+    if (init?.method === "DELETE") {
+      if (id === auth.account.id) return json({}, 409);
+      if (users.failDelete) return json({}, 500);
+      if (!users.others.some((u) => u.id === id)) return json({}, 404);
+      users.others = users.others.filter((u) => u.id !== id);
+      return new Response(null, { status: 204 });
+    }
+    users.listed.push(url);
+    const params = new URLSearchParams(query);
+    const page = Number(params.get("page") ?? 0);
+    const size = Number(params.get("size") ?? 20);
+    const all: User[] = [auth.account, ...users.others];
+    const created = new Map(all.map((u, index) => [u.id, index]));
+    const orders = params.getAll("sort").map((order) => order.split(","));
+    const sorted = [...all].sort((a, b) => {
+      for (const [field, direction] of orders) {
+        const sign = direction === "desc" ? -1 : 1;
+        const diff = field === "createdAt"
+          ? created.get(a.id)! - created.get(b.id)!
+          : String(a[field as keyof User]).localeCompare(String(b[field as keyof User]));
+        if (diff !== 0) return sign * diff;
+      }
+      return 0;
+    });
+    return json({
+      content: sorted.slice(page * size, (page + 1) * size),
+      page: { size, number: page, totalElements: all.length, totalPages: Math.ceil(all.length / size) },
+    });
+  }
 
   function accountResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/auth/csrf")) {
@@ -181,6 +234,10 @@ export function installFakeApi(
     const accountAnswer = accountResponse(url, init);
     if (accountAnswer) {
       return accountAnswer;
+    }
+    const usersAnswer = usersResponse(url, init);
+    if (usersAnswer) {
+      return usersAnswer;
     }
     if (state.fail) {
       return new Response(null, { status: state.fail });
@@ -430,5 +487,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { instructions, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { instructions, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

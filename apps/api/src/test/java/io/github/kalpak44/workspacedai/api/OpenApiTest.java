@@ -36,6 +36,9 @@ class OpenApiTest {
             "\"operationId\":\"listModelProviders\"",
             "\"operationId\":\"addWorkspaceSecret\"",
             "\"operationId\":\"removeWorkspaceSecret\"",
+            "\"operationId\":\"listUsers\"",
+            "\"operationId\":\"createUser\"",
+            "\"operationId\":\"deleteUser\"",
             "application/problem+json");
   }
 

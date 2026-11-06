@@ -29,6 +29,9 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Query("update WorkspaceEntity w set w.model = :model where w.id = :id")
   int updateModel(@Param("id") UUID id, @Param("model") String model);
 
+  @Query("select w.id from WorkspaceEntity w where w.ownerId = :ownerId")
+  List<UUID> findIdsByOwnerId(UUID ownerId);
+
   @Query("select w.ownerId from WorkspaceEntity w where w.id = :id")
   Optional<UUID> findOwnerIdById(UUID id);
 }

@@ -7,14 +7,14 @@ when a rule below is broken.
 src/
 ├── api/            fetch calls and their types — imported only by hooks/
 ├── hooks/          state and side effects (route, workspaces, sessions, chat, model providers, model settings, MCP servers,
-│                   secrets, theme, voice dictation, popover dismissal)
+│                   secrets, users, theme, voice dictation, popover dismissal)
 ├── lib/            framework-free helpers (routes, relative times, token and price formatting, storage)
 └── components/
     ├── atoms/      Logo, Button, IconButton, TextField, ChoiceCard, Spinner, Avatar, Divider — props in, markup out, no hooks
     ├── molecules/  ChatComposer, ChatMessageView, EmptyState, ErrorBanner, Markdown, Menu, Modal, PageHeader,
-    │               SecretItem, SessionCard, SettingsSection, ThemeSwitch, WorkspaceItem, WorkspaceStatusIcon
+    │               SecretItem, SessionCard, SettingsSection, ThemeSwitch, UserItem, WorkspaceItem, WorkspaceStatusIcon
     ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, ChatModelPicker, ModelPanel, McpPanel,
-    │               SecretsPanel
+    │               SecretsPanel, UsersPanel, CreateUserDialog, DeleteUserDialog
     ├── templates/  AppLayout — the frame every page sits in
     └── pages/      WorkspacesPage (the shell: sidebar, dialogs, routing), WorkspacePage, SessionPage, SettingsPage,
                     TerminalPage
@@ -30,7 +30,9 @@ src/
 The app first asks the API who is signed in (`GET /api/v1/account`) and shows a sign-in page until someone is; a fresh
 install accepts admin/admin. The session itself is an HttpOnly cookie the code never reads. Any `401` from the API
 returns the app to the sign-in page, and Logout in the account menu clears the cookie. The profile on the settings page
-(names and avatar) and the password change are saved to the account. A workspace's settings have an Instructions section:
+(names and avatar) and the password change are saved to the account. Its Users tab lists everyone who can sign in,
+sorted as chosen (newest first by default) and loaded 20 at a time as the end of the list scrolls into view; it adds a
+user in a dialog and deletes anyone but yourself after a confirmation dialog. A workspace's settings have an Instructions section:
 the workspace's instruction files, which its agent is given in every session, with an editor for each and buttons to add
 and delete them. They live in the workspace, so it must be running.
 
