@@ -99,6 +99,8 @@ export function WorkspaceItem({
           </MenuItem>
           <MenuItem
             className="gap-2 px-3 py-2"
+            // No shell to open until the pod is up.
+            disabled={workspace.status === "INITIALIZING"}
             onClick={() => {
               setMenuOpen(false);
               onTerminal();
