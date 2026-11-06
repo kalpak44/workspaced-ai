@@ -1,7 +1,7 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { Session } from "../../hooks/useSessions";
-import { IconButton } from "../atoms";
+import { IconButton, Spinner } from "../atoms";
 import { ChatComposer, ErrorBanner, SessionCard } from "../molecules";
 
 const PAGE_SIZE = 10;
@@ -19,9 +19,16 @@ interface Props {
   readonly onDelete: (id: string) => void;
 }
 
-function Placeholder() {
+/** A session row's outline, shaped like SessionCard, while the list loads. */
+function Placeholder({ width }: { readonly width: string }) {
   return (
-    <li aria-hidden className="h-[62px] animate-pulse rounded-lg bg-zinc-100 dark:bg-zinc-800/60" />
+    <li aria-hidden className="flex animate-pulse items-center gap-3 px-4 py-3">
+      <span className="size-4 shrink-0 rounded bg-zinc-200 dark:bg-zinc-800" />
+      <span className="flex min-w-0 flex-1 flex-col gap-2 py-0.5">
+        <span className={`h-3 rounded bg-zinc-200 dark:bg-zinc-800 ${width}`} />
+        <span className="h-2.5 w-16 rounded bg-zinc-100 dark:bg-zinc-800/60" />
+      </span>
+    </li>
   );
 }
 
@@ -57,7 +64,11 @@ export function SessionList(props: Props) {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="flex items-baseline gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-300">
             Recent sessions
-            {!loading && <span className="text-xs font-normal text-zinc-400">{sessions.length}</span>}
+            {loading ? (
+              <Spinner label="Loading sessions" className="size-3.5 self-center text-zinc-400" />
+            ) : (
+              <span className="text-xs font-normal text-zinc-400">{sessions.length}</span>
+            )}
           </h2>
           {!loading && pageCount > 1 && (
             <span className="text-xs text-zinc-400">Page {page} of {pageCount}</span>
@@ -71,8 +82,9 @@ export function SessionList(props: Props) {
           <ul className="flex flex-col divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-busy={loading}>
             {loading ? (
               <>
-                <Placeholder />
-                <Placeholder />
+                <Placeholder width="w-2/5" />
+                <Placeholder width="w-3/5" />
+                <Placeholder width="w-1/3" />
               </>
             ) : (
               visibleSessions.map((session) => (
