@@ -4,20 +4,20 @@
 export const GENERAL_INSTRUCTIONS_EXAMPLE = `For example:
 
 ## About me
-Who you are and what you usually work on.
+How you like to be addressed, and anything the assistant should know about you.
 
 ## How to work
-- Explain your plan briefly before a larger change.
-- Check that something works before saying it does.
-- Ask before deleting files or anything else you cannot undo.
+- Ask when something is unclear instead of guessing.
+- Say what you are about to do before you do it.
+- Tell me honestly when you are not sure.
 - Keep answers short and to the point.`;
 
 export const WORKSPACE_INSTRUCTIONS_EXAMPLE = `For example:
 
-## This workspace
-What this workspace is for, and where its main files are.
+## Purpose
+What this workspace is for.
 
 ## Rules
-- Conventions to follow here: tools, formatting, naming.
-- What needs my approval first.
-- What to keep untouched.`;
+- Ask before deleting or replacing anything.
+- Keep a short note of what was done and why.
+- Answer in the language I write in.`;
