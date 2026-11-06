@@ -81,7 +81,6 @@ public class OpenCodeHarness implements Harness {
           .connectTimeout(CONNECT_TIMEOUT)
           .build();
   private final JsonMapper json;
-  private final Object configLock = new Object();
 
   public OpenCodeHarness(JsonMapper json) {
     this.json = json;
@@ -366,12 +365,10 @@ public class OpenCodeHarness implements Harness {
     if (servers.isEmpty()) {
       return false;
     }
-    synchronized (configLock) {
-      var config = readConfig(endpoint);
-      var configured = config.withObjectProperty("mcp").withObjectProperty("servers");
-      servers.forEach((name, server) -> configured.set(name, json.valueToTree(mcpConfig(server))));
-      writeConfig(endpoint, config);
-    }
+    var config = readConfig(endpoint);
+    var configured = config.withObjectProperty("mcp").withObjectProperty("servers");
+    servers.forEach((name, server) -> configured.set(name, json.valueToTree(mcpConfig(server))));
+    writeConfig(endpoint, config);
     call(endpoint, "POST", "/api/location/reload", null);
     return true;
   }
@@ -387,15 +384,13 @@ public class OpenCodeHarness implements Harness {
 
   @Override
   public void removeMcp(HarnessEndpoint endpoint, String name) {
-    synchronized (configLock) {
-      var config = readConfig(endpoint);
-      if (config.path("mcp").path("servers") instanceof ObjectNode configured
-          && configured.has(name)) {
-        configured.remove(name);
-        writeConfig(endpoint, config);
-        call(endpoint, "POST", "/api/location/reload", null);
-        return;
-      }
+    var config = readConfig(endpoint);
+    if (config.path("mcp").path("servers") instanceof ObjectNode configured
+        && configured.has(name)) {
+      configured.remove(name);
+      writeConfig(endpoint, config);
+      call(endpoint, "POST", "/api/location/reload", null);
+      return;
     }
     call(
         endpoint,

@@ -46,6 +46,7 @@ class SettingsControllerTest {
   @Autowired WorkspaceRepository repository;
   @Autowired SessionService sessions;
   @Autowired ApplicationEventPublisher events;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -286,6 +287,46 @@ class SettingsControllerTest {
                 .statusCode())
         .isEqualTo(400);
     assertThat(OPENCODE.mcpConfigFile).isNull();
+  }
+
+  /** Another API instance's change to the same workspace's MCP servers is waited for. */
+  @Test
+  void waitsForAnotherInstancesChangeToTheMcpServers() throws Exception {
+    holdMcpLock();
+    var release =
+        Thread.ofVirtual()
+            .start(
+                () -> {
+                  java.util.concurrent.locks.LockSupport.parkNanos(300_000_000L);
+                  jdbc.update(
+                      "update shedlock set lock_until = timezone('utc', now()) where name = ?",
+                      SettingsService.mcpLock(workspace));
+                });
+    var started = System.nanoTime();
+    var added = send("POST", "/mcp-servers", "{\"name\":\"docs\",\"url\":\"https://mcp.test\"}");
+    release.join();
+    assertThat(added.statusCode()).isEqualTo(201);
+    assertThat(System.nanoTime() - started).isGreaterThanOrEqualTo(300_000_000L);
+    assertThat(OPENCODE.configuredMcp().has("docs")).isTrue();
+  }
+
+  @Test
+  void refusesAnMcpChangeWhileAnotherOutlastsTheWait() throws Exception {
+    holdMcpLock();
+    var refused = send("POST", "/mcp-servers", "{\"name\":\"docs\",\"url\":\"https://mcp.test\"}");
+    assertThat(refused.statusCode()).isEqualTo(409);
+    assertThat(OPENCODE.configuredMcp().has("docs")).isFalse();
+    assertThat(send("DELETE", "/mcp-servers/docs", null).statusCode()).isEqualTo(409);
+  }
+
+  /** As another API instance would, mid-change: its lease runs an hour from now. */
+  private void holdMcpLock() {
+    jdbc.update(
+        "insert into shedlock (name, lock_until, locked_at, locked_by)"
+            + " values (?, timezone('utc', now()) + interval '1 hour', timezone('utc', now()),"
+            + " 'another-instance') on conflict (name) do update set"
+            + " lock_until = excluded.lock_until, locked_by = excluded.locked_by",
+        SettingsService.mcpLock(workspace));
   }
 
   private HttpResponse<String> send(String method, String path, String json) throws Exception {

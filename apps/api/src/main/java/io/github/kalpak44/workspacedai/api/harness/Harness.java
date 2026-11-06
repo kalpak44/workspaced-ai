@@ -102,6 +102,8 @@ public interface Harness {
   /**
    * Adds or replaces MCP servers in the harness's global configuration, which every session's
    * project reads, and reloads it. They outlast a restart, since the configuration is in the home.
+   * The file is read and written back whole, so two changes to one workspace must not overlap; the
+   * caller makes them take turns, as does {@code removeMcp}'s.
    *
    * @return whether anything had to change
    */

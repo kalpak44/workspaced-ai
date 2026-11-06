@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.settings;
 
+import io.github.kalpak44.workspacedai.api.ClusterLocks;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
@@ -30,12 +31,17 @@ public class SettingsService {
   private final WorkspaceRepository workspaces;
   private final WorkspaceRuntime runtime;
   private final Harness harness;
+  private final ClusterLocks locks;
 
   public SettingsService(
-      WorkspaceRepository workspaces, WorkspaceRuntime runtime, Harness harness) {
+      WorkspaceRepository workspaces,
+      WorkspaceRuntime runtime,
+      Harness harness,
+      ClusterLocks locks) {
     this.workspaces = workspaces;
     this.runtime = runtime;
     this.harness = harness;
+    this.locks = locks;
   }
 
   @Transactional(readOnly = true)
@@ -93,14 +99,24 @@ public class SettingsService {
         .toList();
   }
 
+  /**
+   * The harness's config file is read, changed and written back, so two changes to one workspace
+   * take turns, whichever API instance each reaches; otherwise the later write would drop the
+   * earlier one's server.
+   */
   public McpServer addMcpServer(UUID workspaceId, McpServerRequest request) {
     workspace(workspaceId);
+    var config = config(request);
     var endpoint = endpoint(workspaceId);
-    if (harness.mcpStatus(endpoint).containsKey(request.name())) {
-      throw new ResponseStatusException(
-          HttpStatus.CONFLICT, "the workspace already has an MCP server " + request.name());
-    }
-    harness.configureMcp(endpoint, Map.of(request.name(), config(request)));
+    locks.run(
+        mcpLock(workspaceId),
+        () -> {
+          if (harness.mcpStatus(endpoint).containsKey(request.name())) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "the workspace already has an MCP server " + request.name());
+          }
+          harness.configureMcp(endpoint, Map.of(request.name(), config));
+        });
     // Projects rebuilt by the reload list their servers only once they have started them.
     return mcpServers(workspaceId).stream()
         .filter(s -> s.name().equals(request.name()))
@@ -111,11 +127,19 @@ public class SettingsService {
   public void removeMcpServer(UUID workspaceId, String name) {
     workspace(workspaceId);
     var endpoint = endpoint(workspaceId);
-    if (!harness.mcpStatus(endpoint).containsKey(name)) {
-      throw new ResponseStatusException(
-          HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name);
-    }
-    harness.removeMcp(endpoint, name);
+    locks.run(
+        mcpLock(workspaceId),
+        () -> {
+          if (!harness.mcpStatus(endpoint).containsKey(name)) {
+            throw new ResponseStatusException(
+                HttpStatus.NOT_FOUND, "the workspace has no MCP server " + name);
+          }
+          harness.removeMcp(endpoint, name);
+        });
+  }
+
+  static String mcpLock(UUID workspaceId) {
+    return "mcp-config:" + workspaceId;
   }
 
   /** Exactly one of a URL or a command; the parts that belong to the other form are refused. */
