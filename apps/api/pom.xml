@@ -28,6 +28,7 @@
         <!-- springdoc 3.x is the line built for Boot 4; 2.x targets Boot 3. -->
         <spring-doc.version>3.2.0</spring-doc.version>
         <fabric8.version>8.0.0</fabric8.version>
+        <shedlock.version>7.10.1</shedlock.version>
 
         <!-- The floor `mvn verify` enforces. It lives here rather than in a CI step so a
              step deleted from the workflow cannot silently disable it. -->
@@ -113,6 +114,17 @@
             <groupId>io.fabric8</groupId>
             <artifactId>kubernetes-httpclient-jdk</artifactId>
             <version>${fabric8.version}</version>
+        </dependency>
+        <!-- Runs each scheduled job on one API instance at a time, with the lock in PostgreSQL. -->
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-spring</artifactId>
+            <version>${shedlock.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>net.javacrumbs.shedlock</groupId>
+            <artifactId>shedlock-provider-jdbc-template</artifactId>
+            <version>${shedlock.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>
