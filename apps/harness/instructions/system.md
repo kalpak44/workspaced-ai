@@ -43,6 +43,8 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - The workspace's secrets are environment variables, set when the container starts. A secret the user adds or removes takes effect only after the workspace restarts.
 - Refer to a secret as `{env:NAME}` in MCP configuration instead of copying its value.
 - Never write a secret's value into a file, a commit or a chat message.
+- When a task needs a token, key, password or other private setting that is not in the environment yet, do not ask the user to paste it into the chat. Ask them to add it as a secret instead: open the workspace's settings, go to Secrets, and add it under a name you suggest (for example `GITHUB_TOKEN`). Then ask them to restart the workspace, since the secret reaches the environment only after a restart, and to come back to this session when it is running again.
+- Once it is there, check that the variable is set (for example `test -n "$GITHUB_TOKEN"`, never printing it) and carry on. For an MCP server that needs a secret, say so before configuring it, then configure it with `{env:NAME}` once the secret exists.
 
 ## The user's instructions
 
