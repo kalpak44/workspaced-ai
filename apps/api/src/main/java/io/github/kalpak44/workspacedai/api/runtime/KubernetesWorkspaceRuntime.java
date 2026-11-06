@@ -324,7 +324,14 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     }
   }
 
+  /**
+   * A pod on its way out, as one is through a restart, is starting rather than ready: it keeps its
+   * Ready condition until its container stops, which would hide the restart from the status.
+   */
   static WorkspaceStatus statusOf(Pod pod) {
+    if (pod.getMetadata() != null && pod.getMetadata().getDeletionTimestamp() != null) {
+      return WorkspaceStatus.INITIALIZING;
+    }
     var status = pod.getStatus();
     var phase = status == null ? null : status.getPhase();
     if ("Failed".equals(phase) || "Succeeded".equals(phase)) {

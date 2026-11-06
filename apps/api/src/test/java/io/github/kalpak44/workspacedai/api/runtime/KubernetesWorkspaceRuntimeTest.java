@@ -289,6 +289,24 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
+  void reportsAPodThatIsShuttingDownAsStarting() {
+    var terminating =
+        new PodBuilder()
+            .withNewMetadata()
+            .withName(resourceName(id) + "-a")
+            .withDeletionTimestamp("2026-11-06T12:00:00Z")
+            .endMetadata()
+            .withNewStatus()
+            .withPhase("Running")
+            .addToConditions(
+                new PodConditionBuilder().withType("Ready").withStatus("True").build())
+            .endStatus()
+            .build();
+    assertThat(KubernetesWorkspaceRuntime.statusOf(terminating))
+        .isEqualTo(WorkspaceStatus.INITIALIZING);
+  }
+
+  @Test
   void refusesToRestartTheBarePodAWorkspaceRanAsBeforeDeployments() {
     bare("Running", "True");
     assertThatThrownBy(() -> runtime.restart(id)).isInstanceOf(IllegalStateException.class);
