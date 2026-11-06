@@ -18,7 +18,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Everyone who can sign in: listed a page at a time, created, and deleted with their workspaces. */
+/**
+ * Everyone who can sign in: listed a page at a time, created, and deleted with their workspaces.
+ */
 @Service
 public class UserService {
 
@@ -70,8 +72,7 @@ public class UserService {
             if (users.existsByUsername(username)) {
               throw taken(username);
             }
-            return User.of(
-                users.saveAndFlush(new UserEntity(username, hash, firstName, lastName)));
+            return User.of(users.saveAndFlush(new UserEntity(username, hash, firstName, lastName)));
           });
     } catch (DataIntegrityViolationException e) {
       throw taken(username);
