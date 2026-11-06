@@ -121,7 +121,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
           ) : (
             <form aria-label="New instructions" className="flex flex-col gap-2 rounded-md bg-zinc-50 p-3 dark:bg-zinc-900/60"
               onSubmit={(event) => { event.preventDefault(); void create(); }}>
-              <TextField id="instructions-name" label="Name" autoFocus value={newName} error={nameError}
+              <TextField id="instructions-name" surface="solid" label="Name" autoFocus value={newName} error={nameError}
                 hint="For example code-review" onChange={(event) => setNewName(event.target.value.trim())} />
               <div className="flex gap-2">
                 <Button label="Create" type="submit" busy={busy} disabled={!newName || nameError !== null} />

@@ -114,7 +114,7 @@ function JsonImport({ onAdd }: { readonly onAdd: Props["onAdd"] }) {
           setText(e.currentTarget.value);
           setFormError(null);
         }}
-        className="w-full resize-y rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-zinc-500 disabled:cursor-not-allowed dark:border-zinc-700 dark:bg-zinc-950"
+        className="w-full resize-y rounded-md border border-zinc-300 bg-white px-3 py-2 font-mono text-xs outline-none focus:border-zinc-500 disabled:cursor-not-allowed dark:border-zinc-700 dark:bg-zinc-900"
       />
       {formError && (
         <p id="mcp-json-error" className="text-xs text-rose-600">
@@ -228,6 +228,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
         <div className="grid gap-3 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
           <TextField
             id="mcp-name"
+            surface="solid"
             label="Name"
             placeholder="github"
             autoComplete="off"
@@ -243,6 +244,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
           />
           <TextField
             id="mcp-url"
+            surface="solid"
             label="URL"
             type="url"
             placeholder="https://example.com/mcp"
@@ -260,6 +262,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
             <div className="min-w-0 sm:flex-1">
               <TextField
                 id={`mcp-header-name-${header.key}`}
+                surface="solid"
                 label={`Header ${index + 1} name`}
                 placeholder="Authorization"
                 value={header.name}
@@ -270,6 +273,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
             <div className="col-start-1 row-start-2 min-w-0 sm:flex-[2]">
               <TextField
                 id={`mcp-header-value-${header.key}`}
+                surface="solid"
                 label={`Header ${index + 1} value`}
                 placeholder="Bearer {env:GITHUB_TOKEN}"
                 value={header.value}
