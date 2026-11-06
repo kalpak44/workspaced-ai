@@ -15,8 +15,10 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * Keeps the stored workspace and its runtime together. The runtime call happens inside the
@@ -104,6 +106,23 @@ public class WorkspaceService {
     repository.flush();
     runtime.stop(id);
     events.publishEvent(new WorkspaceDeleted(id));
+    return true;
+  }
+
+  /**
+   * Returns once the old pod is on its way out; the status stream reports the new one starting and
+   * then ready. False when no workspace has that id.
+   */
+  @Transactional(readOnly = true)
+  public boolean restart(UUID id) {
+    if (!repository.existsById(id)) {
+      return false;
+    }
+    try {
+      runtime.restart(id);
+    } catch (IllegalStateException e) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "workspace cannot be restarted", e);
+    }
     return true;
   }
 

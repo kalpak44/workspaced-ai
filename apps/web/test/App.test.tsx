@@ -292,6 +292,26 @@ describe("App", () => {
     expect(api.rows).toEqual([]);
   });
 
+  it("restarts the workspace's pod after confirming", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Restart" }));
+    let dialog = screen.getByRole("dialog", { name: "Restart Starter?" });
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(api.restarted).toEqual([]);
+
+    await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
+    await user.click(screen.getByRole("menuitem", { name: "Restart" }));
+    dialog = screen.getByRole("dialog", { name: "Restart Starter?" });
+    expect(dialog).toHaveTextContent("Sessions, files, and secrets are kept");
+    await user.click(within(dialog).getByRole("button", { name: "Restart workspace" }));
+    expect(dialog).not.toBeInTheDocument();
+    await waitFor(() => expect(api.restarted).toEqual(["starter"]));
+    expect(api.rows).toHaveLength(1);
+  });
+
   it("cancels workspace deletion from Cancel, Escape, or the backdrop", async () => {
     const user = userEvent.setup();
     await renderLoaded();

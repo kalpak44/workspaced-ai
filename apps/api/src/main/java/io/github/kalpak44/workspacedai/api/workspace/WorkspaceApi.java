@@ -200,6 +200,47 @@ public interface WorkspaceApi {
       @Valid @RequestBody WorkspaceRequest request);
 
   /**
+   * Restarts a workspace's runtime.
+   *
+   * @param id the workspace
+   */
+  @Operation(
+      operationId = "restartWorkspace",
+      summary = "Restart a workspace",
+      description =
+          "Replaces the workspace's running pod with a fresh one. Its home, sessions and files "
+              + "are kept; running processes and open terminals are not. Answers as soon as the "
+              + "old pod is going; follow /workspaces/events for INITIALIZING and then READY.")
+  @ApiResponse(responseCode = "202", description = "Restarting.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "The id is not a UUID.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No workspace has that id.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class),
+              examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "The workspace runs as a bare pod from before Deployments, which nothing would bring back.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping("/{id}/restart")
+  ResponseEntity<Void> restart(
+      @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
+          @PathVariable
+          UUID id);
+
+  /**
    * Deletes a workspace.
    *
    * @param id the workspace

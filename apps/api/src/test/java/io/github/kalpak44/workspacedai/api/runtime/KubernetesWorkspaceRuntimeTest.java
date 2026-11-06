@@ -269,6 +269,33 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
+  void restartsByDeletingThePodsAndKeepingEverythingElse() {
+    runtime.start(id, ENVIRONMENT);
+    replica("a", "Running", "True");
+    runtime.restart(id);
+    assertThat(client.pods().inNamespace(namespace()).withName(resourceName(id) + "-a").get())
+        .isNull();
+    assertThat(
+            client.apps().deployments().inNamespace(namespace()).withName(resourceName(id)).get())
+        .isNotNull();
+    assertThat(secret()).isNotNull();
+    assertThat(
+            client
+                .persistentVolumeClaims()
+                .inNamespace(namespace())
+                .withName(resourceName(id))
+                .get())
+        .isNotNull();
+  }
+
+  @Test
+  void refusesToRestartTheBarePodAWorkspaceRanAsBeforeDeployments() {
+    bare("Running", "True");
+    assertThatThrownBy(() -> runtime.restart(id)).isInstanceOf(IllegalStateException.class);
+    assertThat(client.pods().inNamespace(namespace()).withName(resourceName(id)).get()).isNotNull();
+  }
+
+  @Test
   void stopsTheBarePodAWorkspaceRanAsBeforeDeployments() {
     bare("Running", "True");
     runtime.stop(id);

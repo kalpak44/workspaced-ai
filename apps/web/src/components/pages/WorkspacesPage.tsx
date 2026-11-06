@@ -4,7 +4,7 @@ import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
 import { DEFAULT_NAME, useWorkspaces } from "../../hooks/useWorkspaces";
 import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
-import { CreateWorkspaceDialog, DeleteWorkspaceDialog, Sidebar, TopBar } from "../organisms";
+import { CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, Sidebar, TopBar } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -30,6 +30,7 @@ export function WorkspacesPage() {
     create,
     suggestName,
     rename,
+    restart,
     remove,
     patch,
   } = useWorkspaces();
@@ -37,12 +38,14 @@ export function WorkspacesPage() {
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [restartId, setRestartId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const openNew = () => setNewName(suggestName());
 
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const deleteTarget = workspaces.find((w) => w.id === deleteId) ?? null;
+  const restartTarget = workspaces.find((w) => w.id === restartId) ?? null;
 
   // Home is the first workspace, and a workspace that is gone — deleted here or in another
   // tab, or a stale link — falls back to home. Both replace the entry, so Back skips them.
@@ -127,6 +130,7 @@ export function WorkspacesPage() {
           onRename={rename}
           onSettings={(id) => navigate({ name: "settings", workspaceId: id })}
           onTerminal={(id) => navigate({ name: "terminal", workspaceId: id })}
+          onRestart={setRestartId}
           onDelete={setDeleteId}
         />
       }
@@ -144,6 +148,16 @@ export function WorkspacesPage() {
             )
           }
           onClose={() => setNewName(null)}
+        />
+      )}
+      {restartTarget && (
+        <RestartWorkspaceDialog
+          name={restartTarget.name}
+          onClose={() => setRestartId(null)}
+          onConfirm={() => {
+            restart(restartTarget.id);
+            setRestartId(null);
+          }}
         />
       )}
       {deleteTarget && (

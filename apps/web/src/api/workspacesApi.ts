@@ -58,6 +58,11 @@ export async function renameWorkspace(id: string, name: string): Promise<Workspa
   return (await send(workspaceUrl(id), { method: "PUT", body: JSON.stringify({ name }) })).json();
 }
 
+/** Answers once the old pod is going; the event stream reports the new one starting. */
+export async function restartWorkspace(id: string): Promise<void> {
+  await send(`${workspaceUrl(id)}/restart`, { method: "POST" });
+}
+
 export async function deleteWorkspace(id: string): Promise<void> {
   await send(workspaceUrl(id), { method: "DELETE" });
 }

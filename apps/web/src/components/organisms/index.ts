@@ -2,6 +2,7 @@ export { ChatModelPicker } from "./ChatModelPicker";
 export { ChatPanel } from "./ChatPanel";
 export { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 export { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
+export { RestartWorkspaceDialog } from "./RestartWorkspaceDialog";
 export { McpPanel } from "./McpPanel";
 export { ModelPanel } from "./ModelPanel";
 export { SecretsPanel } from "./SecretsPanel";

@@ -20,6 +20,12 @@ public interface WorkspaceRuntime {
    */
   void stop(UUID workspaceId);
 
+  /**
+   * Replaces its running pod with a fresh one, keeping its storage, and returns before the new one
+   * is ready. Fails when the workspace has nothing that would bring a pod back.
+   */
+  void restart(UUID workspaceId);
+
   /** Adds or replaces one secret. A running workspace sees it only once it restarts. */
   void putSecret(UUID workspaceId, String name, String value);
 

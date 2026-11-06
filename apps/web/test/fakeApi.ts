@@ -100,6 +100,8 @@ export function installFakeApi(
   ];
   // Every server POSTed, as sent, so a test can check what the UI built.
   const mcpPosted: NewMcpServer[] = [];
+  // Every workspace id a restart was asked for.
+  const restarted: string[] = [];
   const catalogue: ModelCatalogue = {
     defaultModel: "anthropic/claude-sonnet-5.5",
     models: [
@@ -185,6 +187,12 @@ export function installFakeApi(
     const secretsRoute = /\/api\/v1\/workspaces\/([^/]+)\/secrets(?:\/(.+))?$/.exec(url);
     if (secretsRoute) {
       return secretsResponse(secretsRoute[1], secretsRoute[2], init);
+    }
+    const restartRoute = /\/api\/v1\/workspaces\/([^/]+)\/restart$/.exec(url);
+    if (restartRoute) {
+      if (!rows.some((workspace) => workspace.id === restartRoute[1])) return json({}, 404);
+      restarted.push(restartRoute[1]);
+      return new Response(null, { status: 202 });
     }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
@@ -346,5 +354,5 @@ export function installFakeApi(
 
   vi.stubGlobal("fetch", fetchFn);
   vi.stubGlobal("EventSource", FakeEventSource);
-  return { sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

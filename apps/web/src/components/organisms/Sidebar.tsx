@@ -14,6 +14,7 @@ interface Props {
   readonly onRename: (id: string, name: string) => void;
   readonly onSettings: (id: string) => void;
   readonly onTerminal: (id: string) => void;
+  readonly onRestart: (id: string) => void;
   readonly onDelete: (id: string) => void;
 }
 
@@ -27,6 +28,7 @@ export function Sidebar({
   onRename,
   onSettings,
   onTerminal,
+  onRestart,
   onDelete,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -68,6 +70,7 @@ export function Sidebar({
             onRename={(name) => onRename(workspace.id, name)}
             onSettings={() => { close(); onSettings(workspace.id); }}
             onTerminal={() => { close(); onTerminal(workspace.id); }}
+            onRestart={() => { close(); onRestart(workspace.id); }}
             onDelete={() => { close(); onDelete(workspace.id); }}
           />
         ))}

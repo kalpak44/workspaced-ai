@@ -125,6 +125,14 @@ class WorkspaceControllerTest {
   }
 
   @Test
+  void restarts() throws Exception {
+    var id = create("Running");
+    assertThat(send("POST", "/" + id + "/restart", null).statusCode()).isEqualTo(202);
+    assertThat(send("POST", "/" + UUID.randomUUID() + "/restart", null).statusCode())
+        .isEqualTo(404);
+  }
+
+  @Test
   void answersNotFoundForAnUnknownIdAsAProblemDetail() throws Exception {
     var id = UUID.randomUUID();
     var renamed = send("PUT", "/" + id, "{\"name\":\"x\"}");

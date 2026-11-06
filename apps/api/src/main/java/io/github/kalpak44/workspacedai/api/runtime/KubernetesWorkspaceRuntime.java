@@ -155,6 +155,25 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     }
   }
 
+  /**
+   * Deletes the pods and lets the Deployment bring up the next, which mounts the same home and
+   * reads the Secret afresh. The bare pod a workspace ran as before Deployments has nothing to
+   * replace it, so it is left alone.
+   */
+  @Override
+  public void restart(UUID workspaceId) {
+    var deployment =
+        client.apps().deployments().inNamespace(namespace).withName(resourceName(workspaceId));
+    if (deployment.get() == null) {
+      throw new IllegalStateException("workspace " + workspaceId + " has no Deployment");
+    }
+    client
+        .pods()
+        .inNamespace(namespace)
+        .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
+        .delete();
+  }
+
   /** Creates the Secret when it is missing, as it is for a workspace made before secrets were. */
   @Override
   public void putSecret(UUID workspaceId, String name, String value) {

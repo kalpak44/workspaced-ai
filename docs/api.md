@@ -31,6 +31,7 @@ can be used, `FAILED` if it stopped or is gone. Workspaces are listed in the ord
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "apiKey": "sk-or-…"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its pods are gone, or `404`          |
+| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its pod is replaced, `404`, or `409` for a bare pod |
 
 A blank or overlong name, a blank key, an unknown provider, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
 
@@ -56,7 +57,9 @@ replaces a pod that dies, so the workspace is `INITIALIZING` again rather than `
 its environment — the provider key (`OPENROUTER_API_KEY`) plus any secrets added later in the Secret, the provider's
 base URL (`OPENROUTER_BASE_URL`) in the ConfigMap — and the pod takes both with `envFrom`. Deleting the workspace
 deletes all of them, and the call answers only once its pods are gone (`workspaced.workspace.stop-timeout`, 60
-seconds by default); if they are not gone in time, the workspace is kept and the call fails. A workspace made before
+seconds by default); if they are not gone in time, the workspace is kept and the call fails. Restarting deletes the
+workspace's pods and lets the Deployment bring up a new one on the same PVC, so sessions, files and secrets survive while
+processes and terminals do not; the event stream then reports `INITIALIZING` and `READY`. A workspace made before
 Deployments ran as a bare pod of that name, which is still reported on and deleted. Outside
 Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
 the kubeconfig points at.

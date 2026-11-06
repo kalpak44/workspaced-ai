@@ -35,6 +35,11 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public void restart(UUID workspaceId) {
+    // Nothing runs locally, so there is nothing to restart.
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     // Nothing runs that could read it, so the value is not kept anywhere.
   }

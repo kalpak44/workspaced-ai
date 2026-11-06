@@ -8,6 +8,7 @@ import {
   listWorkspaces,
   type NewWorkspace,
   renameWorkspace,
+  restartWorkspace,
   type StatusEvent,
   type Workspace,
   type WorkspaceStatus,
@@ -124,6 +125,14 @@ export function useWorkspaces() {
     );
   };
 
+  // Shown starting at once; the event stream then follows the new pod to READY.
+  const restart = (id: string) => {
+    restartWorkspace(id).then(
+      () => patch(id, { status: "INITIALIZING" }),
+      () => setError("Could not restart the workspace"),
+    );
+  };
+
   const remove = (id: string) => {
     const settle = () =>
       setDeleting((current) => {
@@ -162,6 +171,7 @@ export function useWorkspaces() {
     create,
     suggestName,
     rename,
+    restart,
     remove,
     patch,
   };
