@@ -9,6 +9,8 @@ import { Bold, Code, Heading2, Italic, List, ListOrdered, Quote, Redo2, Undo2 } 
 import { useEffect, useState } from "react";
 
 interface Props {
+  /** Shown in the editor header, for example working-style.md. */
+  readonly fileName: string;
   readonly value: string;
   readonly onChange: (value: string) => void;
   /** An example shown while the document is empty; it is never part of the value. */
@@ -16,7 +18,7 @@ interface Props {
 }
 
 /** One Markdown document, edited as formatted text or source. All styling belongs to the app. */
-export function InstructionsEditor({ value, onChange, placeholder = "" }: Props) {
+export function InstructionsEditor({ fileName, value, onChange, placeholder = "" }: Props) {
   const [mode, setMode] = useState<"editor" | "raw">("editor");
   const editor = useEditor({
     extensions: [StarterKit, Markdown, Image, TableKit, TaskList, TaskItem.configure({ nested: true }), Placeholder.configure({ placeholder })],
@@ -55,7 +57,7 @@ export function InstructionsEditor({ value, onChange, placeholder = "" }: Props)
   return (
     <div className="overflow-hidden rounded-lg border border-zinc-300 focus-within:border-zinc-500 focus-within:ring-2 focus-within:ring-zinc-900/10 dark:border-zinc-700 dark:focus-within:border-zinc-400 dark:focus-within:ring-white/10">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
-        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">AGENTS.md</span>
+        <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{fileName}</span>
         <div role="group" aria-label="Instructions editing mode" className="flex rounded-full border border-zinc-200 p-0.5 dark:border-zinc-700">
           {([{ id: "editor", label: "Editor" }, { id: "raw", label: "Raw Markdown" }] as const).map(({ id, label }) => (
             <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)}

@@ -7,7 +7,7 @@ import { InstructionsEditor } from "../src/components/molecules/InstructionsEdit
 /** The editor as a page holds it: the Markdown in state, updated on every change. */
 function Editor() {
   const [value, setValue] = useState("");
-  return <InstructionsEditor value={value} onChange={setValue} placeholder="An example" />;
+  return <InstructionsEditor fileName="working-style.md" value={value} onChange={setValue} placeholder="An example" />;
 }
 
 describe("instructions editor", () => {

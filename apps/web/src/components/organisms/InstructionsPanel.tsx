@@ -133,7 +133,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
         <div className="min-w-0 flex-1 space-y-4">
           {file ? (
             <>
-              <InstructionsEditor value={draft} placeholder={INSTRUCTIONS_EXAMPLE}
+              <InstructionsEditor fileName={`${file.name}.md`} value={draft} placeholder={INSTRUCTIONS_EXAMPLE}
                 onChange={(value) => { setDrafts((current) => ({ ...current, [file.name]: value })); setNotice(""); }} />
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{file.name}.md · {draft.length.toLocaleString()} characters</p>
