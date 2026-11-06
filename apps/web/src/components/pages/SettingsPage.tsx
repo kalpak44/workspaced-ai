@@ -1,7 +1,7 @@
 import { ArrowLeft, Clock, FileText, KeyRound, Plug } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
-import { navigate } from "../../hooks/useRoute";
+import { goBack } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { McpPanel, SecretsPanel } from "../organisms";
@@ -33,7 +33,7 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
   const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("mcp");
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id, onSecretsChanged);
-  const back = () => navigate({ name: "workspace", workspaceId: workspace.id });
+  const back = () => goBack({ name: "workspace", workspaceId: workspace.id });
 
   return (
     <ContextLayout
@@ -42,12 +42,11 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
           <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
             <button
               type="button"
-              aria-label="Back to workspace"
               onClick={back}
               className="flex min-w-0 items-center gap-2 rounded-md text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
             >
               <ArrowLeft aria-hidden className="size-4 shrink-0" />
-              <span className="truncate">{workspace.name}</span>
+              Back
             </button>
           </div>
           <nav aria-label="Workspace settings sections" className="flex flex-wrap gap-1 p-3 sm:flex-col">

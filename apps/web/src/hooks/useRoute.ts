@@ -5,6 +5,8 @@ export type { Route } from "../lib/routes";
 
 // pushState fires no event of its own, so navigate() announces the change with this one.
 const NAVIGATED = "workspaced:navigated";
+// Marks history entries this app pushed, so goBack() knows Back stays inside the app.
+const IN_APP = { inApp: true };
 
 function subscribe(onChange: () => void): () => void {
   globalThis.addEventListener("popstate", onChange);
@@ -25,11 +27,23 @@ export function navigate(route: Route, { replace = false } = {}): void {
     return;
   }
   if (replace) {
-    globalThis.history.replaceState(null, "", path);
+    globalThis.history.replaceState(globalThis.history.state, "", path);
   } else {
-    globalThis.history.pushState(null, "", path);
+    globalThis.history.pushState(IN_APP, "", path);
   }
   globalThis.dispatchEvent(new Event(NAVIGATED));
+}
+
+/**
+ * Returns to the previous page, like the browser's Back. A page opened directly by its link has
+ * no previous page here, so it goes to `fallback` instead of leaving the app.
+ */
+export function goBack(fallback: Route): void {
+  if ((globalThis.history.state as typeof IN_APP | null)?.inApp) {
+    globalThis.history.back();
+  } else {
+    navigate(fallback, { replace: true });
+  }
 }
 
 /** The page the URL names; Back and Forward change it like any other navigation. */

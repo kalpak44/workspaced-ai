@@ -523,7 +523,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Save session settings" }));
     expect(api.sessionTtl.get("starter")).toEqual({ sessionTtlEnabled: true, sessionTtlHours: 24 });
 
-    await user.click(screen.getByRole("button", { name: "Back to workspace" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
     expect(path()).toBe("/workspaces/starter");
     await sessionsHere();
   });
@@ -632,7 +632,7 @@ describe("App", () => {
   it("reports secrets that cannot be loaded", async () => {
     visit("/workspaces/starter/settings");
     render(<App />);
-    await screen.findByRole("button", { name: "Back to workspace" });
+    await screen.findByRole("button", { name: "Back" });
     api.state.fail = 500;
     // Loaded before the failure, so reopen the page to load again.
     act(() => {
@@ -650,7 +650,7 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);
-    await user.click(screen.getByRole("button", { name: "Back to workspace" }));
+    await user.click(screen.getByRole("button", { name: "Back" }));
     await user.click(screen.getByRole("button", { name: "Other" }));
     expect(heading()).toHaveTextContent("Other");
     expect(path()).toBe("/workspaces/other");
