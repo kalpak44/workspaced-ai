@@ -678,6 +678,9 @@ describe("App", () => {
     expect(FakeEventSource.latest("/sessions/s-1/events")).toBeDefined();
     expect(heading()).toHaveTextContent("New session");
     expect(screen.getByText("Working…")).toBeInTheDocument();
+    // Shown at once, before the server echoes it back.
+    expect(screen.getByRole("listitem", { name: "You" })).toHaveTextContent("List the files");
+    expect(screen.queryByRole("status", { name: "Loading the conversation" })).not.toBeInTheDocument();
 
     FakeEventSource.emitSession("status", { busy: true });
     FakeEventSource.emitSession("message", { id: "m1", role: "user" });
@@ -694,6 +697,7 @@ describe("App", () => {
     FakeEventSource.emitSession("delta", { messageId: "m2", partId: "p2", delta: "**none**." });
 
     expect(screen.getByRole("listitem", { name: "You" })).toHaveTextContent("List the files");
+    expect(screen.getAllByRole("listitem", { name: "You" })).toHaveLength(1);
     const agent = screen.getByRole("listitem", { name: "Agent" });
     expect(agent).toHaveTextContent("There are none.");
     expect(within(agent).getByText("none").tagName).toBe("STRONG");

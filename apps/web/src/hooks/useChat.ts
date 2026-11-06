@@ -20,12 +20,13 @@ export type { AgentForm, FormAnswer, FormField, FormValue } from "../api/session
 type Messages = readonly ChatMessage[];
 
 // A prompt typed before its session's page was open. The page sends it once its stream is
-// listening, so not a token of the reply is missed.
-const queued = new Map<string, string>();
+// listening, so not a token of the reply is missed. It stays here until the request settles,
+// so a page that remounts meanwhile, as in development, still shows it instead of sending again.
+const queued = new Map<string, { readonly text: string; request?: Promise<unknown> }>();
 
 /** Hands `text` to the chat that opens `sessionId` next. */
 export function queuePrompt(sessionId: string, text: string): void {
-  queued.set(sessionId, text);
+  queued.set(sessionId, { text });
 }
 
 function upsertMessage(messages: Messages, id: string, role?: ChatMessage["role"]): ChatMessage[] {
@@ -53,6 +54,18 @@ function updatePart(
   });
 }
 
+/** User messages that already have their text; an announced message may still be empty. */
+function sentCount(messages: Messages): number {
+  return messages.filter((m) => m.role === "user" && m.parts.length > 0).length;
+}
+
+/** A message being sent, shown at once until the server's copy of it arrives. */
+interface Pending {
+  readonly text: string;
+  /** How many user messages there were when it was sent; one more means it arrived. */
+  readonly after: number;
+}
+
 /**
  * The history is authoritative for every message it holds; a message only the stream has
  * seen so far is newer than the history, so it is kept after it.
@@ -74,6 +87,7 @@ export function useChat(
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [busy, setBusy] = useState(false);
   const [forms, setForms] = useState<AgentForm[]>([]);
+  const [pending, setPending] = useState<Pending | null>(null);
   const reloadForms = useRef<() => Promise<unknown>>(() => Promise.resolve());
   const formRevision = useRef(0);
   // Loading from the first render, so an empty conversation is never shown for a full one.
@@ -89,6 +103,7 @@ export function useChat(
 
   useEffect(() => {
     setMessages([]);
+    setPending(null);
     setBusy(false);
     setForms([]);
     setError(null);
@@ -128,7 +143,9 @@ export function useChat(
     };
     reloadForms.current = loadForms;
     void loadForms();
-    setLoading(true);
+    const prompt = queued.get(sessionId);
+    // A queued prompt means a new session: it has no history to wait for.
+    setLoading(prompt === undefined);
     void load().finally(() => active && setLoading(false));
 
     const source = new EventSource(sessionEventsUrl(workspaceId, sessionId));
@@ -164,13 +181,14 @@ export function useChat(
     on("refresh", () => void load(true));
     on("forms", () => void loadForms());
 
-    const prompt = queued.get(sessionId);
     if (prompt !== undefined) {
-      queued.delete(sessionId);
       setBusy(true);
-      sendMessage(workspaceId, sessionId, prompt).catch(() => {
+      setPending({ text: prompt.text, after: 0 });
+      prompt.request ??= sendMessage(workspaceId, sessionId, prompt.text).finally(() => queued.delete(sessionId));
+      prompt.request.catch(() => {
         if (active) {
           setBusy(false);
+          setPending(null);
           setError("Could not send the message");
         }
       });
@@ -191,10 +209,12 @@ export function useChat(
     }
     setBusy(true);
     setError(null);
+    setPending({ text, after: sentCount(latestMessages.current) });
     return sendMessage(workspaceId, sessionId, text).then(
       () => true,
       () => {
         setBusy(false);
+        setPending(null);
         setError("Could not send the message");
         return false;
       },
@@ -244,5 +264,9 @@ export function useChat(
     }
   };
 
-  return { messages, forms, answerForm, busy, loading, error, dismissError: () => setError(null), send, edit, stop };
+  const shown: Messages = pending && sentCount(messages) <= pending.after
+    ? [...messages, { id: "pending", role: "user", parts: [{ id: "pending", type: "text", text: pending.text, tool: null, status: null }] }]
+    : messages;
+
+  return { messages: shown, forms, answerForm, busy, loading, error, dismissError: () => setError(null), send, edit, stop };
 }
