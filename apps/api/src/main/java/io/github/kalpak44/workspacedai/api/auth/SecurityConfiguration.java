@@ -54,9 +54,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
-import org.springframework.security.web.csrf.CsrfFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
-import org.springframework.security.web.util.matcher.AndRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import org.springframework.web.filter.OncePerRequestFilter;
@@ -98,13 +96,7 @@ public class SecurityConfiguration {
   @Bean
   SecurityFilterChain api(HttpSecurity http, WorkspaceRepository workspaces) throws Exception {
     var publicPaths = publicPaths();
-    http.csrf(
-            csrf ->
-                csrf.csrfTokenRepository(csrfCookie())
-                    .requireCsrfProtectionMatcher(
-                        new AndRequestMatcher(
-                            CsrfFilter.DEFAULT_CSRF_MATCHER,
-                            SecurityConfiguration::hasTokenCookie)))
+    http.csrf(csrf -> csrf.csrfTokenRepository(csrfCookie()))
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
@@ -190,10 +182,6 @@ public class SecurityConfiguration {
     var repository = new CookieCsrfTokenRepository();
     repository.setCookieCustomizer(cookie -> cookie.sameSite("Strict"));
     return repository;
-  }
-
-  private static boolean hasTokenCookie(HttpServletRequest request) {
-    return CookieToken.cookie(request) != null;
   }
 
   private static RequestMatcher publicPaths() {

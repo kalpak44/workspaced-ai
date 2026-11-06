@@ -14,6 +14,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -31,6 +32,7 @@ import tools.jackson.databind.json.JsonMapper;
 class AuthTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
+  private static final Set<String> SAFE_METHODS = Set.of("GET", "HEAD", "OPTIONS", "TRACE");
 
   @LocalServerPort int port;
 
@@ -314,6 +316,9 @@ class AuthTest {
     var builder = HttpRequest.newBuilder(url(path));
     if (bearer != null) {
       builder.header("Authorization", bearer);
+    } else if (!SAFE_METHODS.contains(method)) {
+      var csrf = csrf();
+      builder.header("Cookie", csrf.cookie()).header("X-XSRF-TOKEN", csrf.token());
     }
     if (body != null) {
       builder.header("Content-Type", "application/json");
@@ -324,4 +329,18 @@ class AuthTest {
             .build();
     return http.send(request, BodyHandlers.ofString());
   }
+
+  private Csrf csrf() throws Exception {
+    var request = HttpRequest.newBuilder(url("/auth/csrf")).GET().build();
+    var response = http.send(request, BodyHandlers.ofString());
+    var cookie =
+        response.headers().allValues("Set-Cookie").stream()
+            .filter(value -> value.startsWith("XSRF-TOKEN="))
+            .map(value -> value.substring(0, value.indexOf(';')))
+            .findFirst()
+            .orElseThrow();
+    return new Csrf(cookie, JSON.readTree(response.body()).get("token").asString());
+  }
+
+  private record Csrf(String cookie, String token) {}
 }

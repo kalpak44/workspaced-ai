@@ -27,15 +27,31 @@ public final class TestUsers {
   }
 
   public static String login(int port, String username, String password) {
-    var request =
-        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/login"))
-            .header("Content-Type", "application/json")
-            .POST(
-                BodyPublishers.ofString(
-                    JSON.writeValueAsString(Map.of("username", username, "password", password))))
-            .build();
+    var client = HttpClient.newHttpClient();
     try {
-      var response = HttpClient.newHttpClient().send(request, BodyHandlers.ofString());
+      var issued =
+          client.send(
+              HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/csrf"))
+                  .GET()
+                  .build(),
+              BodyHandlers.ofString());
+      var csrf =
+          issued.headers().allValues("Set-Cookie").stream()
+              .filter(cookie -> cookie.startsWith("XSRF-TOKEN="))
+              .map(cookie -> cookie.substring(0, cookie.indexOf(';')))
+              .findFirst()
+              .orElseThrow();
+      var token = JSON.readTree(issued.body()).get("token").asString();
+      var request =
+          HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/login"))
+              .header("Content-Type", "application/json")
+              .header("Cookie", csrf)
+              .header("X-XSRF-TOKEN", token)
+              .POST(
+                  BodyPublishers.ofString(
+                      JSON.writeValueAsString(Map.of("username", username, "password", password))))
+              .build();
+      var response = client.send(request, BodyHandlers.ofString());
       if (response.statusCode() != 200) {
         throw new IllegalStateException("login answered " + response.statusCode());
       }
