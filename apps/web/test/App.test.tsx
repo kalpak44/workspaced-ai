@@ -240,7 +240,7 @@ describe("App", () => {
     await user.type(input, "Research{Enter}");
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
     expect(api.rows).toEqual([
-      { id: "starter", name: "Research", modelProvider: "openrouter", model: null, status: "READY" },
+      { id: "starter", name: "Research", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
     ]);
 
     await user.click(screen.getByRole("button", { name: "Actions for Research" }));
@@ -536,6 +536,35 @@ describe("App", () => {
     expect(api.sent).toEqual([{ name: "GITHUB_TOKEN", value: "ghp_secret" }]);
   });
 
+  it("warns that changed secrets need a restart, and restarts from the warning", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    const secrets = await openSettings(user);
+    expect(within(secrets).queryByRole("status", { name: "Restart required" })).not.toBeInTheDocument();
+    await user.type(within(secrets).getByRole("textbox", { name: "Name" }), "GITHUB_TOKEN");
+    await user.type(within(secrets).getByLabelText("Value"), "ghp_secret");
+    await user.click(within(secrets).getByRole("button", { name: "Add" }));
+
+    const warning = await within(secrets).findByRole("status", { name: "Restart required" });
+    expect(warning).toHaveTextContent("only after it restarts");
+    await user.click(within(warning).getByRole("button", { name: "Restart workspace" }));
+    const dialog = screen.getByRole("dialog", { name: "Restart Starter?" });
+    await user.click(within(dialog).getByRole("button", { name: "Restart workspace" }));
+
+    await waitFor(() => expect(api.restarted).toEqual(["starter"]));
+    await waitFor(() =>
+      expect(within(secrets).queryByRole("status", { name: "Restart required" })).not.toBeInTheDocument(),
+    );
+  });
+
+  it("keeps the restart warning across reloads until the workspace restarts", async () => {
+    api.rows[0] = { ...api.rows[0], restartRequired: true };
+    const user = userEvent.setup();
+    await renderLoaded();
+    const secrets = await openSettings(user);
+    expect(within(secrets).getByRole("status", { name: "Restart required" })).toBeInTheDocument();
+  });
+
   it("refuses a name that is not an environment variable, or one already set", async () => {
     const user = userEvent.setup();
     await renderLoaded();
@@ -608,7 +637,7 @@ describe("App", () => {
   });
 
   it("leaves settings when another workspace is selected", async () => {
-    api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", model: null, status: "READY" });
+    api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false });
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);

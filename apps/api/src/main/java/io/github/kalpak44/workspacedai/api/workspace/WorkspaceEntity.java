@@ -37,6 +37,18 @@ public class WorkspaceEntity {
   @Column(name = "session_ttl_hours", nullable = false)
   private int sessionTtlHours = 168;
 
+  // Secrets changed since the pod started; it sees them only once it restarts.
+  @Column(name = "secrets_pending_restart", nullable = false)
+  private boolean secretsPendingRestart;
+
+  public boolean isSecretsPendingRestart() {
+    return secretsPendingRestart;
+  }
+
+  public void setSecretsPendingRestart(boolean pending) {
+    this.secretsPendingRestart = pending;
+  }
+
   public boolean isSessionTtlEnabled() {
     return sessionTtlEnabled;
   }

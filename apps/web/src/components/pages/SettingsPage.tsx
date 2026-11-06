@@ -10,6 +10,9 @@ import { ContextLayout } from "../templates/ContextLayout";
 
 interface Props {
   readonly workspace: Workspace;
+  /** A secret was added or removed; the running workspace sees it only after a restart. */
+  readonly onSecretsChanged: () => void;
+  readonly onRestart: () => void;
 }
 
 const SECTIONS = [
@@ -19,10 +22,10 @@ const SECTIONS = [
 ] as const;
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
-export function SettingsPage({ workspace }: Props) {
+export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) {
   const [section, setSection] = useState<"mcp" | "secrets" | "sessions">("mcp");
   const mcp = useMcpServers(workspace.id);
-  const secrets = useSecrets(workspace.id);
+  const secrets = useSecrets(workspace.id, onSecretsChanged);
   const back = () => navigate({ name: "workspace", workspaceId: workspace.id });
 
   return (
@@ -85,6 +88,9 @@ export function SettingsPage({ workspace }: Props) {
             onDismissError={secrets.dismissError}
             onAdd={secrets.add}
             onRemove={secrets.remove}
+            restartRequired={workspace.restartRequired}
+            restartDisabled={workspace.status === "INITIALIZING"}
+            onRestart={onRestart}
           />
         </div>
       </div>

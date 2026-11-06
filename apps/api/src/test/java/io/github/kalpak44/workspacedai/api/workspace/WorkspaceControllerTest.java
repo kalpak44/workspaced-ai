@@ -113,7 +113,7 @@ class WorkspaceControllerTest {
     var renamed = send("PUT", "/" + id, "{\"name\":\"New\"}");
     assertThat(renamed.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(renamed.body(), Workspace.class))
-        .isEqualTo(new Workspace(id, "New", "openrouter", null, WorkspaceStatus.READY));
+        .isEqualTo(new Workspace(id, "New", "openrouter", null, WorkspaceStatus.READY, false));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
   }
 

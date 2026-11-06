@@ -91,7 +91,11 @@ export function WorkspacesPage() {
   } else if (route.name === "settings") {
     tabTitle = `Settings · ${workspace.name}`;
     page = (
-      <SettingsPage workspace={workspace} />
+      <SettingsPage
+        workspace={workspace}
+        onSecretsChanged={() => patch(workspace.id, { restartRequired: true })}
+        onRestart={() => setRestartId(workspace.id)}
+      />
     );
   } else if (route.name === "terminal") {
     tabTitle = `Terminal · ${workspace.name}`;

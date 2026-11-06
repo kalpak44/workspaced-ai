@@ -133,7 +133,7 @@ export function useWorkspaces() {
       return;
     }
     patch(id, { status: "INITIALIZING" });
-    restartWorkspace(id).catch(() => {
+    restartWorkspace(id).then(() => patch(id, { restartRequired: false })).catch(() => {
       if (before) {
         patch(id, { status: latest.current.get(id) ?? before });
       }

@@ -11,6 +11,8 @@ export interface Workspace {
   /** The model its agent replies with; null for the harness's default. */
   readonly model: string | null;
   readonly status: WorkspaceStatus;
+  /** Secrets changed since its runtime started; they apply only once it restarts. */
+  readonly restartRequired: boolean;
 }
 
 /** The key is checked with the provider before anything is created, and never stored. */

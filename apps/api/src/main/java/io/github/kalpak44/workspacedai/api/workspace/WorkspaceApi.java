@@ -38,11 +38,12 @@ public interface WorkspaceApi {
 
   String WORKSPACE_EXAMPLE =
       "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
-          + "\"modelProvider\":\"openrouter\",\"status\":\"READY\"}";
+          + "\"modelProvider\":\"openrouter\",\"status\":\"READY\",\"restartRequired\":false}";
 
   String CREATED_EXAMPLE =
       "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
-          + "\"modelProvider\":\"openrouter\",\"status\":\"INITIALIZING\"}";
+          + "\"modelProvider\":\"openrouter\",\"status\":\"INITIALIZING\","
+          + "\"restartRequired\":false}";
 
   String REJECTED_KEY_EXAMPLE =
       "{\"type\":\"about:blank\",\"title\":\"Unprocessable Content\",\"status\":422,"
@@ -209,7 +210,8 @@ public interface WorkspaceApi {
       summary = "Restart a workspace",
       description =
           "Replaces the workspace's running pod with a fresh one. Its home, sessions and files "
-              + "are kept; running processes and open terminals are not. Answers as soon as the "
+              + "are kept; running processes and open terminals are not. The new pod reads its "
+              + "secrets afresh, so restartRequired is cleared. Answers as soon as the "
               + "old pod is going; follow /workspaces/events for INITIALIZING and then READY.")
   @ApiResponse(responseCode = "202", description = "Restarting.")
   @ApiResponse(

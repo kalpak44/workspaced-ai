@@ -17,10 +17,20 @@ public record Workspace(
             example = "anthropic/claude-sonnet-5.5")
         String model,
     @Schema(description = "Whether its runtime can be used yet", example = "INITIALIZING")
-        WorkspaceStatus status) {
+        WorkspaceStatus status,
+    @Schema(
+            description =
+                "Whether secrets changed since its runtime started, and apply only after a restart",
+            example = "false")
+        boolean restartRequired) {
 
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
     return new Workspace(
-        entity.getId(), entity.getName(), entity.getModelProvider(), entity.getModel(), status);
+        entity.getId(),
+        entity.getName(),
+        entity.getModelProvider(),
+        entity.getModel(),
+        status,
+        entity.isSecretsPendingRestart());
   }
 }

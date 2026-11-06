@@ -17,7 +17,8 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * Keeps a workspace's secret names and its runtime's values together, the way WorkspaceService
  * keeps workspaces and pods: the runtime call runs inside the transaction, after the flush, so a
- * failure on either side rolls back both.
+ * failure on either side rolls back both. A running pod reads its secrets only when it starts, so
+ * each change marks the workspace as needing a restart.
  */
 @Service
 public class SecretService {
@@ -63,6 +64,7 @@ public class SecretService {
       throw conflict("the workspace already has a secret " + name);
     }
     secrets.saveAndFlush(new WorkspaceSecretEntity(workspaceId, name));
+    workspace.setSecretsPendingRestart(true);
     runtime.putSecret(workspaceId, name, value);
     return new Secret(name, false);
   }
@@ -85,6 +87,7 @@ public class SecretService {
                         HttpStatus.NOT_FOUND, "the workspace has no secret " + name));
     secrets.delete(secret);
     secrets.flush();
+    workspace.setSecretsPendingRestart(true);
     runtime.removeSecret(workspaceId, name);
   }
 

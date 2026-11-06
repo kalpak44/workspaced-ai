@@ -73,6 +73,28 @@ class SecretControllerTest {
   }
 
   @Test
+  void marksTheWorkspaceForRestartUntilItRestarts() throws Exception {
+    assertThat(pendingRestart()).isFalse();
+    send("POST", "", "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_1\"}");
+    assertThat(pendingRestart()).isTrue();
+    workspaces.restart(id);
+    assertThat(pendingRestart()).isFalse();
+    send("DELETE", "/GITHUB_TOKEN", null);
+    assertThat(pendingRestart()).isTrue();
+  }
+
+  @Test
+  void leavesNothingPendingWhenAChangeIsRefused() throws Exception {
+    assertThat(send("POST", "", "{\"name\":\"OPENROUTER_API_KEY\",\"value\":\"x\"}").statusCode())
+        .isEqualTo(409);
+    assertThat(pendingRestart()).isFalse();
+  }
+
+  private boolean pendingRestart() {
+    return workspaces.list().getFirst().restartRequired();
+  }
+
+  @Test
   void removes() throws Exception {
     send("POST", "", "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_1\"}");
     assertThat(send("DELETE", "/GITHUB_TOKEN", null).statusCode()).isEqualTo(204);

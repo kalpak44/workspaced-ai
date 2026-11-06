@@ -10,9 +10,10 @@ export type AddResult = "added" | "conflict" | "failed";
 
 /**
  * A workspace's secrets, by name. Like the workspace list, it changes only once the API
- * has accepted the change. Pass null while no workspace's settings are open.
+ * has accepted the change. Pass null while no workspace's settings are open. `onChanged`
+ * hears each accepted add or remove, which the running workspace sees only after a restart.
  */
-export function useSecrets(workspaceId: string | null) {
+export function useSecrets(workspaceId: string | null, onChanged?: () => void) {
   const [secrets, setSecrets] = useState<Secret[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -42,6 +43,7 @@ export function useSecrets(workspaceId: string | null) {
     return addSecret(workspaceId, name, value).then(
       (secret): AddResult => {
         setSecrets((current) => [...current, secret]);
+        onChanged?.();
         return "added";
       },
       (error_: unknown): AddResult =>
@@ -63,6 +65,7 @@ export function useSecrets(workspaceId: string | null) {
     removeSecret(workspaceId, name).then(
       () => {
         setSecrets((current) => current.filter((s) => s.name !== name));
+        onChanged?.();
         settle();
       },
       () => {

@@ -7,8 +7,8 @@ import { installFakeApi } from "./fakeApi";
 describe("workspace session TTL settings", () => {
   it("loads and saves retention through the API, separately for each workspace", async () => {
     const api = installFakeApi([
-      { id: "first", name: "First", modelProvider: "openrouter", model: null, status: "READY" },
-      { id: "second", name: "Second", modelProvider: "openrouter", model: null, status: "READY" },
+      { id: "first", name: "First", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
+      { id: "second", name: "Second", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
     ]);
     const user = userEvent.setup();
     const view = render(<SessionTtlPanel key="first" workspaceId="first" />);

@@ -76,7 +76,7 @@ export class FakeEventSource {
  */
 export function installFakeApi(
   initial: Workspace[] = [
-    { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "READY" },
+    { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
   ],
 ) {
   const rows = [...initial];
@@ -196,6 +196,7 @@ export function installFakeApi(
       if (!rows.some((workspace) => workspace.id === restartRoute[1])) return json({}, 404);
       if (state.failRestart) return json({}, 503);
       restarted.push(restartRoute[1]);
+      markRestartRequired(restartRoute[1], false);
       return new Response(null, { status: 202 });
     }
     const id = url.split("/api/v1/workspaces/")[1];
@@ -213,6 +214,7 @@ export function installFakeApi(
           modelProvider: body!.modelProvider!,
           model: null,
           status: state.createStatus,
+          restartRequired: false,
         };
         rows.push(created);
         return json(created, 201);
@@ -327,6 +329,11 @@ export function installFakeApi(
     return new Response(null, { status: 204 });
   }
 
+  function markRestartRequired(workspaceId: string, restartRequired: boolean) {
+    const index = rows.findIndex((w) => w.id === workspaceId);
+    rows[index] = { ...rows[index], restartRequired };
+  }
+
   async function secretsResponse(workspaceId: string, name: string | undefined, init?: RequestInit) {
     if (!rows.some((w) => w.id === workspaceId)) return json({}, 404);
     const names = secrets.get(workspaceId) ?? [];
@@ -337,6 +344,7 @@ export function installFakeApi(
           return json({}, 409);
         }
         secrets.set(workspaceId, [...names, secret.name]);
+        markRestartRequired(workspaceId, true);
         sent.push(secret);
         return json({ name: secret.name, managed: false } satisfies Secret, 201);
       }
@@ -347,6 +355,7 @@ export function installFakeApi(
           workspaceId,
           names.filter((n) => n !== name),
         );
+        markRestartRequired(workspaceId, true);
         return new Response(null, { status: 204 });
       default:
         return json([

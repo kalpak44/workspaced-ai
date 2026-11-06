@@ -57,7 +57,9 @@ replaces a pod that dies, so the workspace is `INITIALIZING` again rather than `
 its environment — the provider key (`OPENROUTER_API_KEY`) plus any secrets added later in the Secret, the provider's
 base URL (`OPENROUTER_BASE_URL`) in the ConfigMap — and the pod takes both with `envFrom`. Deleting the workspace
 deletes all of them, and the call answers only once its pods are gone (`workspaced.workspace.stop-timeout`, 60
-seconds by default); if they are not gone in time, the workspace is kept and the call fails. Restarting deletes the
+seconds by default); if they are not gone in time, the workspace is kept and the call fails. Adding or removing a secret
+sets the workspace's `restartRequired` (stored as `secrets_pending_restart`), since a running pod reads its secrets
+only when it starts; restarting clears it. Restarting deletes the
 workspace's pods and lets the Deployment bring up a new one on the same PVC, so sessions, files and secrets survive while
 processes and terminals do not; the event stream then reports `INITIALIZING` and `READY`. A workspace made before
 Deployments ran as a bare pod of that name, which is still reported on and deleted. Outside

@@ -111,13 +111,16 @@ public class WorkspaceService {
 
   /**
    * Returns once the old pod is on its way out; the status stream reports the new one starting and
-   * then ready. False when no workspace has that id.
+   * then ready. The new pod reads the secrets afresh, so none is left pending. False when no
+   * workspace has that id.
    */
-  @Transactional(readOnly = true)
+  @Transactional
   public boolean restart(UUID id) {
-    if (!repository.existsById(id)) {
+    var entity = repository.findById(id);
+    if (entity.isEmpty()) {
       return false;
     }
+    entity.get().setSecretsPendingRestart(false);
     try {
       runtime.restart(id);
     } catch (IllegalStateException e) {
