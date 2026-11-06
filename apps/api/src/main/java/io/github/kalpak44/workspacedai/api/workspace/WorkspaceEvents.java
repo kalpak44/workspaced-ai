@@ -1,11 +1,12 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.SseOutbox;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
-import java.io.IOException;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Supplier;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
@@ -13,17 +14,23 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
-/** Fans each workspace status change out to the open event streams of the user who owns it. */
+/**
+ * Fans each workspace status change out to the open event streams of the user who owns it. Changes
+ * arrive on the Kubernetes informer's thread, which only queues them on each browser's own {@link
+ * SseOutbox}: a browser that stops reading must not hold up the informer, or every other browser.
+ */
 @Component
 public class WorkspaceEvents {
 
   static final String STATUS = "status";
   static final String DELETED = "deleted";
 
-  // Each open stream, and the user it was opened by.
-  private final Map<SseEmitter, UUID> emitters = new ConcurrentHashMap<>();
+  // Each open stream, with the user it was opened by and what it has still to be sent.
+  private final Map<SseEmitter, Subscriber> subscribers = new ConcurrentHashMap<>();
   private final WorkspaceService service;
   private final ApplicationEventPublisher events;
+
+  private record Subscriber(UUID ownerId, SseOutbox outbox) {}
 
   public WorkspaceEvents(
       WorkspaceService service, WorkspaceRuntime runtime, ApplicationEventPublisher events) {
@@ -33,22 +40,19 @@ public class WorkspaceEvents {
   }
 
   /**
-   * Registers before it sends the snapshot, so a change landing in between arrives twice rather
+   * Registers before it queues the snapshot, so a change landing in between arrives twice rather
    * than not at all; a repeated status is harmless to the client.
    */
   public SseEmitter subscribe(UUID ownerId) {
     // 0 disables the async timeout: the stream lives as long as the client keeps it open.
     var emitter = new SseEmitter(0L);
-    emitter.onCompletion(() -> emitters.remove(emitter));
-    emitter.onTimeout(() -> emitters.remove(emitter));
-    emitter.onError(e -> emitters.remove(emitter));
-    emitters.put(emitter, ownerId);
-    try {
-      for (var workspace : service.list(ownerId)) {
-        emitter.send(event(workspace.id(), workspace.status()));
-      }
-    } catch (IOException _) {
-      drop(emitter);
+    var outbox = new SseOutbox(emitter, "workspace-events");
+    emitter.onCompletion(() -> forget(emitter));
+    emitter.onTimeout(() -> forget(emitter));
+    emitter.onError(_ -> forget(emitter));
+    subscribers.put(emitter, new Subscriber(ownerId, outbox));
+    for (var workspace : service.list(ownerId)) {
+      outbox.offer(event(workspace.id(), workspace.status()));
     }
     return emitter;
   }
@@ -58,7 +62,7 @@ public class WorkspaceEvents {
    * workspace already gone has no owner left to tell; its deleted event has covered that.
    */
   void publish(UUID id, WorkspaceStatus status) {
-    service.ownerOf(id).ifPresent(owner -> sendTo(owner, event(id, status)));
+    service.ownerOf(id).ifPresent(owner -> sendTo(owner, () -> event(id, status)));
     events.publishEvent(new WorkspaceStatusChanged(id, status));
   }
 
@@ -68,34 +72,20 @@ public class WorkspaceEvents {
    * another open tab would only see the pod disappear and show the workspace as failed.
    */
   void deleted(UUID id, UUID ownerId) {
-    sendTo(ownerId, SseEmitter.event().name(DELETED).data(Map.of("id", id)));
+    sendTo(ownerId, () -> SseEmitter.event().name(DELETED).data(Map.of("id", id)));
   }
 
   /** A comment line every half minute, so a proxy never sees the stream as idle. */
   @Scheduled(fixedRate = 30, timeUnit = TimeUnit.SECONDS)
   void heartbeat() {
-    broadcast(SseEmitter.event().comment("keepalive"));
+    subscribers.values().forEach(s -> s.outbox().offer(SseEmitter.event().comment("keepalive")));
   }
 
-  private void sendTo(UUID ownerId, SseEmitter.SseEventBuilder event) {
-    emitters.forEach(
-        (emitter, owner) -> {
-          if (owner.equals(ownerId)) {
-            send(emitter, event);
-          }
-        });
-  }
-
-  private void broadcast(SseEmitter.SseEventBuilder event) {
-    emitters.keySet().forEach(emitter -> send(emitter, event));
-  }
-
-  private void send(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
-    try {
-      emitter.send(event);
-    } catch (IOException _) {
-      drop(emitter);
-    }
+  /** A builder per browser: building one appends to it, so it cannot be shared. */
+  private void sendTo(UUID ownerId, Supplier<SseEmitter.SseEventBuilder> event) {
+    subscribers.values().stream()
+        .filter(s -> s.ownerId().equals(ownerId))
+        .forEach(s -> s.outbox().offer(event.get()));
   }
 
   /**
@@ -105,12 +95,15 @@ public class WorkspaceEvents {
    */
   @EventListener(ContextClosedEvent.class)
   void closeAll() {
-    emitters.keySet().forEach(this::drop);
+    subscribers.keySet().forEach(SseEmitter::complete);
+    subscribers.keySet().forEach(this::forget);
   }
 
-  private void drop(SseEmitter emitter) {
-    emitters.remove(emitter);
-    emitter.complete();
+  private void forget(SseEmitter emitter) {
+    var subscriber = subscribers.remove(emitter);
+    if (subscriber != null) {
+      subscriber.outbox().close();
+    }
   }
 
   private static SseEmitter.SseEventBuilder event(UUID id, WorkspaceStatus status) {
