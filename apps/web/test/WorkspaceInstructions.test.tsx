@@ -54,13 +54,13 @@ describe("workspace AI instructions", () => {
     const user = userEvent.setup();
     await openInstructions(user);
     const editor = screen.getByRole("textbox", { name: "AI instructions editor" });
-    await waitFor(() => expect(editor.querySelector("[data-placeholder]")?.getAttribute("data-placeholder")).toContain("Use pnpm, not npm"));
+    await waitFor(() => expect(editor.querySelector("[data-placeholder]")?.getAttribute("data-placeholder")).toContain("What needs my approval first."));
     expect(screen.getByRole("button", { name: "Save instructions" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
     const raw = screen.getByRole("textbox", { name: "AI instructions Markdown" });
     expect(raw).toHaveValue("");
-    expect(raw.getAttribute("placeholder")).toContain("Use pnpm, not npm");
+    expect(raw.getAttribute("placeholder")).toContain("What needs my approval first.");
     expect(api.instructions.has("starter")).toBe(false);
   });
 
