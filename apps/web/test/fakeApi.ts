@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
+import type { Variable } from "../src/api/variablesApi";
 import type { User } from "../src/api/usersApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
@@ -95,6 +96,7 @@ export function installFakeApi(
   // Each workspace's instruction files, by name; filled on first use as the harness seeds them.
   const instructions = new Map<string, Map<string, string>>();
   const tasks = new Map<string, Map<string, TaskContent>>();
+  const variables = new Map<string, Variable[]>();
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
@@ -264,6 +266,14 @@ export function installFakeApi(
         return new Response(null, { status: 204 });
       }
       return json([...files].sort(([a], [b]) => a.localeCompare(b)).map(([n, content]) => ({ name: n, content })));
+    }
+    const variablesRoute = /\/api\/v1\/workspaces\/([^/]+)\/variables$/.exec(url);
+    if (variablesRoute) {
+      const [, id] = variablesRoute;
+      if (!rows.some((workspace) => workspace.id === id)) return json({}, 404);
+      if (state.harnessDown) return json({}, 503);
+      if (init?.method === "PUT") variables.set(id, JSON.parse(String(init.body)));
+      return json(variables.get(id) ?? []);
     }
     const tasksRoute = /\/api\/v1\/workspaces\/([^/]+)\/tasks(?:\/([^/]+))?$/.exec(url);
     if (tasksRoute) {
@@ -506,5 +516,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { instructions, tasks, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

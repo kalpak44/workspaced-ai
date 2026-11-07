@@ -451,6 +451,18 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public Optional<String> readVariables(HarnessEndpoint endpoint) {
+    var file = Path.of(VARIABLES_FILE);
+    return readFile(endpoint, file.getParent().toString(), file.getFileName().toString());
+  }
+
+  @Override
+  public void writeVariables(HarnessEndpoint endpoint, String content) {
+    shell(endpoint, "mkdir -p -- " + quote(Path.of(VARIABLES_FILE).getParent().toString()));
+    writeFile(endpoint, VARIABLES_FILE, content);
+  }
+
+  @Override
   public List<String> taskFiles(HarnessEndpoint endpoint) {
     return markdownFiles(endpoint, TASKS_DIRECTORY);
   }

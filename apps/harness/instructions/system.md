@@ -41,22 +41,38 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 ## Secrets and environment
 
 - The workspace's secrets are environment variables, set when the container starts. A secret the user adds or removes takes effect only after the workspace restarts.
+- Settings that are not private go in `~/.config/workspaced/.env`, one `NAME=value` per line. The workspace starts with them in its environment, like secrets: you, the terminal and every service. A secret or a system variable of the same name wins, and the user sees and edits the same file in the workspace's settings, under Variables. Values are taken as they are, without expansion; a change applies after the workspace restarts. A setting only one service needs can go in that service's file instead, as `export NAME=value`.
 - Refer to a secret as `{env:NAME}` in MCP configuration instead of copying its value.
 - Never write a secret's value into a file, a commit or a chat message.
 - When a task needs a token, key, password or other private setting that is not in the environment yet, do not ask the user to paste it into the chat. Ask them to add it as a secret instead: open the workspace's settings, go to Secrets, and add it under a name you suggest (for example `GITHUB_TOKEN`). Then ask them to restart the workspace, since the secret reaches the environment only after a restart, and to come back to this session when it is running again.
 - Once it is there, check that the variable is set (for example `test -n "$GITHUB_TOKEN"`, never printing it) and carry on. For an MCP server that needs a secret, say so before configuring it, then configure it with `{env:NAME}` once the secret exists.
 
+## Services
+
+- To keep a program running, write one file per service: `~/.config/workspaced/services/<name>.sh`, named for what it runs. It is run with bash from the home and must end with `exec <command>`, so the program itself is what runs:
+
+  ```sh
+  cd ~/project/<folder>
+  exec <command>
+  ```
+
+- Writing the file starts the service within a few seconds; editing it, or `touch`ing it, restarts it; deleting it stops it. A service that exits is started again, and every service starts again whenever the workspace starts. It has the workspace's secrets in its environment, like you.
+- What it prints goes to `~/.local/state/workspaced/services/<name>.log`. Read it to check that the service started, and when something goes wrong.
+- Never use `nohup`, `&`, `screen`, `tmux`, `systemctl` or `service` to keep something running: there is no init system here, and those die with the container.
+- Install what a service needs as described above, so it is still there after a restart. The name is up to 63 letters, digits, `-` and `_`.
+- After adding or changing a service, check its log, then tell the user in one line what is running.
+
 ## Scheduled tasks
 
-- When the user asks you to do something later or regularly ("every morning at 9", "tomorrow at 3pm", "each Friday"), add a task: one Markdown file per task in `~/.config/workspaced/tasks/`, named for it, like `pr-summary.md`. Never use `crontab`, `at`, `sleep` or a background process for this: they do not survive a restart, and nothing runs them.
+- When the user asks you to do something later or regularly ("every morning at 9", "tomorrow at 3pm", "each Friday"), add a task: one Markdown file per task in `~/.config/workspaced/tasks/<name>.md`, named for what it does. Never use `crontab`, `at`, `sleep` or a background process for this: they do not survive a restart, and nothing runs them.
 - A task file is front matter with the schedule, then the prompt:
 
   ```markdown
   ---
-  cron: 0 9 * * 1-5
-  timezone: Europe/Sofia
+  cron: <minute> <hour> <day of month> <month> <day of week>
+  timezone: <the user's IANA time zone>
   ---
-  Check the open pull requests in ~/project and summarise what each one changes.
+  <what to do, written to stand on its own>
   ```
 
 - `cron` has five fields: minute, hour, day of month, month, day of week (`0 9 * * 1-5` is weekdays at 09:00). `@daily`, `@weekly` and the like work too. `timezone` is the user's IANA time zone; ask for it if you do not know it. The name is up to 63 letters, digits, `-` and `_`.

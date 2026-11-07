@@ -1,6 +1,7 @@
 *
 !opencode/
 !start.sh
+!services.sh
 !terminal.sh
 !instructions/
 !apk.sh

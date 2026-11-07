@@ -15,4 +15,30 @@ fi
 if [ -f "$HOME/.config/opencode/plugin/session-directories.js" ]; then
   mv "$HOME/.config/opencode/plugin/session-directories.js" "$HOME/.config/opencode/session-directories.v1.disabled"
 fi
+# The workspace's variables: each NAME=value line of ~/.config/workspaced/.env, set here so that
+# OpenCode, the terminal and every service start with them. One already set, by a secret or the
+# image, keeps its value, and none may set OpenCode's own, which would lock the API out. The value
+# is taken as it is, without expansion; one pair of quotes around it is removed. Blank lines and
+# lines starting with # are skipped, and an `export ` in front is allowed.
+env_file="$HOME/.config/workspaced/.env"
+if [ -f "$env_file" ]; then
+  while IFS= read -r line || [ -n "$line" ]; do
+    line=${line#"${line%%[![:space:]]*}"}
+    line=${line#export }
+    case "$line" in '' | '#'*) continue ;; esac
+    name=${line%%=*}
+    [ "$name" != "$line" ] || continue
+    case "$name" in '' | [0-9]* | *[!A-Za-z0-9_]* | OPENCODE_*) continue ;; esac
+    eval "[ -z \"\${$name+set}\" ]" || continue
+    value=${line#*=}
+    case "$value" in
+      \"*\") value=${value#\"}; value=${value%\"} ;;
+      \'*\') value=${value#\'}; value=${value%\'} ;;
+    esac
+    export "$name=$value"
+  done < "$env_file"
+fi
+# The user's services: every ~/.config/workspaced/services/<name>.sh is kept running, with this
+# environment, until its file is deleted. They start again on every start of the workspace.
+start-services &
 exec opencode serve --hostname 0.0.0.0 --port 4096

@@ -41,6 +41,12 @@ public interface Harness {
    */
   String TASKS_DIRECTORY = HOME + "/.config/workspaced/tasks";
 
+  /**
+   * The workspace's variables, as NAME=value lines, which the harness sets when it starts. The user
+   * edits them in the app; the agent can edit them too.
+   */
+  String VARIABLES_FILE = HOME + "/.config/workspaced/.env";
+
   /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
 
@@ -138,6 +144,12 @@ public interface Harness {
   void writeInstructions(HarnessEndpoint endpoint, String name, String content);
 
   void deleteInstructions(HarnessEndpoint endpoint, String name);
+
+  /** The variables file's text; empty when there is none yet. */
+  Optional<String> readVariables(HarnessEndpoint endpoint);
+
+  /** Replaces the variables file whole; it applies when the workspace next starts. */
+  void writeVariables(HarnessEndpoint endpoint, String content);
 
   /** The names of the workspace's task files, without ".md", in name order. */
   List<String> taskFiles(HarnessEndpoint endpoint);

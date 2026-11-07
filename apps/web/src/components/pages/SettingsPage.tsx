@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, Clock, FileText, KeyRound, Plug } from "lucide-react";
+import { ArrowLeft, CalendarClock, Clock, FileText, KeyRound, Plug, Variable } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { goBack } from "../../hooks/useRoute";
@@ -6,6 +6,7 @@ import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { McpPanel, SecretsPanel } from "../organisms";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
+import { VariablesPanel } from "../organisms/VariablesPanel";
 import { Spinner } from "../atoms";
 import { ContextLayout } from "../templates/ContextLayout";
 
@@ -19,6 +20,7 @@ interface Props {
 const SECTIONS = [
   { id: "mcp", label: "MCP servers", Icon: Plug },
   { id: "secrets", label: "Secrets", Icon: KeyRound },
+  { id: "variables", label: "Variables", Icon: Variable },
   { id: "sessions", label: "Sessions", Icon: Clock },
   { id: "instructions", label: "Instructions", Icon: FileText },
   { id: "tasks", label: "Tasks", Icon: CalendarClock },
@@ -77,6 +79,10 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
           <Suspense fallback={<Spinner label="Loading instructions" className="size-5 text-zinc-400" />}>
             <InstructionsPanel key={workspace.id} workspaceId={workspace.id} />
           </Suspense>
+        )}
+        {section === "variables" && (
+          <VariablesPanel key={workspace.id} workspaceId={workspace.id}
+            restartDisabled={workspace.status === "INITIALIZING"} onRestart={onRestart} />
         )}
         {section === "tasks" && (
           <Suspense fallback={<Spinner label="Loading tasks" className="size-5 text-zinc-400" />}>

@@ -71,6 +71,7 @@ COPY --from=config /stage/.config/opencode/opencode.json /usr/share/harness/open
 # the home on the first start, where the user and the agent can change them.
 COPY instructions/ /usr/share/harness/instructions/
 COPY start.sh /usr/local/bin/start-harness
+COPY services.sh /usr/local/bin/start-services
 # Ahead of /sbin/apk on PATH, so a plain `apk add` installs into the home without root.
 COPY apk.sh /usr/local/bin/apk
 # The musl loader looks in the image's library folders first, then in the home's package

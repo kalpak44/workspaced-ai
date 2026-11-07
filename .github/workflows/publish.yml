@@ -308,6 +308,26 @@ jobs:
             exit 1
           fi
 
+          echo "A service file starts its program, with the environment, and deleting it stops it"
+          docker exec harness sh -c 'mkdir -p ~/.config/workspaced/services &&
+            printf "echo started with \$OPENROUTER_BASE_URL\nexec sleep 1234\n" \
+              > ~/.config/workspaced/services/smoke.sh'
+          log=/home/workspace/.local/state/workspaced/services/smoke.log
+          for _ in $(seq 1 15); do
+            docker exec harness pgrep -f 'sleep 1234' > /dev/null && break
+            sleep 1
+          done
+          docker exec harness grep -q 'started with https://openrouter.ai/api/v1' "$log"
+          docker exec harness rm /home/workspace/.config/workspaced/services/smoke.sh
+          for _ in $(seq 1 15); do
+            docker exec harness pgrep -f 'sleep 1234' > /dev/null || break
+            sleep 1
+          done
+          if docker exec harness pgrep -f 'sleep 1234' > /dev/null; then
+            echo "::error::the service outlived its file"
+            exit 1
+          fi
+
       - name: Show the harness log
         if: failure()
         run: |
