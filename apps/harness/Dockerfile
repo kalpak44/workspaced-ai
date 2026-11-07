@@ -45,7 +45,10 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 # Python, uv (which runs Python MCP servers with uvx), jq and yq, make, an editor, an SSH
 # client for git, SQLite and the usual archive and file tools come with the image; anything
 # else, the agent installs itself with apk (see apk.sh), into the persistent home.
-RUN apk add --no-cache bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
+# zlib arrives with the alpine:3.24 base as 1.3.2-r1, which carries CVE-2026-4738. The same
+# branch publishes 1.4-r0, but apk add leaves an already-installed base package alone, so
+# ask for that upgrade explicitly instead of relying on the base image to move.
+RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
       file jq make nano openssh-client py3-pip python3 sqlite tree uv yq-go zip \
  && curl -fsSL -o /tmp/npm.tgz \
       "https://registry.npmjs.org/npm/-/npm-${NPM_VERSION}.tgz" \
