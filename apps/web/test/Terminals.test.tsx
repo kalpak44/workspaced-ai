@@ -8,9 +8,10 @@ import { installFakeApi } from "./fakeApi";
 const consoles = vi.hoisted(() => [] as { write: ReturnType<typeof vi.fn>; input?: (data: string) => void; disposed: boolean }[]);
 vi.mock("@xterm/xterm", () => ({ Terminal: class {
   cols = 100; rows = 30;
+  options: { fontSize?: number } = {};
   own = { write: vi.fn(), input: undefined as ((data: string) => void) | undefined, disposed: false };
   constructor() { consoles.push(this.own); }
-  loadAddon() {} open() {} focus() {} writeln() {}
+  loadAddon() {} open() {} focus() {} writeln() {} attachCustomKeyEventHandler() {}
   write(data: unknown) { this.own.write(data); }
   onData(callback: (data: string) => void) { this.own.input = callback; return { dispose() {} }; }
   dispose() { this.own.disposed = true; }
@@ -84,6 +85,22 @@ describe("workspace terminals", () => {
     await waitFor(() => expect(lastSocket()).not.toBe(socket));
     expect(lastSocket().url).toBe(socket.url);
     expect(api.terminals.get("starter")).toHaveLength(1);
+  });
+
+  it("zooms the text without reconnecting, keeping the size for the next terminal", async () => {
+    localStorage.removeItem("workspaced.terminal.fontSize");
+    api.terminals.set("starter", [terminal(1)]);
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => expect(lastSocket()?.send).toHaveBeenCalledWith("resize:100:30"));
+    const socket = lastSocket();
+    await user.click(screen.getByRole("button", { name: "Larger text" }));
+    await user.click(screen.getByRole("button", { name: "Larger text" }));
+    expect(screen.getByRole("button", { name: "Text size 15, reset" })).toBeInTheDocument();
+    expect(localStorage.getItem("workspaced.terminal.fontSize")).toBe("15");
+    await user.click(screen.getByRole("button", { name: "Text size 15, reset" }));
+    expect(screen.getByRole("button", { name: "Text size 13, reset" })).toBeInTheDocument();
+    expect(lastSocket()).toBe(socket);
   });
 
   it("confirms deletion, retains failed deletes, and deletes only the selected shell", async () => {
