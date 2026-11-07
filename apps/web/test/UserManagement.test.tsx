@@ -28,7 +28,12 @@ function stubIntersections() {
     }
   });
   return {
-    scrollToEnd: () => act(() => observers.forEach((callback) => callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver))),
+    scrollToEnd: async () => {
+      // The panel recreates its observer in an effect after every page, so wait for one
+      // to be watching before scrolling; otherwise a scroll right after a render is lost.
+      await waitFor(() => expect(observers.size).toBeGreaterThan(0));
+      act(() => observers.forEach((callback) => callback([{ isIntersecting: true } as IntersectionObserverEntry], {} as IntersectionObserver)));
+    },
   };
 }
 
@@ -135,16 +140,16 @@ describe("user management", () => {
     expect(within(list).getAllByRole("listitem")).toHaveLength(20);
     expect(screen.getByText("Showing 20 of 45")).toBeInTheDocument();
 
-    scrollToEnd();
+    await scrollToEnd();
     await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(40));
 
     // A user deleted meanwhile shifts the rest up a place; the next page still misses none.
     await user.click(screen.getByRole("button", { name: "Delete user43" }));
     await user.click(screen.getByRole("button", { name: "Delete user" }));
     await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(39));
-    scrollToEnd();
+    await scrollToEnd();
     await waitFor(() => expect(screen.getByText("Showing 40 of 44")).toBeInTheDocument());
-    scrollToEnd();
+    await scrollToEnd();
     await waitFor(() => expect(screen.getByText("Showing 44 of 44")).toBeInTheDocument());
     const shown = names(list);
     expect(new Set(shown).size).toBe(44);
