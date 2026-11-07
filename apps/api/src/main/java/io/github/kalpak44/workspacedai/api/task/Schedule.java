@@ -12,9 +12,10 @@ record Schedule(CronExpression cron, ZoneId zone) {
 
   /** Empty when either is not valid, with no reason; {@link #error} gives one. */
   static Optional<Schedule> of(String cron, String timeZone) {
-    return error(cron, timeZone) == null
-        ? Optional.of(new Schedule(expression(cron), ZoneId.of(timeZone.strip())))
-        : Optional.empty();
+    if (timeZone == null || error(cron, timeZone) != null) {
+      return Optional.empty();
+    }
+    return Optional.of(new Schedule(expression(cron), ZoneId.of(timeZone.strip())));
   }
 
   /** Why the cron expression or the time zone is not valid, or null when both are. */
