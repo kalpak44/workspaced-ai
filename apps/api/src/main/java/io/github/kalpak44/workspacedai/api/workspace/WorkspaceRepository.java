@@ -13,6 +13,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID> {
 
+  @Query("select w.id from WorkspaceEntity w")
+  List<UUID> findAllIds();
+
   @Query("select w.id from WorkspaceEntity w where w.sessionTtlEnabled = true")
   List<UUID> findTtlEnabledIds();
 

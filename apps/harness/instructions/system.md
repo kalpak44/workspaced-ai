@@ -46,6 +46,26 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - When a task needs a token, key, password or other private setting that is not in the environment yet, do not ask the user to paste it into the chat. Ask them to add it as a secret instead: open the workspace's settings, go to Secrets, and add it under a name you suggest (for example `GITHUB_TOKEN`). Then ask them to restart the workspace, since the secret reaches the environment only after a restart, and to come back to this session when it is running again.
 - Once it is there, check that the variable is set (for example `test -n "$GITHUB_TOKEN"`, never printing it) and carry on. For an MCP server that needs a secret, say so before configuring it, then configure it with `{env:NAME}` once the secret exists.
 
+## Scheduled tasks
+
+- When the user asks you to do something later or regularly ("every morning at 9", "tomorrow at 3pm", "each Friday"), add a task: one Markdown file per task in `~/.config/workspaced/tasks/`, named for it, like `pr-summary.md`. Never use `crontab`, `at`, `sleep` or a background process for this: they do not survive a restart, and nothing runs them.
+- A task file is front matter with the schedule, then the prompt:
+
+  ```markdown
+  ---
+  cron: 0 9 * * 1-5
+  timezone: Europe/Sofia
+  ---
+  Check the open pull requests in ~/project and summarise what each one changes.
+  ```
+
+- `cron` has five fields: minute, hour, day of month, month, day of week (`0 9 * * 1-5` is weekdays at 09:00). `@daily`, `@weekly` and the like work too. `timezone` is the user's IANA time zone; ask for it if you do not know it. The name is up to 63 letters, digits, `-` and `_`.
+- When the schedule matches, the prompt is sent to you in a new session, with nobody watching. So write it as a complete instruction that stands on its own: what to do, where, and where to put the result. It should not rely on this conversation.
+- A task runs only while the workspace is running; a time it was stopped for is skipped, not made up later.
+- For a one-off ("tomorrow at 3pm"), use that date in the cron expression (`0 15 8 11 *`), and say in the prompt to delete its own file once done, so it does not run again next year.
+- To change or stop a task, edit or delete its file. The user sees and edits the same files in the workspace's settings, under Tasks.
+- After adding or changing a task, tell the user in one line what will run and when, in their time zone.
+
 ## The user's instructions
 
 - Besides this guide, you are given every Markdown file in `~/.config/workspaced/instructions/`: the user's own instructions for this workspace, one topic per file. They apply from the next message, in every session.

@@ -404,8 +404,12 @@ public class OpenCodeHarness implements Harness {
 
   @Override
   public List<String> instructionFiles(HarnessEndpoint endpoint) {
-    var response =
-        send(request(endpoint, withLocation("/api/fs/list", INSTRUCTIONS_DIRECTORY)).GET());
+    return markdownFiles(endpoint, INSTRUCTIONS_DIRECTORY);
+  }
+
+  /** The names, without ".md", of the plainly named Markdown files in the directory. */
+  private List<String> markdownFiles(HarnessEndpoint endpoint, String directory) {
+    var response = send(request(endpoint, withLocation("/api/fs/list", directory)).GET());
     if (response.statusCode() == 404) {
       return List.of();
     }
@@ -438,12 +442,7 @@ public class OpenCodeHarness implements Harness {
    */
   @Override
   public void writeInstructions(HarnessEndpoint endpoint, String name, String content) {
-    var file = instructionFile(name);
-    // A workspace from before instructions has no folder yet.
-    if (!instructionFiles(endpoint).contains(name)) {
-      shell(endpoint, "mkdir -p -- " + quote(INSTRUCTIONS_DIRECTORY));
-    }
-    writeFile(endpoint, INSTRUCTIONS_DIRECTORY + "/" + file, content);
+    writeMarkdown(endpoint, INSTRUCTIONS_DIRECTORY, name, content);
   }
 
   @Override
@@ -451,10 +450,40 @@ public class OpenCodeHarness implements Harness {
     shell(endpoint, "rm -f -- " + quote(INSTRUCTIONS_DIRECTORY + "/" + instructionFile(name)));
   }
 
+  @Override
+  public List<String> taskFiles(HarnessEndpoint endpoint) {
+    return markdownFiles(endpoint, TASKS_DIRECTORY);
+  }
+
+  @Override
+  public Optional<String> readTask(HarnessEndpoint endpoint, String name) {
+    return readFile(endpoint, TASKS_DIRECTORY, instructionFile(name));
+  }
+
+  @Override
+  public void writeTask(HarnessEndpoint endpoint, String name, String content) {
+    writeMarkdown(endpoint, TASKS_DIRECTORY, name, content);
+  }
+
+  @Override
+  public void deleteTask(HarnessEndpoint endpoint, String name) {
+    shell(endpoint, "rm -f -- " + quote(TASKS_DIRECTORY + "/" + instructionFile(name)));
+  }
+
+  private void writeMarkdown(
+      HarnessEndpoint endpoint, String directory, String name, String content) {
+    var file = instructionFile(name);
+    // A workspace from before the folder existed has none yet.
+    if (!markdownFiles(endpoint, directory).contains(name)) {
+      shell(endpoint, "mkdir -p -- " + quote(directory));
+    }
+    writeFile(endpoint, directory + "/" + file, content);
+  }
+
   /** Refuses any name that is not a plain file name, so no other path can be reached. */
   private static String instructionFile(String name) {
     if (name == null || !INSTRUCTION_NAME.matcher(name).matches()) {
-      throw new IllegalArgumentException("not an instruction file name: " + name);
+      throw new IllegalArgumentException("not an instruction or task file name: " + name);
     }
     return name + MARKDOWN;
   }

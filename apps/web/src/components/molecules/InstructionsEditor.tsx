@@ -15,10 +15,12 @@ interface Props {
   readonly onChange: (value: string) => void;
   /** An example shown while the document is empty; it is never part of the value. */
   readonly placeholder?: string;
+  /** Names the editor for readers, for example "Task prompt". */
+  readonly label?: string;
 }
 
 /** One Markdown document, edited as formatted text or source. All styling belongs to the app. */
-export function InstructionsEditor({ fileName, value, onChange, placeholder = "" }: Props) {
+export function InstructionsEditor({ fileName, value, onChange, placeholder = "", label = "AI instructions" }: Props) {
   const [mode, setMode] = useState<"editor" | "raw">("editor");
   const editor = useEditor({
     extensions: [StarterKit, Markdown, Image, TableKit, TaskList, TaskItem.configure({ nested: true }), Placeholder.configure({ placeholder })],
@@ -29,7 +31,7 @@ export function InstructionsEditor({ fileName, value, onChange, placeholder = ""
       attributes: {
         class: "instructions-editor min-h-80 px-4 py-4 text-sm leading-relaxed outline-none",
         role: "textbox",
-        "aria-label": "AI instructions editor",
+        "aria-label": `${label} editor`,
         "aria-multiline": "true",
       },
     },
@@ -58,7 +60,7 @@ export function InstructionsEditor({ fileName, value, onChange, placeholder = ""
     <div className="overflow-hidden rounded-lg border border-zinc-300 focus-within:border-zinc-500 focus-within:ring-2 focus-within:ring-zinc-900/10 dark:border-zinc-700 dark:focus-within:border-zinc-400 dark:focus-within:ring-white/10">
       <div className="flex flex-wrap items-center justify-between gap-3 border-b border-zinc-200 bg-zinc-50 px-3 py-2 dark:border-zinc-800 dark:bg-zinc-900">
         <span className="font-mono text-xs text-zinc-500 dark:text-zinc-400">{fileName}</span>
-        <div role="group" aria-label="Instructions editing mode" className="flex rounded-full border border-zinc-200 p-0.5 dark:border-zinc-700">
+        <div role="group" aria-label={`${label} editing mode`} className="flex rounded-full border border-zinc-200 p-0.5 dark:border-zinc-700">
           {([{ id: "editor", label: "Editor" }, { id: "raw", label: "Raw Markdown" }] as const).map(({ id, label }) => (
             <button key={id} type="button" aria-pressed={mode === id} onClick={() => setMode(id)}
               className={`rounded-full px-3 py-1 text-xs font-medium ${mode === id ? "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900" : "text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"}`}>
@@ -77,7 +79,7 @@ export function InstructionsEditor({ fileName, value, onChange, placeholder = ""
           ))}
         </div>
         <EditorContent editor={editor} />
-      </> : <textarea aria-label="AI instructions Markdown" value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} spellCheck={false} className="block min-h-80 w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-relaxed outline-none placeholder:text-zinc-400" />}
+      </> : <textarea aria-label={`${label} Markdown`} value={value} onChange={(event) => onChange(event.target.value)} placeholder={placeholder} spellCheck={false} className="block min-h-80 w-full resize-y bg-transparent px-4 py-4 font-mono text-sm leading-relaxed outline-none placeholder:text-zinc-400" />}
       <div className="border-t border-zinc-200 px-3 py-2 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">{mode === "editor" ? "Format with the toolbar or use Markdown shortcuts as you type." : "Edit Markdown source. Switch to Editor to see and edit formatted text."}</div>
     </div>
   );

@@ -34,7 +34,14 @@ public interface Harness {
    */
   String INSTRUCTIONS_DIRECTORY = HOME + "/.config/workspaced/instructions";
 
-  /** An instruction file's name, without ".md": a plain file name, never a path. */
+  /**
+   * The workspace's scheduled tasks: each Markdown file here has the agent run its prompt, in a new
+   * session, whenever its cron expression matches. The user edits them in the app; the agent adds
+   * them when asked to do something later or regularly.
+   */
+  String TASKS_DIRECTORY = HOME + "/.config/workspaced/tasks";
+
+  /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
 
   /** Fails when the server is not OpenCode V2 or the project location cannot be resolved. */
@@ -131,6 +138,16 @@ public interface Harness {
   void writeInstructions(HarnessEndpoint endpoint, String name, String content);
 
   void deleteInstructions(HarnessEndpoint endpoint, String name);
+
+  /** The names of the workspace's task files, without ".md", in name order. */
+  List<String> taskFiles(HarnessEndpoint endpoint);
+
+  /** One task file's text, front matter included; empty when there is no such file. */
+  Optional<String> readTask(HarnessEndpoint endpoint, String name);
+
+  void writeTask(HarnessEndpoint endpoint, String name, String content);
+
+  void deleteTask(HarnessEndpoint endpoint, String name);
 
   /** An MCP server the harness reaches over HTTP, or one it starts in the workspace. */
   sealed interface McpServerConfig {

@@ -1,4 +1,4 @@
-import { ArrowLeft, Clock, FileText, KeyRound, Plug } from "lucide-react";
+import { ArrowLeft, CalendarClock, Clock, FileText, KeyRound, Plug } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { goBack } from "../../hooks/useRoute";
@@ -21,12 +21,14 @@ const SECTIONS = [
   { id: "secrets", label: "Secrets", Icon: KeyRound },
   { id: "sessions", label: "Sessions", Icon: Clock },
   { id: "instructions", label: "Instructions", Icon: FileText },
+  { id: "tasks", label: "Tasks", Icon: CalendarClock },
 ] as const;
 
-// The instructions editor is large, so it is only loaded once its section is opened.
+// The instructions editor is large, so the panels using it are only loaded once opened.
 const InstructionsPanel = lazy(() =>
   import("../organisms/InstructionsPanel").then((panel) => ({ default: panel.InstructionsPanel })),
 );
+const TasksPanel = lazy(() => import("../organisms/TasksPanel").then((panel) => ({ default: panel.TasksPanel })));
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
 export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) {
@@ -74,6 +76,11 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
         {section === "instructions" && (
           <Suspense fallback={<Spinner label="Loading instructions" className="size-5 text-zinc-400" />}>
             <InstructionsPanel key={workspace.id} workspaceId={workspace.id} />
+          </Suspense>
+        )}
+        {section === "tasks" && (
+          <Suspense fallback={<Spinner label="Loading tasks" className="size-5 text-zinc-400" />}>
+            <TasksPanel key={workspace.id} workspaceId={workspace.id} />
           </Suspense>
         )}
         <div hidden={section !== "sessions"}>
