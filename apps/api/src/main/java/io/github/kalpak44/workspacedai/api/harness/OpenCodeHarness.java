@@ -727,7 +727,7 @@ public class OpenCodeHarness implements Harness {
 
   private void read(InputStream body, Consumer<HarnessEventEnvelope> onEvent, AtomicBoolean closed)
       throws IOException {
-    var tools = new TreeMap<String, String>();
+    var tools = new TreeMap<String, ChatPart>();
     try (var lines = new BufferedReader(new InputStreamReader(body, StandardCharsets.UTF_8))) {
       String line;
       while (!closed.get() && (line = lines.readLine()) != null) {
@@ -740,7 +740,11 @@ public class OpenCodeHarness implements Harness {
     }
   }
 
-  static List<HarnessEventEnvelope> events(JsonNode event, Map<String, String> tools) {
+  /**
+   * @param tools the tool parts of this stream still running, by id: a part replaces the whole
+   *     state the browser holds, so later events carry forward what earlier ones said
+   */
+  static List<HarnessEventEnvelope> events(JsonNode event, Map<String, ChatPart> tools) {
     var type = text(event, "type");
     var data = event.path("data");
     var sessionId = text("form.created".equals(type) ? data.path("form") : data, "sessionID");
@@ -784,26 +788,23 @@ public class OpenCodeHarness implements Harness {
       case "session.tool.input.started" -> {
         var id = text(data, "id");
         var name = text(data, "name");
-        tools.put(id, name);
-        result.add(
-            new HarnessEvent.Part(
-                text(data, "assistantMessageID"), new ChatPart(id, "tool", name, name, "pending")));
+        var part = new ChatPart(id, "tool", name, name, "pending");
+        tools.put(id, part);
+        result.add(new HarnessEvent.Part(text(data, "assistantMessageID"), part));
       }
       case "session.tool.called", "session.tool.progress" -> {
         var id = text(data, "id");
-        var name = tools.get(id);
-        result.add(
-            new HarnessEvent.Part(
-                text(data, "assistantMessageID"), new ChatPart(id, "tool", name, name, "running")));
+        var input = data.path("input").isObject() ? data.path("input") : null;
+        var part = tool(tools.get(id), id).with("running", input, null);
+        tools.put(id, part);
+        result.add(new HarnessEvent.Part(text(data, "assistantMessageID"), part));
       }
       case "session.tool.success", "session.tool.failed" -> {
         var id = text(data, "id");
-        var name = tools.remove(id);
-        result.add(
-            new HarnessEvent.Part(
-                text(data, "assistantMessageID"),
-                new ChatPart(
-                    id, "tool", name, name, type.endsWith("success") ? "completed" : "error")));
+        var failed = type.endsWith("failed");
+        var output = output(data.path("content"), failed ? data.path("error") : null);
+        var part = tool(tools.remove(id), id).with(failed ? "error" : "completed", null, output);
+        result.add(new HarnessEvent.Part(text(data, "assistantMessageID"), part));
       }
       default -> {
         return List.of();
@@ -845,11 +846,44 @@ public class OpenCodeHarness implements Harness {
       return null;
     }
     var name = text(content, "name");
-    var status = text(content.path("state"), "status");
+    var state = content.path("state");
+    var status = text(state, "status");
     if ("streaming".equals(status)) {
       status = "pending";
     }
-    return new ChatPart(text(content, "id"), "tool", name, name, status);
+    var input = state.path("input").isObject() ? state.path("input") : null;
+    var finished = "completed".equals(status) || "error".equals(status);
+    var output =
+        finished
+            ? output(state.path("content"), "error".equals(status) ? state.path("error") : null)
+            : null;
+    return new ChatPart(text(content, "id"), "tool", name, name, status, input, output);
+  }
+
+  /** A tool part this stream has not seen start, as when it was opened mid-call. */
+  private static ChatPart tool(ChatPart known, String id) {
+    return known != null ? known : new ChatPart(id, "tool", null, null, "running");
+  }
+
+  /**
+   * The text a tool returned, then the error it failed with, if any; files it returned are left
+   * out. Cut to {@link ChatPart#MAX_OUTPUT} characters, keeping the end, where errors usually are.
+   */
+  private static String output(JsonNode content, JsonNode error) {
+    var output = new StringBuilder();
+    for (var item : content) {
+      var text = text(item, "text");
+      if ("text".equals(text(item, "type")) && text != null) {
+        output.append(output.isEmpty() ? "" : "\n").append(text);
+      }
+    }
+    if (error != null && text(error, "message") != null) {
+      output.append(output.isEmpty() ? "" : "\n").append(text(error, "message"));
+    }
+    if (output.length() > ChatPart.MAX_OUTPUT) {
+      return "…" + output.substring(output.length() - ChatPart.MAX_OUTPUT + 1);
+    }
+    return output.toString();
   }
 
   private static String partId(String type, JsonNode data) {

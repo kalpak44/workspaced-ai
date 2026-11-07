@@ -18,6 +18,10 @@ export interface ChatPart {
   readonly text: string | null;
   readonly tool: string | null;
   readonly status: "pending" | "running" | "completed" | "error" | null;
+  /** For a tool, the arguments it was called with, once known. */
+  readonly input?: Readonly<Record<string, unknown>> | null;
+  /** For a finished tool, what it printed, or why it failed. */
+  readonly output?: string | null;
 }
 
 export interface ChatMessage {

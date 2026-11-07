@@ -118,7 +118,14 @@ class OpenCodeHarnessTest {
                 "assistant",
                 List.of(
                     new ChatPart("msg_a:reasoning:0", "reasoning", "I should run ls.", null, null),
-                    new ChatPart("tool_1", "tool", "bash", "bash", "completed"),
+                    new ChatPart(
+                        "tool_1",
+                        "tool",
+                        "bash",
+                        "bash",
+                        "completed",
+                        JsonMapper.builder().build().createObjectNode(),
+                        ""),
                     new ChatPart("msg_a:text:2", "text", "There are none.", null, null))));
   }
 
@@ -180,6 +187,50 @@ class OpenCodeHarnessTest {
             new HarnessEvent.Title("Friendly greeting request"),
             new HarnessEvent.Delta("msg_a", "msg_a:text:0", "second answer here"));
     assertThat(events).anyMatch(e -> e.event() instanceof HarnessEvent.Heartbeat);
+  }
+
+  @Test
+  void carriesAToolsInputThroughProgressToItsOutput() {
+    var json = JsonMapper.builder().build();
+    var tools = new TreeMap<String, ChatPart>();
+    var ids = "\"sessionID\":\"s\",\"assistantMessageID\":\"msg_a\",\"id\":\"t1\"";
+    var events =
+        List.of(
+            "{\"type\":\"session.tool.input.started\",\"data\":{" + ids + ",\"name\":\"shell\"}}",
+            "{\"type\":\"session.tool.called\",\"data\":{"
+                + ids
+                + ",\"input\":{\"command\":\"ls\"}}}",
+            "{\"type\":\"session.tool.progress\",\"data\":{" + ids + ",\"metadata\":{}}}",
+            "{\"type\":\"session.tool.success\",\"data\":{"
+                + ids
+                + ",\"content\":[{\"type\":\"text\",\"text\":\"a.txt\"}]}}");
+    var parts =
+        events.stream()
+            .flatMap(e -> OpenCodeHarness.events(json.readTree(e), tools).stream())
+            .map(e -> ((HarnessEvent.Part) e.event()).part())
+            .toList();
+    var input = json.readTree("{\"command\":\"ls\"}");
+    assertThat(parts)
+        .containsExactly(
+            new ChatPart("t1", "tool", "shell", "shell", "pending"),
+            new ChatPart("t1", "tool", "shell", "shell", "running", input, null),
+            new ChatPart("t1", "tool", "shell", "shell", "running", input, null),
+            new ChatPart("t1", "tool", "shell", "shell", "completed", input, "a.txt"));
+    assertThat(tools).isEmpty();
+  }
+
+  @Test
+  void reportsWhyAToolFailed() {
+    var json = JsonMapper.builder().build();
+    var event =
+        json.readTree(
+            "{\"type\":\"session.tool.failed\",\"data\":{\"sessionID\":\"s\","
+                + "\"assistantMessageID\":\"msg_a\",\"id\":\"t1\",\"error\":{\"message\":\"exit 1\"},"
+                + "\"content\":[{\"type\":\"text\",\"text\":\"no such file\"}]}}");
+    assertThat(OpenCodeHarness.events(event, new TreeMap<>()))
+        .extracting(e -> ((HarnessEvent.Part) e.event()).part())
+        .containsExactly(
+            new ChatPart("t1", "tool", null, null, "error", null, "no such file\nexit 1"));
   }
 
   @Test

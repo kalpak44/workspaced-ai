@@ -1,9 +1,22 @@
-import { CircleAlert, CircleCheck, Pencil, Wrench } from "lucide-react";
+import { ChevronRight, CircleAlert, CircleCheck, Pencil, Wrench } from "lucide-react";
 import { useState } from "react";
 import type { ChatMessage, ChatPart } from "../../hooks/useChat";
 import { Button, IconButton, Spinner } from "../atoms";
 import { Markdown } from "./Markdown";
 
+/** What a tool call is about in one line: its own description, else its command or first text. */
+function toolSummary(input: ChatPart["input"]): string | null {
+  if (!input) return null;
+  for (const key of ["description", "command", "filePath", "path", "pattern", "url", "query"]) {
+    if (typeof input[key] === "string" && input[key]) return input[key];
+  }
+  return Object.values(input).find((value): value is string => typeof value === "string" && value !== "") ?? null;
+}
+
+/**
+ * A tool call as one line, which opens to what it was called with and what came back: a shell
+ * command as the command itself, any other tool as its arguments.
+ */
 function ToolPart({ part }: { readonly part: ChatPart }) {
   let state;
   if (part.status === "completed") {
@@ -13,13 +26,43 @@ function ToolPart({ part }: { readonly part: ChatPart }) {
   } else {
     state = <Spinner label="Running" className="size-3.5 text-zinc-400" />;
   }
-  return (
-    <div className="flex items-center gap-2 rounded-md border border-zinc-200 px-2.5 py-1.5 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-400">
+  const summary = toolSummary(part.input);
+  const command = typeof part.input?.command === "string" ? part.input.command : null;
+  const hasDetails = Boolean(part.input && Object.keys(part.input).length > 0) || Boolean(part.output);
+  const line = (
+    <>
       <Wrench aria-hidden className="size-3.5 shrink-0" />
-      <span className="font-mono">{part.tool}</span>
-      {part.text && <span className="truncate">{part.text}</span>}
+      <span className="shrink-0 font-mono">{part.tool}</span>
+      {summary && <span className="truncate text-zinc-500 dark:text-zinc-500">{summary}</span>}
       <span className="ml-auto shrink-0">{state}</span>
-    </div>
+    </>
+  );
+  const frame = "rounded-md border border-zinc-200 text-xs text-zinc-600 dark:border-zinc-800 dark:text-zinc-400";
+  if (!hasDetails) {
+    return <div className={`flex items-center gap-2 px-2.5 py-1.5 ${frame}`}>{line}</div>;
+  }
+  const block = "max-h-80 overflow-auto whitespace-pre-wrap px-2.5 py-2 font-mono [overflow-wrap:anywhere]";
+  return (
+    <details className={`group ${frame}`}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 px-2.5 py-1.5 select-none hover:bg-zinc-50 dark:hover:bg-zinc-900 [&::-webkit-details-marker]:hidden">
+        <ChevronRight aria-hidden className="size-3 shrink-0 transition-transform group-open:rotate-90" />
+        {line}
+      </summary>
+      <div className="divide-y divide-zinc-200 border-t border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        {command !== null ? (
+          <pre aria-label="Command" className={`${block} text-zinc-800 dark:text-zinc-200`}>$ {command}</pre>
+        ) : (
+          part.input && Object.keys(part.input).length > 0 && (
+            <pre aria-label="Input" className={`${block} text-zinc-800 dark:text-zinc-200`}>{JSON.stringify(part.input, null, 2)}</pre>
+          )
+        )}
+        {part.output ? (
+          <pre aria-label="Output" className={`${block} bg-zinc-50 dark:bg-zinc-900/60 ${part.status === "error" ? "text-rose-600 dark:text-rose-400" : ""}`}>{part.output}</pre>
+        ) : (
+          part.status === "completed" && <p className="px-2.5 py-2 text-zinc-400">No output.</p>
+        )}
+      </div>
+    </details>
   );
 }
 
