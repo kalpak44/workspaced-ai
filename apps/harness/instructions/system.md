@@ -62,6 +62,16 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - Install what a service needs as described above, so it is still there after a restart. The name is up to 63 letters, digits, `-` and `_`.
 - After adding or changing a service, check its log, then tell the user in one line what is running.
 
+## Public access
+
+- Nothing here is reachable from the internet by default. When the user wants something public (a page to share, an API, a webhook or an OAuth callback address), recommend ngrok, and only then.
+- ngrok needs the user's own authtoken. If `NGROK_AUTHTOKEN` is not set, ask them to copy it from their ngrok dashboard into the workspace's settings, under Secrets, with that name, and to restart the workspace, as for any other secret. Never ask for it in the chat.
+- If `ngrok` is not installed, download the official Linux amd64 build into `~/.local/bin`, so it is still there after a restart.
+- Run it as a service, `~/.config/workspaced/services/share-<name>.sh`, ending in `exec ngrok http <port> --log stdout`. ngrok reads the token from the environment, so never put it in the file or the command.
+- Without `--url`, the address changes every time the service starts. When the link must last, for example as an OAuth callback, ask the user for the static domain in their ngrok dashboard and add `--url <domain>`.
+- Read the service's log for the public URL and give it to the user.
+- Anyone with the URL can open it. Never make public the terminal, files from the home folder, or anything that shows a secret. Deleting the service file stops the sharing.
+
 ## Scheduled tasks
 
 - When the user asks you to do something later or regularly ("every morning at 9", "tomorrow at 3pm", "each Friday"), add a task: one Markdown file per task in `~/.config/workspaced/tasks/<name>.md`, named for what it does. Never use `crontab`, `at`, `sleep` or a background process for this: they do not survive a restart, and nothing runs them.
