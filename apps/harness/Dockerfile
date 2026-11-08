@@ -13,6 +13,11 @@ ARG OPENCODE_SHA512=5e2e262ba044001d04e642096ed33aa4a93e9a0b4c8dba3782b5f87aef8d
 # mutable registry tag. Bumping NPM_VERSION means recomputing the tarball's SHA-512.
 ARG NPM_VERSION=11.21.2
 ARG NPM_SHA512=ec73c0a64f807e53146af4ac78bd4f9ba0a762a3081e4e77c7e2a6ba1aa64c3a8f9233cc8312294cf713aac13dd4428dc3880504957d7e75e249d1a6d435eaf4
+# Alpine 3.24's yq-go 4.53.3 bundles golang.org/x/net 0.55.0 and x/text 0.37.0,
+# which have published Critical and High findings. Upstream 4.54.2 carries the
+# fixed modules, so pin its static binary and verify it rather than the package.
+ARG YQ_VERSION=4.54.2
+ARG YQ_SHA256=44c7759059b4910827a0059a2757b22001e59360cdecdb2ef8dedc4b6c7e9f32
 
 FROM alpine:3.24 AS fetch
 ARG OPENCODE_VERSION
@@ -34,9 +39,12 @@ FROM alpine:3.24
 ARG OPENCODE_VERSION
 ARG NPM_VERSION
 ARG NPM_SHA512
+ARG YQ_VERSION
+ARG YQ_SHA256
 LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai" \
       io.workspaced.opencode.version="${OPENCODE_VERSION}" \
-      io.workspaced.npm.version="${NPM_VERSION}"
+      io.workspaced.npm.version="${NPM_VERSION}" \
+      io.workspaced.yq.version="${YQ_VERSION}"
 
 # The agent's own tools: git and ripgrep, which opencode would otherwise download at run
 # time into a home that does not survive the pod, curl, and a shell for its bash tool.
@@ -49,7 +57,11 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 # branch publishes 1.4-r0, but apk add leaves an already-installed base package alone, so
 # ask for that upgrade explicitly instead of relying on the base image to move.
 RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
-      file jq make nano openssh-client py3-pip python3 sqlite tree uv yq-go zip \
+      file jq make nano openssh-client py3-pip python3 sqlite tree uv zip \
+ && curl -fsSL -o /tmp/yq \
+      "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
+ && echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c - \
+ && install -m 0755 /tmp/yq /usr/local/bin/yq \
  && curl -fsSL -o /tmp/npm.tgz \
       "https://registry.npmjs.org/npm/-/npm-${NPM_VERSION}.tgz" \
  && echo "${NPM_SHA512}  /tmp/npm.tgz" | sha512sum -c - \
@@ -57,7 +69,7 @@ RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libst
  && tar -xzf /tmp/npm.tgz -C /usr/local/lib/node_modules/npm --strip-components=1 \
  && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
- && rm -r /tmp/npm.tgz /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
+ && rm -r /tmp/npm.tgz /tmp/yq /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
  && adduser -D -u 1000 -h /home/workspace workspace \
  && rm /var/log/apk.log
 
