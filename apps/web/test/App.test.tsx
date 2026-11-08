@@ -844,6 +844,39 @@ describe("App", () => {
     expect(within(list).getByText(/No sessions yet/)).toBeInTheDocument();
   });
 
+  it("deletes chosen sessions at once, keeping the choice when the dialog is cancelled", async () => {
+    const at = new Date().toISOString();
+    api.sessions.set("starter", ["a", "b", "c"].map((id) => ({ id, title: `Session ${id}`, path: `/p/${id}`, createdAt: at })));
+    const user = userEvent.setup();
+    await renderLoaded();
+    const list = await screen.findByRole("region", { name: "Sessions" });
+    await user.click(await within(list).findByRole("button", { name: "Select" }));
+    // Selecting does not open a session.
+    await user.click(within(list).getByRole("checkbox", { name: /Session a/ }));
+    await user.click(within(list).getByRole("checkbox", { name: /Session c/ }));
+    expect(path()).toBe("/workspaces/starter");
+    const toolbar = within(list).getByRole("toolbar", { name: "Selected sessions" });
+    expect(toolbar).toHaveTextContent("2 selected");
+
+    await user.click(within(toolbar).getByRole("button", { name: "Delete 2" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Delete 2 sessions?" })).getByRole("button", { name: "Cancel" }));
+    expect(api.sessions.get("starter")).toHaveLength(3);
+    expect(toolbar).toHaveTextContent("2 selected");
+
+    await user.click(within(toolbar).getByRole("button", { name: "Delete 2" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete 2 sessions" }));
+    await waitFor(() => expect(within(list).queryByText("Session a")).not.toBeInTheDocument());
+    expect(within(list).queryByText("Session c")).not.toBeInTheDocument();
+    expect(within(list).getByText("Session b")).toBeInTheDocument();
+    expect(within(list).queryByRole("toolbar")).not.toBeInTheDocument();
+
+    await user.click(within(list).getByRole("button", { name: "Select" }));
+    await user.click(within(list).getByLabelText("Select all 1"));
+    await user.click(within(list).getByRole("button", { name: "Delete 1" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Delete 1 session" }));
+    expect(await within(list).findByText(/No sessions yet/)).toBeInTheDocument();
+  });
+
   it("isolates general settings navigation from workspace management", async () => {
     visit("/settings");
     render(<App />);

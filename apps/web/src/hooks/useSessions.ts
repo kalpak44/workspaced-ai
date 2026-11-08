@@ -49,9 +49,10 @@ export function useSessions(workspaceId: string | null) {
     );
   };
 
-  const remove = (id: string) => {
+  /** Resolves once the session is gone, or the deletion failed and was reported. */
+  const remove = async (id: string): Promise<boolean> => {
     if (workspaceId === null) {
-      return;
+      return false;
     }
     const settle = () =>
       setDeleting((current) => {
@@ -60,16 +61,46 @@ export function useSessions(workspaceId: string | null) {
         return next;
       });
     setDeleting((current) => new Set(current).add(id));
-    deleteSession(workspaceId, id).then(
-      () => {
-        setSessions((current) => current.filter((s) => s.id !== id));
-        settle();
-      },
-      () => {
-        settle();
-        setError("Could not delete the session");
-      },
-    );
+    try {
+      await deleteSession(workspaceId, id);
+      setSessions((current) => current.filter((s) => s.id !== id));
+      return true;
+    } catch {
+      setError("Could not delete the session");
+      return false;
+    } finally {
+      settle();
+    }
+  };
+
+  /**
+   * Deletes several, a few at a time, so a long list does not flood the workspace. Each that fails
+   * stays in the list; the count of those is reported once.
+   */
+  const removeMany = async (ids: readonly string[]): Promise<void> => {
+    if (workspaceId === null) return;
+    setDeleting((current) => new Set([...current, ...ids]));
+    const queue = [...ids];
+    let failed = 0;
+    const worker = async () => {
+      for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
+        try {
+          await deleteSession(workspaceId, id);
+          setSessions((current) => current.filter((s) => s.id !== id));
+        } catch {
+          failed++;
+        }
+        setDeleting((current) => {
+          const next = new Set(current);
+          next.delete(id);
+          return next;
+        });
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(4, ids.length) }, worker));
+    if (failed > 0) {
+      setError(failed === 1 ? "Could not delete 1 session" : `Could not delete ${failed} sessions`);
+    }
   };
 
   /** The agent named a session; nothing to send, the API stored it already. */
@@ -84,6 +115,7 @@ export function useSessions(workspaceId: string | null) {
     dismissError: () => setError(null),
     create,
     remove,
+    removeMany,
     retitle,
   };
 }

@@ -18,6 +18,7 @@ export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
   const ready = workspace.status === "READY" && !deleting;
   const sessions = useSessions(ready ? workspace.id : null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteMany, setDeleteMany] = useState<readonly string[] | null>(null);
   const deleteTarget = sessions.sessions.find((session) => session.id === deleteId);
   const open = (sessionId: string) =>
     navigate({ name: "session", workspaceId: workspace.id, sessionId });
@@ -47,11 +48,13 @@ export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
           onStart={start}
           onOpen={open}
           onDelete={setDeleteId}
+          onDeleteMany={setDeleteMany}
         />
       ) : (
         <WorkspaceStatusView workspace={workspace} deleting={deleting} />
       )}
-      {deleteTarget && <DeleteSessionDialog title={deleteTarget.title ?? "New session"} onClose={() => setDeleteId(null)} onConfirm={() => { sessions.remove(deleteTarget.id); setDeleteId(null); }} />}
+      {deleteMany && <DeleteSessionDialog count={deleteMany.length} onClose={() => setDeleteMany(null)} onConfirm={() => { void sessions.removeMany(deleteMany); setDeleteMany(null); }} />}
+      {deleteTarget && <DeleteSessionDialog title={deleteTarget.title ?? "New session"} onClose={() => setDeleteId(null)} onConfirm={() => { void sessions.remove(deleteTarget.id); setDeleteId(null); }} />}
     </>
   );
 }

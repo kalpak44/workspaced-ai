@@ -71,7 +71,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
       ) : (
         <WorkspaceStatusView workspace={workspace} deleting={deleting} />
       )}
-      {deleteTarget && <DeleteSessionDialog title={deleteTarget.title ?? "New session"} onClose={() => setDeleteId(null)} onConfirm={() => { sessions.remove(deleteTarget.id); setDeleteId(null); }} />}
+      {deleteTarget && <DeleteSessionDialog title={deleteTarget.title ?? "New session"} onClose={() => setDeleteId(null)} onConfirm={() => { void sessions.remove(deleteTarget.id); setDeleteId(null); }} />}
     </ContextLayout>
   );
 }
