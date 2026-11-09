@@ -1,10 +1,12 @@
 # The harness each workspace pod runs: OpenCode V2's service, with every chat attached to
 # the workspace project and terminals served by OpenCode's PTY API.
+# .dockerignore admits only the files it lists, so every file this build copies must be
+# listed there too, or the build fails with "not found".
 
 # opencode ships as one self-contained binary per platform on npm; only the musl build
 # runs on Alpine. It is checked against the registry's integrity hash before use, so a
 # tampered tarball fails the build rather than reaching a workspace. Bumping it means both
-# ARGs: the hex of `npm view opencode-linux-x64-musl@<version> dist.integrity`.
+# ARGs: the hex of `npm view @opencode/cli-linux-x64-musl@<version> dist.integrity`.
 ARG OPENCODE_VERSION=2.2.5
 ARG OPENCODE_SHA512=5e2e262ba044001d04e642096ed33aa4a93e9a0b4c8dba3782b5f87aef8d0e97d61a9e1e32e02fb1a5e7858609bf1ca27b695240123661d8bb437b28e323f6ba
 # Alpine 3.24 packages npm 11.12.1, whose bundled tar, brace-expansion, ip-address,
