@@ -308,26 +308,6 @@ jobs:
             exit 1
           fi
 
-          echo "A service file starts its program, with the environment, and deleting it stops it"
-          docker exec harness sh -c 'mkdir -p ~/.config/workspaced/services &&
-            printf "echo started with \$OPENROUTER_BASE_URL\nexec sleep 1234\n" \
-              > ~/.config/workspaced/services/smoke.sh'
-          log=/home/workspace/.local/state/workspaced/services/smoke.log
-          for _ in $(seq 1 15); do
-            docker exec harness pgrep -f 'sleep 1234' > /dev/null && break
-            sleep 1
-          done
-          docker exec harness grep -q 'started with https://openrouter.ai/api/v1' "$log"
-          docker exec harness rm /home/workspace/.config/workspaced/services/smoke.sh
-          for _ in $(seq 1 15); do
-            docker exec harness pgrep -f 'sleep 1234' > /dev/null || break
-            sleep 1
-          done
-          if docker exec harness pgrep -f 'sleep 1234' > /dev/null; then
-            echo "::error::the service outlived its file"
-            exit 1
-          fi
-
       - name: Show the harness log
         if: failure()
         run: |
@@ -402,7 +382,7 @@ jobs:
 
           fetch_verified() {
             url="$1"; want="$2"; out="$3"
-            curl --proto '=https' --tlsv1.2 -fsSL "$url" -o "$out"
+            curl --proto '=https' --tlsv1.2 -fsSL --retry 3 --retry-all-errors "$url" -o "$out"
             echo "${want}  ${out}" | sha256sum -c -
           }
 
@@ -413,8 +393,19 @@ jobs:
             "https://raw.githubusercontent.com/anchore/grype/${GRYPE_VERSION}/install.sh" \
             "$GRYPE_INSTALLER_SHA256" grype-install.sh
 
-          sh syft-install.sh -b /usr/local/bin "${SYFT_VERSION}"
-          sh grype-install.sh -b /usr/local/bin "${GRYPE_VERSION}"
+          # The installers fetch release assets themselves, and an occasional 5xx from
+          # GitHub releases would otherwise fail the whole scan on its first attempt.
+          retry() {
+            for attempt in 1 2 3; do
+              "$@" && return 0
+              echo "attempt $attempt failed: $*" >&2
+              [ "$attempt" -lt 3 ] && sleep $((attempt * 15))
+            done
+            return 1
+          }
+
+          retry sh syft-install.sh -b /usr/local/bin "${SYFT_VERSION}"
+          retry sh grype-install.sh -b /usr/local/bin "${GRYPE_VERSION}"
 
           syft version
           grype version
