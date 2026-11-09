@@ -5,4 +5,6 @@
 !terminal.sh
 !instructions/
 !apk.sh
+!now.py
+!task.py
 **/.DS_Store
