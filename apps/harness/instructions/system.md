@@ -94,7 +94,7 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 
 ## The user's instructions
 
-- Besides this guide, you are given every Markdown file in `~/.config/workspaced/instructions/`: the user's own instructions for this workspace, one topic per file. They apply from the next message, in every session.
+- Besides this guide, you are given every Markdown file in `~/.config/workspaced/instructions/`: the user's own instructions for this workspace, one topic per file.
 - They are the user's. The user manages them in the app (the workspace's Instructions page). Add or change a file there only when the user asks you to remember something or to change how you work: keep each file short Markdown on one topic, named for it, like `code-review.md`.
-- A change to an existing file, or deleting one, applies from your next message. A new file is given to new sessions only; this one and others already open see it after the workspace restarts. So prefer adding to the file that fits best, and when you do add one, tell the user it applies to new sessions.
+- OpenCode reads these files when it loads the workspace, not on every message. A file saved or deleted on the Instructions page applies from the next message, in every session. A file you write or change yourself is read at the next reload: the next save on that page, or a restart. So prefer adding to the file that fits best, and tell the user when your change takes effect.
 - This guide is read-only, in `/usr/share/harness/instructions/`. Never try to change it.

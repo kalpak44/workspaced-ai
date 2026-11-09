@@ -372,7 +372,7 @@ public class OpenCodeHarness implements Harness {
     var configured = config.withObjectProperty("mcp").withObjectProperty("servers");
     servers.forEach((name, server) -> configured.set(name, json.valueToTree(mcpConfig(server))));
     writeConfig(endpoint, config);
-    call(endpoint, "POST", "/api/location/reload", null);
+    reload(endpoint);
     return true;
   }
 
@@ -392,7 +392,7 @@ public class OpenCodeHarness implements Harness {
         && configured.has(name)) {
       configured.remove(name);
       writeConfig(endpoint, config);
-      call(endpoint, "POST", "/api/location/reload", null);
+      reload(endpoint);
       return;
     }
     call(
@@ -434,20 +434,30 @@ public class OpenCodeHarness implements Harness {
   }
 
   /**
-   * OpenCode reads every instruction file afresh for each message, so an edit or a delete applies
-   * from the next one, in every session. Which files there are, it settles when a session's folder
-   * is first loaded: a new file reaches new sessions, each of which has a folder of its own, but
-   * sessions already open only after the workspace restarts. A reload does not change that, and
-   * would cancel questions the agent is waiting on, so none is made.
+   * OpenCode reads the instruction files, their contents included, when it loads a project, so a
+   * save or a deleted reaches no session already open, and none in a shared folder such as the
+   * project root, until the projects reload. The reload cancels questions the agent is waiting on,
+   * the price of instructions that take effect on the next message.
    */
   @Override
   public void writeInstructions(HarnessEndpoint endpoint, String name, String content) {
     writeMarkdown(endpoint, INSTRUCTIONS_DIRECTORY, name, content);
+    reload(endpoint);
   }
 
   @Override
   public void deleteInstructions(HarnessEndpoint endpoint, String name) {
     shell(endpoint, "rm -f -- " + quote(INSTRUCTIONS_DIRECTORY + "/" + instructionFile(name)));
+    reload(endpoint);
+  }
+
+  /**
+   * The reload answers before the projects are rebuilt; reading the project root waits for that, so
+   * a message sent right after it already runs with the new configuration.
+   */
+  private void reload(HarnessEndpoint endpoint) {
+    call(endpoint, "POST", "/api/location/reload", null);
+    call(endpoint, "GET", withLocation("/api/location", PROJECT_ROOT), null);
   }
 
   @Override

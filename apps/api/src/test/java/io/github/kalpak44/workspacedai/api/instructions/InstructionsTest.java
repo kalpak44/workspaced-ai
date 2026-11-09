@@ -108,8 +108,9 @@ class InstructionsTest {
     assertThat(send("DELETE", "/research-rules", null).statusCode()).isEqualTo(204);
     assertThat(OPENCODE.files).doesNotContainKey(DIRECTORY + "research-rules.md");
     assertThat(send("DELETE", "/research-rules", null).statusCode()).isEqualTo(404);
-    // A reload would not help OpenCode find a file, and would cancel the agent's questions.
-    assertThat(OPENCODE.reloads).isEqualTo(reloads);
+    // OpenCode reads instructions when it loads a project, so each change reloads; a missing file
+    // changes nothing.
+    assertThat(OPENCODE.reloads).isEqualTo(reloads + 3);
   }
 
   @Test
