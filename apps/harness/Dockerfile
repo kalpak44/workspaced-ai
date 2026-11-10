@@ -15,6 +15,11 @@ ARG OPENCODE_SHA512=5e2e262ba044001d04e642096ed33aa4a93e9a0b4c8dba3782b5f87aef8d
 # mutable registry tag. Bumping NPM_VERSION means recomputing the tarball's SHA-512.
 ARG NPM_VERSION=11.21.2
 ARG NPM_SHA512=ec73c0a64f807e53146af4ac78bd4f9ba0a762a3081e4e77c7e2a6ba1aa64c3a8f9233cc8312294cf713aac13dd4428dc3880504957d7e75e249d1a6d435eaf4
+# Alpine 3.24's py3-pip 26.1.2-r0 carries GHSA-qwm4-qh6w-59xr, fixed in pip
+# 26.2.0, and the package index has no newer build. Install the verified upstream
+# wheel over it rather than waiting for a rebuilt package.
+ARG PIP_VERSION=26.2
+ARG PIP_SHA256=931c303696af6fa3417112103b1cad26890e5a07eccb5b99783700e33f2b8aad
 # Alpine 3.24's yq-go 4.53.3 bundles golang.org/x/net 0.55.0 and x/text 0.37.0,
 # which have published Critical and High findings. Upstream 4.54.2 carries the
 # fixed modules, so pin its static binary and verify it rather than the package.
@@ -41,11 +46,14 @@ FROM alpine:3.24
 ARG OPENCODE_VERSION
 ARG NPM_VERSION
 ARG NPM_SHA512
+ARG PIP_VERSION
+ARG PIP_SHA256
 ARG YQ_VERSION
 ARG YQ_SHA256
 LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai" \
       io.workspaced.opencode.version="${OPENCODE_VERSION}" \
       io.workspaced.npm.version="${NPM_VERSION}" \
+      io.workspaced.pip.version="${PIP_VERSION}" \
       io.workspaced.yq.version="${YQ_VERSION}"
 
 # The agent's own tools: git and ripgrep, which opencode would otherwise download at run
@@ -73,7 +81,12 @@ RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libst
  && tar -xzf /tmp/npm.tgz -C /usr/local/lib/node_modules/npm --strip-components=1 \
  && ln -sf ../lib/node_modules/npm/bin/npm-cli.js /usr/local/bin/npm \
  && ln -sf ../lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx \
- && rm -r /tmp/npm.tgz /tmp/yq /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
+ && curl -fsSL -o "/tmp/pip-${PIP_VERSION}-py3-none-any.whl" \
+      "https://files.pythonhosted.org/packages/62/36/a3aed958d60531cb442b7ab4596cda7b3621cfb916f8ae1d6769795c7dc1/pip-${PIP_VERSION}-py3-none-any.whl" \
+ && echo "${PIP_SHA256}  /tmp/pip-${PIP_VERSION}-py3-none-any.whl" | sha256sum -c - \
+ && python3 -m pip install --no-cache-dir --no-deps --break-system-packages --root-user-action=ignore --upgrade "/tmp/pip-${PIP_VERSION}-py3-none-any.whl" \
+ && python3 -m pip --version | grep -q "pip ${PIP_VERSION}" \
+ && rm -r /tmp/npm.tgz "/tmp/pip-${PIP_VERSION}-py3-none-any.whl" /tmp/yq /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
  && adduser -D -u 1000 -h /home/workspace workspace \
  && rm /var/log/apk.log
 
