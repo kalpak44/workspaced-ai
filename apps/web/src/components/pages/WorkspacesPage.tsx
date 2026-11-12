@@ -2,9 +2,10 @@ import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useModelProviders } from "../../hooks/useModelProviders";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
+import { useBackupRun } from "../../hooks/useBackupRun";
 import { DEFAULT_NAME, useWorkspaces } from "../../hooks/useWorkspaces";
 import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
-import { CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, Sidebar, TopBar } from "../organisms";
+import { BackupDialog, CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, Sidebar, TopBar } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -13,6 +14,7 @@ import { WorkspacePage } from "./WorkspacePage";
 
 const APP = "workspaced-ai";
 const GeneralSettingsPage = lazy(() => import("./GeneralSettingsPage").then((page) => ({ default: page.GeneralSettingsPage })));
+const BackupsPage = lazy(() => import("./BackupsPage").then((page) => ({ default: page.BackupsPage })));
 
 /**
  * The frame every page shares — the bar, the sidebar of workspaces, the create dialog — and
@@ -33,12 +35,14 @@ export function WorkspacesPage() {
     restart,
     remove,
     patch,
+    added,
   } = useWorkspaces();
   const providers = useModelProviders();
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [restartId, setRestartId] = useState<string | null>(null);
+  const [backupId, setBackupId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const openNew = () => setNewName(suggestName());
 
@@ -46,6 +50,7 @@ export function WorkspacesPage() {
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const deleteTarget = workspaces.find((w) => w.id === deleteId) ?? null;
   const restartTarget = workspaces.find((w) => w.id === restartId) ?? null;
+  const backupTarget = workspaces.find((w) => w.id === backupId) ?? null;
 
   // Home is the first workspace, and a workspace that is gone — deleted here or in another
   // tab, or a stale link — falls back to home. Both replace the entry, so Back skips them.
@@ -68,6 +73,13 @@ export function WorkspacesPage() {
   if (route.name === "general-settings") {
     tabTitle = "General settings";
     page = <Suspense fallback={<EmptyState busy title="Loading settings…" hint="Preparing your preferences" />}><GeneralSettingsPage /></Suspense>;
+  } else if (route.name === "backups") {
+    tabTitle = "Backups";
+    page = (
+      <Suspense fallback={<EmptyState busy title="Loading backups…" hint="Fetching them from the API" />}>
+        <BackupsPage group={route.group} onCreated={added} onRestored={(id) => patch(id, { status: "INITIALIZING" })} />
+      </Suspense>
+    );
   } else if (loading || (workspaceId !== null && !workspace)) {
     tabTitle = "Workspaces";
     page = (
@@ -125,7 +137,7 @@ export function WorkspacesPage() {
     <AppLayout
       header={<TopBar theme={theme} onThemeChange={setTheme} />}
       sidebar={
-        route.name !== "session" && route.name !== "terminal" && route.name !== "settings" && route.name !== "general-settings" && <Sidebar
+        route.name !== "session" && route.name !== "terminal" && route.name !== "settings" && route.name !== "general-settings" && route.name !== "backups" && <Sidebar
           workspaces={workspaces}
           selectedId={workspace?.id ?? null}
           deleting={deleting}
@@ -135,6 +147,8 @@ export function WorkspacesPage() {
           onSettings={(id) => navigate({ name: "settings", workspaceId: id })}
           onTerminal={(id) => navigate({ name: "terminal", workspaceId: id })}
           onRestart={setRestartId}
+          onBackup={setBackupId}
+          onRestore={(id) => navigate({ name: "backups", group: id })}
           onDelete={setDeleteId}
         />
       }
@@ -164,6 +178,14 @@ export function WorkspacesPage() {
           }}
         />
       )}
+      {backupTarget && (
+        <BackupRun
+          key={backupTarget.id}
+          workspaceId={backupTarget.id}
+          name={backupTarget.name}
+          onClose={() => setBackupId(null)}
+        />
+      )}
       {deleteTarget && (
         <DeleteWorkspaceDialog
           name={deleteTarget.name}
@@ -175,5 +197,14 @@ export function WorkspacesPage() {
         />
       )}
     </AppLayout>
+  );
+}
+
+/** Mounted for one backup: it starts on mount and stops following when the dialog closes. */
+function BackupRun({ workspaceId, name, onClose }: { readonly workspaceId: string; readonly name: string; readonly onClose: () => void }) {
+  const { backup, error } = useBackupRun(workspaceId);
+  return (
+    <BackupDialog name={name} backup={backup} error={error} onClose={onClose}
+      onShowBackups={() => { onClose(); navigate({ name: "backups", group: workspaceId }); }} />
   );
 }

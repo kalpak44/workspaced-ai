@@ -221,6 +221,14 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   }
 
   @Override
+  public Optional<String> secret(UUID workspaceId, String name) {
+    var secret = client.secrets().inNamespace(namespace).withName(resourceName(workspaceId)).get();
+    var data = secret == null ? null : secret.getData();
+    return Optional.ofNullable(data == null ? null : data.get(name))
+        .map(value -> new String(Base64.getDecoder().decode(value), StandardCharsets.UTF_8));
+  }
+
+  @Override
   public void removeSecret(UUID workspaceId, String name) {
     var secret = client.secrets().inNamespace(namespace).withName(resourceName(workspaceId));
     var current = secret.get();

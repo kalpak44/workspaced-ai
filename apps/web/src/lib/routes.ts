@@ -2,6 +2,8 @@
 export type Route =
   | { readonly name: "home" }
   | { readonly name: "general-settings" }
+  // `group` is the workspace a backup was made of, which may since have been deleted.
+  | { readonly name: "backups"; readonly group?: string }
   | { readonly name: "workspace"; readonly workspaceId: string }
   | { readonly name: "settings"; readonly workspaceId: string }
   | { readonly name: "terminal"; readonly workspaceId: string; readonly terminalId?: string }
@@ -12,6 +14,8 @@ export type Route =
 const ID = "([A-Za-z0-9_-]+)";
 const PATTERNS: ReadonlyArray<[RegExp, (ids: string[]) => Route]> = [
   [/^\/settings\/?$/, () => ({ name: "general-settings" })],
+  [/^\/settings\/backups\/?$/, () => ({ name: "backups" })],
+  [new RegExp(`^/settings/backups/${ID}/?$`), ([g]) => ({ name: "backups", group: g })],
   [new RegExp(`^/workspaces/${ID}/?$`), ([w]) => ({ name: "workspace", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/settings/?$`), ([w]) => ({ name: "settings", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/terminal/?$`), ([w]) => ({ name: "terminal", workspaceId: w })],
@@ -39,6 +43,8 @@ export function routePath(route: Route): string {
       return "/";
     case "general-settings":
       return "/settings";
+    case "backups":
+      return `/settings/backups${route.group ? `/${route.group}` : ""}`;
     case "workspace":
       return `/workspaces/${route.workspaceId}`;
     case "settings":

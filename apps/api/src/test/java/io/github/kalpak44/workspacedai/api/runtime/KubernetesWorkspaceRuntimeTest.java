@@ -167,6 +167,15 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
+  void readsOneSecretBack() {
+    assertThat(runtime.secret(id, "API_KEY")).isEmpty();
+    runtime.start(id, ENVIRONMENT);
+    runtime.putSecret(id, "GITHUB_TOKEN", "ghp_1");
+    assertThat(runtime.secret(id, "GITHUB_TOKEN")).hasValue("ghp_1");
+    assertThat(runtime.secret(id, "MISSING")).isEmpty();
+  }
+
+  @Test
   void createsTheSecretForAWorkspaceThatHadNone() {
     runtime.removeSecret(id, "GITHUB_TOKEN");
     runtime.putSecret(id, "GITHUB_TOKEN", "ghp_1");

@@ -198,8 +198,39 @@ public class OpenCodeHarness implements Harness {
     shell(endpoint, "rm -rf -- " + quote(path.toString()));
   }
 
+  /**
+   * The job goes in a file rather than on the command line, which keeps the signed URL out of the
+   * process list. The tool runs in a session of its own so it outlives the shell that starts it.
+   */
+  @Override
+  public boolean startBackup(HarnessEndpoint endpoint, String backupId, URI uploadUrl) {
+    if (shellExit(endpoint, "command -v workspace-backup") != 0) {
+      return false;
+    }
+    var directory = quote(BACKUP_DIRECTORY);
+    shell(endpoint, "mkdir -p -- " + directory + " && rm -f -- " + directory + "/status.json");
+    writeFile(
+        endpoint,
+        BACKUP_DIRECTORY + "/job.json",
+        json.writeValueAsString(Map.of("id", backupId, "uploadUrl", uploadUrl.toString())));
+    shell(endpoint, "setsid workspace-backup run > " + directory + "/log 2>&1 < /dev/null &");
+    return true;
+  }
+
+  @Override
+  public Optional<String> backupStatus(HarnessEndpoint endpoint) {
+    return readFile(endpoint, BACKUP_DIRECTORY, "status.json");
+  }
+
   /** Runs one command to completion, failing unless it exits with 0. */
   private void shell(HarnessEndpoint endpoint, String command) {
+    if (shellExit(endpoint, command) != 0) {
+      throw new HarnessUnavailableException("the workspace could not run: " + command);
+    }
+  }
+
+  /** Runs one command to completion and answers its exit code. */
+  private int shellExit(HarnessEndpoint endpoint, String command) {
     var info =
         call(
                 endpoint,
@@ -224,9 +255,10 @@ public class OpenCodeHarness implements Harness {
               .path("data");
     }
     var exit = number(info, "exit");
-    if (!"exited".equals(text(info, "status")) || exit == null || exit != 0) {
+    if (!"exited".equals(text(info, "status")) || exit == null) {
       throw new HarnessUnavailableException("the workspace could not run: " + command);
     }
+    return exit.intValue();
   }
 
   private static String quote(String value) {

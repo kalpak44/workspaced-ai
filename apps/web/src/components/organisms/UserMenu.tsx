@@ -40,6 +40,9 @@ export function UserMenu({ theme, onThemeChange }: Props) {
           <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "general-settings" }); }}>
             Settings
           </MenuItem>
+          <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "backups" }); }}>
+            Backups
+          </MenuItem>
           <MenuLink className={`${ROW} ${SEPARATED}`} href="/api/v1/swagger-ui">
             API Reference
           </MenuLink>

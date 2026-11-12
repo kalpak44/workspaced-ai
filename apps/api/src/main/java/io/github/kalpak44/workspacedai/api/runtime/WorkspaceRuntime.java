@@ -29,6 +29,9 @@ public interface WorkspaceRuntime {
   /** Adds or replaces one secret. A running workspace sees it only once it restarts. */
   void putSecret(UUID workspaceId, String name, String value);
 
+  /** One secret's value; empty when the workspace has no such secret, or none at all. */
+  Optional<String> secret(UUID workspaceId, String name);
+
   /** Removes one secret; removing one that is not there is not an error. */
   void removeSecret(UUID workspaceId, String name);
 

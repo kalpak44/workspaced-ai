@@ -1,6 +1,7 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
+import type { Backup } from "../src/api/backupsApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
 import type { Variable } from "../src/api/variablesApi";
@@ -157,6 +158,14 @@ export function installFakeApi(
     listed: [] as string[],
   };
 
+  const backups = {
+    list: [] as Backup[],
+    nextId: 1,
+    restored: [] as string[],
+    failStart: 0,
+    failRun: false,
+  };
+
   // Spring's paging: `sort` is "field,direction", repeated, most significant first. The list
   // order stands in for creation order, oldest first, with the signed-in account the oldest.
   function usersResponse(url: string, init?: RequestInit): Response | null {
@@ -248,6 +257,10 @@ export function installFakeApi(
     }
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
+    }
+    const backupAnswer = backupsResponse(url, init);
+    if (backupAnswer) {
+      return backupAnswer;
     }
     const instructionsRoute = /\/api\/v1\/workspaces\/([^/]+)\/instructions(?:\/([^/]+))?$/.exec(url);
     if (instructionsRoute) {
@@ -476,6 +489,51 @@ export function installFakeApi(
     return new Response(null, { status: 204 });
   }
 
+  // Each GET of a running backup moves it on by half, so a test sees it run and then finish.
+  function backupsResponse(url: string, init?: RequestInit): Response | null {
+    const method = init?.method ?? "GET";
+    const start = /\/api\/v1\/workspaces\/([^/]+)\/backups$/.exec(url);
+    if (start && method === "POST") {
+      const workspace = rows.find((w) => w.id === start[1]);
+      if (!workspace) return json({}, 404);
+      if (backups.failStart) return json({}, backups.failStart);
+      const backup = newBackup({ id: `backup-${backups.nextId++}`, workspaceId: workspace.id, workspaceName: workspace.name, status: "RUNNING", progress: 0, phase: "preparing", sizeBytes: null });
+      backups.list.unshift(backup);
+      return json(backup, 202);
+    }
+    const route = /\/api\/v1\/backups(?:\/([^/]+))?(?:\/(restore|workspaces|download))?$/.exec(url);
+    if (!route) return null;
+    const [, id, action] = route;
+    if (!id) return json(backups.list.map((b) => ({ ...b, workspaceExists: rows.some((w) => w.id === b.workspaceId) })));
+    const index = backups.list.findIndex((b) => b.id === id);
+    if (index < 0) return json({}, 404);
+    const backup = backups.list[index];
+    if (action === "restore") {
+      backups.restored.push(id);
+      return new Response(null, { status: 202 });
+    }
+    if (action === "download") return json({ url: `https://storage/${id}`, expiresAt: "2099-01-01T00:00:00Z" });
+    if (action === "workspaces") {
+      const body = JSON.parse(String(init!.body)) as { name: string; apiKey?: string };
+      if (body.apiKey === REJECTED_KEY) return json({}, 422);
+      if (!body.apiKey && !rows.some((w) => w.id === backup.workspaceId)) return json({}, 400);
+      const created: Workspace = { id: `ws-${state.nextId++}`, name: body.name, modelProvider: "openrouter", model: backup.model, status: "INITIALIZING", restartRequired: false };
+      rows.push(created);
+      return json(created, 201);
+    }
+    if (method === "DELETE") {
+      backups.list.splice(index, 1);
+      return new Response(null, { status: 204 });
+    }
+    if (backup.status === "RUNNING") {
+      const progress = Math.min(100, backup.progress + 50);
+      backups.list[index] = progress === 100
+        ? { ...backup, progress, status: backups.failRun ? "FAILED" : "COMPLETED", phase: "done", sizeBytes: 2_500_000, error: backups.failRun ? "disk full" : null }
+        : { ...backup, progress, phase: "archiving" };
+    }
+    return json({ ...backups.list[index], workspaceExists: rows.some((w) => w.id === backup.workspaceId) });
+  }
+
   function markRestartRequired(workspaceId: string, restartRequired: boolean) {
     const index = rows.findIndex((w) => w.id === workspaceId);
     rows[index] = { ...rows[index], restartRequired };
@@ -516,5 +574,17 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { backups, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+}
+
+/** A completed backup with nothing in it, for a test to override what it is about. */
+export function newBackup(overrides: Partial<Backup> = {}): Backup {
+  return {
+    id: "backup-0", workspaceId: "starter", workspaceName: "Starter", workspaceExists: true,
+    status: "COMPLETED", phase: "done", progress: 100, sizeBytes: 1_200_000, error: null,
+    createdAt: "2026-11-12T10:00:00Z", completedAt: "2026-11-12T10:01:00Z",
+    modelProvider: "openrouter", model: null, sessionTtlEnabled: false, sessionTtlHours: 168,
+    secrets: [], variables: [], instructions: [], tasks: [], sessions: 0,
+    ...overrides,
+  };
 }

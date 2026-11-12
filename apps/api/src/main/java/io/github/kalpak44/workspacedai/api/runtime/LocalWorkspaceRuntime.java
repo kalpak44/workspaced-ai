@@ -45,6 +45,12 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public Optional<String> secret(UUID workspaceId, String name) {
+    // None was kept.
+    return Optional.empty();
+  }
+
+  @Override
   public void removeSecret(UUID workspaceId, String name) {
     // Nothing was kept, so there is nothing to remove.
   }

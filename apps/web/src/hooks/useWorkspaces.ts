@@ -161,6 +161,13 @@ export function useWorkspaces() {
     );
   };
 
+  /** A workspace the API created elsewhere, e.g. from a backup. */
+  const added = (workspace: Workspace) =>
+    setWorkspaces((current) => [
+      ...current.filter((w) => w.id !== workspace.id),
+      { ...workspace, status: latest.current.get(workspace.id) ?? workspace.status },
+    ]);
+
   /** A change the API has already accepted elsewhere, e.g. a new model from the settings page. */
   const patch = (id: string, changes: Partial<Workspace>) =>
     setWorkspaces((current) => current.map((w) => (w.id === id ? { ...w, ...changes } : w)));
@@ -182,5 +189,6 @@ export function useWorkspaces() {
     restart,
     remove,
     patch,
+    added,
   };
 }

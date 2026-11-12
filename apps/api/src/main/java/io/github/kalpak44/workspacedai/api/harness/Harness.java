@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.harness;
 
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.OutputStream;
+import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -46,6 +47,20 @@ public interface Harness {
    * edits them in the app; the agent can edit them too.
    */
   String VARIABLES_FILE = HOME + "/.config/workspaced/.env";
+
+  /**
+   * Where the harness's backup tool takes its job and reports its progress; the tool leaves this
+   * folder out of every archive it makes.
+   */
+  String BACKUP_DIRECTORY = HOME + "/.cache/workspaced/backup";
+
+  /**
+   * A restore the API asks for: the archive's URL and an id the harness records once it has
+   * restored, so a later start does not restore again. No user secret may take either name.
+   */
+  String RESTORE_URL_VARIABLE = "WORKSPACED_RESTORE_URL";
+
+  String RESTORE_ID_VARIABLE = "WORKSPACED_RESTORE_ID";
 
   /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
@@ -160,6 +175,17 @@ public interface Harness {
   void writeTask(HarnessEndpoint endpoint, String name, String content);
 
   void deleteTask(HarnessEndpoint endpoint, String name);
+
+  /**
+   * Starts archiving the home and uploading it to that URL, and returns at once; follow it with
+   * {@link #backupStatus}.
+   *
+   * @return false when the harness image predates backups, so nothing was started
+   */
+  boolean startBackup(HarnessEndpoint endpoint, String backupId, URI uploadUrl);
+
+  /** The backup tool's latest report, as JSON; empty before it has written one. */
+  Optional<String> backupStatus(HarnessEndpoint endpoint);
 
   /** An MCP server the harness reaches over HTTP, or one it starts in the workspace. */
   sealed interface McpServerConfig {
