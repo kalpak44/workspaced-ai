@@ -28,6 +28,7 @@ import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -234,6 +235,42 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
     var current = secret.get();
     if (current != null && current.getData() != null && current.getData().containsKey(name)) {
       secret.edit(s -> new SecretBuilder(s).removeFromData(name).build());
+    }
+  }
+
+  /**
+   * The newest pod's, since an older one is on its way out. A pod whose container has not started
+   * has no log yet, and a missing permission is not a reason to fail the caller: both read as
+   * nothing printed.
+   */
+  @Override
+  public List<String> recentLog(UUID workspaceId, int lines) {
+    try {
+      var newest =
+          client
+              .pods()
+              .inNamespace(namespace)
+              .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
+              .list()
+              .getItems()
+              .stream()
+              .filter(p -> p.getMetadata().getDeletionTimestamp() == null)
+              .max(Comparator.comparing(p -> p.getMetadata().getCreationTimestamp()));
+      if (newest.isEmpty()) {
+        return List.of();
+      }
+      var log =
+          client
+              .pods()
+              .inNamespace(namespace)
+              .withName(newest.get().getMetadata().getName())
+              .inContainer(CONTAINER)
+              .tailingLines(lines)
+              .getLog();
+      return log == null || log.isEmpty() ? List.of() : List.of(log.split("\n"));
+    } catch (KubernetesClientException e) {
+      LOG.debug("could not read the log of workspace {}", workspaceId, e);
+      return List.of();
     }
   }
 

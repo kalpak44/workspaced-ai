@@ -20,6 +20,7 @@ import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -27,6 +28,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -36,6 +38,10 @@ import tools.jackson.databind.json.JsonMapper;
  */
 @Service
 public class BackupService {
+
+  private static final String RESTORE_PROGRESS = "workspace-backup progress ";
+  // The restore reports once a second, so its last report is always among these.
+  private static final int RESTORE_LOG_LINES = 20;
 
   // Long enough to start a download, short enough that a link pasted somewhere soon stops working.
   private static final Duration DOWNLOAD_TTL = Duration.ofMinutes(15);
@@ -134,6 +140,46 @@ public class BackupService {
     }
     progress.follow(entity.getId(), workspaceId, entity.getObjectKey());
     return Backup.of(entity, manifest, workspace.getName(), true);
+  }
+
+  /**
+   * Read from the workspace's own log: the restore runs before its harness, so the log is all there
+   * is. Empty when the newest pod is not restoring, as after an ordinary restart.
+   */
+  public Optional<RestoreProgress> restoreProgress(UUID workspaceId) {
+    return latestRestoreProgress(runtime.recentLog(workspaceId, RESTORE_LOG_LINES), json);
+  }
+
+  /** The last progress line of a log, if it has one that reads. */
+  static Optional<RestoreProgress> latestRestoreProgress(List<String> lines, JsonMapper json) {
+    for (var i = lines.size() - 1; i >= 0; i--) {
+      var line = lines.get(i);
+      var at = line.indexOf(RESTORE_PROGRESS);
+      if (at < 0) {
+        continue;
+      }
+      try {
+        var report = json.readTree(line.substring(at + RESTORE_PROGRESS.length()));
+        var phase = report.path("phase").asString("");
+        var done = report.path("done").asLong(0);
+        var total = report.path("total").asLong(0);
+        return Optional.of(new RestoreProgress(phase, done, total, overall(phase, done, total)));
+      } catch (JacksonException _) {
+        return Optional.empty();
+      }
+    }
+    return Optional.empty();
+  }
+
+  /** Extracting takes most of a restore on a network volume, one round trip per file. */
+  static int overall(String phase, long done, long total) {
+    return switch (phase) {
+      case "downloading" -> BackupProgress.share(done, total, 0, 20);
+      case "checking" -> BackupProgress.share(done, total, 20, 30);
+      case "extracting" -> BackupProgress.share(done, total, 30, 99);
+      case "done" -> 100;
+      default -> 0;
+    };
   }
 
   /** Every backup the user has, newest first, named as each workspace is now if it still is. */

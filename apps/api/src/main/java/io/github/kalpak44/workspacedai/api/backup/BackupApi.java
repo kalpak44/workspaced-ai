@@ -70,6 +70,22 @@ public interface BackupApi {
   ResponseEntity<Backup> start(@Parameter(description = "Workspace id") @PathVariable UUID id);
 
   @Operation(
+      operationId = "getRestoreProgress",
+      summary = "How far a workspace's restore is",
+      description =
+          "While a workspace restores a backup, before its agent starts: downloading, checking "
+              + "and extracting the archive. 204 when it is not restoring.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Restoring.",
+      content =
+          @Content(mediaType = JSON, schema = @Schema(implementation = RestoreProgress.class)))
+  @ApiResponse(responseCode = "204", description = "Not restoring.")
+  @GetMapping(path = "/workspaces/{id}/restore", produces = JSON)
+  ResponseEntity<RestoreProgress> restoreProgress(
+      @Parameter(description = "Workspace id") @PathVariable UUID id);
+
+  @Operation(
       operationId = "listBackups",
       summary = "List backups",
       description =

@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.runtime;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -34,6 +35,12 @@ public interface WorkspaceRuntime {
 
   /** Removes one secret; removing one that is not there is not an error. */
   void removeSecret(UUID workspaceId, String name);
+
+  /**
+   * The last lines its newest pod printed, oldest first; empty when it has no pod or the log cannot
+   * be read. Before its harness starts, this is the only way to hear from it.
+   */
+  List<String> recentLog(UUID workspaceId, int lines);
 
   /** Where the workspace's harness answers; empty while it has none running. */
   Optional<HarnessEndpoint> harness(UUID workspaceId);

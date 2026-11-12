@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useState } from "react";
+import { createContext, useCallback, useContext, useRef, useState } from "react";
 import { linkSessionFile, uploadSessionFile } from "../api/sessionFilesApi";
 import { ApiError } from "../api/http";
 
@@ -6,7 +6,8 @@ import { ApiError } from "../api/http";
 export interface Attachment {
   readonly id: string;
   readonly name: string;
-  readonly status: "uploading" | "ready" | "failed";
+  /** "queued" waits in the browser for a session to exist, as on the start screen. */
+  readonly status: "queued" | "uploading" | "ready" | "failed";
   /** Relative to the session's folder, once uploaded. */
   readonly path: string | null;
   readonly error: string | null;
@@ -30,6 +31,62 @@ export function isSessionFileLink(href: string | undefined): href is string {
   if (!href || href.startsWith("#")) return false;
   if (href.startsWith("/home/workspace/")) return true;
   return !href.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(href);
+}
+
+/** Names the uploaded files under the message, so the agent knows to read them. */
+export function attachmentNote(text: string, paths: readonly string[]): string {
+  if (paths.length === 0) return text;
+  return `${text ? `${text}\n\n` : ""}Attached files:\n${paths.map((p) => `- ${p}`).join("\n")}`;
+}
+
+/**
+ * Files picked before there is a session to put them in. They are uploaded only once the
+ * session exists, on send.
+ */
+export function useFileQueue() {
+  const [attachments, setAttachments] = useState<Attachment[]>([]);
+  const files = useRef(new Map<string, File>());
+
+  const update = (id: string, changes: Partial<Attachment>) =>
+    setAttachments((current) => current.map((a) => (a.id === id ? { ...a, ...changes } : a)));
+
+  const attach = (picked: readonly File[]) => {
+    for (const file of picked) {
+      const id = `${file.name}-${crypto.randomUUID()}`;
+      const tooLarge = file.size > MAX_BYTES;
+      if (!tooLarge) files.current.set(id, file);
+      setAttachments((current) => [...current, { id, name: file.name, status: tooLarge ? "failed" : "queued", path: null, error: tooLarge ? "Larger than 100 MB" : null }]);
+    }
+  };
+
+  const detach = (id: string) => {
+    files.current.delete(id);
+    setAttachments((current) => current.filter((a) => a.id !== id));
+  };
+
+  /** Every queued file into the session; null when any of them failed, which stay to retry. */
+  const uploadTo = async (workspaceId: string, sessionId: string): Promise<string[] | null> => {
+    const queued = attachments.filter((a) => a.status === "queued" || (a.status === "failed" && files.current.has(a.id)));
+    const results = await Promise.all(queued.map(async (a) => {
+      update(a.id, { status: "uploading", error: null });
+      try {
+        const uploaded = await uploadSessionFile(workspaceId, sessionId, files.current.get(a.id)!);
+        update(a.id, { status: "ready", path: uploaded.path });
+        return uploaded.path;
+      } catch {
+        update(a.id, { status: "failed", error: "Upload failed" });
+        return null;
+      }
+    }));
+    return results.every((path) => path !== null) ? (results as string[]) : null;
+  };
+
+  const clear = () => {
+    files.current.clear();
+    setAttachments([]);
+  };
+
+  return { attachments, attach, detach, uploadTo, clear };
 }
 
 /** Files between the user and one session's agent: what the composer attaches, and links out. */
@@ -59,13 +116,8 @@ export function useSessionFiles(workspaceId: string | null, sessionId: string | 
 
   const detach = (id: string) => setAttachments((current) => current.filter((a) => a.id !== id));
 
-  /** Names the uploaded files under the message, so the agent knows to read them, and clears them. */
-  const withAttachments = (text: string): string => {
-    const ready = attachments.filter((a) => a.status === "ready" && a.path);
-    if (ready.length === 0) return text;
-    const list = ready.map((a) => `- ${a.path}`).join("\n");
-    return `${text ? `${text}\n\n` : ""}Attached files:\n${list}`;
-  };
+  const withAttachments = (text: string): string =>
+    attachmentNote(text, attachments.filter((a) => a.status === "ready" && a.path).map((a) => a.path!));
 
   const clear = () => setAttachments([]);
 

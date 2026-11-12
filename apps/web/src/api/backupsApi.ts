@@ -79,3 +79,18 @@ export async function createWorkspaceFromBackup(id: string, request: WorkspaceFr
 export async function downloadBackup(id: string): Promise<BackupDownload> {
   return (await send(`${backupUrl(id)}/download`, { method: "POST" })).json();
 }
+
+/** How far a workspace is through restoring, before its agent starts. */
+export interface RestoreProgress {
+  readonly phase: "downloading" | "checking" | "extracting" | "done" | string;
+  readonly done: number;
+  readonly total: number;
+  /** 0 to 100, across all phases. */
+  readonly progress: number;
+}
+
+/** Null when the workspace is not restoring. */
+export async function getRestoreProgress(workspaceId: string): Promise<RestoreProgress | null> {
+  const response = await send(`${workspaceUrl(workspaceId)}/restore`);
+  return response.status === 204 ? null : response.json();
+}

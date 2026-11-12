@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -16,7 +16,7 @@ async function openSession(api: ReturnType<typeof installFakeApi>, reply = "Done
   ]);
   globalThis.history.replaceState(null, "", "/workspaces/starter/sessions/s-1");
   render(<App />);
-  await screen.findByText(reply.startsWith("Here") ? "report.pdf" : reply);
+  await screen.findByRole("heading", { name: "Files" });
 }
 
 describe("session files", () => {
@@ -51,6 +51,49 @@ describe("session files", () => {
     expect(screen.queryByRole("list", { name: "Attached files" })).not.toBeInTheDocument();
   });
 
+  it("starts a session with files attached on the start screen", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    globalThis.history.replaceState(null, "", "/workspaces/starter");
+    render(<App />);
+    await user.upload(await screen.findByLabelText("Files to attach"), new File(["x"], "brief.md"));
+    // Nothing is uploaded before there is a session to put it in.
+    expect(api.sessionFiles.size).toBe(0);
+    await user.type(screen.getByLabelText("Message"), "Summarise it");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(location.pathname).toBe("/workspaces/starter/sessions/s-1"));
+    expect(api.sessionFiles.has("s-1/uploads/brief.md")).toBe(true);
+    await waitFor(() => expect(api.prompts).toEqual([{ sessionId: "s-1", text: "Summarise it\n\nAttached files:\n- uploads/brief.md" }]));
+  });
+
+  it("keeps the text and files on the start screen when an upload fails", async () => {
+    const api = installFakeApi();
+    api.sessionFiles.failUpload = 500;
+    const user = userEvent.setup();
+    globalThis.history.replaceState(null, "", "/workspaces/starter");
+    render(<App />);
+    await user.upload(await screen.findByLabelText("Files to attach"), new File(["x"], "brief.md"));
+    await user.type(screen.getByLabelText("Message"), "Summarise it");
+    await user.click(screen.getByRole("button", { name: "Send" }));
+    expect(await screen.findByText("· Upload failed")).toBeInTheDocument();
+    expect(location.pathname).toBe("/workspaces/starter");
+    expect(screen.getByLabelText("Message")).toHaveValue("Summarise it");
+    await waitFor(() => expect(api.sessions.get("starter") ?? []).toEqual([]));
+  });
+
+  it("attaches files dropped on the composer", async () => {
+    const api = installFakeApi();
+    await openSession(api);
+    const composer = screen.getByLabelText("Message").closest("form")!;
+    const file = new File(["x"], "dropped.txt");
+    const dataTransfer = { types: ["Files"], files: [file] };
+    fireEvent.dragOver(composer, { dataTransfer });
+    expect(screen.getByText("Drop files to attach them")).toBeInTheDocument();
+    fireEvent.drop(composer, { dataTransfer });
+    expect(screen.queryByText("Drop files to attach them")).not.toBeInTheDocument();
+    await waitFor(() => expect(api.sessionFiles.has("s-1/uploads/dropped.txt")).toBe(true));
+  });
+
   it("waits for uploads before sending, and drops a removed file", async () => {
     const api = installFakeApi();
     let release = () => {};
@@ -83,9 +126,22 @@ describe("session files", () => {
     const open = vi.spyOn(globalThis, "open").mockReturnValue(null);
     const user = userEvent.setup();
     await openSession(api, "Here it is: [report.pdf](outbox/report.pdf) and [docs](https://example.com)");
-    expect(screen.getByRole("link", { name: "docs" })).toHaveAttribute("href", "https://example.com");
-    await user.click(screen.getByRole("button", { name: "report.pdf" }));
+    expect(await screen.findByRole("link", { name: "docs" })).toHaveAttribute("href", "https://example.com");
+    await user.click(await screen.findByRole("button", { name: "report.pdf" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith("https://app/api/v1/files/token-outbox/report.pdf", "_blank", "noopener"));
+    open.mockRestore();
+  });
+
+  it("offers a download beside a session file path the agent printed instead of linking", async () => {
+    const api = installFakeApi();
+    const path = "/home/workspace/sessions/s-1/out.zip";
+    api.sessionFiles.add(`s-1/${path}`);
+    const open = vi.spyOn(globalThis, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    await openSession(api, `Done: \`${path}\` and \`npm test\``);
+    await user.click(await screen.findByRole("button", { name: "Download out.zip" }));
+    expect(screen.queryByRole("button", { name: /Download npm/ })).not.toBeInTheDocument();
+    await waitFor(() => expect(open).toHaveBeenCalledWith(`https://app/api/v1/files/token-${path}`, "_blank", "noopener"));
     open.mockRestore();
   });
 
@@ -93,7 +149,7 @@ describe("session files", () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     await openSession(api, "Here: [report.pdf](outbox/report.pdf)");
-    await user.click(screen.getByRole("button", { name: "report.pdf" }));
+    await user.click(await screen.findByRole("button", { name: "report.pdf" }));
     expect(await screen.findByText("The file outbox/report.pdf is not in this session.")).toBeInTheDocument();
   });
 });

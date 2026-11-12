@@ -26,6 +26,14 @@ public class BackupController implements BackupApi {
   }
 
   @Override
+  public ResponseEntity<RestoreProgress> restoreProgress(UUID id) {
+    return service
+        .restoreProgress(id)
+        .map(ResponseEntity::ok)
+        .orElseGet(() -> ResponseEntity.noContent().build());
+  }
+
+  @Override
   public ResponseEntity<List<Backup>> list() {
     return ResponseEntity.ok(service.list(CurrentUser.id()));
   }

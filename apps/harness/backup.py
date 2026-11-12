@@ -205,6 +205,22 @@ def wipe(root: Path, keep: Path):
             entry.unlink()
 
 
+class Progress:
+    """One line per second at most on stderr, which the API reads back from the pod's log: the
+    restore runs before OpenCode, so there is nothing else to ask."""
+
+    def __init__(self):
+        self.last = 0.0
+
+    def report(self, phase: str, done: int, total: int, force: bool = False):
+        now = time.monotonic()
+        if not force and now - self.last < 1:
+            return
+        self.last = now
+        line = json.dumps({"phase": phase, "done": done, "total": total})
+        print(f"workspace-backup progress {line}", file=sys.stderr, flush=True)
+
+
 def restore() -> int:
     url = os.environ.get("WORKSPACED_RESTORE_URL", "")
     restore_id = os.environ.get("WORKSPACED_RESTORE_ID", "")
@@ -214,21 +230,40 @@ def restore() -> int:
         return 0
     RESTORE_WORK.mkdir(parents=True, exist_ok=True)
     archive = RESTORE_WORK / "archive.tar.gz"
-    print(f"workspace-backup: restoring {restore_id}", file=sys.stderr)
+    progress = Progress()
+    print(f"workspace-backup: restoring {restore_id}", file=sys.stderr, flush=True)
     # Downloaded and read through once before the home is touched, so a broken link or a
     # damaged archive leaves the current files where they are.
     with urllib.request.urlopen(url, timeout=120) as response, archive.open("wb") as f:
-        shutil.copyfileobj(response, f, CHUNK)
+        total = int(response.headers.get("Content-Length") or 0)
+        done = 0
+        progress.report("downloading", 0, total, force=True)
+        while chunk := response.read(CHUNK):
+            f.write(chunk)
+            done += len(chunk)
+            progress.report("downloading", done, total)
+    size = archive.stat().st_size
     with tarfile.open(archive, "r:gz") as tar:
+        # Reading every header decompresses the whole archive, which is the check; the list it
+        # leaves behind is what extraction then counts against.
+        raw = tar.fileobj.fileobj
         for _ in tar:
-            pass
-    wipe(HOME, RESTORE_WORK)
-    with tarfile.open(archive, "r:gz") as tar:
-        tar.extractall(HOME, filter="tar")
+            progress.report("checking", raw.tell(), size)
+        members = tar.getmembers()
+        progress.report("extracting", 0, len(members), force=True)
+        wipe(HOME, RESTORE_WORK)
+
+        def counted():
+            for index, member in enumerate(members, 1):
+                yield member
+                progress.report("extracting", index, len(members))
+
+        tar.extractall(HOME, members=counted(), filter="tar")
     shutil.rmtree(RESTORE_WORK)
     MARKER.parent.mkdir(parents=True, exist_ok=True)
     MARKER.write_text(restore_id + "\n")
-    print(f"workspace-backup: restored {restore_id}", file=sys.stderr)
+    progress.report("done", 1, 1, force=True)
+    print(f"workspace-backup: restored {restore_id}", file=sys.stderr, flush=True)
     return 0
 
 

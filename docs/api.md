@@ -332,6 +332,7 @@ the **names** of its secrets. Secret values are never backed up; the backup list
 |----------|----------------------------------------|-----------------------------------|------------------------------------------------|
 | `POST`   | `/api/v1/workspaces/{id}/backups`      |                                   | `202` and the backup, `409` if one is running, `503` |
 | `GET`    | `/api/v1/backups`                      |                                   | `200`, every backup of the caller's, newest first |
+| `GET`    | `/api/v1/workspaces/{id}/restore`      |                                   | `200` and the restore's progress, or `204`      |
 | `GET`    | `/api/v1/backups/{id}`                 |                                   | `200` with `status`, `phase` and `progress` (0–100) |
 | `POST`   | `/api/v1/backups/{id}/download`        |                                   | `200` and `{url, expiresAt}`, a 15-minute link  |
 | `POST`   | `/api/v1/backups/{id}/restore`         |                                   | `202`; `404` once its workspace is gone         |
@@ -347,7 +348,10 @@ restarts is picked up again.
 A restore signs a download URL into the workspace's Secret as `WORKSPACED_RESTORE_URL` and `WORKSPACED_RESTORE_ID` and
 restarts it; `start.sh` runs `workspace-backup restore` before OpenCode starts, downloading and checking the archive
 before it replaces the home, so a broken link leaves the old files. The id is recorded in the home, so later starts
-do not restore again. A new workspace from a backup starts the same way; without `apiKey` it reuses the original
+do not restore again. While it runs, the restore prints a progress line about once a second (downloading,
+checking, extracting), and `GET /api/v1/workspaces/{id}/restore` reads the newest pod's log for the last one: `200`
+with `{phase, done, total, progress}`, or `204` when the workspace is not restoring. The API's service account needs
+`get` on `pods/log` for it. A new workspace from a backup starts the same way; without `apiKey` it reuses the original
 workspace's key while that workspace exists. Backups outlive their workspace and are kept under
 `users/<owner>/workspaces/<workspace>/<backup>.tar.gz`. A harness image from before backups answers `409` until the
 workspace is restarted onto the current one.

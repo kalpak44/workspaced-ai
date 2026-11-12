@@ -170,6 +170,8 @@ export function installFakeApi(
     restored: [] as string[],
     failStart: 0,
     failRun: false,
+    // A workspace's restore as its status page reads it; absent means it is not restoring.
+    restoreProgress: new Map<string, { phase: string; done: number; total: number; progress: number }>(),
   };
 
   // Spring's paging: `sort` is "field,direction", repeated, most significant first. The list
@@ -521,6 +523,11 @@ export function installFakeApi(
       const backup = newBackup({ id: `backup-${backups.nextId++}`, workspaceId: workspace.id, workspaceName: workspace.name, status: "RUNNING", progress: 0, phase: "preparing", sizeBytes: null });
       backups.list.unshift(backup);
       return json(backup, 202);
+    }
+    const restoring = /\/api\/v1\/workspaces\/([^/]+)\/restore$/.exec(url);
+    if (restoring) {
+      const progress = backups.restoreProgress.get(restoring[1]);
+      return progress ? json(progress) : new Response(null, { status: 204 });
     }
     const route = /\/api\/v1\/backups(?:\/([^/]+))?(?:\/(restore|workspaces|download))?$/.exec(url);
     if (!route) return null;

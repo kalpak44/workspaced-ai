@@ -167,6 +167,14 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
+  void readsNoLogFromAWorkspaceWithoutAPod() {
+    assertThat(runtime.recentLog(id, 10)).isEmpty();
+    runtime.start(id, ENVIRONMENT);
+    // The mock server has no logs to give; that reads as nothing printed rather than failing.
+    assertThat(runtime.recentLog(id, 10)).isNotNull();
+  }
+
+  @Test
   void readsOneSecretBack() {
     assertThat(runtime.secret(id, "API_KEY")).isEmpty();
     runtime.start(id, ENVIRONMENT);

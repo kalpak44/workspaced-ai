@@ -203,6 +203,12 @@ class BackupTest {
   }
 
   @Test
+  void reportsNoRestoreProgressForAWorkspaceThatIsNotRestoring() throws Exception {
+    assertThat(send("GET", "/workspaces/" + workspace + "/restore", null).statusCode())
+        .isEqualTo(204);
+  }
+
+  @Test
   void restoresOnlyACompletedBackup() throws Exception {
     var id = startBackup();
     assertThat(send("POST", "/backups/" + id + "/restore", null).statusCode()).isEqualTo(409);

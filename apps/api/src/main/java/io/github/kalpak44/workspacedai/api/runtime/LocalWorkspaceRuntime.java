@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.runtime;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -53,6 +54,12 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   @Override
   public void removeSecret(UUID workspaceId, String name) {
     // Nothing was kept, so there is nothing to remove.
+  }
+
+  @Override
+  public List<String> recentLog(UUID workspaceId, int lines) {
+    // Nothing runs locally, so nothing prints.
+    return List.of();
   }
 
   @Override

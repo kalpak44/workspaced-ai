@@ -1,5 +1,6 @@
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import type { Attachment } from "../../hooks/useSessionFiles";
 import type { Session } from "../../hooks/useSessions";
 import { Button, IconButton, Spinner } from "../atoms";
 import { ChatComposer, ErrorBanner, SessionCard } from "../molecules";
@@ -15,6 +16,10 @@ interface Props {
   readonly onDismissError: () => void;
   /** Starts a session with this first message and opens it. */
   readonly onStart: (text: string) => Promise<boolean>;
+  /** Files waiting for the session the first message starts. */
+  readonly attachments?: readonly Attachment[];
+  readonly onAttach?: (files: File[]) => void;
+  readonly onDetach?: (id: string) => void;
   readonly onOpen: (id: string) => void;
   readonly onDelete: (id: string) => void;
   /** Asks to delete these; they stay selected until they are gone, so a cancel keeps the choice. */
@@ -82,6 +87,9 @@ export function SessionList(props: Props) {
           placeholder="Describe a task, and a new session starts on it…"
           onSend={props.onStart}
           onStop={() => {}}
+          attachments={props.attachments}
+          onAttach={props.onAttach}
+          onDetach={props.onDetach}
         />
       </div>
       <div>

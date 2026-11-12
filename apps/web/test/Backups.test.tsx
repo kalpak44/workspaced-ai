@@ -148,6 +148,26 @@ describe("backups", () => {
     expect(api.backups.list).toHaveLength(0);
   });
 
+  it("shows how far a starting workspace is through its restore", async () => {
+    const api = installFakeApi([{ id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "INITIALIZING", restartRequired: false }]);
+    api.backups.restoreProgress.set("starter", { phase: "extracting", done: 77492, total: 84048, progress: 94 });
+    await openApp("/workspaces/starter");
+    expect(await screen.findByText("Restoring files: 77,492 of 84,048")).toBeInTheDocument();
+    expect(screen.getByRole("progressbar", { name: "Restore progress" })).toHaveAttribute("aria-valuenow", "94");
+    api.backups.restoreProgress.set("starter", { phase: "downloading", done: 1_000_000, total: 2_000_000, progress: 10 });
+    expect(await screen.findByText("Downloading the backup: 1.0 MB of 2.0 MB", {}, { timeout: 3000 })).toBeInTheDocument();
+    api.backups.restoreProgress.set("starter", { phase: "checking", done: 1, total: 2, progress: 25 });
+    expect(await screen.findByText(/Checking the archive/, {}, { timeout: 3000 })).toBeInTheDocument();
+    api.backups.restoreProgress.set("starter", { phase: "done", done: 1, total: 1, progress: 100 });
+    expect(await screen.findByText("Starting the agent…", {}, { timeout: 3000 })).toBeInTheDocument();
+  }, 15000);
+
+  it("shows the ordinary start when the workspace is not restoring", async () => {
+    installFakeApi([{ id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "INITIALIZING", restartRequired: false }]);
+    await openApp("/workspaces/starter");
+    expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();
+  });
+
   it("opens the backups page from the account menu", async () => {
     installFakeApi();
     const user = userEvent.setup();

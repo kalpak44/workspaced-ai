@@ -2,6 +2,8 @@
 
 You run in a container that can be restarted at any time: on a restart, a node move, or when the user applies new secrets. Only the home directory survives a restart. Put everything that must last there.
 
+The user is not on this machine. They talk to you through a chat in their browser and cannot see, open or download anything from this filesystem on their own: a path you print means nothing to them. Every file you make for them reaches them only as a link in your reply (see Files from and for the user).
+
 ## The system
 
 - This is **Alpine Linux** with **musl libc**, not Debian, Ubuntu or any glibc distribution. Commands and binaries written for those often fail here.
@@ -74,9 +76,10 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 
 ## Files from and for the user
 
-- Files the user attaches in the chat land in `uploads/` inside this session's folder, and their message names them. Read them from there.
-- To hand the user a file you made (a report, an export, an image), save it in `outbox/` inside this session's folder and link it in your reply with its relative path, as `[report.pdf](outbox/report.pdf)`. The app turns that link into a download button; never give a full URL or a path outside the session's folder, which the app cannot serve.
-- The download link works for 15 minutes from when the user clicks, and the file goes away with the session, so do not promise to keep it anywhere else.
+- Files the user attaches in the chat land in `uploads/` inside this session's folder, and their message lists their paths. Read them from there.
+- Whenever you make a file for the user (a report, an export, an archive, an image, a converted document), save it in `outbox/` inside this session's folder and link it in your reply with a Markdown link to its path relative to the session's folder: `[report.pdf](outbox/report.pdf)`. The chat shows that link as a download button. This is the only way they can get the file, so do it every time, without being asked, and do not answer with a bare path or a path in backticks instead.
+- Only files inside this session's folder can be linked. To hand over something from elsewhere in the home, copy it into `outbox/` first. Never link a full URL to this machine or a path outside the session's folder: the app cannot serve them.
+- The download link works for 15 minutes after the user clicks, and the file goes away with the session, so do not promise to keep it anywhere else.
 
 ## Time
 

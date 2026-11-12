@@ -1,5 +1,5 @@
 import { FileWarning, Mic, MicOff, Paperclip, SendHorizontal, Square, X } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
+import { type DragEvent, type KeyboardEvent, type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useDictation } from "../../hooks/useDictation";
 import type { Attachment } from "../../hooks/useSessionFiles";
 import { IconButton, Spinner } from "../atoms";
@@ -40,7 +40,8 @@ export function ChatComposer({
   const [text, setText] = useState("");
   const picker = useRef<HTMLInputElement>(null);
   const uploading = attachments.some((a) => a.status === "uploading");
-  const attached = attachments.some((a) => a.status === "ready");
+  const attached = attachments.some((a) => a.status === "ready" || a.status === "queued");
+  const [dragging, setDragging] = useState(false);
   const [pending, setPending] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const dictation = useDictation((spoken) => {
@@ -83,7 +84,22 @@ export function ChatComposer({
         event.preventDefault();
         void submit();
       }}
-      className="flex flex-col gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
+      onDragOver={onAttach && !disabled ? (event: DragEvent) => {
+        if (!event.dataTransfer.types.includes("Files")) return;
+        event.preventDefault();
+        setDragging(true);
+      } : undefined}
+      onDragLeave={(event: DragEvent) => {
+        // Leaving for a child of the form is not leaving the form.
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={onAttach && !disabled ? (event: DragEvent) => {
+        event.preventDefault();
+        setDragging(false);
+        onAttach([...event.dataTransfer.files]);
+      } : undefined}
+      data-dragging={dragging || undefined}
+      className="data-[dragging]:border-dashed data-[dragging]:border-zinc-500 data-[dragging]:bg-zinc-50 dark:data-[dragging]:bg-zinc-800/60 flex flex-col gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
     >
       {dictation.listening && (
         <div role="status" className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm dark:bg-rose-950/40">
@@ -99,6 +115,7 @@ export function ChatComposer({
           </span>
         </div>
       )}
+      {dragging && <p className="px-2 text-xs font-medium text-zinc-600 dark:text-zinc-300">Drop files to attach them</p>}
       {attachments.length > 0 && (
         <ul aria-label="Attached files" className="flex flex-wrap gap-1.5 px-1">
           {attachments.map((a) => (
@@ -106,7 +123,7 @@ export function ChatComposer({
               className={`flex max-w-56 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${a.status === "failed" ? "border-rose-300 text-rose-600 dark:border-rose-900 dark:text-rose-400" : "border-zinc-200 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"}`}>
               {a.status === "uploading" && <Spinner label={`Uploading ${a.name}`} className="size-3" />}
               {a.status === "failed" && <FileWarning aria-hidden className="size-3.5 shrink-0" />}
-              {a.status === "ready" && <Paperclip aria-hidden className="size-3.5 shrink-0" />}
+              {(a.status === "ready" || a.status === "queued") && <Paperclip aria-hidden className="size-3.5 shrink-0" />}
               <span className="min-w-0 truncate">{a.name}</span>
               {a.status === "failed" && <span className="shrink-0">· {a.error}</span>}
               {onDetach && <button type="button" aria-label={`Remove ${a.name}`} onClick={() => onDetach(a.id)} className="shrink-0 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"><X aria-hidden className="size-3.5" /></button>}
