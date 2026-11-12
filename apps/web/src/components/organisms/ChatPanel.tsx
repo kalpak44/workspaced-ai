@@ -2,6 +2,7 @@ import { Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../../hooks/useChat";
 import type { AgentForm, FormAnswer } from "../../hooks/useChat";
+import type { Attachment } from "../../hooks/useSessionFiles";
 import { AgentQuestion } from "../molecules/AgentQuestion";
 import { Spinner } from "../atoms";
 import { ChatComposer, ChatMessageEditor, ChatMessageView, ErrorBanner } from "../molecules";
@@ -19,10 +20,13 @@ interface Props {
   readonly modelControl?: ReactNode;
   readonly forms: readonly AgentForm[];
   readonly onAnswer: (id: string, answer?: FormAnswer) => Promise<boolean>;
+  readonly attachments?: readonly Attachment[];
+  readonly onAttach?: (files: File[]) => void;
+  readonly onDetach?: (id: string) => void;
 }
 
 /** One session's conversation, with the composer pinned below it. */
-export function ChatPanel({ messages, loading, busy, disabled = false, error, onDismissError, onSend, onStop, onEdit, modelControl, forms, onAnswer }: Props) {
+export function ChatPanel({ messages, loading, busy, disabled = false, error, onDismissError, onSend, onStop, onEdit, modelControl, forms, onAnswer, attachments, onAttach, onDetach }: Props) {
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   // Keep the editor mounted even if a revert event removes the original message before
   // the request settles. A failed replacement must leave the draft available to copy.
@@ -93,7 +97,8 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
         {body}
       </div>
       <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
-        <ChatComposer busy={busy} disabled={disabled || editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop} />
+        <ChatComposer busy={busy} disabled={disabled || editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop}
+          attachments={attachments} onAttach={onAttach} onDetach={onDetach} />
         <p className="mt-2 text-center text-xs text-zinc-400">
           Enter to send · Shift+Enter for a new line
         </p>

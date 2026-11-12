@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.harness;
 
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.util.List;
@@ -186,6 +187,20 @@ public interface Harness {
 
   /** The backup tool's latest report, as JSON; empty before it has written one. */
   Optional<String> backupStatus(HarnessEndpoint endpoint);
+
+  /**
+   * Writes the stream to that absolute path, creating its folder, without holding it in memory.
+   *
+   * @param length the stream's exact length in bytes
+   */
+  void uploadFile(HarnessEndpoint endpoint, String path, InputStream content, long length);
+
+  /** A file under the directory, streamed; empty when there is no such file. */
+  Optional<HarnessFile> downloadFile(
+      HarnessEndpoint endpoint, String directory, String relativePath);
+
+  /** A file being read from the workspace; closing it releases the connection. */
+  record HarnessFile(InputStream content, long length) {}
 
   /** An MCP server the harness reaches over HTTP, or one it starts in the workspace. */
   sealed interface McpServerConfig {

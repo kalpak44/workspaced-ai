@@ -81,7 +81,7 @@ function sessionsUrl(workspaceId: string): string {
   return `${workspaceUrl(workspaceId)}/sessions`;
 }
 
-function sessionUrl(workspaceId: string, sessionId: string): string {
+export function sessionUrl(workspaceId: string, sessionId: string): string {
   if (!SAFE_ID.test(sessionId)) {
     throw new Error("Invalid session id");
   }

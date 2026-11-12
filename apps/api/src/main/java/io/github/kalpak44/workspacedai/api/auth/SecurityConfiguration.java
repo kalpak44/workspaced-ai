@@ -90,6 +90,8 @@ public class SecurityConfiguration {
     "/v3/api-docs/**",
     "/swagger-ui/**",
     "/swagger-ui.html",
+    // A download link carries its own signed token, and is opened outside the app.
+    "/files/*",
     "/error"
   };
 

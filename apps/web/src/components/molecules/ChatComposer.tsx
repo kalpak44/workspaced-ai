@@ -1,7 +1,8 @@
-import { Mic, MicOff, SendHorizontal, Square } from "lucide-react";
+import { FileWarning, Mic, MicOff, Paperclip, SendHorizontal, Square, X } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useDictation } from "../../hooks/useDictation";
-import { IconButton } from "../atoms";
+import type { Attachment } from "../../hooks/useSessionFiles";
+import { IconButton, Spinner } from "../atoms";
 
 // The API refuses anything longer.
 const MAX_TEXT = 100000;
@@ -17,6 +18,10 @@ interface Props {
   /** Resolves true once accepted; the text is kept on false so nothing typed is lost. */
   readonly onSend: (text: string) => Promise<boolean>;
   readonly onStop: () => void;
+  /** Files picked to go with the next message; without onAttach there is no attach button. */
+  readonly attachments?: readonly Attachment[];
+  readonly onAttach?: (files: File[]) => void;
+  readonly onDetach?: (id: string) => void;
 }
 
 /** Enter sends and Shift+Enter starts a new line, as in most chat apps. */
@@ -28,8 +33,14 @@ export function ChatComposer({
   modelControl,
   onSend,
   onStop,
+  attachments = [],
+  onAttach,
+  onDetach,
 }: Props) {
   const [text, setText] = useState("");
+  const picker = useRef<HTMLInputElement>(null);
+  const uploading = attachments.some((a) => a.status === "uploading");
+  const attached = attachments.some((a) => a.status === "ready");
   const [pending, setPending] = useState(false);
   const field = useRef<HTMLTextAreaElement>(null);
   const dictation = useDictation((spoken) => {
@@ -45,7 +56,7 @@ export function ChatComposer({
 
   const submit = async () => {
     const message = text.trim();
-    if (!message || disabled || busy || pending || dictation.listening) {
+    if ((!message && !attached) || uploading || disabled || busy || pending || dictation.listening) {
       return;
     }
     setPending(true);
@@ -88,6 +99,21 @@ export function ChatComposer({
           </span>
         </div>
       )}
+      {attachments.length > 0 && (
+        <ul aria-label="Attached files" className="flex flex-wrap gap-1.5 px-1">
+          {attachments.map((a) => (
+            <li key={a.id} title={a.error ?? a.name}
+              className={`flex max-w-56 items-center gap-1.5 rounded-lg border px-2 py-1 text-xs ${a.status === "failed" ? "border-rose-300 text-rose-600 dark:border-rose-900 dark:text-rose-400" : "border-zinc-200 text-zinc-700 dark:border-zinc-700 dark:text-zinc-300"}`}>
+              {a.status === "uploading" && <Spinner label={`Uploading ${a.name}`} className="size-3" />}
+              {a.status === "failed" && <FileWarning aria-hidden className="size-3.5 shrink-0" />}
+              {a.status === "ready" && <Paperclip aria-hidden className="size-3.5 shrink-0" />}
+              <span className="min-w-0 truncate">{a.name}</span>
+              {a.status === "failed" && <span className="shrink-0">· {a.error}</span>}
+              {onDetach && <button type="button" aria-label={`Remove ${a.name}`} onClick={() => onDetach(a.id)} className="shrink-0 rounded text-zinc-400 hover:text-zinc-700 dark:hover:text-zinc-200"><X aria-hidden className="size-3.5" /></button>}
+            </li>
+          ))}
+        </ul>
+      )}
       <textarea
         ref={field}
         aria-label="Message"
@@ -101,6 +127,12 @@ export function ChatComposer({
         className="max-h-48 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed"
       />
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
+      {onAttach && <>
+        <IconButton label="Attach files" title="Attach files" icon={Paperclip} disabled={disabled || pending}
+          onClick={() => picker.current?.click()} className="mr-auto" />
+        <input ref={picker} type="file" multiple aria-label="Files to attach" className="hidden"
+          onChange={(event) => { onAttach([...(event.target.files ?? [])]); event.target.value = ""; }} />
+      </>}
       {modelControl}
       {dictation.supported && <IconButton
         label={dictation.listening ? "Stop dictation" : "Dictate message"}
@@ -116,7 +148,7 @@ export function ChatComposer({
           label="Send"
           icon={SendHorizontal}
           submit
-          disabled={disabled || pending || dictation.listening || !text.trim()}
+          disabled={disabled || pending || uploading || dictation.listening || (!text.trim() && !attached)}
         />
       )}
       </div>

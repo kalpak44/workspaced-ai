@@ -220,6 +220,24 @@ The model selector is available beside the composer for new tasks and session ch
 all sessions in the workspace. Supported browsers also offer microphone dictation; recognized text stays in the
 composer for review and is sent as an ordinary text prompt.
 
+### Session files
+
+| Method | Path | Body | Answers |
+|--------|------|------|---------|
+| `PUT`  | `/api/v1/workspaces/{id}/sessions/{sid}/files/{name}` | the file itself | `201` and `{name, path, size}`; `400`, `411`, `413` |
+| `POST` | `/api/v1/workspaces/{id}/sessions/{sid}/files/links` | `{"path": "outbox/report.pdf"}` | `200` and `{url, expiresAt}`; `400`, `404` |
+| `GET`  | `/api/v1/files/{token}` | | `200` and the file as an attachment; `404` |
+
+An upload, at most 100 MB with its `Content-Length`, is streamed into `uploads/<name>` in the session's own folder and
+never held by the API; the UI names the uploaded files under the message it sends. A name is a plain file name: up to
+200 letters, digits, spaces and `. _ ( ) + -`, starting with a letter or digit.
+
+The agent hands a file back by saving it in the session's folder and linking it relatively, as
+`[report.pdf](outbox/report.pdf)` (the system guide tells it so); the chat renders such a link as a download button.
+A link is signed with the login key under its own label, so the download needs no sign-in, and it lasts 15 minutes. It
+is checked against the session on every use, so it dies with the session, and it is always served as an attachment,
+so a file the agent wrote never renders as a page of this site. A path that would leave the session's folder is `400`.
+
 ## Agent settings
 
 | Method   | Path                                           | Body                                              | Answers                                   |

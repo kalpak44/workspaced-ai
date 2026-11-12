@@ -1,15 +1,36 @@
+import { Download } from "lucide-react";
+import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { isSessionFileLink, useFileLink } from "../../hooks/useSessionFiles";
+
+/**
+ * A link to a file in the session's folder becomes a download, since the browser cannot open a
+ * path inside the workspace; any other link opens in a new tab.
+ */
+function Link({ href, children }: { readonly href?: string; readonly children?: ReactNode }) {
+  const open = useFileLink();
+  if (open && isSessionFileLink(href)) {
+    return (
+      <button type="button" onClick={() => open(href)} title={`Download ${href}`}
+        className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-1.5 py-0.5 align-baseline text-[0.95em] hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
+        <Download aria-hidden className="size-3.5" />
+        {children}
+      </button>
+    );
+  }
+  return (
+    <a href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2">
+      {children}
+    </a>
+  );
+}
 
 // Raw HTML in the source is never rendered: react-markdown escapes it unless told otherwise,
 // and model output is not trusted markup.
 const COMPONENTS: Components = {
   p: ({ children }) => <p className="my-3 first:mt-0 last:mb-0">{children}</p>,
-  a: ({ href, children }) => (
-    <a href={href} target="_blank" rel="noreferrer" className="underline underline-offset-2">
-      {children}
-    </a>
-  ),
+  a: ({ href, children }) => <Link href={href}>{children}</Link>,
   ul: ({ children }) => <ul className="my-3 list-disc space-y-1 pl-6">{children}</ul>,
   ol: ({ children }) => <ol className="my-3 list-decimal space-y-1 pl-6">{children}</ol>,
   h1: ({ children }) => <h3 className="mt-5 mb-2 text-lg font-semibold">{children}</h3>,

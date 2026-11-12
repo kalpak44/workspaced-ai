@@ -3,6 +3,7 @@ import { useChat } from "../../hooks/useChat";
 import { navigate } from "../../hooks/useRoute";
 import { useSessions } from "../../hooks/useSessions";
 import { useSessionAgents } from "../../hooks/useSessionAgents";
+import { FileLinkContext, useSessionFiles } from "../../hooks/useSessionFiles";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
@@ -27,6 +28,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   const sessions = useSessions(ready ? workspace.id : null);
   const chat = useChat(ready ? workspace.id : null, ready ? sessionId : null, sessions.retitle);
   const agents = useSessionAgents(ready ? workspace.id : null, ready ? sessionId : null);
+  const files = useSessionFiles(ready ? workspace.id : null, ready ? sessionId : null);
   const switchingAgent = agents.saving !== null;
   const session = sessions.sessions.find((s) => s.id === sessionId);
   const title = session?.title ?? "New session";
@@ -51,6 +53,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
         crumbs={[{ label: workspace.name, onClick: back }]}
       />
       {ready ? (
+        <FileLinkContext.Provider value={files.open}>
         <ChatPanel
           messages={chat.messages}
           loading={chat.loading && chat.messages.length === 0}
@@ -58,16 +61,25 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           disabled={switchingAgent}
           forms={chat.forms}
           onAnswer={chat.answerForm}
-          error={sessions.error ?? chat.error}
+          error={sessions.error ?? chat.error ?? files.linkError}
           onDismissError={() => {
             sessions.dismissError();
             chat.dismissError();
+            files.dismissLinkError();
           }}
           modelControl={<><ChatAgentPicker agents={agents} disabled={chat.busy || chat.forms.length > 0} /><ChatModelPicker workspace={workspace} disabled={chat.busy || switchingAgent} onChanged={onModelChanged} /></>}
           onEdit={chat.edit}
-          onSend={chat.send}
+          onSend={async (text) => {
+            const sent = await chat.send(files.withAttachments(text));
+            if (sent) files.clear();
+            return sent;
+          }}
           onStop={chat.stop}
+          attachments={files.attachments}
+          onAttach={files.attach}
+          onDetach={files.detach}
         />
+        </FileLinkContext.Provider>
       ) : (
         <WorkspaceStatusView workspace={workspace} deleting={deleting} />
       )}

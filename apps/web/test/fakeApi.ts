@@ -158,6 +158,12 @@ export function installFakeApi(
     listed: [] as string[],
   };
 
+  // Every file in a session's folder, as "<session>/<path>"; `linked` is each path a link was made for.
+  const sessionFiles = Object.assign(new Set<string>(), {
+    linked: [] as string[],
+    failUpload: 0,
+    holdUpload: null as Promise<void> | null,
+  });
   const backups = {
     list: [] as Backup[],
     nextId: 1,
@@ -327,6 +333,21 @@ export function installFakeApi(
     }
     if (settingsRoute) {
       return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
+    }
+    const filesRoute = /\/api\/v1\/workspaces\/([^/]+)\/sessions\/([^/]+)\/files\/([^/]+)$/.exec(url);
+    if (filesRoute) {
+      const [, , sessionId, name] = filesRoute;
+      if (name === "links") {
+        const { path } = JSON.parse(String(init!.body)) as { path: string };
+        if (!sessionFiles.has(`${sessionId}/${path}`)) return json({}, 404);
+        sessionFiles.linked.push(path);
+        return json({ url: `https://app/api/v1/files/token-${path}`, expiresAt: "2099-01-01T00:00:00Z" });
+      }
+      if (sessionFiles.failUpload) return json({}, sessionFiles.failUpload);
+      if (sessionFiles.holdUpload) await sessionFiles.holdUpload;
+      const decoded = decodeURIComponent(name);
+      sessionFiles.add(`${sessionId}/uploads/${decoded}`);
+      return json({ name: decoded, path: `uploads/${decoded}`, size: (init!.body as Blob).size }, 201);
     }
     const sessionsRoute =
       /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort|agent|forms(?:\/[^/]+(?:\/reply)?)?))?$/.exec(url);
@@ -574,7 +595,7 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { backups, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { sessionFiles, backups, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }
 
 /** A completed backup with nothing in it, for a test to override what it is about. */

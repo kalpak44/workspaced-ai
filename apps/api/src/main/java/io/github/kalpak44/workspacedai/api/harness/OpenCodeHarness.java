@@ -20,6 +20,7 @@ import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -32,6 +33,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -49,6 +51,8 @@ public class OpenCodeHarness implements Harness {
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
   private static final Duration SHELL_TIMEOUT = Duration.ofSeconds(30);
   private static final Duration SHELL_POLL = Duration.ofMillis(200);
+  // A file moves at the speed of the user's connection, not the harness's.
+  private static final Duration TRANSFER_TIMEOUT = Duration.ofMinutes(10);
   private static final String CONFIG_DIRECTORY = HOME + "/.config/opencode";
   private static final String MCP_CONFIG = "opencode.jsonc";
   private static final String MARKDOWN = ".md";
@@ -220,6 +224,59 @@ public class OpenCodeHarness implements Harness {
   @Override
   public Optional<String> backupStatus(HarnessEndpoint endpoint) {
     return readFile(endpoint, BACKUP_DIRECTORY, "status.json");
+  }
+
+  @Override
+  public void uploadFile(HarnessEndpoint endpoint, String path, InputStream content, long length) {
+    shell(endpoint, "mkdir -p -- " + quote(Path.of(path).getParent().toString()));
+    var request =
+        request(endpoint, "/api/experimental/fs/write?path=" + encode(path))
+            .timeout(TRANSFER_TIMEOUT)
+            .header("Content-Type", "application/octet-stream")
+            .POST(
+                BodyPublishers.fromPublisher(BodyPublishers.ofInputStream(() -> content), length));
+    check(send(request));
+  }
+
+  @Override
+  public Optional<HarnessFile> downloadFile(
+      HarnessEndpoint endpoint, String directory, String relativePath) {
+    var segments =
+        Arrays.stream(relativePath.split("/"))
+            .map(segment -> encode(segment).replace("+", "%20"))
+            .collect(Collectors.joining("/"));
+    var request =
+        request(endpoint, withLocation("/api/fs/read/" + segments, directory))
+            .timeout(TRANSFER_TIMEOUT)
+            .GET()
+            .build();
+    HttpResponse<InputStream> response;
+    try {
+      response = http.send(request, BodyHandlers.ofInputStream());
+    } catch (IOException e) {
+      throw new HarnessUnavailableException("the workspace's OpenCode service is not answering", e);
+    } catch (InterruptedException e) {
+      Thread.currentThread().interrupt();
+      throw new HarnessUnavailableException("interrupted calling OpenCode", e);
+    }
+    if (response.statusCode() == 404) {
+      close(response.body());
+      return Optional.empty();
+    }
+    if (response.statusCode() / 100 != 2) {
+      close(response.body());
+      throw new HarnessUnavailableException("OpenCode V2 answered " + response.statusCode());
+    }
+    var length = response.headers().firstValueAsLong("Content-Length").orElse(-1);
+    return Optional.of(new HarnessFile(response.body(), length));
+  }
+
+  private static void close(InputStream stream) {
+    try {
+      stream.close();
+    } catch (IOException e) {
+      LOG.debug("could not close a response from OpenCode", e);
+    }
   }
 
   /** Runs one command to completion, failing unless it exits with 0. */

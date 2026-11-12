@@ -72,6 +72,12 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - Read the service's log for the public URL and give it to the user.
 - Anyone with the URL can open it. Never make public the terminal, files from the home folder, or anything that shows a secret. Deleting the service file stops the sharing.
 
+## Files from and for the user
+
+- Files the user attaches in the chat land in `uploads/` inside this session's folder, and their message names them. Read them from there.
+- To hand the user a file you made (a report, an export, an image), save it in `outbox/` inside this session's folder and link it in your reply with its relative path, as `[report.pdf](outbox/report.pdf)`. The app turns that link into a download button; never give a full URL or a path outside the session's folder, which the app cannot serve.
+- The download link works for 15 minutes from when the user clicks, and the file goes away with the session, so do not promise to keep it anywhere else.
+
 ## Time
 
 - The clock here is UTC: `date`, logs, file times and the task scheduler all run on it. Do not set `TZ`.
