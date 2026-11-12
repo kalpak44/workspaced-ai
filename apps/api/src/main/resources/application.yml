@@ -48,6 +48,14 @@ workspaced:
     # is a 401 at the next.
     jwt-secret: ${WORKSPACED_JWT_SECRET}
     token-ttl: ${WORKSPACED_TOKEN_TTL:12h}
+  # Workspace backups in S3-compatible storage. Left unset, as it is locally, backups are off
+  # and every backup route answers 503 rather than the API failing to start.
+  backup:
+    endpoint: ${WORKSPACED_BACKUP_ENDPOINT:}
+    bucket: ${WORKSPACED_BACKUP_BUCKET:workspace-backups}
+    region: ${WORKSPACED_BACKUP_REGION:us-east-1}
+    access-key: ${WORKSPACED_BACKUP_ACCESS_KEY:}
+    secret-key: ${WORKSPACED_BACKUP_SECRET_KEY:}
 
 management:
   endpoints:

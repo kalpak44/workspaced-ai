@@ -12,7 +12,9 @@ public class BackupConfiguration {
   @Bean
   @ConditionalOnMissingBean
   BackupStorage backupStorage(BackupProperties properties) {
-    return properties.endpoint() == null
+    // An unset variable reaches here as an empty URI rather than null.
+    var endpoint = properties.endpoint();
+    return endpoint == null || endpoint.toString().isBlank()
         ? new UnconfiguredBackupStorage()
         : new S3BackupStorage(properties);
   }
