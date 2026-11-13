@@ -318,6 +318,79 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
+  void publishesTheWebServerAsAServiceNamedForItsPublicName() {
+    runtime.start(id, ENVIRONMENT);
+
+    runtime.publish(id, "my-app");
+
+    var web = webService("my-app");
+    assertThat(web.getMetadata().getLabels())
+        .containsEntry(WORKSPACE_ID_LABEL, id.toString())
+        .containsEntry("workspaced-ai/web-server", "my-app");
+    assertThat(web.getSpec().getSelector())
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of(WORKSPACE_ID_LABEL, id.toString(), MANAGED_BY_LABEL, MANAGED_BY));
+    var port = web.getSpec().getPorts().getFirst();
+    assertThat(port.getPort()).isEqualTo(80);
+    assertThat(port.getTargetPort().getIntVal()).isEqualTo(8080);
+    // The harness's own Service is left as it was.
+    assertThat(
+            client
+                .services()
+                .inNamespace(namespace())
+                .withName(resourceName(id))
+                .get()
+                .getSpec()
+                .getPorts())
+        .extracting(p -> p.getName())
+        .containsExactly("harness");
+
+    runtime.publish(id, "my-app");
+    runtime.publish(id, "renamed");
+
+    assertThat(webService("my-app")).isNull();
+    assertThat(webService("renamed")).isNotNull();
+  }
+
+  @Test
+  void refusesANameAnotherWorkspaceIsPublishedUnder() {
+    runtime.start(id, ENVIRONMENT);
+    var other = UUID.randomUUID();
+    runtime.start(other, ENVIRONMENT);
+    runtime.publish(other, "my-app");
+
+    assertThatThrownBy(() -> runtime.publish(id, "my-app"))
+        .isInstanceOf(IllegalStateException.class);
+    assertThat(webService("my-app").getMetadata().getLabels())
+        .containsEntry(WORKSPACE_ID_LABEL, other.toString());
+  }
+
+  @Test
+  void unpublishesAndToleratesNothingPublished() {
+    runtime.start(id, ENVIRONMENT);
+    runtime.unpublish(id);
+    runtime.publish(id, "my-app");
+
+    runtime.unpublish(id);
+
+    assertThat(webService("my-app")).isNull();
+    assertThat(client.services().inNamespace(namespace()).withName(resourceName(id)).get())
+        .isNotNull();
+  }
+
+  @Test
+  void removesThePublishedServiceWithTheWorkspace() {
+    runtime.start(id, ENVIRONMENT);
+    runtime.publish(id, "my-app");
+    runtime.stop(id);
+    assertThat(webService("my-app")).isNull();
+  }
+
+  private io.fabric8.kubernetes.api.model.Service webService(String name) {
+    return client.services().inNamespace(namespace()).withName("web-" + name).get();
+  }
+
+  @Test
   void restartsByDeletingThePodsAndKeepingEverythingElse() {
     runtime.start(id, ENVIRONMENT);
     replica("a", "Running", "True");

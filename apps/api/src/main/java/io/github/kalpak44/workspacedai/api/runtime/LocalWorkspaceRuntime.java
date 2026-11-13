@@ -41,6 +41,16 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public void publish(UUID workspaceId, String name) {
+    // Nothing routes to a laptop, so there is no route to make.
+  }
+
+  @Override
+  public void unpublish(UUID workspaceId) {
+    // No route was made.
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     // Nothing runs that could read it, so the value is not kept anywhere.
   }

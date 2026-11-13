@@ -50,6 +50,12 @@ public interface Harness {
   String VARIABLES_FILE = HOME + "/.config/workspaced/.env";
 
   /**
+   * The web server's state in the home. The agent's `web-server publish` writes a request here, the
+   * API answers it beside it, and the address it is public at is kept here while it is on.
+   */
+  String WEB_DIRECTORY = HOME + "/.config/workspaced/web";
+
+  /**
    * Where the harness's backup tool takes its job and reports its progress; the tool leaves this
    * folder out of every archive it makes.
    */
@@ -187,6 +193,23 @@ public interface Harness {
 
   /** The backup tool's latest report, as JSON; empty before it has written one. */
   Optional<String> backupStatus(HarnessEndpoint endpoint);
+
+  /**
+   * Starts the workspace's web server, which answers at that address, and keeps it running across
+   * restarts. Its config and site, once there, are the user's and are left alone.
+   *
+   * @return false when the harness image predates the web server, so nothing was started
+   */
+  boolean enableWebServer(HarnessEndpoint endpoint, URI url);
+
+  /** Stops the web server and keeps it from starting again; its config and site are kept. */
+  void disableWebServer(HarnessEndpoint endpoint);
+
+  /** What the agent asked of the web server, a name or "off"; empty when it asked nothing. */
+  Optional<String> webServerRequest(HarnessEndpoint endpoint);
+
+  /** Leaves the outcome where the agent's tool waits for it, then removes the request. */
+  void answerWebServerRequest(HarnessEndpoint endpoint, String result);
 
   /**
    * Writes the stream to that absolute path, creating its folder, without holding it in memory.

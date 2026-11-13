@@ -16,7 +16,7 @@ import org.springframework.context.annotation.Primary;
  * read.
  */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(WorkspaceProperties.class)
+@EnableConfigurationProperties({WorkspaceProperties.class, WebServerProperties.class})
 public class RuntimeConfiguration {
 
   /** In a pod, the client authenticates with the mounted service account token. */

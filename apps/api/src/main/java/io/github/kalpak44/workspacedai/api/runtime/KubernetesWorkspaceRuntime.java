@@ -57,6 +57,11 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
   static final String MANAGED_BY = "workspaced-ai-api";
   static final String POD_PREFIX = "workspaced-ai-workspace-";
   static final int HARNESS_PORT = 4096;
+  // Where the harness image's nginx listens, unprivileged; its Service offers it on 80.
+  static final int WEB_PORT = 8080;
+  // Each public name's Service is web-<name>, which is what the gateway in front resolves.
+  static final String WEB_SERVICE_PREFIX = "web-";
+  static final String WEB_SERVER_LABEL = "workspaced-ai/web-server";
   // The user the harness image runs as, which owns the home it works in.
   private static final long HARNESS_USER = 1000L;
   private static final String BY_WORKSPACE = "workspace";
@@ -202,6 +207,65 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .inNamespace(namespace)
         .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
         .delete();
+  }
+
+  /**
+   * A Service of its own, named for the public name, so whatever routes the domain inside the
+   * cluster finds the workspace by that name alone. Publishing under another name replaces it.
+   */
+  @Override
+  public void publish(UUID workspaceId, String name) {
+    var service = webServiceName(name);
+    var existing = client.services().inNamespace(namespace).withName(service).get();
+    if (existing != null && !workspaceOf(existing).contains(workspaceId.toString())) {
+      throw new IllegalStateException(service + " belongs to another workspace");
+    }
+    if (existing == null) {
+      client.services().inNamespace(namespace).resource(webService(workspaceId, name)).create();
+    }
+    webServices(workspaceId).stream()
+        .filter(s -> !s.getMetadata().getName().equals(service))
+        .forEach(s -> client.services().inNamespace(namespace).resource(s).delete());
+  }
+
+  @Override
+  public void unpublish(UUID workspaceId) {
+    webServices(workspaceId)
+        .forEach(s -> client.services().inNamespace(namespace).resource(s).delete());
+  }
+
+  static String webServiceName(String name) {
+    return WEB_SERVICE_PREFIX + name;
+  }
+
+  /** Listed and deleted one by one: the API server offers no deletecollection on Services. */
+  private List<Service> webServices(UUID workspaceId) {
+    return client
+        .services()
+        .inNamespace(namespace)
+        .withLabel(WORKSPACE_ID_LABEL, workspaceId.toString())
+        .withLabel(WEB_SERVER_LABEL)
+        .list()
+        .getItems();
+  }
+
+  private static Service webService(UUID workspaceId, String name) {
+    return new ServiceBuilder()
+        .withMetadata(
+            new ObjectMetaBuilder(metadata(workspaceId))
+                .withName(webServiceName(name))
+                .addToLabels(WEB_SERVER_LABEL, name)
+                .build())
+        .withNewSpec()
+        .addToSelector(WORKSPACE_ID_LABEL, workspaceId.toString())
+        .addToSelector(MANAGED_BY_LABEL, MANAGED_BY)
+        .addNewPort()
+        .withName("http")
+        .withPort(80)
+        .withTargetPort(new IntOrString(WEB_PORT))
+        .endPort()
+        .endSpec()
+        .build();
   }
 
   /** Creates the Secret when it is missing, as it is for a workspace made before secrets were. */
@@ -461,6 +525,7 @@ public class KubernetesWorkspaceRuntime implements WorkspaceRuntime, AutoCloseab
         .withName(name)
         .withPropagationPolicy(DeletionPropagation.BACKGROUND)
         .delete();
+    unpublish(workspaceId);
     client.services().inNamespace(namespace).withName(name).delete();
     client.pods().inNamespace(namespace).withName(name).delete();
     client.secrets().inNamespace(namespace).withName(name).delete();

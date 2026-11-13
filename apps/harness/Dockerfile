@@ -66,10 +66,11 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 # zlib arrives with the alpine:3.24 base as 1.3.2-r1, which carries CVE-2026-4738. The same
 # branch publishes 1.4-r0, but apk add leaves an already-installed base package alone, so
 # ask for that upgrade explicitly instead of relying on the base image to move.
+# nginx is the workspace's public web server, off until the user turns it on (web-server.sh).
 # tzdata lets every tool convert between the UTC clock and the user's time zone; without it
 # a zone name silently reads as UTC, and Python cannot load one at all.
 RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
-      file jq make nano openssh-client py3-pip python3 sqlite tree tzdata uv zip \
+      file jq make nano nginx openssh-client py3-pip python3 sqlite tree tzdata uv zip \
  && curl -fsSL -o /tmp/yq \
       "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
  && echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c - \
@@ -109,6 +110,9 @@ COPY --chmod=0755 now.py /usr/local/bin/now
 COPY --chmod=0755 task.py /usr/local/bin/task
 # Packages the home for a backup the API starts, and puts one back before OpenCode starts.
 COPY --chmod=0755 backup.py /usr/local/bin/workspace-backup
+# The web server's defaults, copied into the home when the user turns it on.
+COPY web/ /usr/share/harness/web/
+COPY --chmod=0755 web-server.sh /usr/local/bin/web-server
 # The musl loader looks in the image's library folders first, then in the home's package
 # root, so a program installed there finds its libraries and the image's own are never
 # shadowed by them.
@@ -130,6 +134,6 @@ ENV HOME=/home/workspace TERM=xterm-256color COLORTERM=truecolor \
 
 USER 1000
 WORKDIR /home/workspace
-EXPOSE 4096
+EXPOSE 4096 8080
 ENTRYPOINT ["/sbin/tini", "--"]
 CMD ["start-harness"]

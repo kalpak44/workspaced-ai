@@ -227,6 +227,32 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public boolean enableWebServer(HarnessEndpoint endpoint, URI url) {
+    if (shellExit(endpoint, "command -v web-server") != 0) {
+      return false;
+    }
+    shell(endpoint, "web-server enable " + quote(url.toString()));
+    return true;
+  }
+
+  /** An image without the tool never started a web server, so there is nothing to stop. */
+  @Override
+  public void disableWebServer(HarnessEndpoint endpoint) {
+    shell(endpoint, "! command -v web-server > /dev/null || web-server disable");
+  }
+
+  @Override
+  public Optional<String> webServerRequest(HarnessEndpoint endpoint) {
+    return readFile(endpoint, WEB_DIRECTORY, "request");
+  }
+
+  @Override
+  public void answerWebServerRequest(HarnessEndpoint endpoint, String result) {
+    writeFile(endpoint, WEB_DIRECTORY + "/result", result + "\n");
+    shell(endpoint, "rm -f -- " + quote(WEB_DIRECTORY + "/request"));
+  }
+
+  @Override
   public void uploadFile(HarnessEndpoint endpoint, String path, InputStream content, long length) {
     shell(endpoint, "mkdir -p -- " + quote(Path.of(path).getParent().toString()));
     var request =

@@ -27,6 +27,15 @@ public interface WorkspaceRuntime {
    */
   void restart(UUID workspaceId);
 
+  /**
+   * Makes the workspace's web server reachable under that public name, replacing any name it had.
+   * It outlives restarts; only {@link #unpublish} or stopping the workspace takes it away.
+   */
+  void publish(UUID workspaceId, String name);
+
+  /** Takes its web server's name away; one that has none is not an error. */
+  void unpublish(UUID workspaceId);
+
   /** Adds or replaces one secret. A running workspace sees it only once it restarts. */
   void putSecret(UUID workspaceId, String name, String value);
 

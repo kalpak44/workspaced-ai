@@ -16,6 +16,9 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Query("select w.id from WorkspaceEntity w")
   List<UUID> findAllIds();
 
+  @Query("select w.id from WorkspaceEntity w where w.webServerAgentAllowed = true")
+  List<UUID> findWebServerAgentAllowedIds();
+
   @Query("select w.id from WorkspaceEntity w where w.sessionTtlEnabled = true")
   List<UUID> findTtlEnabledIds();
 
@@ -31,6 +34,20 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Modifying
   @Query("update WorkspaceEntity w set w.model = :model where w.id = :id")
   int updateModel(@Param("id") UUID id, @Param("model") String model);
+
+  /**
+   * Its own transaction, for a caller that must not hold one while it asks the harness. A name
+   * another workspace holds fails here, on the unique constraint.
+   */
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.webServerName = :name where w.id = :id")
+  int updateWebServerName(@Param("id") UUID id, @Param("name") String name);
+
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.webServerAgentAllowed = :allowed where w.id = :id")
+  int updateWebServerAgentAllowed(@Param("id") UUID id, @Param("allowed") boolean allowed);
 
   @Query("select w.id from WorkspaceEntity w where w.ownerId = :ownerId")
   List<UUID> findIdsByOwnerId(UUID ownerId);

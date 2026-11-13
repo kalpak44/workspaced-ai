@@ -1,4 +1,4 @@
-import { ArrowLeft, CalendarClock, Clock, FileText, KeyRound, Plug, Variable } from "lucide-react";
+import { ArrowLeft, CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Variable } from "lucide-react";
 import { lazy, Suspense, useState } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { goBack } from "../../hooks/useRoute";
@@ -7,6 +7,7 @@ import type { Workspace } from "../../hooks/useWorkspaces";
 import { McpPanel, SecretsPanel } from "../organisms";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { VariablesPanel } from "../organisms/VariablesPanel";
+import { WebServerPanel } from "../organisms/WebServerPanel";
 import { Spinner } from "../atoms";
 import { ContextLayout } from "../templates/ContextLayout";
 
@@ -22,6 +23,7 @@ const SECTIONS = [
   { id: "secrets", label: "Secrets", Icon: KeyRound },
   { id: "variables", label: "Variables", Icon: Variable },
   { id: "sessions", label: "Sessions", Icon: Clock },
+  { id: "web-server", label: "Web server", Icon: Globe },
   { id: "instructions", label: "Instructions", Icon: FileText },
   { id: "tasks", label: "Tasks", Icon: CalendarClock },
 ] as const;
@@ -89,6 +91,7 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
             <TasksPanel key={workspace.id} workspaceId={workspace.id} />
           </Suspense>
         )}
+        {section === "web-server" && <WebServerPanel key={workspace.id} workspaceId={workspace.id} />}
         <div hidden={section !== "sessions"}>
           <SessionTtlPanel key={workspace.id} workspaceId={workspace.id} />
         </div>
