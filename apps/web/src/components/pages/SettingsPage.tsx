@@ -1,10 +1,10 @@
-import { ArrowLeft, CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Variable } from "lucide-react";
-import { lazy, Suspense, useState } from "react";
+import { Archive, ArrowLeft, CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Variable } from "lucide-react";
+import { lazy, Suspense } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
-import { goBack } from "../../hooks/useRoute";
+import { goBack, navigate } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { McpPanel, SecretsPanel } from "../organisms";
+import { BackupsPanel, McpPanel, SecretsPanel } from "../organisms";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { VariablesPanel } from "../organisms/VariablesPanel";
 import { WebServerPanel } from "../organisms/WebServerPanel";
@@ -13,9 +13,14 @@ import { ContextLayout } from "../templates/ContextLayout";
 
 interface Props {
   readonly workspace: Workspace;
+  /** The open section's id, from the URL; the first section when unset or unknown. */
+  readonly section?: string;
   /** A secret was added or removed; the running workspace sees it only after a restart. */
   readonly onSecretsChanged: () => void;
   readonly onRestart: () => void;
+  /** A backup is being restored, so the workspace is restarting. */
+  readonly onRestored: (workspaceId: string) => void;
+  readonly onCreated: (workspace: Workspace) => void;
 }
 
 const SECTIONS = [
@@ -26,7 +31,10 @@ const SECTIONS = [
   { id: "web-server", label: "Web server", Icon: Globe },
   { id: "instructions", label: "Instructions", Icon: FileText },
   { id: "tasks", label: "Tasks", Icon: CalendarClock },
+  { id: "backups", label: "Backups", Icon: Archive },
 ] as const;
+
+type SectionId = (typeof SECTIONS)[number]["id"];
 
 // The instructions editor is large, so the panels using it are only loaded once opened.
 const InstructionsPanel = lazy(() =>
@@ -35,8 +43,10 @@ const InstructionsPanel = lazy(() =>
 const TasksPanel = lazy(() => import("../organisms/TasksPanel").then((panel) => ({ default: panel.TasksPanel })));
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
-export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) {
-  const [section, setSection] = useState<(typeof SECTIONS)[number]["id"]>("mcp");
+export function SettingsPage({ workspace, section: requested, onSecretsChanged, onRestart, onRestored, onCreated }: Props) {
+  const section: SectionId = SECTIONS.find((s) => s.id === requested)?.id ?? "mcp";
+  // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
+  const setSection = (id: SectionId) => navigate({ name: "settings", workspaceId: workspace.id, section: id }, { replace: true });
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id, onSecretsChanged);
   const back = () => goBack({ name: "workspace", workspaceId: workspace.id });
@@ -92,6 +102,7 @@ export function SettingsPage({ workspace, onSecretsChanged, onRestart }: Props) 
           </Suspense>
         )}
         {section === "web-server" && <WebServerPanel key={workspace.id} workspaceId={workspace.id} />}
+        {section === "backups" && <BackupsPanel key={workspace.id} workspace={workspace} onRestored={onRestored} onCreated={onCreated} />}
         <div hidden={section !== "sessions"}>
           <SessionTtlPanel key={workspace.id} workspaceId={workspace.id} />
         </div>

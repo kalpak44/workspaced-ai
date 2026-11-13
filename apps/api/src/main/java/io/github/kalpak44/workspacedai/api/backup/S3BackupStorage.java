@@ -9,10 +9,13 @@ import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
 import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
 import software.amazon.awssdk.core.checksums.RequestChecksumCalculation;
 import software.amazon.awssdk.core.checksums.ResponseChecksumValidation;
+import software.amazon.awssdk.core.sync.RequestBody;
 import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
 import software.amazon.awssdk.regions.Region;
 import software.amazon.awssdk.services.s3.S3Client;
 import software.amazon.awssdk.services.s3.S3Configuration;
+import software.amazon.awssdk.services.s3.model.CompletedPart;
+import software.amazon.awssdk.services.s3.model.NoSuchUploadException;
 import software.amazon.awssdk.services.s3.model.S3Exception;
 import software.amazon.awssdk.services.s3.presigner.S3Presigner;
 
@@ -86,6 +89,41 @@ class S3BackupStorage implements BackupStorage, AutoCloseable {
   @Override
   public void delete(String key) {
     client.deleteObject(r -> r.bucket(bucket).key(key));
+  }
+
+  @Override
+  public String startUpload(String key) {
+    return client.createMultipartUpload(r -> r.bucket(bucket).key(key)).uploadId();
+  }
+
+  @Override
+  public void uploadPart(String key, String uploadId, int part, byte[] bytes) {
+    client.uploadPart(
+        r -> r.bucket(bucket).key(key).uploadId(uploadId).partNumber(part),
+        RequestBody.fromBytes(bytes));
+  }
+
+  @Override
+  public void completeUpload(String key, String uploadId) {
+    // Asked of the store rather than remembered per part, so no ETag has to be kept anywhere.
+    var parts =
+        client
+            .listPartsPaginator(r -> r.bucket(bucket).key(key).uploadId(uploadId))
+            .parts()
+            .stream()
+            .map(p -> CompletedPart.builder().partNumber(p.partNumber()).eTag(p.eTag()).build())
+            .toList();
+    client.completeMultipartUpload(
+        r -> r.bucket(bucket).key(key).uploadId(uploadId).multipartUpload(m -> m.parts(parts)));
+  }
+
+  @Override
+  public void abortUpload(String key, String uploadId) {
+    try {
+      client.abortMultipartUpload(r -> r.bucket(bucket).key(key).uploadId(uploadId));
+    } catch (NoSuchUploadException _) {
+      // Already completed or aborted.
+    }
   }
 
   @Override

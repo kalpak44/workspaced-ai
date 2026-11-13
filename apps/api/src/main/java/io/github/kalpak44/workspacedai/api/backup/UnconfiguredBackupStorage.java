@@ -29,6 +29,26 @@ class UnconfiguredBackupStorage implements BackupStorage {
     throw unavailable();
   }
 
+  @Override
+  public String startUpload(String key) {
+    throw unavailable();
+  }
+
+  @Override
+  public void uploadPart(String key, String uploadId, int part, byte[] bytes) {
+    throw unavailable();
+  }
+
+  @Override
+  public void completeUpload(String key, String uploadId) {
+    throw unavailable();
+  }
+
+  @Override
+  public void abortUpload(String key, String uploadId) {
+    throw unavailable();
+  }
+
   private static ResponseStatusException unavailable() {
     return new ResponseStatusException(
         HttpStatus.SERVICE_UNAVAILABLE,

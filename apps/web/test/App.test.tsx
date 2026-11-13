@@ -507,7 +507,7 @@ describe("App", () => {
     const secrets = await openSettings(user);
     expect(screen.getByRole("navigation", { name: "Workspace settings sections" })).toBeVisible();
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).not.toBeInTheDocument();
-    expect(path()).toBe("/workspaces/starter/settings");
+    expect(path()).toBe("/workspaces/starter/settings/secrets");
     expect(document.title).toBe("Settings · Starter — workspaced-ai");
     expect(within(secrets).getByText("Model provider")).toBeInTheDocument();
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();

@@ -15,6 +15,8 @@ import io.github.kalpak44.workspacedai.api.workspace.Workspace;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
+import java.io.IOException;
+import java.io.InputStream;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
@@ -42,6 +44,11 @@ public class BackupService {
   private static final String RESTORE_PROGRESS = "workspace-backup progress ";
   // The restore reports once a second, so its last report is always among these.
   private static final int RESTORE_LOG_LINES = 20;
+
+  // Under the 100 MB a request may carry through the proxies in front of the API, and over the
+  // 5 MiB S3 requires of every part but the last.
+  static final int MAX_PART_BYTES = 32 * 1024 * 1024;
+  private static final int MAX_PARTS = 10_000;
 
   // Long enough to start a download, short enough that a link pasted somewhere soon stops working.
   private static final Duration DOWNLOAD_TTL = Duration.ofMinutes(15);
@@ -143,6 +150,100 @@ public class BackupService {
   }
 
   /**
+   * Starts an archive the user uploads, in parts through {@link #uploadPart}, which can then be
+   * restored like any backup. The archive brings only the home, so the settings recorded beside it
+   * are the workspace's own: restoring it leaves them as they are.
+   */
+  public Backup startUpload(UUID workspaceId, long sizeBytes) {
+    var workspace =
+        workspaces
+            .findById(workspaceId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "no workspace " + workspaceId));
+    if (backups.existsByWorkspaceIdAndStatus(workspaceId, BackupStatus.RUNNING)) {
+      throw alreadyRunning();
+    }
+    var manifest = manifest(workspace, List.of(), List.of());
+    var entity =
+        BackupEntity.upload(
+            UUID.randomUUID(),
+            workspace.getOwnerId(),
+            workspaceId,
+            workspace.getName(),
+            json.writeValueAsString(manifest),
+            sizeBytes);
+    entity.setUploadId(storage.startUpload(entity.getObjectKey()));
+    try {
+      backups.saveAndFlush(entity);
+    } catch (DataIntegrityViolationException e) {
+      storage.abortUpload(entity.getObjectKey(), entity.getUploadId());
+      throw alreadyRunning();
+    }
+    return Backup.of(entity, manifest, workspace.getName(), true);
+  }
+
+  /**
+   * One part of an upload, numbered from 1. The first is checked for gzip's signature, so a file
+   * that is not an archive is refused before the rest is sent rather than when the workspace fails
+   * to start on it.
+   */
+  public void uploadPart(UUID ownerId, UUID backupId, int part, InputStream body) {
+    var backup = uploading(ownerId, backupId);
+    if (part < 1 || part > MAX_PARTS) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "a part number is from 1 to " + MAX_PARTS);
+    }
+    byte[] bytes;
+    try {
+      bytes = body.readNBytes(MAX_PART_BYTES + 1);
+    } catch (IOException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "the part could not be read", e);
+    }
+    if (bytes.length == 0) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "the part is empty");
+    }
+    if (bytes.length > MAX_PART_BYTES) {
+      throw new ResponseStatusException(
+          HttpStatus.CONTENT_TOO_LARGE, "a part is at most " + MAX_PART_BYTES + " bytes");
+    }
+    if (part == 1 && !gzipped(bytes)) {
+      discard(backup);
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "the file is not a .tar.gz archive, as a download is");
+    }
+    storage.uploadPart(backup.getObjectKey(), backup.getUploadId(), part, bytes);
+    // Parts are the same size but the last, so this is exact until the last one arrives.
+    var received = Math.min((long) part * bytes.length, backup.getSizeBytes());
+    backups.progress(
+        backupId,
+        "uploading",
+        Math.min(99, BackupProgress.share(received, backup.getSizeBytes(), 0, 100)));
+  }
+
+  /**
+   * Joins the parts into the archive. One that does not come to the size declared is failed rather
+   * than kept, since a restore of a truncated archive would fail the workspace's start.
+   */
+  public Backup completeUpload(UUID ownerId, UUID backupId) {
+    var backup = uploading(ownerId, backupId);
+    var key = backup.getObjectKey();
+    storage.completeUpload(key, backup.getUploadId());
+    var size = storage.size(key).orElse(0);
+    if (size != backup.getSizeBytes()) {
+      storage.delete(key);
+      backups.fail(
+          backupId,
+          "the upload is incomplete: " + size + " of " + backup.getSizeBytes() + " bytes arrived",
+          now());
+    } else {
+      backups.complete(backupId, size, now());
+    }
+    return get(ownerId, backupId);
+  }
+
+  /**
    * Read from the workspace's own log: the restore runs before its harness, so the log is all there
    * is. Empty when the newest pod is not restoring, as after an ordinary restart.
    */
@@ -208,9 +309,16 @@ public class BackupService {
     return new BackupDownload(storage.downloadUrl(backup.getObjectKey(), DOWNLOAD_TTL), expiresAt);
   }
 
-  /** The archive goes first, so a failure leaves the row to retry the delete from. */
+  /**
+   * The archive goes first, so a failure leaves the row to retry the delete from. An upload still
+   * running is cancelled: nothing else would ever end it.
+   */
   public void delete(UUID ownerId, UUID backupId) {
     var backup = owned(ownerId, backupId);
+    if (backup.getStatus() == BackupStatus.RUNNING && backup.isUploaded()) {
+      discard(backup);
+      return;
+    }
     if (backup.getStatus() == BackupStatus.RUNNING) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "the backup is still being made");
     }
@@ -319,6 +427,11 @@ public class BackupService {
   }
 
   private BackupManifest manifest(WorkspaceEntity workspace, HarnessEndpoint endpoint) {
+    return manifest(workspace, harness.instructionFiles(endpoint), harness.taskFiles(endpoint));
+  }
+
+  private BackupManifest manifest(
+      WorkspaceEntity workspace, List<String> instructions, List<String> tasks) {
     var id = workspace.getId();
     return new BackupManifest(
         workspace.getModelProvider(),
@@ -329,8 +442,8 @@ public class BackupService {
             .map(WorkspaceSecretEntity::getName)
             .toList(),
         variables.list(id).stream().map(Variable::name).toList(),
-        harness.instructionFiles(endpoint),
-        harness.taskFiles(endpoint),
+        instructions,
+        tasks,
         sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(id).stream()
             .map(
                 s ->
@@ -367,6 +480,24 @@ public class BackupService {
           HttpStatus.CONFLICT, "only a completed backup can be restored or downloaded");
     }
     return backup;
+  }
+
+  private BackupEntity uploading(UUID ownerId, UUID backupId) {
+    var backup = owned(ownerId, backupId);
+    if (!backup.isUploaded() || backup.getStatus() != BackupStatus.RUNNING) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "the backup is not being uploaded");
+    }
+    return backup;
+  }
+
+  private void discard(BackupEntity backup) {
+    storage.abortUpload(backup.getObjectKey(), backup.getUploadId());
+    backups.deleteById(backup.getId());
+  }
+
+  /** gzip's two signature bytes, which every .tar.gz starts with. */
+  private static boolean gzipped(byte[] bytes) {
+    return bytes.length >= 2 && bytes[0] == (byte) 0x1f && bytes[1] == (byte) 0x8b;
   }
 
   private static ResponseStatusException alreadyRunning() {

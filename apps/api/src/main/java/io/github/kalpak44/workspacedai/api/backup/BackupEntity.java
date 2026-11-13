@@ -55,6 +55,12 @@ public class BackupEntity {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(nullable = false, updatable = false)
+  private boolean uploaded;
+
+  @Column(name = "upload_id", length = 1024)
+  private String uploadId;
+
   protected BackupEntity() {
     // For JPA.
   }
@@ -68,6 +74,16 @@ public class BackupEntity {
     this.objectKey = "users/" + ownerId + "/workspaces/" + workspaceId + "/" + id + ".tar.gz";
     this.manifest = manifest;
     this.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
+  }
+
+  /** An archive the user sends in parts; its size is the one declared until it completes. */
+  static BackupEntity upload(
+      UUID id, UUID ownerId, UUID workspaceId, String workspaceName, String manifest, long size) {
+    var entity = new BackupEntity(id, ownerId, workspaceId, workspaceName, manifest);
+    entity.uploaded = true;
+    entity.phase = "uploading";
+    entity.sizeBytes = size;
+    return entity;
   }
 
   public UUID getId() {
@@ -120,5 +136,17 @@ public class BackupEntity {
 
   public Instant getCompletedAt() {
     return completedAt;
+  }
+
+  public boolean isUploaded() {
+    return uploaded;
+  }
+
+  public String getUploadId() {
+    return uploadId;
+  }
+
+  void setUploadId(String uploadId) {
+    this.uploadId = uploadId;
   }
 }

@@ -33,7 +33,9 @@ public record Backup(
     List<String> variables,
     List<String> instructions,
     List<String> tasks,
-    @Schema(description = "How many conversations it holds") int sessions) {
+    @Schema(description = "How many conversations it holds") int sessions,
+    @Schema(description = "Uploaded by the user rather than made by the workspace")
+        boolean uploaded) {
 
   static Backup of(BackupEntity entity, BackupManifest manifest, String name, boolean exists) {
     return new Backup(
@@ -56,6 +58,7 @@ public record Backup(
         manifest.variables(),
         manifest.instructions(),
         manifest.tasks(),
-        manifest.sessions().size());
+        manifest.sessions().size(),
+        entity.isUploaded());
   }
 }

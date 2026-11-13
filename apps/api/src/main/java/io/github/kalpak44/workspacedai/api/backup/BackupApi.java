@@ -9,6 +9,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import java.io.InputStream;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ProblemDetail;
@@ -17,6 +18,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 
 /**
@@ -68,6 +70,93 @@ public interface BackupApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/workspaces/{id}/backups", produces = JSON)
   ResponseEntity<Backup> start(@Parameter(description = "Workspace id") @PathVariable UUID id);
+
+  @Operation(
+      operationId = "startBackupUpload",
+      summary = "Start uploading an archive as a backup",
+      description =
+          "For a .tar.gz of a workspace's home, such as a downloaded backup. Send it with PUT "
+              + "/backups/{id}/parts/{part}, then POST /backups/{id}/complete; it can then be "
+              + "restored like any backup. The workspace's own settings are recorded beside it, "
+              + "so restoring it changes only the home.")
+  @ApiResponse(
+      responseCode = "201",
+      description = "Started; the backup is RUNNING until it completes.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = Backup.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No workspace has that id.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "A backup or upload of the workspace is already running.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping(path = "/workspaces/{id}/backups/uploads", consumes = JSON, produces = JSON)
+  ResponseEntity<Backup> startUpload(
+      @Parameter(description = "Workspace id") @PathVariable UUID id,
+      @Valid @RequestBody UploadBackupRequest request);
+
+  @Operation(
+      operationId = "uploadBackupPart",
+      summary = "Send one part of an uploaded archive",
+      description =
+          "Parts are numbered from 1 and at most 32 MiB; every part but the last must be at "
+              + "least 5 MiB, and all but the last the same size. The first must start like a "
+              + "gzip file, or the upload is cancelled.")
+  @ApiResponse(responseCode = "204", description = "Stored.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Empty, a part number out of range, or not a gzip file.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "The backup is not an upload in progress.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "413",
+      description = "The part is over 32 MiB.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PutMapping(path = "/backups/{id}/parts/{part}", consumes = "application/octet-stream")
+  ResponseEntity<Void> uploadPart(
+      @Parameter(description = "Backup id") @PathVariable UUID id,
+      @Parameter(description = "Part number, from 1") @PathVariable int part,
+      InputStream body);
+
+  @Operation(
+      operationId = "completeBackupUpload",
+      summary = "Finish an uploaded archive",
+      description =
+          "Joins the parts. The backup is COMPLETED when they add up to the size declared, and "
+              + "FAILED otherwise.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Finished, one way or the other.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = Backup.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "The backup is not an upload in progress.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping(path = "/backups/{id}/complete", produces = JSON)
+  ResponseEntity<Backup> completeUpload(
+      @Parameter(description = "Backup id") @PathVariable UUID id);
 
   @Operation(
       operationId = "getRestoreProgress",
@@ -146,7 +235,9 @@ public interface BackupApi {
   @Operation(
       operationId = "deleteBackup",
       summary = "Delete a backup",
-      description = "Removes the archive from storage, then the backup.")
+      description =
+          "Removes the archive from storage, then the backup. An upload in progress is "
+              + "cancelled.")
   @ApiResponse(responseCode = "204", description = "Deleted.")
   @ApiResponse(
       responseCode = "404",
@@ -157,7 +248,7 @@ public interface BackupApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @ApiResponse(
       responseCode = "409",
-      description = "The backup is still being made.",
+      description = "The backup is still being made by its workspace.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

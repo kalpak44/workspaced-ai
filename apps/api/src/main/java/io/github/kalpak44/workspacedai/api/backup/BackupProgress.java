@@ -54,6 +54,10 @@ public class BackupProgress {
   @EventListener(ApplicationReadyEvent.class)
   void resume() {
     for (var backup : backups.findAllByStatus(BackupStatus.RUNNING)) {
+      // An upload is driven by the browser sending it, so there is no workspace to follow.
+      if (backup.isUploaded()) {
+        continue;
+      }
       follow(backup.getId(), backup.getWorkspaceId(), backup.getObjectKey());
     }
   }

@@ -15,8 +15,7 @@ interface Props {
   readonly onSettings: (id: string) => void;
   readonly onTerminal: (id: string) => void;
   readonly onRestart: (id: string) => void;
-  readonly onBackup: (id: string) => void;
-  readonly onRestore: (id: string) => void;
+  readonly onBackups: (id: string) => void;
   readonly onDelete: (id: string) => void;
 }
 
@@ -31,8 +30,7 @@ export function Sidebar({
   onSettings,
   onTerminal,
   onRestart,
-  onBackup,
-  onRestore,
+  onBackups,
   onDelete,
 }: Props) {
   const [open, setOpen] = useState(false);
@@ -75,8 +73,7 @@ export function Sidebar({
             onSettings={() => { close(); onSettings(workspace.id); }}
             onTerminal={() => { close(); onTerminal(workspace.id); }}
             onRestart={() => { close(); onRestart(workspace.id); }}
-            onBackup={() => { close(); onBackup(workspace.id); }}
-            onRestore={() => { close(); onRestore(workspace.id); }}
+            onBackups={() => { close(); onBackups(workspace.id); }}
             onDelete={() => { close(); onDelete(workspace.id); }}
           />
         ))}

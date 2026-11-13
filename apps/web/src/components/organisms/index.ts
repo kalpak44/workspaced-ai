@@ -11,7 +11,4 @@ export { Sidebar } from "./Sidebar";
 export { TopBar } from "./TopBar";
 export { UserMenu } from "./UserMenu";
 export { UsersPanel } from "./UsersPanel";
-export { BackupDialog } from "./BackupDialog";
-export { BackupList } from "./BackupList";
-export { CreateFromBackupDialog } from "./CreateFromBackupDialog";
-export { RestoreBackupDialog } from "./RestoreBackupDialog";
+export { BackupsPanel } from "./BackupsPanel";

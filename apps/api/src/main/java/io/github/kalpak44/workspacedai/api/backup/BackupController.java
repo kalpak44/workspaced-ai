@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.backup;
 
 import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
 import io.github.kalpak44.workspacedai.api.workspace.Workspace;
+import java.io.InputStream;
 import java.net.URI;
 import java.util.List;
 import java.util.UUID;
@@ -23,6 +24,23 @@ public class BackupController implements BackupApi {
   public ResponseEntity<Backup> start(UUID id) {
     var backup = service.start(id);
     return ResponseEntity.accepted().location(backupUri(backup.id())).body(backup);
+  }
+
+  @Override
+  public ResponseEntity<Backup> startUpload(UUID id, UploadBackupRequest request) {
+    var backup = service.startUpload(id, request.sizeBytes());
+    return ResponseEntity.created(backupUri(backup.id())).body(backup);
+  }
+
+  @Override
+  public ResponseEntity<Void> uploadPart(UUID id, int part, InputStream body) {
+    service.uploadPart(CurrentUser.id(), id, part, body);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<Backup> completeUpload(UUID id) {
+    return ResponseEntity.ok(service.completeUpload(CurrentUser.id(), id));
   }
 
   @Override

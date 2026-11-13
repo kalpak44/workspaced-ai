@@ -2,10 +2,8 @@
 export type Route =
   | { readonly name: "home" }
   | { readonly name: "general-settings" }
-  // `group` is the workspace a backup was made of, which may since have been deleted.
-  | { readonly name: "backups"; readonly group?: string }
   | { readonly name: "workspace"; readonly workspaceId: string }
-  | { readonly name: "settings"; readonly workspaceId: string }
+  | { readonly name: "settings"; readonly workspaceId: string; readonly section?: string }
   | { readonly name: "terminal"; readonly workspaceId: string; readonly terminalId?: string }
   | { readonly name: "session"; readonly workspaceId: string; readonly sessionId: string };
 
@@ -14,10 +12,9 @@ export type Route =
 const ID = "([A-Za-z0-9_-]+)";
 const PATTERNS: ReadonlyArray<[RegExp, (ids: string[]) => Route]> = [
   [/^\/settings\/?$/, () => ({ name: "general-settings" })],
-  [/^\/settings\/backups\/?$/, () => ({ name: "backups" })],
-  [new RegExp(`^/settings/backups/${ID}/?$`), ([g]) => ({ name: "backups", group: g })],
   [new RegExp(`^/workspaces/${ID}/?$`), ([w]) => ({ name: "workspace", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/settings/?$`), ([w]) => ({ name: "settings", workspaceId: w })],
+  [new RegExp(`^/workspaces/${ID}/settings/([a-z-]+)/?$`), ([w, s]) => ({ name: "settings", workspaceId: w, section: s })],
   [new RegExp(`^/workspaces/${ID}/terminal/?$`), ([w]) => ({ name: "terminal", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/terminal/(pty[A-Za-z0-9_-]+)/?$`), ([w, t]) => ({ name: "terminal", workspaceId: w, terminalId: t })],
   [
@@ -43,12 +40,10 @@ export function routePath(route: Route): string {
       return "/";
     case "general-settings":
       return "/settings";
-    case "backups":
-      return `/settings/backups${route.group ? `/${route.group}` : ""}`;
     case "workspace":
       return `/workspaces/${route.workspaceId}`;
     case "settings":
-      return `/workspaces/${route.workspaceId}/settings`;
+      return `/workspaces/${route.workspaceId}/settings${route.section ? `/${route.section}` : ""}`;
     case "terminal":
       return `/workspaces/${route.workspaceId}/terminal${route.terminalId ? `/${route.terminalId}` : ""}`;
     case "session":

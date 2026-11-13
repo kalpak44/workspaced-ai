@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.awaitility.Awaitility.await;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -92,6 +93,7 @@ class BackupTest {
     when(storage.uploadUrl(anyString(), any())).thenReturn(URI.create("https://s3/up?sig=1"));
     when(storage.downloadUrl(anyString(), any())).thenReturn(URI.create("https://s3/down?sig=2"));
     when(storage.size(anyString())).thenReturn(OptionalLong.of(1234));
+    when(storage.startUpload(anyString())).thenReturn("upload-1");
     workspace =
         workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
   }
@@ -286,6 +288,83 @@ class BackupTest {
         .isEqualTo(404);
     assertThat(JSON.readTree(send("GET", "/backups", null, other).body())).isEmpty();
     assertThat(send("GET", "/backups/" + id, null).statusCode()).isEqualTo(200);
+  }
+
+  @Test
+  void takesAnUploadedArchiveInPartsAndRestoresItLikeAnyBackup() throws Exception {
+    var id = startUpload(4);
+    assertThat(backup(id).get("uploaded").asBoolean()).isTrue();
+    assertThat(sendBytes(1, id, new byte[] {0x1f, (byte) 0x8b}).statusCode()).isEqualTo(204);
+    assertThat(backup(id).get("progress").asInt()).isEqualTo(50);
+    assertThat(sendBytes(2, id, new byte[] {1, 2}).statusCode()).isEqualTo(204);
+    verify(storage).uploadPart(anyString(), eq("upload-1"), eq(2), any());
+
+    when(storage.size(anyString())).thenReturn(OptionalLong.of(4));
+    var completed = JSON.readTree(send("POST", "/backups/" + id + "/complete", null).body());
+    assertThat(completed.get("status").asString()).isEqualTo("COMPLETED");
+    assertThat(completed.get("sizeBytes").asLong()).isEqualTo(4);
+    verify(storage).completeUpload(anyString(), eq("upload-1"));
+    assertThat(send("POST", "/backups/" + id + "/restore", null).statusCode()).isEqualTo(202);
+  }
+
+  @Test
+  void refusesAnUploadThatIsNotAnArchive() throws Exception {
+    var id = startUpload(4);
+    assertThat(sendBytes(1, id, "PK\u0003\u0004".getBytes()).statusCode()).isEqualTo(400);
+    verify(storage).abortUpload(anyString(), eq("upload-1"));
+    assertThat(send("GET", "/backups/" + id, null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void failsAnUploadThatDoesNotAddUp() throws Exception {
+    var id = startUpload(4);
+    sendBytes(1, id, new byte[] {0x1f, (byte) 0x8b});
+    when(storage.size(anyString())).thenReturn(OptionalLong.of(2));
+    var failed = JSON.readTree(send("POST", "/backups/" + id + "/complete", null).body());
+    assertThat(failed.get("status").asString()).isEqualTo("FAILED");
+    assertThat(failed.get("error").asString()).contains("2 of 4");
+  }
+
+  @Test
+  void cancelsAnUploadOnDelete() throws Exception {
+    var id = startUpload(4);
+    assertThat(send("POST", "/workspaces/" + workspace + "/backups", null).statusCode())
+        .isEqualTo(409);
+    assertThat(send("DELETE", "/backups/" + id, null).statusCode()).isEqualTo(204);
+    verify(storage).abortUpload(anyString(), eq("upload-1"));
+    assertThat(sendBytes(1, id, new byte[] {0x1f, (byte) 0x8b}).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void takesPartsOnlyForAnUploadInProgress() throws Exception {
+    var made = startBackup();
+    assertThat(sendBytes(1, made, new byte[] {0x1f, (byte) 0x8b}).statusCode()).isEqualTo(409);
+    report(made, "done", 1, 1);
+    await().until(() -> backup(made).get("status").asString().equals("COMPLETED"));
+    var id = startUpload(4);
+    assertThat(sendBytes(0, id, new byte[] {1}).statusCode()).isEqualTo(400);
+    assertThat(sendBytes(10_001, id, new byte[] {1}).statusCode()).isEqualTo(400);
+  }
+
+  private String startUpload(long size) throws Exception {
+    var started =
+        send(
+            "POST",
+            "/workspaces/" + workspace + "/backups/uploads",
+            "{\"sizeBytes\":" + size + "}");
+    assertThat(started.statusCode()).isEqualTo(201);
+    return JSON.readTree(started.body()).get("id").asString();
+  }
+
+  private HttpResponse<String> sendBytes(int part, String id, byte[] bytes) throws Exception {
+    var request =
+        HttpRequest.newBuilder(
+                URI.create("http://localhost:" + port + "/api/v1/backups/" + id + "/parts/" + part))
+            .header("Authorization", TestUsers.bearer(port))
+            .header("Content-Type", "application/octet-stream")
+            .PUT(BodyPublishers.ofByteArray(bytes))
+            .build();
+    return http.send(request, BodyHandlers.ofString());
   }
 
   private String startBackup() throws Exception {

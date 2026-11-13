@@ -29,6 +29,8 @@ export interface Backup {
   readonly instructions: readonly string[];
   readonly tasks: readonly string[];
   readonly sessions: number;
+  /** Uploaded by the user rather than made by the workspace. */
+  readonly uploaded: boolean;
 }
 
 export interface BackupDownload {
@@ -54,6 +56,26 @@ function backupUrl(id: string): string {
 
 export async function startBackup(workspaceId: string): Promise<Backup> {
   return (await send(`${workspaceUrl(workspaceId)}/backups`, { method: "POST" })).json();
+}
+
+/** Starts an archive the browser then sends in parts; it is RUNNING until completed. */
+export async function startUpload(workspaceId: string, sizeBytes: number): Promise<Backup> {
+  return (await send(`${workspaceUrl(workspaceId)}/backups/uploads`, { method: "POST", body: JSON.stringify({ sizeBytes }) })).json();
+}
+
+/** Parts are numbered from 1; the API takes at most 32 MiB in one. */
+export async function uploadPart(id: string, part: number, bytes: Blob, signal?: AbortSignal): Promise<void> {
+  await send(`${backupUrl(id)}/parts/${part}`, {
+    method: "PUT",
+    body: bytes,
+    headers: { "Content-Type": "application/octet-stream" },
+    signal,
+  });
+}
+
+/** COMPLETED when the parts add up to the size declared, FAILED otherwise. */
+export async function completeUpload(id: string): Promise<Backup> {
+  return (await send(`${backupUrl(id)}/complete`, { method: "POST" })).json();
 }
 
 export async function listBackups(): Promise<Backup[]> {

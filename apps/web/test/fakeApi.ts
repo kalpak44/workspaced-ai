@@ -175,6 +175,9 @@ export function installFakeApi(
     restored: [] as string[],
     failStart: 0,
     failRun: false,
+    // Each uploaded part as "<backup>:<part>:<bytes>"; failPart answers a part with that status.
+    parts: [] as string[],
+    failPart: 0,
     // A workspace's restore as its status page reads it; absent means it is not restoring.
     restoreProgress: new Map<string, { phase: string; done: number; total: number; progress: number }>(),
   };
@@ -536,7 +539,16 @@ export function installFakeApi(
     return new Response(null, { status: 204 });
   }
 
-  // Each GET of a running backup moves it on by half, so a test sees it run and then finish.
+  // Each read of a running backup moves it on by half, so a test sees it run and then finish.
+  function advance(index: number) {
+    const backup = backups.list[index];
+    if (backup.status !== "RUNNING" || backup.uploaded) return;
+    const progress = Math.min(100, backup.progress + 50);
+    backups.list[index] = progress === 100
+      ? { ...backup, progress, status: backups.failRun ? "FAILED" : "COMPLETED", phase: "done", sizeBytes: 2_500_000, error: backups.failRun ? "disk full" : null }
+      : { ...backup, progress, phase: "archiving" };
+  }
+
   function backupsResponse(url: string, init?: RequestInit): Response | null {
     const method = init?.method ?? "GET";
     const start = /\/api\/v1\/workspaces\/([^/]+)\/backups$/.exec(url);
@@ -548,21 +560,44 @@ export function installFakeApi(
       backups.list.unshift(backup);
       return json(backup, 202);
     }
+    const uploads = /\/api\/v1\/workspaces\/([^/]+)\/backups\/uploads$/.exec(url);
+    if (uploads && method === "POST") {
+      const workspace = rows.find((w) => w.id === uploads[1]);
+      if (!workspace) return json({}, 404);
+      const { sizeBytes } = JSON.parse(String(init!.body)) as { sizeBytes: number };
+      const backup = newBackup({ id: `backup-${backups.nextId++}`, workspaceId: workspace.id, workspaceName: workspace.name, status: "RUNNING", progress: 0, phase: "uploading", sizeBytes, uploaded: true });
+      backups.list.unshift(backup);
+      return json(backup, 201);
+    }
+    const part = /\/api\/v1\/backups\/([^/]+)\/parts\/(\d+)$/.exec(url);
+    if (part && method === "PUT") {
+      if (!backups.list.some((b) => b.id === part[1])) return json({}, 404);
+      if (backups.failPart) return json({}, backups.failPart);
+      backups.parts.push(`${part[1]}:${part[2]}:${(init!.body as Blob).size}`);
+      return new Response(null, { status: 204 });
+    }
     const restoring = /\/api\/v1\/workspaces\/([^/]+)\/restore$/.exec(url);
     if (restoring) {
       const progress = backups.restoreProgress.get(restoring[1]);
       return progress ? json(progress) : new Response(null, { status: 204 });
     }
-    const route = /\/api\/v1\/backups(?:\/([^/]+))?(?:\/(restore|workspaces|download))?$/.exec(url);
+    const route = /\/api\/v1\/backups(?:\/([^/]+))?(?:\/(restore|workspaces|download|complete))?$/.exec(url);
     if (!route) return null;
     const [, id, action] = route;
-    if (!id) return json(backups.list.map((b) => ({ ...b, workspaceExists: rows.some((w) => w.id === b.workspaceId) })));
+    if (!id) {
+      backups.list.forEach((_, i) => advance(i));
+      return json(backups.list.map((b) => ({ ...b, workspaceExists: rows.some((w) => w.id === b.workspaceId) })));
+    }
     const index = backups.list.findIndex((b) => b.id === id);
     if (index < 0) return json({}, 404);
     const backup = backups.list[index];
     if (action === "restore") {
       backups.restored.push(id);
       return new Response(null, { status: 202 });
+    }
+    if (action === "complete") {
+      backups.list[index] = { ...backup, status: "COMPLETED", phase: "done", progress: 100 };
+      return json({ ...backups.list[index], workspaceExists: true });
     }
     if (action === "download") return json({ url: `https://storage/${id}`, expiresAt: "2099-01-01T00:00:00Z" });
     if (action === "workspaces") {
@@ -577,12 +612,7 @@ export function installFakeApi(
       backups.list.splice(index, 1);
       return new Response(null, { status: 204 });
     }
-    if (backup.status === "RUNNING") {
-      const progress = Math.min(100, backup.progress + 50);
-      backups.list[index] = progress === 100
-        ? { ...backup, progress, status: backups.failRun ? "FAILED" : "COMPLETED", phase: "done", sizeBytes: 2_500_000, error: backups.failRun ? "disk full" : null }
-        : { ...backup, progress, phase: "archiving" };
-    }
+    advance(index);
     return json({ ...backups.list[index], workspaceExists: rows.some((w) => w.id === backup.workspaceId) });
   }
 
@@ -636,7 +666,7 @@ export function newBackup(overrides: Partial<Backup> = {}): Backup {
     status: "COMPLETED", phase: "done", progress: 100, sizeBytes: 1_200_000, error: null,
     createdAt: "2026-11-12T10:00:00Z", completedAt: "2026-11-12T10:01:00Z",
     modelProvider: "openrouter", model: null, sessionTtlEnabled: false, sessionTtlHours: 168,
-    secrets: [], variables: [], instructions: [], tasks: [], sessions: 0,
+    secrets: [], variables: [], instructions: [], tasks: [], sessions: 0, uploaded: false,
     ...overrides,
   };
 }

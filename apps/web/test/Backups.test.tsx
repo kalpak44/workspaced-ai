@@ -4,12 +4,22 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import { formatBytes } from "../src/lib/format";
 import { parseRoute, routePath } from "../src/lib/routes";
-import { groupBackups } from "../src/hooks/useBackups";
+import { groupBackups, PART_BYTES } from "../src/hooks/useBackups";
 import { installFakeApi, newBackup, REJECTED_KEY } from "./fakeApi";
+
+const BACKUPS = "/workspaces/starter/settings/backups";
 
 async function openApp(path: string) {
   globalThis.history.replaceState(null, "", path);
   render(<App />);
+}
+
+function archive(name: string, size: number) {
+  const file = new File([new Uint8Array(0)], name, { type: "application/gzip" });
+  // A real archive of this size would be slow to build in a test; slicing honours the claim.
+  Object.defineProperty(file, "size", { value: size });
+  file.slice = (start?: number, end?: number) => new Blob([new Uint8Array((end ?? size) - (start ?? 0))]);
+  return file;
 }
 
 afterEach(() => {
@@ -17,11 +27,11 @@ afterEach(() => {
 });
 
 describe("backups", () => {
-  it("routes to the backups page, with or without a workspace", () => {
-    expect(parseRoute("/settings/backups")).toEqual({ name: "backups" });
-    expect(parseRoute("/settings/backups/abc")).toEqual({ name: "backups", group: "abc" });
-    expect(routePath({ name: "backups", group: "abc" })).toBe("/settings/backups/abc");
-    expect(routePath({ name: "backups" })).toBe("/settings/backups");
+  it("routes to a workspace's backups as a settings section", () => {
+    expect(parseRoute(BACKUPS)).toEqual({ name: "settings", workspaceId: "starter", section: "backups" });
+    expect(routePath({ name: "settings", workspaceId: "starter", section: "backups" })).toBe(BACKUPS);
+    expect(routePath({ name: "settings", workspaceId: "starter" })).toBe("/workspaces/starter/settings");
+    expect(parseRoute("/settings/backups")).toEqual({ name: "home" });
   });
 
   it("formats archive sizes", () => {
@@ -42,84 +52,137 @@ describe("backups", () => {
     ]);
   });
 
-  it("backs up a workspace from its menu and follows the progress", async () => {
+  it("opens the workspace's backups from its menu", async () => {
     const api = installFakeApi();
+    api.backups.list.push(newBackup({ id: "b1", secrets: ["GITHUB_TOKEN"], sessions: 3, instructions: ["chat"] }));
     const user = userEvent.setup();
     await openApp("/workspaces/starter");
     await user.click(await screen.findByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Backup" }));
-    const dialog = await screen.findByRole("dialog");
-    await waitFor(() => expect(within(dialog).getByRole("progressbar")).toHaveAttribute("aria-valuenow", "50"), { timeout: 3000 });
-    expect(await within(dialog).findByText("Saved 2.5 MB", {}, { timeout: 3000 })).toBeInTheDocument();
+    expect(screen.queryByRole("menuitem", { name: "Restore" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: "Backups" }));
+    expect(location.pathname).toBe(BACKUPS);
+    expect(await screen.findByText(/3 conversations · 1 instruction/)).toBeInTheDocument();
+    expect(screen.getByText("GITHUB_TOKEN")).toBeInTheDocument();
+  });
+
+  it("is no longer in the account menu", async () => {
+    installFakeApi();
+    const user = userEvent.setup();
+    await openApp("/workspaces/starter");
+    await user.click(await screen.findByRole("button", { name: "Account menu" }));
+    expect(screen.queryByRole("menuitem", { name: "Backups" })).not.toBeInTheDocument();
+  });
+
+  it("backs up after confirming and shows the progress in the list", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    await openApp(BACKUPS);
+    expect(await screen.findByText(/No backups yet/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Back up now" }));
+    const dialog = screen.getByRole("dialog");
+    await user.click(within(dialog).getByRole("button", { name: "Back up now" }));
+    expect(await screen.findByRole("progressbar", { name: "Backup progress" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Back up now" })).toBeDisabled();
+    expect(await screen.findByRole("button", { name: "Download" }, { timeout: 4000 })).toBeInTheDocument();
     expect(api.backups.list[0].status).toBe("COMPLETED");
-    await user.click(within(dialog).getByRole("button", { name: "View backups" }));
-    expect(location.pathname).toBe("/settings/backups/starter");
-    expect(await screen.findByRole("list", { name: "Backup versions" })).toBeInTheDocument();
   });
 
   it("reports a backup the workspace could not start", async () => {
     const api = installFakeApi();
     api.backups.failStart = 409;
     const user = userEvent.setup();
-    await openApp("/workspaces/starter");
-    await user.click(await screen.findByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Backup" }));
+    await openApp(BACKUPS);
+    await user.click(await screen.findByRole("button", { name: "Back up now" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Back up now" }));
     expect(await screen.findByRole("alert")).toHaveTextContent("needs a restart");
   });
 
-  it("reports a backup that failed part way", async () => {
+  it("shows a backup that failed part way", async () => {
     const api = installFakeApi();
     api.backups.failRun = true;
     const user = userEvent.setup();
-    await openApp("/workspaces/starter");
-    await user.click(await screen.findByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Backup" }));
+    await openApp(BACKUPS);
+    await user.click(await screen.findByRole("button", { name: "Back up now" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Back up now" }));
     expect(await screen.findByText("disk full", {}, { timeout: 4000 })).toBeInTheDocument();
   });
 
-  it("opens the workspace's backups from Restore in its menu", async () => {
+  it("uploads an archive in parts and restores it", async () => {
     const api = installFakeApi();
-    api.backups.list.push(newBackup({ id: "b1", secrets: ["GITHUB_TOKEN"], sessions: 3, instructions: ["chat"] }));
     const user = userEvent.setup();
-    await openApp("/workspaces/starter");
-    await user.click(await screen.findByRole("button", { name: "Actions for Starter" }));
-    await user.click(screen.getByRole("menuitem", { name: "Restore" }));
-    expect(location.pathname).toBe("/settings/backups/starter");
-    expect(await screen.findByText(/3 conversations · 1 instruction/)).toBeInTheDocument();
-    expect(screen.getByText("GITHUB_TOKEN")).toBeInTheDocument();
+    await openApp(BACKUPS);
+    await user.click(await screen.findByRole("button", { name: "Upload backup" }));
+    await user.upload(screen.getByLabelText("Backup archive"), archive("home.tar.gz", PART_BYTES + 10));
+    expect(screen.getByText(/Every file in the workspace is replaced/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Upload and restore" }));
+    await waitFor(() => expect(api.backups.restored).toEqual(["backup-1"]));
+    expect(api.backups.parts).toEqual([`backup-1:1:${PART_BYTES}`, "backup-1:2:10"]);
+    expect(await screen.findByText("Uploaded")).toBeInTheDocument();
+    expect(screen.getByRole("status", { name: "Restore" })).toHaveTextContent("Restoring the backup");
+  });
+
+  it("keeps an upload to restore later when asked to", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    await openApp(BACKUPS);
+    await user.click(await screen.findByRole("button", { name: "Upload backup" }));
+    await user.upload(screen.getByLabelText("Backup archive"), archive("home.tgz", 10));
+    await user.click(screen.getByLabelText(/Restore it once uploaded/));
+    await user.click(screen.getByRole("button", { name: "Upload" }));
+    expect(await screen.findByText("Uploaded")).toBeInTheDocument();
+    expect(await screen.findByText(/files only/)).toBeInTheDocument();
+    expect(api.backups.restored).toEqual([]);
+  });
+
+  it("refuses a file that is not an archive", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup({ applyAccept: false });
+    await openApp(BACKUPS);
+    await user.click(await screen.findByRole("button", { name: "Upload backup" }));
+    await user.upload(screen.getByLabelText("Backup archive"), archive("home.zip", 10));
+    expect(screen.getByRole("alert")).toHaveTextContent("Choose a .tar.gz or .tgz archive");
+    expect(screen.getByRole("button", { name: "Upload and restore" })).toBeDisabled();
+    api.backups.failPart = 400;
+    await user.upload(screen.getByLabelText("Backup archive"), archive("renamed.tar.gz", 10));
+    await user.click(screen.getByRole("button", { name: "Upload and restore" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("not a .tar.gz archive");
+    await waitFor(() => expect(api.backups.list).toHaveLength(0));
+    expect(api.backups.restored).toEqual([]);
   });
 
   it("restores a version in place after confirming", async () => {
     const api = installFakeApi();
     api.backups.list.push(newBackup({ id: "b1" }));
     const user = userEvent.setup();
-    await openApp("/settings/backups");
+    await openApp(BACKUPS);
     await user.click(await screen.findByRole("button", { name: "Restore" }));
     await user.click(screen.getByRole("button", { name: "Restore workspace" }));
-    await waitFor(() => expect(location.pathname).toBe("/workspaces/starter"));
+    expect(await screen.findByText("Restoring the backup")).toBeInTheDocument();
     expect(api.backups.restored).toEqual(["b1"]);
+    expect(location.pathname).toBe(BACKUPS);
   });
 
   it("creates a new workspace from a version, reusing the key while the original exists", async () => {
     const api = installFakeApi();
     api.backups.list.push(newBackup({ id: "b1" }));
     const user = userEvent.setup();
-    await openApp("/settings/backups");
+    await openApp(BACKUPS);
     await user.click(await screen.findByRole("button", { name: "Create new" }));
-    expect(screen.getByLabelText("Name")).toHaveValue("Starter copy");
+    expect(within(screen.getByRole("dialog")).getByLabelText("Name")).toHaveValue("Starter copy");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(location.pathname).toMatch(/^\/workspaces\/ws-/));
     expect(api.rows.some((w) => w.name === "Starter copy")).toBe(true);
   });
 
-  it("asks for a key once the original workspace is gone, and shows a refused one", async () => {
-    const api = installFakeApi([]);
+  it("lists a deleted workspace's backups, which can only start a new one", async () => {
+    const api = installFakeApi();
     api.backups.list.push(newBackup({ id: "b1", workspaceId: "gone", workspaceName: "Old", secrets: ["TOKEN"] }));
     const user = userEvent.setup();
-    await openApp("/settings/backups");
-    expect(await screen.findByText("deleted")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Create new" }));
+    await openApp(BACKUPS);
+    const section = await screen.findByRole("region", { name: "Backups of deleted workspaces" });
+    expect(within(section).getByText("Old")).toBeInTheDocument();
+    expect(within(section).queryByRole("button", { name: "Restore" })).not.toBeInTheDocument();
+    await user.click(within(section).getByRole("button", { name: "Create new" }));
     expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
     await user.type(screen.getByLabelText("API key"), REJECTED_KEY);
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
@@ -131,7 +194,7 @@ describe("backups", () => {
     api.backups.list.push(newBackup({ id: "b1" }));
     const open = vi.spyOn(globalThis, "open").mockReturnValue(null);
     const user = userEvent.setup();
-    await openApp("/settings/backups");
+    await openApp(BACKUPS);
     await user.click(await screen.findByRole("button", { name: "Download" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith("https://storage/b1", "_blank", "noopener"));
     open.mockRestore();
@@ -141,11 +204,22 @@ describe("backups", () => {
     const api = installFakeApi();
     api.backups.list.push(newBackup({ id: "b1" }));
     const user = userEvent.setup();
-    await openApp("/settings/backups");
+    await openApp(BACKUPS);
     await user.click(await screen.findByRole("button", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete backup" }));
-    expect(await screen.findByText("No backups yet")).toBeInTheDocument();
+    expect(await screen.findByText(/No backups yet/)).toBeInTheDocument();
     expect(api.backups.list).toHaveLength(0);
+  });
+
+  it("cancels an interrupted upload after confirming", async () => {
+    const api = installFakeApi();
+    api.backups.list.push(newBackup({ id: "b1", status: "RUNNING", phase: "uploading", progress: 40, uploaded: true }));
+    const user = userEvent.setup();
+    await openApp(BACKUPS);
+    expect(await screen.findByText("Uploading from another tab, or interrupted")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Cancel upload" }));
+    await user.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel upload" }));
+    await waitFor(() => expect(api.backups.list).toHaveLength(0));
   });
 
   it("shows how far a starting workspace is through its restore", async () => {
@@ -166,15 +240,5 @@ describe("backups", () => {
     installFakeApi([{ id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "INITIALIZING", restartRequired: false }]);
     await openApp("/workspaces/starter");
     expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();
-  });
-
-  it("opens the backups page from the account menu", async () => {
-    installFakeApi();
-    const user = userEvent.setup();
-    await openApp("/workspaces/starter");
-    await user.click(await screen.findByRole("button", { name: "Account menu" }));
-    await user.click(screen.getByRole("menuitem", { name: "Backups" }));
-    expect(location.pathname).toBe("/settings/backups");
-    expect(await screen.findByText("No backups yet")).toBeInTheDocument();
   });
 });
