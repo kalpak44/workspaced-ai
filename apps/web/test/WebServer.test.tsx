@@ -15,6 +15,8 @@ describe("workspace web server settings", () => {
     expect(screen.getByRole("button", { name: "Save web server" })).toBeDisabled();
 
     await user.click(screen.getByRole("button", { name: "Enabled" }));
+    await user.click(screen.getByText("box-"));
+    expect(field).toHaveFocus();
     await user.type(field, "My-App");
     expect(field).toHaveValue("my-app");
     expect(field).toHaveAccessibleDescription("Public at https://box-my-app.workspaced.test/");

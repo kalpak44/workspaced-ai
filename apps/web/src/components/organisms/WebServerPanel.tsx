@@ -71,7 +71,7 @@ export function WebServerPanel({ workspaceId }: Props) {
         <div className="flex max-w-xl min-w-0 flex-col gap-1.5 text-sm">
           <label htmlFor="web-server-name" className="font-medium text-zinc-700 dark:text-zinc-300">Name</label>
           {/* Shaped like the address it makes, so it is plain which part is the user's. */}
-          <div onClick={() => field.current?.focus()} className={`flex min-w-0 cursor-text items-center rounded-md border bg-white font-mono focus-within:ring-2 dark:bg-zinc-900 ${
+          <label htmlFor="web-server-name" className={`flex min-w-0 cursor-text items-center rounded-md border bg-white font-mono focus-within:ring-2 dark:bg-zinc-900 ${
             invalid
               ? "border-rose-500 focus-within:ring-rose-500/20"
               : "border-zinc-300 focus-within:border-zinc-500 focus-within:ring-zinc-900/10 dark:border-zinc-700 dark:focus-within:border-zinc-400 dark:focus-within:ring-white/10"
@@ -85,7 +85,7 @@ export function WebServerPanel({ workspaceId }: Props) {
               style={{ width: `${Math.max(name.length, 6) + 0.25}ch` }}
               className="min-w-0 flex-1 bg-transparent py-2 pr-3 font-medium text-zinc-900 outline-none placeholder:font-normal placeholder:text-zinc-400 sm:max-w-full sm:flex-none sm:pr-0 dark:text-zinc-100" />
             <span aria-hidden className="hidden min-w-0 truncate pr-3 text-zinc-400 sm:inline dark:text-zinc-500">.{server.domain}/</span>
-          </div>
+          </label>
           <span id="web-server-name-note" className={invalid ? "text-rose-600 dark:text-rose-400" : "sr-only"}>
             {invalid
               ? "Use up to 59 lowercase letters, digits and hyphens, not at the start or end."
