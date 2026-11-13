@@ -27,13 +27,14 @@ public class WebServerService {
 
   /**
    * One DNS label, so the name is exactly one level under the domain's wildcard certificate, and
-   * short enough that box-<name> and the Service web-<name> stay within 63 characters.
+   * short enough that box-<name> stays within the 63 characters of a label and a Service name.
    */
   static final String NAME = "^[a-z0-9](?:[a-z0-9-]{0,57}[a-z0-9])?$";
 
   /**
-   * Every public name is box-<name>, which is all the gateway routes, so no name can ever stand for
-   * another host under the domain. apps/gateway/gateway.conf.template matches the same prefix.
+   * Every public host is box-<name>, which is all the gateway routes, so no name can ever stand for
+   * another host under the domain. The label is the Service's name too, so the gateway in
+   * apps/gateway/gateway.conf.template passes it through unchanged.
    */
   static final String HOST_PREFIX = "box-";
 
@@ -125,7 +126,7 @@ public class WebServerService {
                   HttpStatus.CONFLICT,
                   "the workspace runs an older harness; restart it to update, then try again");
             }
-            runtime.publish(workspaceId, name);
+            runtime.publish(workspaceId, label(name));
           } catch (RuntimeException e) {
             rollBack(workspaceId, endpoint, previous);
             throw e;
@@ -174,8 +175,12 @@ public class WebServerService {
         workspace.isWebServerAgentAllowed());
   }
 
+  private static String label(String name) {
+    return HOST_PREFIX + name;
+  }
+
   private String url(String name) {
-    return "https://" + HOST_PREFIX + name + "." + properties.domain() + "/";
+    return "https://" + label(name) + "." + properties.domain() + "/";
   }
 
   static String lock(UUID workspaceId) {

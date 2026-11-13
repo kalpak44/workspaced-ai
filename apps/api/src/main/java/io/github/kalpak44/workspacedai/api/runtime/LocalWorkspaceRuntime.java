@@ -41,7 +41,7 @@ public class LocalWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
-  public void publish(UUID workspaceId, String name) {
+  public void publish(UUID workspaceId, String label) {
     // Nothing routes to a laptop, so there is no route to make.
   }
 

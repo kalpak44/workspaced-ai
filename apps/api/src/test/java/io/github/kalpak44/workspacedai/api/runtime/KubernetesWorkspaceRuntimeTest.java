@@ -318,15 +318,15 @@ class KubernetesWorkspaceRuntimeTest {
   }
 
   @Test
-  void publishesTheWebServerAsAServiceNamedForItsPublicName() {
+  void publishesTheWebServerAsAServiceNamedAsItsHostLabel() {
     runtime.start(id, ENVIRONMENT);
 
-    runtime.publish(id, "my-app");
+    runtime.publish(id, "box-my-app");
 
-    var web = webService("my-app");
+    var web = webService("box-my-app");
     assertThat(web.getMetadata().getLabels())
         .containsEntry(WORKSPACE_ID_LABEL, id.toString())
-        .containsEntry("workspaced-ai/web-server", "my-app");
+        .containsEntry("workspaced-ai/web-server", "box-my-app");
     assertThat(web.getSpec().getSelector())
         .containsExactlyInAnyOrderEntriesOf(
             Map.of(WORKSPACE_ID_LABEL, id.toString(), MANAGED_BY_LABEL, MANAGED_BY));
@@ -345,11 +345,11 @@ class KubernetesWorkspaceRuntimeTest {
         .extracting(p -> p.getName())
         .containsExactly("harness");
 
-    runtime.publish(id, "my-app");
-    runtime.publish(id, "renamed");
+    runtime.publish(id, "box-my-app");
+    runtime.publish(id, "box-renamed");
 
-    assertThat(webService("my-app")).isNull();
-    assertThat(webService("renamed")).isNotNull();
+    assertThat(webService("box-my-app")).isNull();
+    assertThat(webService("box-renamed")).isNotNull();
   }
 
   @Test
@@ -357,11 +357,11 @@ class KubernetesWorkspaceRuntimeTest {
     runtime.start(id, ENVIRONMENT);
     var other = UUID.randomUUID();
     runtime.start(other, ENVIRONMENT);
-    runtime.publish(other, "my-app");
+    runtime.publish(other, "box-my-app");
 
-    assertThatThrownBy(() -> runtime.publish(id, "my-app"))
+    assertThatThrownBy(() -> runtime.publish(id, "box-my-app"))
         .isInstanceOf(IllegalStateException.class);
-    assertThat(webService("my-app").getMetadata().getLabels())
+    assertThat(webService("box-my-app").getMetadata().getLabels())
         .containsEntry(WORKSPACE_ID_LABEL, other.toString());
   }
 
@@ -369,11 +369,11 @@ class KubernetesWorkspaceRuntimeTest {
   void unpublishesAndToleratesNothingPublished() {
     runtime.start(id, ENVIRONMENT);
     runtime.unpublish(id);
-    runtime.publish(id, "my-app");
+    runtime.publish(id, "box-my-app");
 
     runtime.unpublish(id);
 
-    assertThat(webService("my-app")).isNull();
+    assertThat(webService("box-my-app")).isNull();
     assertThat(client.services().inNamespace(namespace()).withName(resourceName(id)).get())
         .isNotNull();
   }
@@ -381,13 +381,13 @@ class KubernetesWorkspaceRuntimeTest {
   @Test
   void removesThePublishedServiceWithTheWorkspace() {
     runtime.start(id, ENVIRONMENT);
-    runtime.publish(id, "my-app");
+    runtime.publish(id, "box-my-app");
     runtime.stop(id);
-    assertThat(webService("my-app")).isNull();
+    assertThat(webService("box-my-app")).isNull();
   }
 
-  private io.fabric8.kubernetes.api.model.Service webService(String name) {
-    return client.services().inNamespace(namespace()).withName("web-" + name).get();
+  private io.fabric8.kubernetes.api.model.Service webService(String label) {
+    return client.services().inNamespace(namespace()).withName(label).get();
   }
 
   @Test

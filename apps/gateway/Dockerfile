@@ -1,4 +1,4 @@
-# Routes box-<name>.<domain> to the Service web-<name> the API creates for a workspace's web
+# Routes box-<name>.<domain> to the Service box-<name> the API creates for a workspace's web
 # server, so no route has to be added per workspace. Whatever has no workspace behind it
 # gets 404.html.
 
