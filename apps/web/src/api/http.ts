@@ -1,10 +1,23 @@
 export class ApiError extends Error {
   readonly status: number;
+  /** The problem detail the API gave, when it gave one; two refusals can share a status. */
+  readonly detail: string | null;
 
-  constructor(status: number) {
+  constructor(status: number, detail: string | null = null) {
     super(`API answered ${status}`);
     this.name = "ApiError";
     this.status = status;
+    this.detail = detail;
+  }
+}
+
+async function problemDetail(response: Response): Promise<string | null> {
+  try {
+    const body: unknown = await response.json();
+    const detail = (body as { detail?: unknown } | null)?.detail;
+    return typeof detail === "string" ? detail : null;
+  } catch {
+    return null;
   }
 }
 
@@ -52,7 +65,7 @@ export async function send(url: string, init?: RequestInit): Promise<Response> {
     if (response.status === 401) {
       globalThis.dispatchEvent(new Event(UNAUTHORIZED));
     }
-    throw new ApiError(response.status);
+    throw new ApiError(response.status, await problemDetail(response));
   }
   return response;
 }

@@ -125,6 +125,7 @@ export function installFakeApi(
   };
   const state = {
     fail: 0,
+    olderHarness: false,
     nextId: 1,
     createStatus: "READY" as WorkspaceStatus,
     // When set, POST or DELETE waits on it, so a test can look at the UI mid-request.
@@ -432,7 +433,8 @@ export function installFakeApi(
       } else if (method !== "GET" && state.harnessDown) return json({}, 503);
       else if (method === "PUT") {
         const { name: wanted } = JSON.parse(String(init?.body)) as { name: string };
-        if (takenNames.has(wanted)) return json({}, 409);
+        if (takenNames.has(wanted)) return json({ detail: `the name ${wanted} is taken` }, 409);
+        if (state.olderHarness) return json({ detail: "the workspace runs an older harness; restart it to update, then try again" }, 409);
         webServers.set(workspaceId, wanted);
       }
       if (method === "DELETE") {

@@ -53,6 +53,13 @@ describe("workspace web server settings", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("taken is taken or reserved");
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
 
+    api.state.olderHarness = true;
+    await user.clear(field);
+    await user.type(field, "other");
+    await user.click(screen.getByRole("button", { name: "Save web server" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Restart the workspace first");
+    api.state.olderHarness = false;
+
     api.state.harnessDown = true;
     await user.clear(field);
     await user.type(field, "free");

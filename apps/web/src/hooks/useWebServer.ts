@@ -7,7 +7,9 @@ export { WEB_SERVER_NAME } from "../api/webServerApi";
 /** Why a change was refused, in the user's terms. */
 function reason(failure: unknown, name: string | null): string {
   if (failure instanceof ApiError) {
-    if (failure.status === 409 && name) return `${name} is taken or reserved. Try another name, or restart the workspace if it was made before web servers.`;
+    // The API refuses an older harness with the same status as a taken name.
+    if (failure.status === 409 && failure.detail?.includes("restart")) return "Restart the workspace first: it runs a version from before web servers.";
+    if (failure.status === 409 && name) return `${name} is taken or reserved. Try another name.`;
     if (failure.status === 503) return "Start the workspace first: its web server runs inside it.";
   }
   return "Could not change the web server. Please try again.";
