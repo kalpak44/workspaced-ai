@@ -1260,6 +1260,9 @@ describe("signing in", () => {
     const user = userEvent.setup();
     render(<App />);
     await screen.findAllByRole("button", { name: "Starter" });
+    // Let the workspace page finish loading, so the next request to meet the 401 is the
+    // one Settings makes rather than a reply already in flight.
+    await screen.findByText(/No sessions yet/);
     api.state.fail = 401;
     await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
