@@ -17,10 +17,10 @@ describe("workspace web server settings", () => {
     await user.click(screen.getByRole("button", { name: "Enabled" }));
     await user.type(field, "My-App");
     expect(field).toHaveValue("my-app");
-    expect(screen.getByText("https://my-app.workspaced.test")).toBeInTheDocument();
+    expect(field).toHaveAccessibleDescription("Public at https://box-my-app.workspaced.test/");
     await user.click(screen.getByRole("button", { name: "Save web server" }));
     expect(await screen.findByRole("status")).toHaveTextContent("Web server saved.");
-    expect(screen.getByRole("link", { name: "https://my-app.workspaced.test" })).toHaveAttribute("href", "https://my-app.workspaced.test");
+    expect(screen.getByRole("link", { name: "https://box-my-app.workspaced.test/" })).toHaveAttribute("href", "https://box-my-app.workspaced.test/");
     expect(api.webServers.get("starter")).toBe("my-app");
     expect(screen.getByRole("button", { name: "Save web server" })).toBeDisabled();
 

@@ -442,7 +442,7 @@ export function installFakeApi(
         return new Response(null, { status: 204 });
       }
       const current = webServers.get(workspaceId) ?? null;
-      return json({ domain: "workspaced.test", name: current, url: current && `https://${current}.workspaced.test`, agentAllowed: webServerAgents.has(workspaceId) });
+      return json({ domain: "workspaced.test", name: current, url: current && `https://box-${current}.workspaced.test/`, agentAllowed: webServerAgents.has(workspaceId) });
     }
     if (kind === "session-ttl") {
       if (method === "PUT") sessionTtl.set(workspaceId, JSON.parse(String(init?.body)));

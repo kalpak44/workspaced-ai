@@ -57,7 +57,7 @@ workspaced:
     access-key: ${WORKSPACED_BACKUP_ACCESS_KEY:}
     secret-key: ${WORKSPACED_BACKUP_SECRET_KEY:}
 
-  # Each workspace's nginx, public at https://<name>.<domain> through a Service named
+  # Each workspace's nginx, public at https://box-<name>.<domain> through a Service named
   # web-<name>; routing the domain to those Services is the cluster's job. Left unset, as it
   # is locally, there is no web server to turn on and the setting answers 501.
   web-server:

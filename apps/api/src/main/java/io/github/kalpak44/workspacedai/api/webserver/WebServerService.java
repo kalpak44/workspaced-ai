@@ -27,9 +27,15 @@ public class WebServerService {
 
   /**
    * One DNS label, so the name is exactly one level under the domain's wildcard certificate, and
-   * short enough that the Service named web-<name> stays within 63 characters.
+   * short enough that box-<name> and the Service web-<name> stay within 63 characters.
    */
   static final String NAME = "^[a-z0-9](?:[a-z0-9-]{0,57}[a-z0-9])?$";
+
+  /**
+   * Every public name is box-<name>, which is all the gateway routes, so no name can ever stand for
+   * another host under the domain. apps/gateway/gateway.conf.template matches the same prefix.
+   */
+  static final String HOST_PREFIX = "box-";
 
   private static final Logger LOG = LoggerFactory.getLogger(WebServerService.class);
 
@@ -169,7 +175,7 @@ public class WebServerService {
   }
 
   private String url(String name) {
-    return "https://" + name + "." + properties.domain();
+    return "https://" + HOST_PREFIX + name + "." + properties.domain() + "/";
   }
 
   static String lock(UUID workspaceId) {

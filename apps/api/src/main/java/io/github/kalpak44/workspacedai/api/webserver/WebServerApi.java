@@ -25,7 +25,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Tag(
     name = "Web server",
     description =
-        "nginx inside the workspace, public at https://<name>.<domain>. Off by default; turned"
+        "nginx inside the workspace, public at https://box-<name>.<domain>/. Off by default; turned"
             + " on, it starts with every start of the workspace and serves whatever its config,"
             + " which the user and the agent edit, points at")
 @RequestMapping("/workspaces/{workspaceId}/web-server")

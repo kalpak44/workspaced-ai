@@ -1,7 +1,7 @@
 import { ExternalLink } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useWebServer, WEB_SERVER_NAME } from "../../hooks/useWebServer";
-import { Button, Spinner, TextField } from "../atoms";
+import { Button, Spinner } from "../atoms";
 import { SettingsSection } from "../molecules";
 
 interface Props {
@@ -16,6 +16,7 @@ export function WebServerPanel({ workspaceId }: Props) {
   const [notice, setNotice] = useState("");
   const [problem, setProblem] = useState("");
   const [agentAllowed, setAgentAllowed] = useState(false);
+  const field = useRef<HTMLInputElement>(null);
   useEffect(() => {
     if (server) {
       setEnabled(Boolean(server.name));
@@ -67,12 +68,31 @@ export function WebServerPanel({ workspaceId }: Props) {
           if (failure) setProblem(failure);
           else setNotice(serverChanged && !enabled ? "Web server turned off." : "Web server saved.");
         }}>
-        <div className="max-w-sm">
-          <TextField id="web-server-name" label="Name" value={name} surface="solid" disabled={!enabled || saving}
-            placeholder="my-app" autoComplete="off" spellCheck={false}
-            error={invalid ? "Use up to 59 lowercase letters, digits and hyphens, not at the start or end." : null}
-            hint={`https://${name || "my-app"}.${server.domain}`}
-            onChange={(event) => { setName(event.target.value.toLowerCase().trim()); edited(); }} />
+        <div className="flex max-w-xl min-w-0 flex-col gap-1.5 text-sm">
+          <label htmlFor="web-server-name" className="font-medium text-zinc-700 dark:text-zinc-300">Name</label>
+          {/* Shaped like the address it makes, so it is plain which part is the user's. */}
+          <div onClick={() => field.current?.focus()} className={`flex min-w-0 cursor-text items-center rounded-md border bg-white font-mono focus-within:ring-2 dark:bg-zinc-900 ${
+            invalid
+              ? "border-rose-500 focus-within:ring-rose-500/20"
+              : "border-zinc-300 focus-within:border-zinc-500 focus-within:ring-zinc-900/10 dark:border-zinc-700 dark:focus-within:border-zinc-400 dark:focus-within:ring-white/10"
+          } ${!enabled || saving ? "opacity-60" : ""}`}>
+            <span aria-hidden className="shrink-0 pl-3 text-zinc-400 dark:text-zinc-500"><span className="hidden sm:inline">https://</span>box-</span>
+            <input id="web-server-name" ref={field} value={name} disabled={!enabled || saving}
+              placeholder="my-app" autoComplete="off" spellCheck={false} maxLength={59}
+              aria-invalid={invalid || undefined} aria-describedby="web-server-name-note"
+              onChange={(event) => { setName(event.target.value.toLowerCase().trim()); edited(); }}
+              // As wide as the name, so the domain follows it; on a phone it takes the row instead.
+              style={{ width: `${Math.max(name.length, 6) + 0.25}ch` }}
+              className="min-w-0 flex-1 bg-transparent py-2 pr-3 font-medium text-zinc-900 outline-none placeholder:font-normal placeholder:text-zinc-400 sm:max-w-full sm:flex-none sm:pr-0 dark:text-zinc-100" />
+            <span aria-hidden className="hidden min-w-0 truncate pr-3 text-zinc-400 sm:inline dark:text-zinc-500">.{server.domain}/</span>
+          </div>
+          <span id="web-server-name-note" className={invalid ? "text-rose-600 dark:text-rose-400" : "sr-only"}>
+            {invalid
+              ? "Use up to 59 lowercase letters, digits and hyphens, not at the start or end."
+              : `Public at https://box-${name || "name"}.${server.domain}/`}
+          </span>
+          {/* A phone has no room for the domain inside the field. */}
+          {!invalid && <span aria-hidden className="break-all font-mono text-xs text-zinc-500 sm:hidden dark:text-zinc-400">https://box-{name || "name"}.{server.domain}/</span>}
         </div>
         <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
           <input type="checkbox" checked={agentAllowed} disabled={saving}

@@ -33,8 +33,9 @@ server {
 
 server {
   listen 8080;
-  # The first label names the workspace; the domain is whatever the route sends here.
-  server_name ~^(?<name>[a-z0-9-]+)\.;
+  # box-<name> names the workspace; the domain is whatever the route sends here. Any other
+  # host falls to the server above. The API builds addresses with the same prefix.
+  server_name ~^box-(?<name>[a-z0-9-]+)\.;
   client_max_body_size 100m;
 
   location / {

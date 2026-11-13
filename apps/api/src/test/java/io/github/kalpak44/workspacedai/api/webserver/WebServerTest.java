@@ -109,9 +109,9 @@ class WebServerTest {
 
     assertThat(response.statusCode()).isEqualTo(200);
     assertThat(JSON.readTree(response.body()).get("url").asString())
-        .isEqualTo("https://my-app.workspaced.test");
+        .isEqualTo("https://box-my-app.workspaced.test/");
     assertThat(OPENCODE.shellCommands)
-        .contains("web-server enable 'https://my-app.workspaced.test'");
+        .contains("web-server enable 'https://box-my-app.workspaced.test/'");
     verify(runtime).publish(workspace, "my-app");
     assertThat(JSON.readTree(send("GET", workspace, null).body()).get("name").asString())
         .isEqualTo("my-app");
@@ -132,7 +132,7 @@ class WebServerTest {
     send("PUT", workspace, "{\"name\":\"my-app\"}");
     var other = create("Other");
 
-    for (var name : List.of("my-app", "ai", "www")) {
+    for (var name : List.of("my-app", "off")) {
       assertThat(send("PUT", other, "{\"name\":\"" + name + "\"}").statusCode())
           .as(name)
           .isEqualTo(409);
@@ -216,7 +216,7 @@ class WebServerTest {
     assertThat(JSON.readTree(allowed.body()).get("agentAllowed").asBoolean()).isTrue();
     requests.run();
 
-    assertThat(OPENCODE.files.get(RESULT)).isEqualTo("on https://bot-app.workspaced.test\n");
+    assertThat(OPENCODE.files.get(RESULT)).isEqualTo("on https://box-bot-app.workspaced.test/\n");
     assertThat(OPENCODE.shellCommands).contains("rm -f -- '" + REQUEST + "'");
     verify(runtime).publish(workspace, "bot-app");
     // The user sees what the agent did.
@@ -236,7 +236,7 @@ class WebServerTest {
     send("PUT", create("Other"), "{\"name\":\"taken\"}");
     reset(runtime);
 
-    for (var request : List.of("Bad_Name", "ai", "taken")) {
+    for (var request : List.of("Bad_Name", "taken")) {
       OPENCODE.files.put(REQUEST, request);
       requests.run();
       assertThat(OPENCODE.files.get(RESULT)).as(request).startsWith("error: ");

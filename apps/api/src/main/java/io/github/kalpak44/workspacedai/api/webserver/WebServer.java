@@ -13,7 +13,7 @@ public record WebServer(
         String name,
     @Schema(
             description = "Where it answers; null while it is off",
-            example = "https://my-app.workspaced.online")
+            example = "https://box-my-app.workspaced.online/")
         String url,
     @Schema(description = "Whether the workspace's agent may turn it on, off and rename it")
         boolean agentAllowed) {}

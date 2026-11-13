@@ -4,24 +4,85 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="robots" content="noindex">
-  <title>Nothing here</title>
+  <title>Nothing here · workspaced-ai</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10 9-5M12 12 3 7m9 5v10'/%3E%3C/svg%3E">
   <style>
-    :root { color-scheme: light dark; --bg: #fff; --fg: #18181b; --muted: #71717a; --line: #e4e4e7; }
-    @media (prefers-color-scheme: dark) { :root { --bg: #09090b; --fg: #f4f4f5; --muted: #a1a1aa; --line: #27272a; } }
+    /* The app's palette: Tailwind's zinc, light and dark. */
+    :root {
+      color-scheme: light dark;
+      --bg: #fff; --fg: #18181b; --muted: #71717a; --line: #e4e4e7; --soft: #f4f4f5; --mark: #a1a1aa;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root { --bg: #09090b; --fg: #f4f4f5; --muted: #a1a1aa; --line: #27272a; --soft: #18181b; --mark: #52525b; }
+    }
     * { box-sizing: border-box; }
-    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 1rem;
-      background: var(--bg); color: var(--fg); font: 16px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif; }
-    main { max-width: 28rem; width: 100%; border: 1px solid var(--line); border-radius: 0.75rem; padding: 1.5rem; }
-    .code { font-size: 0.875rem; color: var(--muted); margin: 0 0 0.5rem; letter-spacing: 0.05em; }
-    h1 { font-size: 1.25rem; font-weight: 600; margin: 0 0 0.5rem; }
-    p { margin: 0; color: var(--muted); font-size: 0.9375rem; }
+    body {
+      margin: 0; min-height: 100vh; display: flex; flex-direction: column; background: var(--bg); color: var(--fg);
+      font: 16px/1.5 ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
+      -webkit-font-smoothing: antialiased;
+    }
+    header { display: flex; align-items: center; gap: 0.5rem; height: 3.5rem; padding: 0 1rem; border-bottom: 1px solid var(--line); font-size: 0.875rem; font-weight: 500; }
+    header svg { width: 1.5rem; height: 1.5rem; }
+    main { flex: 1; display: grid; place-items: center; padding: 2rem 1rem; }
+    .card { width: 100%; max-width: 28rem; text-align: center; border: 1px solid var(--line); border-radius: 0.75rem; padding: 2rem 1.5rem; }
+    .box { display: block; width: 9rem; height: 9rem; margin: 0 auto 1rem; color: var(--mark); }
+    .code { display: inline-block; margin: 0 0 0.75rem; padding: 0.125rem 0.5rem; border-radius: 0.375rem; background: var(--soft); color: var(--muted); font: 500 0.75rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    h1 { margin: 0 0 0.5rem; font-size: 1.125rem; font-weight: 600; }
+    p { margin: 0; color: var(--muted); font-size: 0.875rem; }
+    .host { margin-top: 1rem; font: 0.8125rem/1.5 ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--muted); overflow-wrap: anywhere; }
+
+    /* The lid hovers over an empty box, and a little dust drifts out of it. */
+    .lid { transform-box: fill-box; transform-origin: 30% 100%; animation: lid 3.2s ease-in-out infinite; }
+    .dust circle { opacity: 0; transform-box: fill-box; animation: dust 3.2s ease-out infinite; }
+    .dust circle:nth-child(2) { animation-delay: 0.9s; }
+    .dust circle:nth-child(3) { animation-delay: 1.8s; }
+    .shadow { transform-box: fill-box; transform-origin: center; animation: shadow 3.2s ease-in-out infinite; }
+    @keyframes lid { 0%, 100% { transform: translateY(-14px) rotate(-8deg); } 50% { transform: translateY(-22px) rotate(-3deg); } }
+    @keyframes dust { 0% { opacity: 0; transform: translateY(0); } 25% { opacity: 0.7; } 100% { opacity: 0; transform: translateY(-26px); } }
+    @keyframes shadow { 0%, 100% { opacity: 0.5; transform: scaleX(1); } 50% { opacity: 0.3; transform: scaleX(0.9); } }
+    @media (prefers-reduced-motion: reduce) {
+      .lid, .dust circle, .shadow { animation: none; }
+      .lid { transform: translateY(-16px) rotate(-6deg); }
+    }
   </style>
 </head>
 <body>
+  <header>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z" fill="currentColor" fill-opacity="0.04"/>
+      <path d="m12 12 9-5v10l-9 5V12Z" fill="currentColor" fill-opacity="0.12"/>
+      <path d="m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10 9-5M12 12 3 7m9 5v10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+    </svg>
+    workspaced-ai
+  </header>
   <main>
-    <p class="code">404</p>
-    <h1>Nothing is published here</h1>
-    <p>No workspace is serving this address right now. If it is yours, start the workspace and turn on its web server in the workspace's settings.</p>
+    <div class="card">
+      <svg class="box" viewBox="0 0 120 120" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <ellipse class="shadow" cx="60" cy="108" rx="34" ry="5" fill="currentColor" stroke="none" opacity="0.4"/>
+        <!-- The open box: its inside, with the back corner and the floor's seams, then its
+             two outer faces in front of it. -->
+        <path d="M60 48 92 64 60 80 28 64Z" fill="currentColor" fill-opacity="0.3"/>
+        <path d="M60 48v24m0 0-16 8m16-8 16 8" stroke-width="1.5" opacity="0.6"/>
+        <path d="M28 64 60 80v24L28 88Z" fill="var(--bg)"/>
+        <path d="M28 64 60 80v24L28 88Z" fill="currentColor" fill-opacity="0.08"/>
+        <path d="M60 80 92 64v24l-32 16Z" fill="var(--bg)"/>
+        <path d="M60 80 92 64v24l-32 16Z" fill="currentColor" fill-opacity="0.2"/>
+        <g class="dust" stroke="none" fill="currentColor">
+          <circle cx="52" cy="62" r="1.8"/>
+          <circle cx="64" cy="58" r="1.4"/>
+          <circle cx="72" cy="64" r="1.6"/>
+        </g>
+        <path class="lid" d="M60 28 92 44 60 60 28 44Z" fill="var(--bg)"/>
+      </svg>
+      <p class="code">404</p>
+      <h1>This box is empty</h1>
+      <p>No workspace is serving this address right now. If it is yours, start the workspace and turn on its web server in the workspace's settings.</p>
+      <p class="host" id="host"></p>
+    </div>
   </main>
+  <script>
+    // Names the address that was asked for, so a typo in it is easy to spot.
+    document.getElementById("host").textContent = location.host;
+  </script>
 </body>
 </html>

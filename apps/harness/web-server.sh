@@ -1,6 +1,6 @@
 #!/bin/sh
 # The workspace's public web server, nginx kept running as an ordinary service.
-#   web-server publish <name>  ask the app to make it public at <name>.<domain>, and wait
+#   web-server publish <name>  ask the app to make it public at box-<name>.<domain>, and wait
 #   web-server unpublish       ask the app to take it down
 #   web-server reload          test the config, then restart nginx with it
 # The app answers a request only when the user lets the agent change the web server. It then

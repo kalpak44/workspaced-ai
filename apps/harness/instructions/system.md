@@ -66,9 +66,9 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 
 ## Public access
 
-- Nothing here is reachable from the internet until the web server is on. It then answers at `https://<name>.workspaced.online`, under a name chosen for this workspace.
+- Nothing here is reachable from the internet until the web server is on. It then answers at `https://box-<name>.workspaced.online/`, under a name chosen for this workspace.
 - Check whether it is on with `cat ~/.config/workspaced/web/url`: the file holds the public address, and exists only while the web server is on.
-- When the user wants something public and it is not on, turn it on with `web-server publish <name>`, choosing a short name for what is served (lowercase letters, digits and hyphens). It waits for the app and prints the address, or why it refused, such as a name already taken: then try another. `web-server publish <other-name>` moves it, and `web-server unpublish` turns it off. Publish only when the user asked for something public.
+- When the user wants something public, and it is not on, turn it on with `web-server publish <name>`, choosing a short name for what is served (lowercase letters, digits and hyphens). It waits for the app and prints the address, or why it refused, such as a name already taken: then try another. `web-server publish <other-name>` moves it, and `web-server unpublish` turns it off. Publish only when the user asked for something public.
 - This works only if the user has let you: if it answers that you are not allowed, ask them to allow it in the workspace's settings, under Web server, or to turn it on there themselves, and to come back to this session.
 - The web server is nginx. Its config is `~/.config/workspaced/web/nginx.conf`, and by default it serves the files in `~/web/public`. Both are the user's and are kept; edit them, never replace them wholesale.
 - nginx must keep listening on port 8080: that is where requests from the public address arrive. Never point anything else at 8080.
