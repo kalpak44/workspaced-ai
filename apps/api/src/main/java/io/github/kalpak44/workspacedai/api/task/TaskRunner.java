@@ -64,7 +64,7 @@ public class TaskRunner {
       var schedule = Schedule.of(task.cron(), task.timeZone()).orElse(null);
       if (schedule == null || !schedule.matches(minute)) continue;
       try {
-        var session = sessions.create(workspaceId, task.name());
+        var session = sessions.createForTask(workspaceId, task.name());
         sessions.send(workspaceId, session.id(), prompt(task));
         LOG.info(
             "Ran task {} of workspace {} in session {}", task.name(), workspaceId, session.id());

@@ -9,6 +9,8 @@ export interface Session {
   /** ISO 8601. */
   readonly createdAt: string;
   readonly available?: boolean;
+  /** The scheduled task this session is a run of; null when a user started it. */
+  readonly task?: string | null;
 }
 
 export interface ChatPart {

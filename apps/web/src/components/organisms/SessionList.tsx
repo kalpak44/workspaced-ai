@@ -1,11 +1,18 @@
-import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
+import { CalendarClock, ChevronLeft, ChevronRight, MessageSquare, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import type { Attachment } from "../../hooks/useSessionFiles";
 import type { Session } from "../../hooks/useSessions";
 import { Button, IconButton, Spinner } from "../atoms";
-import { ChatComposer, ErrorBanner, SessionCard } from "../molecules";
+import { ChatComposer, ErrorBanner, SessionCard, Tabs } from "../molecules";
 
 const PAGE_SIZE = 10;
+
+type Tab = "user" | "scheduled";
+
+const TABS = [
+  { value: "user", label: "Your sessions", icon: MessageSquare },
+  { value: "scheduled", label: "Scheduled", icon: CalendarClock },
+] as const;
 
 interface Props {
   readonly modelControl?: ReactNode;
@@ -41,7 +48,11 @@ function Placeholder({ width }: { readonly width: string }) {
 
 /** Where a workspace's work starts: type a task, or pick up an earlier session. */
 export function SessionList(props: Props) {
-  const { sessions, loading } = props;
+  const { loading } = props;
+  // Task runs are kept apart, so the ones a schedule keeps starting never bury the user's own.
+  const [tab, setTab] = useState<Tab>("user");
+  const scheduled = props.sessions.filter((session) => session.task);
+  const sessions = tab === "scheduled" ? scheduled : props.sessions.filter((session) => !session.task);
   const [page, setPage] = useState(1);
   // Null outside selection mode; the ids chosen for deletion inside it.
   const [selected, setSelected] = useState<ReadonlySet<string> | null>(null);
@@ -73,6 +84,11 @@ export function SessionList(props: Props) {
       return next;
     });
   const allSelected = selected !== null && sessions.length > 0 && selected.size === sessions.length;
+  const switchTab = (next: Tab) => {
+    setTab(next);
+    setPage(1);
+    setSelected(null);
+  };
 
   return (
     <section aria-label="Sessions" className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
@@ -94,14 +110,15 @@ export function SessionList(props: Props) {
       </div>
       <div>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="flex items-baseline gap-2 text-sm font-medium text-zinc-600 dark:text-zinc-300">
-            Recent sessions
+          <div className="flex items-center gap-2">
+            <h2 className="sr-only">Recent sessions</h2>
+            <Tabs label="Sessions shown" tabs={TABS} value={tab} onChange={switchTab} />
             {loading ? (
-              <Spinner label="Loading sessions" className="size-3.5 self-center text-zinc-400" />
+              <Spinner label="Loading sessions" className="size-3.5 text-zinc-400" />
             ) : (
-              <span className="text-xs font-normal text-zinc-400">{sessions.length}</span>
+              <span className="text-xs text-zinc-400">{sessions.length}</span>
             )}
-          </h2>
+          </div>
           <div className="flex items-center gap-3">
             {!loading && pageCount > 1 && (
               <span className="text-xs text-zinc-400">Page {page} of {pageCount}</span>
@@ -131,7 +148,9 @@ export function SessionList(props: Props) {
         )}
         {!loading && sessions.length === 0 ? (
           <p className="rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            No sessions yet. Start a task to work with your workspace’s files.
+            {tab === "scheduled"
+              ? "No scheduled runs yet. Each run of a scheduled task opens a session here."
+              : "No sessions yet. Start a task to work with your workspace’s files."}
           </p>
         ) : (
           <ul className="flex flex-col divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-busy={loading}>

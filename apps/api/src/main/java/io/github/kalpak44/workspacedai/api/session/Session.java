@@ -16,10 +16,14 @@ public record Session(
             example = "/home/workspace/project")
         String path,
     @Schema(example = "2026-11-03T15:37:24.531Z") Instant createdAt,
-    boolean available) {
+    boolean available,
+    @Schema(
+            description = "The scheduled task this session is a run of; null when a user started it",
+            example = "pr-summary")
+        String task) {
 
   Session withTitle(String title) {
-    return new Session(id, title, path, createdAt, available);
+    return new Session(id, title, path, createdAt, available, task);
   }
 
   static Session of(WorkspaceSessionEntity entity) {
@@ -28,6 +32,7 @@ public record Session(
         entity.getTitle(),
         entity.getPath(),
         entity.getCreatedAt(),
-        entity.isAvailable());
+        entity.isAvailable(),
+        entity.getTask());
   }
 }

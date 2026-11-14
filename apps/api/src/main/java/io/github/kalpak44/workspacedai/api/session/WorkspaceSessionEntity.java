@@ -32,6 +32,10 @@ public class WorkspaceSessionEntity {
   @Column(nullable = false)
   private boolean available = true;
 
+  // The scheduled task this session is a run of; null for one the user started.
+  @Column(length = 63, updatable = false)
+  private String task;
+
   public boolean isAvailable() {
     return available;
   }
@@ -49,10 +53,16 @@ public class WorkspaceSessionEntity {
   }
 
   public WorkspaceSessionEntity(UUID id, UUID workspaceId, String path, String harnessSessionId) {
+    this(id, workspaceId, path, harnessSessionId, null);
+  }
+
+  public WorkspaceSessionEntity(
+      UUID id, UUID workspaceId, String path, String harnessSessionId, String task) {
     this.id = id;
     this.workspaceId = workspaceId;
     this.path = path;
     this.harnessSessionId = harnessSessionId;
+    this.task = task;
     // Postgres keeps microseconds, so the value read back later equals the one returned now.
     this.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
   }
@@ -79,6 +89,10 @@ public class WorkspaceSessionEntity {
 
   public void setTitle(String title) {
     this.title = title;
+  }
+
+  public String getTask() {
+    return task;
   }
 
   public Instant getCreatedAt() {

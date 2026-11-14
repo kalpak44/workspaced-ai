@@ -854,6 +854,26 @@ describe("App", () => {
     await sessionsHere();
   });
 
+  it("lists scheduled task runs on a tab of their own", async () => {
+    const now = new Date().toISOString();
+    api.sessions.set("starter", [
+      { id: "mine", title: "My chat", path: "/home/workspace/sessions/mine", createdAt: now, task: null },
+      { id: "run", title: "pr-summary", path: "/home/workspace/sessions/run", createdAt: now, task: "pr-summary" },
+    ]);
+    const user = userEvent.setup();
+    await renderLoaded();
+    const list = await screen.findByRole("region", { name: "Sessions" });
+    await within(list).findByText("My chat");
+    expect(within(list).queryByText("pr-summary")).not.toBeInTheDocument();
+
+    await user.click(within(list).getByRole("tab", { name: "Scheduled" }));
+    expect(within(list).getByRole("tab", { name: "Scheduled" })).toHaveAttribute("aria-selected", "true");
+    expect(within(list).getAllByRole("listitem").map((card) => card.textContent)).toEqual(["pr-summaryjust now"]);
+
+    await user.click(within(list).getByText("pr-summary"));
+    expect(path()).toBe("/workspaces/starter/sessions/run");
+  });
+
   it("creates sessions only from the task input, and deletes one from its page", async () => {
     const user = userEvent.setup();
     await renderLoaded();

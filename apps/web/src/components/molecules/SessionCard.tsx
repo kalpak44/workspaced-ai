@@ -1,4 +1,4 @@
-import { Check, MessageSquare, Trash2 } from "lucide-react";
+import { CalendarClock, Check, MessageSquare, Trash2 } from "lucide-react";
 import type { Session } from "../../hooks/useSessions";
 import { timeAgo } from "../../lib/time";
 import { IconButton, Spinner } from "../atoms";
@@ -32,6 +32,8 @@ export function SessionCard({ session, deleting, onOpen, onDelete, selected, onT
           <span aria-hidden className={`flex size-4 shrink-0 items-center justify-center rounded border ${selected ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900" : "border-zinc-300 dark:border-zinc-600"}`}>
             {selected && <Check className="size-3" />}
           </span>
+        ) : session.task ? (
+          <CalendarClock aria-hidden className="size-4 shrink-0 text-zinc-400" />
         ) : (
           <MessageSquare aria-hidden className="size-4 shrink-0 text-zinc-400" />
         )}

@@ -95,8 +95,12 @@ public class SessionService {
     return create(workspaceId, null);
   }
 
-  /** With a title of its own, as for a scheduled task's run, or null for the harness to name it. */
-  public Session create(UUID workspaceId, String title) {
+  /** A scheduled task's run: titled with the task's name, and kept marked as its run. */
+  public Session createForTask(UUID workspaceId, String task) {
+    return create(workspaceId, task);
+  }
+
+  private Session create(UUID workspaceId, String task) {
     requireWorkspace(workspaceId);
     var endpoint = endpoint(workspaceId);
     var id = UUID.randomUUID();
@@ -105,9 +109,10 @@ public class SessionService {
     String harnessId = null;
     try {
       harness.validate(endpoint, path);
-      harnessId = harness.createSession(endpoint, path, title);
+      harnessId = harness.createSession(endpoint, path, task);
       return Session.of(
-          sessions.saveAndFlush(new WorkspaceSessionEntity(id, workspaceId, path, harnessId)));
+          sessions.saveAndFlush(
+              new WorkspaceSessionEntity(id, workspaceId, path, harnessId, task)));
     } catch (RuntimeException e) {
       if (harnessId != null) {
         harness.deleteSession(endpoint, path, harnessId);

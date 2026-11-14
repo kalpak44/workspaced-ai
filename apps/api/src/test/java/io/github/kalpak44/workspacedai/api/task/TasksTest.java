@@ -154,7 +154,9 @@ class TasksTest {
     // Monday 10 November 2026, 09:00 in Sofia.
     runner.runDue(workspace, Instant.parse("2026-11-10T07:00:00Z"));
 
-    assertThat(sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspace)).hasSize(1);
+    assertThat(sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspace))
+        .singleElement()
+        .satisfies(s -> assertThat(s.getTask()).isEqualTo("pr-summary"));
     assertThat(OPENCODE.requests)
         .filteredOn(r -> r.method().equals("POST") && r.path().equals("/api/session"))
         .singleElement()
