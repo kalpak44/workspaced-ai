@@ -39,7 +39,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
  * exhaust the pool for every user.
  */
 @SpringBootTest
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class RemoteCallsOutsideTransactionsTest {
 
   private static final HarnessEndpoint ENDPOINT =
@@ -104,7 +104,7 @@ class RemoteCallsOutsideTransactionsTest {
   @Test
   void holdsNoTransactionWhileAHarnessProviderOrPodIsWorking() {
     var workspace =
-        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1");
+        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null);
     var session = sessions.create(workspace.id());
     sessions.list(workspace.id());
     sessions.messages(workspace.id(), session.id());

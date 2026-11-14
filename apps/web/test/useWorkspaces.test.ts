@@ -1,9 +1,9 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 import { uniqueName, useWorkspaces } from "../src/hooks/useWorkspaces";
-import { FakeEventSource, installFakeApi, REJECTED_KEY } from "./fakeApi";
+import { FakeEventSource, installFakeApi } from "./fakeApi";
 
-const request = (name: string, apiKey = "sk-or-1") => ({ name, modelProvider: "openrouter", apiKey });
+const request = (name: string) => ({ name, serverType: "cx23" });
 
 describe("uniqueName", () => {
   it("keeps a free name", () => {
@@ -38,13 +38,6 @@ describe("useWorkspaces", () => {
     });
     expect(created).toBe("created");
     expect(api.rows.at(-1)?.name).toBe("Docs");
-
-    // A rejected key is the form's to show, so it does not reach the banner.
-    await act(async () => {
-      created = await result.current.create(request("Nope", REJECTED_KEY));
-    });
-    expect(created).toBe("rejected");
-    expect(result.current.error).toBeNull();
 
     api.state.fail = 500;
     await act(async () => {

@@ -14,7 +14,7 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class OpenApiTest {
 
   @LocalServerPort int port;
@@ -34,6 +34,7 @@ class OpenApiTest {
             "\"operationId\":\"deleteWorkspace\"",
             "\"operationId\":\"listWorkspaces\"",
             "\"operationId\":\"listModelProviders\"",
+            "\"operationId\":\"listVmSizes\"",
             "\"operationId\":\"addWorkspaceSecret\"",
             "\"operationId\":\"removeWorkspaceSecret\"",
             "\"operationId\":\"listUsers\"",

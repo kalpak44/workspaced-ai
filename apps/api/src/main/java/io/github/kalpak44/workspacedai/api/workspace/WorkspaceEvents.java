@@ -16,8 +16,8 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
  * Fans each workspace status change out to the open event streams of the user who owns it. Changes
- * arrive on the Kubernetes informer's thread, which only queues them on each browser's own {@link
- * SseOutbox}: a browser that stops reading must not hold up the informer, or every other browser.
+ * arrive on the runtime's own thread, which only queues them on each browser's own {@link
+ * SseOutbox}: a browser that stops reading must not hold up that thread, or every other browser.
  */
 @Component
 public class WorkspaceEvents {
@@ -69,7 +69,7 @@ public class WorkspaceEvents {
   /**
    * Tells the owner's clients on this instance the workspace is gone. {@link WorkspaceDeletions}
    * calls it on every instance once the delete has committed, whichever one made it. Without it,
-   * another open tab would only see the pod disappear and show the workspace as failed.
+   * another open tab would only see the VM disappear and show the workspace as failed.
    */
   void publishDeleted(UUID id, UUID ownerId) {
     sendTo(ownerId, () -> SseEmitter.event().name(DELETED).data(Map.of("id", id)));
@@ -91,7 +91,7 @@ public class WorkspaceEvents {
   /**
    * Ends every stream as soon as shutdown begins. An open stream is an active request, and graceful
    * shutdown would otherwise wait out its whole timeout on each one; the browser's EventSource
-   * reconnects to the next pod by itself.
+   * reconnects to the next API instance by itself.
    */
   @EventListener(ContextClosedEvent.class)
   void closeAll() {

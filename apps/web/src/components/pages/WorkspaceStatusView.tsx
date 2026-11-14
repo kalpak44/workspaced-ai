@@ -5,7 +5,7 @@ import { EmptyState } from "../molecules";
 
 /**
  * What a workspace page shows instead of its content while there is no harness to talk to;
- * null once it is ready. Deleting comes first: the pod is going on purpose, so "unavailable"
+ * null once it is ready. Deleting comes first: the VM is going on purpose, so "unavailable"
  * would mislead.
  */
 export function WorkspaceStatusView({

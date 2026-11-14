@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings;
 import io.github.kalpak44.workspacedai.api.settings.SettingsService;
@@ -22,7 +23,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** Every API instance schedules the expiry pass; only the one holding the lock runs it. */
 @SpringBootTest
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class SessionExpiryLockTest {
 
   @MockitoBean SessionExpiryService expiry;

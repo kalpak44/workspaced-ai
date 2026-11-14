@@ -11,7 +11,7 @@ import { installFakeApi } from "./fakeApi";
 describe("workspacesApi", () => {
   it("sends each change to its route and returns what the API answered", async () => {
     const api = installFakeApi([]);
-    const created = await createWorkspace({ name: "Docs", modelProvider: "openrouter", apiKey: "k" });
+    const created = await createWorkspace({ name: "Docs", serverType: "cx23" });
     const notes = { id: created.id, name: "Notes", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false };
     expect(await renameWorkspace(created.id, "Notes")).toEqual(notes);
     expect(await listWorkspaces()).toEqual([notes]);

@@ -43,7 +43,12 @@ public class WorkspaceController implements WorkspaceApi {
                         HttpStatus.BAD_REQUEST,
                         "unknown model provider " + request.modelProvider()));
     var workspace =
-        service.create(CurrentUser.id(), request.trimmedName(), provider, request.trimmedApiKey());
+        service.create(
+            CurrentUser.id(),
+            request.trimmedName(),
+            provider,
+            request.trimmedApiKeyOrNull(),
+            request.serverTypeOrNull());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")

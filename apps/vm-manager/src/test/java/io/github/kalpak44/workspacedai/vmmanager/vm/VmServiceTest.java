@@ -39,6 +39,7 @@ class VmServiceTest {
               "nbg1",
               "ubuntu-24.04",
               List.of("ops"),
+              "workspaced-ai-vms",
               Duration.ofSeconds(1)),
           () -> inventoryLoaded,
           published::add,

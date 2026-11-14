@@ -27,7 +27,6 @@
         <sonar.plugin.version>5.8.0.7211</sonar.plugin.version>
         <!-- springdoc 3.x is the line built for Boot 4; 2.x targets Boot 3. -->
         <spring-doc.version>3.2.0</spring-doc.version>
-        <fabric8.version>8.0.0</fabric8.version>
         <shedlock.version>7.11.0</shedlock.version>
         <awssdk.version>2.57.13</awssdk.version>
 
@@ -97,25 +96,6 @@
             <groupId>org.postgresql</groupId>
             <artifactId>postgresql</artifactId>
         </dependency>
-        <!-- Starts and stops each workspace's pod in the namespace the API runs in. On the
-             JDK's own HTTP client rather than the default Vert.x one: Vert.x's threads keep
-             the JVM from exiting, which surefire reports by killing its fork. -->
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-client</artifactId>
-            <version>${fabric8.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>io.fabric8</groupId>
-                    <artifactId>kubernetes-httpclient-vertx</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-httpclient-jdk</artifactId>
-            <version>${fabric8.version}</version>
-        </dependency>
         <!-- Runs each scheduled job on one API instance at a time, with the lock in PostgreSQL. -->
         <dependency>
             <groupId>net.javacrumbs.shedlock</groupId>
@@ -171,14 +151,6 @@
         <dependency>
             <groupId>org.testcontainers</groupId>
             <artifactId>testcontainers-postgresql</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <!-- An in-memory API server that stores what is created, so pod handling is tested
-             against real client calls without a cluster. -->
-        <dependency>
-            <groupId>io.fabric8</groupId>
-            <artifactId>kubernetes-server-mock</artifactId>
-            <version>${fabric8.version}</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

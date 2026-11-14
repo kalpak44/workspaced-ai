@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.terminal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -33,7 +34,7 @@ import tools.jackson.databind.json.JsonMapper;
 /** Full HTTP and browser-WebSocket path through the API to real OpenCode shells. */
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class TerminalLiveTest {
   @LocalServerPort int port;
   @Autowired WorkspaceRepository workspaces;

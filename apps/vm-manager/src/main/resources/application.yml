@@ -49,6 +49,9 @@ workspaced:
     # Comma-separated names of project SSH keys put on every VM. Empty, Hetzner emails a root
     # password for each one instead.
     ssh-keys: ${WORKSPACED_HETZNER_SSH_KEYS:}
+    # Every VM is created behind this Cloud Firewall, made with no rules when it is missing, so
+    # no inbound connection reaches a VM; outbound still works.
+    firewall: ${WORKSPACED_HETZNER_FIREWALL:workspaced-ai-vms}
   vm:
     # The sizes offered, default first. Specs and prices come from Hetzner.
     server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}

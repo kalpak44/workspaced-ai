@@ -15,6 +15,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -23,14 +25,15 @@ import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Keeps the stored workspace and its runtime together. Creating one starts the runtime inside the
- * transaction, after the row is flushed, so a pod that cannot be started rolls the database back;
- * those Kubernetes calls are quick. The slow calls (checking the provider's key, waiting for a pod
- * to be gone) run outside any transaction, so they never hold a database connection.
+ * Keeps the stored workspace and its runtime together. The row is committed before the runtime is
+ * asked for a VM, so that slow call holds no database connection; any failure after that removes
+ * both again, so a failed create leaves nothing behind to bill or to list. The other slow calls
+ * (checking the provider's key, waiting for a VM to be deleted) run outside any transaction too.
  */
 @Service
 public class WorkspaceService {
 
+  private static final Logger log = LoggerFactory.getLogger(WorkspaceService.class);
   private static final SecureRandom RANDOM = new SecureRandom();
 
   private final WorkspaceRepository repository;
@@ -64,46 +67,78 @@ public class WorkspaceService {
   }
 
   /**
-   * The key is checked before anything is stored, so a rejected key leaves nothing behind. The
-   * workspace receives it as a secret and the base URL as config; neither is kept in the database.
-   * The harness gets a password of its own, which only the API and the pod ever see.
+   * A key, when given, is checked before anything is stored, so a rejected key leaves nothing
+   * behind. The workspace receives it as a secret and the base URL as config; neither is kept in
+   * the database. The harness gets a password of its own, which only the API and the workspace ever
+   * see.
+   *
+   * @param apiKey null for none
+   * @param serverType null for the default size
    */
-  public Workspace create(UUID ownerId, String name, ModelProvider provider, String apiKey) {
-    return create(ownerId, name, provider, apiKey, Map.of());
+  public Workspace create(
+      UUID ownerId, String name, ModelProvider provider, String apiKey, String serverType) {
+    return create(ownerId, name, provider, apiKey, serverType, Map.of());
   }
 
   /**
-   * As {@link #create(UUID, String, ModelProvider, String)}, with more secrets for the harness,
-   * such as the restore it is to start from.
+   * As {@link #create(UUID, String, ModelProvider, String, String)}, with more secrets for the
+   * harness, such as the restore it is to start from.
    */
   public Workspace create(
       UUID ownerId,
       String name,
       ModelProvider provider,
       String apiKey,
+      String serverType,
       Map<String, String> harnessSecrets) {
-    if (!keyCheck.accepts(provider, apiKey)) {
+    if (apiKey != null && !keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
-    var entity =
-        transactions.execute(
-            _ -> {
-              var saved =
-                  repository.saveAndFlush(new WorkspaceEntity(ownerId, name, provider.id()));
-              runtime.start(
-                  saved.getId(),
-                  new WorkspaceEnvironment(
-                      Map.of(provider.baseUrlVariable(), provider.baseUrl()),
-                      secrets(provider, apiKey, harnessSecrets)));
-              return saved;
-            });
-    return Workspace.of(entity, statusOf(entity.getId()));
+    var id =
+        transactions
+            .execute(
+                _ -> repository.saveAndFlush(new WorkspaceEntity(ownerId, name, provider.id())))
+            .getId();
+    try {
+      var startedAs =
+          runtime.start(
+              id,
+              ownerId,
+              serverType,
+              new WorkspaceEnvironment(
+                  Map.of(provider.baseUrlVariable(), provider.baseUrl()),
+                  secrets(provider, apiKey, harnessSecrets)));
+      var entity =
+          transactions.execute(
+              _ -> {
+                var saved = repository.findById(id).orElseThrow();
+                saved.setServerType(startedAs);
+                return saved;
+              });
+      return Workspace.of(entity, statusOf(id));
+    } catch (RuntimeException e) {
+      release(id);
+      transactions.executeWithoutResult(_ -> repository.deleteById(id));
+      throw e;
+    }
+  }
+
+  // Best effort: when the runtime cannot be reached either, a VM keeps its workspace-id label and
+  // is found by it.
+  private void release(UUID workspaceId) {
+    try {
+      runtime.stop(workspaceId);
+    } catch (RuntimeException e) {
+      log.error("workspace {} failed to create and could not be released", workspaceId, e);
+    }
   }
 
   private static Map<String, String> secrets(
       ModelProvider provider, String apiKey, Map<String, String> harnessSecrets) {
     var secrets = new HashMap<>(harnessSecrets);
-    secrets.put(provider.apiKeyVariable(), apiKey);
+    if (apiKey != null) {
+      secrets.put(provider.apiKeyVariable(), apiKey);
+    }
     secrets.put(Harness.PASSWORD_VARIABLE, password());
     return secrets;
   }
@@ -127,9 +162,8 @@ public class WorkspaceService {
 
   /**
    * Returns once the workspace's runtime is gone, so the caller can show it deleting until then.
-   * The runtime is stopped first, outside any transaction, since that waits for its pod; if it does
-   * not stop in time the row is kept, so the delete can be retried. False when no workspace has
-   * that id.
+   * The runtime is stopped first, outside any transaction, since that waits for its VM; if it does
+   * not stop the row is kept, so the delete can be retried. False when no workspace has that id.
    */
   public boolean delete(UUID id) {
     var owner = repository.findOwnerIdById(id);
@@ -146,9 +180,8 @@ public class WorkspaceService {
   }
 
   /**
-   * Returns once the old pod is on its way out; the status stream reports the new one starting and
-   * then ready. The new pod reads the secrets afresh, so none is left pending. False when no
-   * workspace has that id.
+   * Returns once the reboot is under way; the status stream reports it starting and then ready. It
+   * reads the secrets afresh, so none is left pending. False when no workspace has that id.
    */
   @Transactional
   public boolean restart(UUID id) {

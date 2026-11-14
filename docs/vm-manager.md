@@ -30,6 +30,14 @@ offered. A missing or malformed `workspaceId` or `userId`, or a `serverType` tha
 Hetzner refusing answers `502` and keeps nothing. Deleting a VM deletes its server, disk included; a server already
 gone counts as deleted, and a VM whose server could not be deleted is kept so the delete can be retried.
 
+### No inbound access
+
+Every server is created behind the Cloud Firewall `workspaced-ai-vms` (`WORKSPACED_HETZNER_FIREWALL`), which the VM
+manager makes, with no rules, the first time it is missing. A Hetzner firewall drops every inbound packet no rule
+allows, so nothing on the internet can open a connection to a VM, SSH included, while the VM can still reach out to the
+API and to package mirrors. The firewall goes in the create request rather than being applied after it, so a VM is
+never reachable even while it boots. Opening a port is a rule added to that firewall, never a server outside it.
+
 ### Labels
 
 Every server is labelled `managed-by=workspaced-ai-vm-manager`, `vm-id`, `workspace-id` and `user-id`, so any server can

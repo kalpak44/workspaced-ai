@@ -9,11 +9,16 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.function.BiConsumer;
 
-/** Where a workspace actually runs. */
+/** Where a workspace actually runs: a Hetzner VM of its own. */
 public interface WorkspaceRuntime {
 
-  /** Starts the workspace's runtime with that environment; returns before it is ready. */
-  void start(UUID workspaceId, WorkspaceEnvironment environment);
+  /**
+   * Starts the workspace's runtime with that environment; returns before it is ready.
+   *
+   * @param serverType the size to start it as; null for the runtime's default
+   * @return the size it was started as; null where sizes mean nothing
+   */
+  String start(UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment);
 
   /**
    * Stops it and returns once it is gone, so a caller can report the workspace deleted only when it
@@ -22,8 +27,8 @@ public interface WorkspaceRuntime {
   void stop(UUID workspaceId);
 
   /**
-   * Replaces its running pod with a fresh one, keeping its storage, and returns before the new one
-   * is ready. Fails when the workspace has nothing that would bring a pod back.
+   * Reboots it, keeping its storage, and returns before it is ready again. Fails with {@link
+   * IllegalStateException} when the workspace has nothing to reboot.
    */
   void restart(UUID workspaceId);
 
@@ -47,8 +52,8 @@ public interface WorkspaceRuntime {
   void removeSecret(UUID workspaceId, String name);
 
   /**
-   * The last lines its newest pod printed, oldest first; empty when it has no pod or the log cannot
-   * be read. Before its harness starts, this is the only way to hear from it.
+   * The last lines it printed, oldest first; empty when it has none or the log cannot be read.
+   * Before its harness starts, this is the only way to hear from it.
    */
   List<String> recentLog(UUID workspaceId, int lines);
 

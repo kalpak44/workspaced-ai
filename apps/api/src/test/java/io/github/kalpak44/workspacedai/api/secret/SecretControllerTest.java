@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
@@ -30,7 +31,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class SecretControllerTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -48,7 +49,10 @@ class SecretControllerTest {
   void setUp() {
     repository.deleteAll();
     when(keyCheck.accepts(any(), any())).thenReturn(true);
-    id = workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+    id =
+        workspaces
+            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+            .id();
   }
 
   @Test

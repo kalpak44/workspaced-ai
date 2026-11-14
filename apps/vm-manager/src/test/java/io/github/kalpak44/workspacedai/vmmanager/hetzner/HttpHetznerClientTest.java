@@ -95,6 +95,25 @@ class HttpHetznerClientTest {
   }
 
   @Test
+  void createsEveryServerBehindOneFirewallThatLetsNothingIn() {
+    var client = client("t0ken");
+    client.createServer(
+        new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of()));
+    client.createServer(
+        new ServerSpec("vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of()));
+
+    assertThat(hetzner.firewalls).hasSize(1);
+    var firewall = hetzner.firewalls.values().iterator().next();
+    assertThat(firewall.path("name").asString()).isEqualTo("workspaced-ai-vms");
+    assertThat(firewall.path("rules")).isEmpty();
+    assertThat(hetzner.createBodies)
+        .allSatisfy(
+            body ->
+                assertThat(body.path("firewalls").get(0).path("firewall").asLong())
+                    .isEqualTo(firewall.path("id").asLong()));
+  }
+
+  @Test
   void listsOnlyServersMatchingTheLabel() {
     var client = client("t0ken");
     var mine =
@@ -140,7 +159,13 @@ class HttpHetznerClientTest {
   private HttpHetznerClient client(String token) {
     var properties =
         new HetznerProperties(
-            token, hetzner.url(), "nbg1", "ubuntu-24.04", List.of(), Duration.ofSeconds(5));
+            token,
+            hetzner.url(),
+            "nbg1",
+            "ubuntu-24.04",
+            List.of(),
+            "workspaced-ai-vms",
+            Duration.ofSeconds(5));
     return new HttpHetznerClient(
         properties, HttpClient.newHttpClient(), JsonMapper.builder().build());
   }

@@ -15,7 +15,7 @@ import java.util.UUID;
 public class WorkspaceEntity {
 
   // Generated on persist rather than by the database, so the id is known before the
-  // insert is flushed and the pod can be named after it.
+  // insert is flushed and the VM can be labelled with it.
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
@@ -31,6 +31,10 @@ public class WorkspaceEntity {
   @Column(name = "model_provider", nullable = false, length = 50)
   private String modelProvider;
 
+  // The VM size it was created as; null where nothing runs it.
+  @Column(name = "server_type", length = 20)
+  private String serverType;
+
   // A model id at that provider; null keeps the harness's own default.
   @Column(length = 200)
   private String model;
@@ -41,7 +45,7 @@ public class WorkspaceEntity {
   @Column(name = "session_ttl_hours", nullable = false)
   private int sessionTtlHours = 168;
 
-  // Secrets changed since the pod started; it sees them only once it restarts.
+  // Secrets changed since the runtime started; it sees them only once it restarts.
   @Column(name = "secrets_pending_restart", nullable = false)
   private boolean secretsPendingRestart;
 
@@ -94,6 +98,14 @@ public class WorkspaceEntity {
     this.ownerId = ownerId;
     this.name = name;
     this.modelProvider = modelProvider;
+  }
+
+  public String getServerType() {
+    return serverType;
+  }
+
+  public void setServerType(String serverType) {
+    this.serverType = serverType;
   }
 
   public UUID getId() {

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.AuthProperties;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
@@ -42,7 +43,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Against a harness that answers as opencode does, through the real client. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class SessionFilesTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -86,7 +87,9 @@ class SessionFilesTest {
     OPENCODE.shellExit = 0;
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace =
-        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+        workspaces
+            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+            .id();
     var created = sessions.create(workspace);
     session = created.id();
     folder = created.path();

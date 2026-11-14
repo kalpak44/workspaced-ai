@@ -9,6 +9,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
@@ -43,7 +44,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Against a harness that answers as opencode does, with the storage stubbed. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class BackupTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -95,7 +96,9 @@ class BackupTest {
     when(storage.size(anyString())).thenReturn(OptionalLong.of(1234));
     when(storage.startUpload(anyString())).thenReturn("upload-1");
     workspace =
-        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1").id();
+        workspaces
+            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+            .id();
   }
 
   @Test

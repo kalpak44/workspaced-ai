@@ -15,6 +15,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param image the operating system image every VM starts from
  * @param sshKeys names or ids of SSH keys in the project to install on every VM; with none, Hetzner
  *     emails the account a root password instead
+ * @param firewall the Cloud Firewall every VM is created behind; it has no inbound rules, so
+ *     nothing on the internet can open a connection to a VM, while the VM can still reach out
  * @param timeout how long one call to Hetzner may take, connecting included
  */
 @ConfigurationProperties("workspaced.hetzner")
@@ -24,6 +26,7 @@ public record HetznerProperties(
     @DefaultValue("nbg1") String location,
     @DefaultValue("ubuntu-24.04") String image,
     @DefaultValue List<String> sshKeys,
+    @DefaultValue("workspaced-ai-vms") String firewall,
     @DefaultValue("10s") Duration timeout) {
 
   boolean hasToken() {

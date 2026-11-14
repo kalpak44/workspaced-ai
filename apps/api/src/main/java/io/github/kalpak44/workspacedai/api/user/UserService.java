@@ -80,8 +80,8 @@ public class UserService {
   }
 
   /**
-   * Deletes each of the user's workspaces the way the workspace route does, so their pods are
-   * stopped rather than orphaned, then the user. Workspace deletes wait for their pods, so no
+   * Deletes each of the user's workspaces the way the workspace route does, so their VMs are
+   * deleted rather than orphaned, then the user. Workspace deletes wait for their VMs, so no
    * transaction is held across them. False when no user has that id.
    */
   public boolean delete(UUID id, UUID requestedBy) {

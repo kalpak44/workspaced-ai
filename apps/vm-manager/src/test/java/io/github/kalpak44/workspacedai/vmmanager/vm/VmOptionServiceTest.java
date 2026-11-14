@@ -39,6 +39,7 @@ class VmOptionServiceTest {
             "nbg1",
             "ubuntu-24.04",
             List.of(),
+            "workspaced-ai-vms",
             Duration.ofSeconds(1)),
         hetzner,
         clock);

@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.terminal;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
@@ -28,7 +29,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Exercises the real HTTP controller, service, database, and OpenCode client together. */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class TerminalControllerTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final FakeOpenCode OPENCODE = start();

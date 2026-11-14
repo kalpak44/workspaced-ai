@@ -15,12 +15,14 @@ export interface Workspace {
   readonly restartRequired: boolean;
 }
 
-/** The key is checked with the provider before anything is created, and never stored. */
 export interface NewWorkspace {
   readonly name: string;
-  readonly modelProvider: string;
-  readonly apiKey: string;
+  /** One of /vm-sizes. */
+  readonly serverType: string;
 }
+
+/** Every workspace uses OpenRouter until choosing a provider and its key comes back. */
+export const MODEL_PROVIDER = "openrouter";
 
 /** Sent once a workspace's deletion has committed, to every open stream. */
 export interface DeletedEvent {
@@ -53,14 +55,15 @@ export async function listWorkspaces(): Promise<Workspace[]> {
 }
 
 export async function createWorkspace(workspace: NewWorkspace): Promise<Workspace> {
-  return (await send(BASE, { method: "POST", body: JSON.stringify(workspace) })).json();
+  const body = JSON.stringify({ ...workspace, modelProvider: MODEL_PROVIDER });
+  return (await send(BASE, { method: "POST", body })).json();
 }
 
 export async function renameWorkspace(id: string, name: string): Promise<Workspace> {
   return (await send(workspaceUrl(id), { method: "PUT", body: JSON.stringify({ name }) })).json();
 }
 
-/** Answers once the old pod is going; the event stream reports the new one starting. */
+/** Answers once the VM is rebooting; the event stream reports it starting again. */
 export async function restartWorkspace(id: string): Promise<void> {
   await send(`${workspaceUrl(id)}/restart`, { method: "POST" });
 }

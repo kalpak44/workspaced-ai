@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
@@ -19,7 +20,7 @@ import org.springframework.context.annotation.Import;
 
 /** No harness running, as while a workspace starts. */
 @SpringBootTest
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class SettingsWithoutHarnessTest {
 
   @Autowired SettingsService service;

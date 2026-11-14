@@ -22,8 +22,8 @@ export function DeleteWorkspaceDialog({ name, onConfirm, onClose }: Props) {
             <AlertTriangle aria-hidden className="size-4.5" />
           </span>
           <p className="pt-0.5 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-            The workspace pod and everything stored in it will be removed, including
-            sessions, files, secrets, and workspace configuration.
+            The workspace's VM and its disk will be deleted, with everything stored on it,
+            including sessions, files, secrets, and workspace configuration.
           </p>
         </div>
       </ModalBody>

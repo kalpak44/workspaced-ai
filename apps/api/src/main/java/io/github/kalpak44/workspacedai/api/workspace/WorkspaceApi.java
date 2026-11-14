@@ -42,7 +42,8 @@ public interface WorkspaceApi {
 
   String CREATED_EXAMPLE =
       "{\"id\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"name\":\"Research\","
-          + "\"modelProvider\":\"openrouter\",\"status\":\"INITIALIZING\","
+          + "\"modelProvider\":\"openrouter\",\"serverType\":\"cx23\","
+          + "\"model\":null,\"status\":\"INITIALIZING\","
           + "\"restartRequired\":false}";
 
   String REJECTED_KEY_EXAMPLE =
@@ -118,10 +119,11 @@ public interface WorkspaceApi {
       operationId = "createWorkspace",
       summary = "Create a workspace",
       description =
-          "Checks the API key with the model provider, then assigns the id and starts the "
-              + "workspace's runtime, which is INITIALIZING until it can be used. The key and the "
-              + "provider's base URL reach the runtime only; the key is not stored by the API. "
-              + "Surrounding whitespace is trimmed from the name and the key.")
+          "Checks the API key with the model provider when one is given, then assigns the id "
+              + "and creates the workspace's VM, of the chosen serverType or the default one; it "
+              + "is INITIALIZING until the VM reports ready. The key and the provider's base URL "
+              + "reach the runtime only; the key is not stored by the API. Surrounding whitespace "
+              + "is trimmed from the name and the key.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -133,8 +135,8 @@ public interface WorkspaceApi {
   @ApiResponse(
       responseCode = "400",
       description =
-          "The name is blank or longer than 100 characters, the key is blank, or the model "
-              + "provider is not one /model-providers lists.",
+          "The name is blank or longer than 100 characters, the model provider is not one "
+              + "/model-providers lists, or the serverType is not one /vm-sizes lists.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
@@ -150,7 +152,16 @@ public interface WorkspaceApi {
               examples = @ExampleObject(REJECTED_KEY_EXAMPLE)))
   @ApiResponse(
       responseCode = "502",
-      description = "The model provider could not be reached to check the key.",
+      description =
+          "The model provider could not be reached to check the key, or the VM manager failed "
+              + "to create the VM; nothing was created.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "The VM manager cannot be reached; nothing was created.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
@@ -209,10 +220,10 @@ public interface WorkspaceApi {
       operationId = "restartWorkspace",
       summary = "Restart a workspace",
       description =
-          "Replaces the workspace's running pod with a fresh one. Its home, sessions and files "
-              + "are kept; running processes and open terminals are not. The new pod reads its "
-              + "secrets afresh, so restartRequired is cleared. Answers as soon as the "
-              + "old pod is going; follow /workspaces/events for INITIALIZING and then READY.")
+          "Reboots the workspace's VM. Its disk is kept; running processes and open terminals "
+              + "are not. It reads its secrets afresh, so restartRequired is cleared. Answers as "
+              + "soon as the reboot is under way; follow /workspaces/events for INITIALIZING and "
+              + "then READY.")
   @ApiResponse(responseCode = "202", description = "Restarting.")
   @ApiResponse(
       responseCode = "400",
@@ -231,8 +242,7 @@ public interface WorkspaceApi {
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
   @ApiResponse(
       responseCode = "409",
-      description =
-          "The workspace runs as a bare pod from before Deployments, which nothing would bring back.",
+      description = "The workspace has no VM to reboot, as one created before VMs does not.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

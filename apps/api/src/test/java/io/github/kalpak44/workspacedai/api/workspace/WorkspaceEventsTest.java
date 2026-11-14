@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
@@ -27,7 +28,7 @@ import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class WorkspaceEventsTest {
 
   @LocalServerPort int port;
@@ -47,7 +48,7 @@ class WorkspaceEventsTest {
   @Timeout(10)
   void sendsASnapshotOnConnectThenEachChange() throws Exception {
     var workspace =
-        service.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-test");
+        service.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-test", null);
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
             .header("Authorization", TestUsers.bearer(port))
@@ -84,7 +85,7 @@ class WorkspaceEventsTest {
   @Timeout(10)
   void relaysADeletionAnotherInstanceAnnounced() throws Exception {
     // A workspace of its own, so the stream opens with a snapshot rather than on a heartbeat.
-    var mine = service.create(TestUsers.ADMIN, "Mine", ModelProvider.OPENROUTER, "sk-test");
+    var mine = service.create(TestUsers.ADMIN, "Mine", ModelProvider.OPENROUTER, "sk-test", null);
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
             .header("Authorization", TestUsers.bearer(port))

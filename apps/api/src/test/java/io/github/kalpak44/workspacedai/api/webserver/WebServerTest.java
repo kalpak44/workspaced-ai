@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
@@ -44,7 +45,7 @@ import tools.jackson.databind.json.JsonMapper;
 
 /** Against a harness that answers as opencode does, through the real client. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class WebServerTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -262,7 +263,7 @@ class WebServerTest {
   }
 
   private UUID create(String name) {
-    return workspaces.create(TestUsers.ADMIN, name, ModelProvider.OPENROUTER, "sk-or-1").id();
+    return workspaces.create(TestUsers.ADMIN, name, ModelProvider.OPENROUTER, "sk-or-1", null).id();
   }
 
   private HttpResponse<String> send(String method, UUID id, String json) throws Exception {

@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doThrow;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
@@ -20,7 +21,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** A name must not be listed for a value the runtime never got, or kept for one it dropped. */
 @SpringBootTest
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class SecretRollbackTest {
 
   @MockitoBean WorkspaceRuntime runtime;

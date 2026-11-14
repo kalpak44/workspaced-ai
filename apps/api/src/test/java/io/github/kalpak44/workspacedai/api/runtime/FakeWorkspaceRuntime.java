@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.net.URI;
 import java.util.Collection;
 import java.util.List;
 import java.util.Map;
@@ -12,22 +13,23 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Used outside Kubernetes. A laptop's kubeconfig may point at any cluster, so a local run starts
- * nothing and reports every workspace ready.
+ * Stands in for the VMs, so the API is tested without a VM manager: it starts nothing, reports
+ * every workspace ready, and points every workspace at the one harness a test started.
  */
-public class LocalWorkspaceRuntime implements WorkspaceRuntime {
+public class FakeWorkspaceRuntime implements WorkspaceRuntime {
 
   private final Optional<HarnessEndpoint> harness;
 
-  /** Every workspace shares the one configured harness, since none has a pod of its own. */
-  public LocalWorkspaceRuntime(WorkspaceProperties.LocalHarness harness) {
-    this.harness =
-        Optional.ofNullable(harness.url()).map(url -> new HarnessEndpoint(url, harness.password()));
+  /** Every workspace shares the one harness the test started, or has none. */
+  public FakeWorkspaceRuntime(URI harnessUrl, String password) {
+    this.harness = Optional.ofNullable(harnessUrl).map(url -> new HarnessEndpoint(url, password));
   }
 
   @Override
-  public void start(UUID workspaceId, WorkspaceEnvironment environment) {
+  public String start(
+      UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment) {
     // Nothing runs locally; the workspace is usable as soon as it is stored.
+    return null;
   }
 
   @Override

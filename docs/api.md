@@ -60,27 +60,30 @@ because each provider needs its own key check.
 ## Workspaces
 
 A workspace has an `id` (UUID, assigned by the server), a `name` (1–100 characters, surrounding whitespace trimmed),
-the `modelProvider` it was created with, and a `status`: `INITIALIZING` while its environment starts, `READY` once it
-can be used, `FAILED` if it stopped or is gone. Workspaces are listed in the order they were created.
+the `modelProvider` it was created with, the `serverType` of its VM, and a `status`: `INITIALIZING` while its VM is
+created, boots or reboots, `READY` once the VM has reported ready, `FAILED` if it has no VM. Workspaces are listed in
+the order they were created.
 
 | Method   | Path                      | Body               | Answers                                         |
 |----------|---------------------------|--------------------|-------------------------------------------------|
+| `GET`    | `/api/v1/vm-sizes`        |                    | `200` and the VM sizes, default first; `503` without the VM manager |
 | `GET`    | `/api/v1/workspaces`      |                    | `200` and every workspace                       |
 | `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
-| `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "apiKey": "sk-or-…"}` | `201`, the workspace, and its URL in `Location` |
+| `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "serverType": "cx23"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
-| `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its pods are gone, or `404`          |
-| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its pod is replaced, `404`, or `409` for a bare pod |
+| `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its VM is deleted, or `404`          |
+| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its VM reboots, `404`, or `409` with no VM |
 
-A blank or overlong name, a blank key, an unknown provider, or an `id` that is not a UUID, answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
+A blank or overlong name, an unknown provider, a `serverType` `/vm-sizes` does not list, or an `id` that is not a UUID,
+answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
 
-Creating a workspace first calls the provider with the key (OpenRouter's `GET /key`). A key the provider refuses
-answers `422` and creates nothing; a provider that cannot be reached answers `502`. The key is never stored by the
-API: it goes straight into the workspace's Kubernetes Secret.
+`apiKey` is optional. When it is given, creating a workspace first calls the provider with it (OpenRouter's `GET /key`):
+a key the provider refuses answers `422` and creates nothing, and a provider that cannot be reached answers `502`. The
+key is never stored by the API.
 
 ```sh
 curl -X POST localhost:8080/api/v1/workspaces -H 'Content-Type: application/json' \
-  -d '{"name":"Docs","modelProvider":"openrouter","apiKey":"sk-or-…"}'
+  -d '{"name":"Docs","modelProvider":"openrouter","serverType":"cx23"}'
 curl localhost:8080/api/v1/workspaces
 curl -X PUT localhost:8080/api/v1/workspaces/$ID -H 'Content-Type: application/json' -d '{"name":"Notes"}'
 curl -X DELETE localhost:8080/api/v1/workspaces/$ID
@@ -89,21 +92,14 @@ curl -X DELETE localhost:8080/api/v1/workspaces/$ID
 The event stream sends one `status` event (`{"id": "…", "status": "READY"}`) per existing workspace on connect, then
 one per change, plus a `deleted` event (`{"id": "…"}`) after each deletion; a status may repeat. A `keepalive` comment follows every 30 seconds.
 
-In Kubernetes each workspace runs as a one-replica Deployment named `workspaced-ai-workspace-<id>`, labelled
-`workspaced-ai/workspace-id=<id>`, in the namespace the API runs in, behind a Service of the same name. The Deployment
-replaces a pod that dies, so the workspace is `INITIALIZING` again rather than `FAILED` while it does; it uses the
-`Recreate` strategy, so two pods never share one workspace. A Secret and a ConfigMap of the same name and label hold
-its environment — the provider key (`OPENROUTER_API_KEY`) plus any secrets added later in the Secret, the provider's
-base URL (`OPENROUTER_BASE_URL`) in the ConfigMap — and the pod takes both with `envFrom`. Deleting the workspace
-deletes all of them, and the call answers only once its pods are gone (`workspaced.workspace.stop-timeout`, 60
-seconds by default); if they are not gone in time, the workspace is kept and the call fails. Adding or removing a secret
-sets the workspace's `restartRequired` (stored as `secrets_pending_restart`), since a running pod reads its secrets
-only when it starts; restarting clears it. Restarting deletes the
-workspace's pods and lets the Deployment bring up a new one on the same PVC, so sessions, files and secrets survive while
-processes and terminals do not; the event stream then reports `INITIALIZING` and `READY`. A workspace made before
-Deployments ran as a bare pod of that name, which is still reported on and deleted. Outside
-Kubernetes nothing is started and every workspace is `READY` at once, so a local run never acts on whatever cluster
-the kubeconfig points at.
+In the cluster each workspace runs on a Hetzner VM of its own, which the API asks the [VM manager](vm-manager.md) for:
+creating a workspace stores it, then creates its VM, and removes both again if that fails, so a failed create leaves
+nothing billing. `serverType` is optional and defaults to the VM manager's default size. Deleting the workspace deletes
+its VM, disk included, and the call answers only once the VM manager has; if it cannot, the workspace is kept and the
+call fails. Restarting reboots the VM. Statuses come from the VM manager's VMs and its event stream. Nothing on a VM
+runs a harness yet, so sessions, terminals, secrets, backups and the web server answer as for a workspace that is not
+running, and the key and base URL reach nothing. There is no other runtime: a local run without
+`WORKSPACED_VM_MANAGER_URL` cannot create a workspace (`503`).
 
 ### Workspace terminals
 
@@ -192,20 +188,6 @@ workspace is created and kept in its Secret as `OPENCODE_PASSWORD`, which no use
 harness that is not running, not answering, or belongs to a workspace made before the harness existed answers `503`.
 opencode is limited to the `openrouter` provider, reading the workspace's `OPENROUTER_API_KEY` and
 `OPENROUTER_BASE_URL`; its default model is set in `apps/harness/opencode/opencode.json`.
-
-A workspace's home is a ReadWriteOnce PVC, so project files and OpenCode's conversation database survive replacement
-pods. Configure `workspaced.workspace.storage-size` (default `10Gi`) and `storage-class` (blank uses the cluster
-default). Deleting a workspace also deletes its PVC; storage reclamation follows the storage class policy.
-
-To chat outside Kubernetes, run a harness and point the API at it:
-
-```sh
-docker build --platform linux/amd64 -t harness apps/harness
-docker run --rm -p 4096:4096 -e OPENCODE_PASSWORD=dev \
-  -e OPENROUTER_API_KEY=sk-or-… -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 harness
-WORKSPACED_WORKSPACE_LOCAL_HARNESS_URL=http://localhost:4096 \
-WORKSPACED_WORKSPACE_LOCAL_HARNESS_PASSWORD=dev WORKSPACED_DB_PASSWORD=workspaced mvn spring-boot:run
-```
 
 ### Editing chat messages
 

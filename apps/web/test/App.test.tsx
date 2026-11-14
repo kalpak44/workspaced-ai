@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
-import { FakeEventSource, installFakeApi, REJECTED_KEY } from "./fakeApi";
+import { FakeEventSource, installFakeApi } from "./fakeApi";
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -41,10 +41,11 @@ const heading = () => screen.getByRole("heading", { level: 1 });
 const sidebar = () => screen.getAllByRole("list")[0];
 type User = ReturnType<typeof userEvent.setup>;
 
-/** The wizard's steps after the name: pick OpenRouter, which reveals its key field, and type a key. */
-async function chooseProvider(user: User, key = "sk-or-1") {
-  await user.click(await screen.findByRole("radio", { name: /OpenRouter/ }));
-  if (key) await user.type(screen.getByLabelText("OpenRouter API key"), key);
+/** The step after the name: move on, wait for the VM types, and pick one if asked. */
+async function chooseVmType(user: User, type?: string) {
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  const radio = await screen.findByRole("radio", { name: new RegExp(type ?? "cx23") });
+  if (type) await user.click(radio);
 }
 
 const path = () => globalThis.location.pathname;
@@ -91,27 +92,29 @@ describe("App", () => {
     const field = within(dialog).getByRole("textbox", { name: "Name" });
     expect(field).toHaveValue("New Workspace");
     expect(field).toHaveFocus();
-    await chooseProvider(user);
+    // Enter moves on from the name, then creates with the default VM type.
+    await user.keyboard("{Enter}");
+    await screen.findByRole("radio", { name: /cx23/ });
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("New Workspace 2");
-    await chooseProvider(user);
-    await user.keyboard("{Enter}");
+    await chooseVmType(user);
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
     expect(await within(sidebar()).findByText("New Workspace 2")).toBeInTheDocument();
     expect(heading()).toHaveTextContent("New Workspace 2");
     expect(api.rows.map((w) => w.name)).toEqual(["Starter", "New Workspace", "New Workspace 2"]);
   });
 
-  it("creates the workspace under the name typed, with the provider and key chosen", async () => {
+  it("creates the workspace under the name typed, on the VM type chosen", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     // Typing replaces the selected suggestion, the way it does in a browser.
     await user.keyboard("Research");
-    await chooseProvider(user, "  sk-or-1\t");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await chooseVmType(user, "cx33");
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
     expect(path()).toBe("/workspaces/ws-1");
     await sessionsHere();
@@ -119,65 +122,55 @@ describe("App", () => {
     const [, init] = api.fetchFn.mock.calls.find(([, i]) => i?.method === "POST")!;
     expect(JSON.parse(String(init?.body))).toEqual({
       name: "Research",
+      serverType: "cx33",
       modelProvider: "openrouter",
-      apiKey: "sk-or-1",
     });
   });
 
-  it("asks for the key only once a provider is chosen, and needs all three", async () => {
+  it("offers each VM type with its resources and no price, the default chosen", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    const next = screen.getByRole("button", { name: "Continue" });
-    expect(screen.queryByLabelText("OpenRouter API key")).not.toBeInTheDocument();
-    expect(next).toBeDisabled();
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Name");
+    await chooseVmType(user);
 
-    await chooseProvider(user, "");
-    expect(screen.getByRole("radio", { name: /OpenRouter/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /openrouter\.ai/ })).toBeInTheDocument();
-    expect(screen.getByLabelText("OpenRouter API key")).toHaveFocus();
-    expect(screen.getByLabelText("OpenRouter API key")).toHaveAccessibleDescription(
-      /Checked with OpenRouter before the workspace is created/,
-    );
-    expect(screen.getByLabelText("OpenRouter API key")).toHaveAttribute("type", "password");
-    expect(next).toBeDisabled();
-    await user.keyboard("sk-or-1");
-    expect(next).toBeEnabled();
-    await user.clear(screen.getByRole("textbox", { name: "Name" }));
-    expect(next).toBeDisabled();
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("VM type");
+    const types = screen.getByRole("group", { name: "VM type" });
+    expect(within(types).getAllByRole("radio")).toHaveLength(2);
+    expect(within(types).getByRole("radio", { name: /cx23/ })).toBeChecked();
+    expect(within(types).getByRole("radio", { name: /2 vCPU · 4 GB RAM · 40 GB disk/ })).toBeInTheDocument();
+    expect(within(types).getByRole("radio", { name: /4 vCPU · 8 GB RAM · 80 GB disk/ })).not.toBeChecked();
+    expect(types).not.toHaveTextContent(/€|6\.59|5\.49/);
+    expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
   });
 
-  it("keeps the dialog open and points at the key when the provider rejects it", async () => {
+  it("needs a name to move on, and keeps it when going back", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    await chooseProvider(user, REJECTED_KEY);
-    await user.keyboard("{Enter}");
+    const name = screen.getByRole("textbox", { name: "Name" });
+    await user.clear(name);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
-    const key = await screen.findByLabelText("OpenRouter API key");
-    await waitFor(() => expect(key).toHaveAccessibleDescription("OpenRouter did not accept this key"));
-    expect(key).toHaveAttribute("aria-invalid", "true");
-    expect(key).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
-    expect(api.rows).toHaveLength(1);
-
-    await user.clear(key);
-    await user.type(key, "sk-or-2{Enter}");
-    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
-    await sessionsHere();
+    await user.type(name, "Research");
+    await chooseVmType(user, "cx33");
+    await user.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Research");
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(await screen.findByRole("radio", { name: /cx33/ })).toBeChecked();
   });
 
-  it("says so when the providers cannot be loaded", async () => {
+  it("says so when the VM types cannot be loaded", async () => {
     api.state.fail = 500;
     const user = userEvent.setup();
     render(<App />);
     await screen.findByRole("alert");
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    const providers = screen.getByRole("group", { name: "Model provider" });
-    expect(within(providers).getByText(/Could not load providers/)).toBeInTheDocument();
-    expect(within(providers).queryByRole("radio")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    const types = screen.getByRole("group", { name: "VM type" });
+    expect(await within(types).findByText(/Could not load VM types/)).toBeInTheDocument();
+    expect(within(types).queryByRole("radio")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
   });
 
   it("closes the dialog on Cancel, Escape or the backdrop without creating anything", async () => {
@@ -206,13 +199,14 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    await chooseProvider(user);
+    await chooseVmType(user);
     await user.keyboard("{Enter}");
 
-    const create = screen.getByRole("button", { name: "Continue" });
+    const create = screen.getByRole("button", { name: "Create workspace" });
     expect(create).toHaveAttribute("aria-busy", "true");
     expect(create).toBeDisabled();
-    expect(screen.getByRole("textbox", { name: "Name" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -224,12 +218,13 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    await chooseProvider(user);
+    await chooseVmType(user, "cx33");
     api.state.fail = 503;
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not create the workspace");
+    expect(screen.getByRole("radio", { name: /cx33/ })).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("New Workspace");
-    expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-1");
   });
 
   it("renames from the item menu, and Escape cancels a rename", async () => {
@@ -482,7 +477,7 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    await chooseProvider(user);
+    await chooseVmType(user);
     await user.keyboard("{Enter}");
 
     expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();

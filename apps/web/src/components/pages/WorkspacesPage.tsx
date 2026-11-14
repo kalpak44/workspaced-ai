@@ -1,5 +1,4 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
-import { useModelProviders } from "../../hooks/useModelProviders";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
 import { DEFAULT_NAME, useWorkspaces } from "../../hooks/useWorkspaces";
@@ -35,7 +34,6 @@ export function WorkspacesPage() {
     patch,
     added,
   } = useWorkspaces();
-  const providers = useModelProviders();
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
@@ -149,8 +147,6 @@ export function WorkspacesPage() {
       {newName !== null && (
         <CreateWorkspaceDialog
           initialName={newName}
-          providers={providers.providers}
-          providersStatus={providers.status}
           onCreate={(request) =>
             create(request, (created) =>
               navigate({ name: "workspace", workspaceId: created.id }),

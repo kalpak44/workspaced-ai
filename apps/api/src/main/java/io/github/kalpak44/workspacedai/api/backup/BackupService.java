@@ -375,19 +375,14 @@ public class BackupService {
             name,
             provider,
             key,
+            null,
             Map.of(
                 Harness.RESTORE_URL_VARIABLE,
                 url.toString(),
                 Harness.RESTORE_ID_VARIABLE,
                 UUID.randomUUID().toString()));
     transactions.executeWithoutResult(_ -> apply(created.id(), manifest));
-    return new Workspace(
-        created.id(),
-        created.name(),
-        created.modelProvider(),
-        manifest.model(),
-        created.status(),
-        created.restartRequired());
+    return created.withModel(manifest.model());
   }
 
   private String reusedKey(UUID ownerId, BackupEntity backup, ModelProvider provider) {

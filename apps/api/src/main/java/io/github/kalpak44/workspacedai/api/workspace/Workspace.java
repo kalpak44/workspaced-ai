@@ -12,6 +12,8 @@ public record Workspace(
     @Schema(description = "Display name", example = "Research", maxLength = 100) String name,
     @Schema(description = "The model provider it was created with", example = "openrouter")
         String modelProvider,
+    @Schema(description = "The size of its VM, one of /vm-sizes; null for none", example = "cx23")
+        String serverType,
     @Schema(
             description = "The model its agent replies with; null for the harness's default",
             example = "anthropic/claude-sonnet-5.5")
@@ -24,11 +26,17 @@ public record Workspace(
             example = "false")
         boolean restartRequired) {
 
+  /** The same workspace with its model changed, as a restore applies the backup's. */
+  public Workspace withModel(String model) {
+    return new Workspace(id, name, modelProvider, serverType, model, status, restartRequired);
+  }
+
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
     return new Workspace(
         entity.getId(),
         entity.getName(),
         entity.getModelProvider(),
+        entity.getServerType(),
         entity.getModel(),
         status,
         entity.isSecretsPendingRestart());

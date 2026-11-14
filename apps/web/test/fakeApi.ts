@@ -19,6 +19,12 @@ export const OPENROUTER = {
   apiKeyVariable: "OPENROUTER_API_KEY",
 };
 
+/** What the fake VM manager offers, default first, with the prices the dialog leaves out. */
+export const VM_SIZES = [
+  { serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 5.49, monthlyGross: 6.59 },
+  { serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 8.49, monthlyGross: 10.19 },
+];
+
 /** The key the fake provider refuses; every other key is accepted. */
 export const REJECTED_KEY = "sk-bad";
 
@@ -273,6 +279,9 @@ export function installFakeApi(
     }
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
+    }
+    if (url.endsWith("/api/v1/vm-sizes")) {
+      return json(VM_SIZES);
     }
     const backupAnswer = backupsResponse(url, init);
     if (backupAnswer) {

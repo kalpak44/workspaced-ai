@@ -8,7 +8,7 @@ interface Props {
   readonly onClose: () => void;
 }
 
-/** Says what a restart keeps and what it interrupts before the pod is replaced. */
+/** Says what a restart keeps and what it interrupts before the VM reboots. */
 export function RestartWorkspaceDialog({ name, onConfirm, onClose }: Props) {
   return (
     <Modal
@@ -22,8 +22,8 @@ export function RestartWorkspaceDialog({ name, onConfirm, onClose }: Props) {
             <RotateCw aria-hidden className="size-4.5" />
           </span>
           <p className="pt-0.5 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-            The workspace pod will be replaced with a fresh one. Sessions, files, and secrets
-            are kept; running agent replies, terminals, and processes are stopped.
+            The workspace's VM will reboot. Sessions, files, and secrets are kept; running
+            agent replies, terminals, and processes are stopped.
           </p>
         </div>
       </ModalBody>

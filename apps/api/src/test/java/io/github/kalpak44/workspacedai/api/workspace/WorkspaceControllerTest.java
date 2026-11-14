@@ -3,10 +3,12 @@ package io.github.kalpak44.workspacedai.api.workspace;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
@@ -31,7 +33,7 @@ import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestRuntime.class})
 class WorkspaceControllerTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -58,7 +60,7 @@ class WorkspaceControllerTest {
     assertThat(research.modelProvider()).isEqualTo("openrouter");
     // The key is checked as it would be used, without the whitespace a paste brings along.
     verify(keyCheck).accepts(ModelProvider.OPENROUTER, "sk-or-1");
-    // Outside Kubernetes nothing is started, so a workspace is usable at once.
+    // Outside the cluster nothing is started, so a workspace is usable at once.
     assertThat(research.status()).isEqualTo(WorkspaceStatus.READY);
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/api/v1/workspaces/" + research.id()));
@@ -88,11 +90,21 @@ class WorkspaceControllerTest {
   }
 
   @Test
-  void rejectsAnUnknownProviderOrAMissingKey() throws Exception {
+  void rejectsAnUnknownOrMissingProvider() throws Exception {
     assertThat(send("POST", "", body("Research", "nope", "sk-or-1")).statusCode()).isEqualTo(400);
-    assertThat(send("POST", "", body("Research", "openrouter", "  ")).statusCode()).isEqualTo(400);
     assertThat(send("POST", "", "{\"name\":\"Research\"}").statusCode()).isEqualTo(400);
     assertThat(list()).isEmpty();
+  }
+
+  @Test
+  void createsWithoutAKeyAndChecksNone() throws Exception {
+    var blank = send("POST", "", body("Blank", "openrouter", "  "));
+    var none = send("POST", "", "{\"name\":\"None\",\"modelProvider\":\"openrouter\"}");
+
+    assertThat(blank.statusCode()).isEqualTo(201);
+    assertThat(none.statusCode()).isEqualTo(201);
+    verify(keyCheck, never()).accepts(any(), any());
+    assertThat(list()).extracting(Workspace::name).containsExactly("Blank", "None");
   }
 
   @Test
@@ -115,7 +127,8 @@ class WorkspaceControllerTest {
     var renamed = send("PUT", "/" + id, "{\"name\":\"New\"}");
     assertThat(renamed.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(renamed.body(), Workspace.class))
-        .isEqualTo(new Workspace(id, "New", "openrouter", null, WorkspaceStatus.READY, false));
+        .isEqualTo(
+            new Workspace(id, "New", "openrouter", null, null, WorkspaceStatus.READY, false));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
   }
 

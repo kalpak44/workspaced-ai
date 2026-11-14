@@ -60,11 +60,13 @@ public class HttpHetznerClient implements HetznerClient {
   }
 
   /**
-   * Public IPv4 and IPv6 both on, so the VM can reach the API with no network of ours. The answer
-   * also carries a root password when no SSH key is given; it is deliberately never read.
+   * Public IPv4 and IPv6 both on, so the VM can reach the API with no network of ours, and behind
+   * the firewall from its first boot, so nothing can reach the VM. The answer also carries a root
+   * password when no SSH key is given; it is deliberately never read.
    */
   @Override
   public CreatedServer createServer(ServerSpec spec) {
+    var firewall = firewallId();
     var body = json.createObjectNode();
     body.put("name", spec.name());
     body.put("server_type", spec.serverType());
@@ -75,6 +77,7 @@ public class HttpHetznerClient implements HetznerClient {
     spec.sshKeys().forEach(keys::add);
     var labels = body.putObject("labels");
     spec.labels().forEach(labels::put);
+    body.putArray("firewalls").addObject().put("firewall", firewall);
     var response =
         send(
             "/servers",
@@ -92,6 +95,29 @@ public class HttpHetznerClient implements HetznerClient {
     } catch (Gone _) {
       // Already deleted, by an earlier attempt or by hand.
     }
+  }
+
+  /**
+   * Looked up by name on every create rather than cached, so a firewall deleted by hand is made
+   * again instead of failing every create after it. Made with no rules: a Hetzner firewall drops
+   * every inbound packet no rule allows, and lets every outbound one through.
+   */
+  private long firewallId() {
+    var name = URLEncoder.encode(properties.firewall(), StandardCharsets.UTF_8);
+    var found = get("/firewalls?name=" + name).path("firewalls");
+    if (!found.isEmpty()) {
+      return found.get(0).path("id").asLong();
+    }
+    var body = json.createObjectNode();
+    body.put("name", properties.firewall());
+    body.putArray("rules");
+    var created =
+        send(
+            "/firewalls",
+            HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
+            "POST",
+            201);
+    return created.path("firewall").path("id").asLong();
   }
 
   private JsonNode get(String path) {

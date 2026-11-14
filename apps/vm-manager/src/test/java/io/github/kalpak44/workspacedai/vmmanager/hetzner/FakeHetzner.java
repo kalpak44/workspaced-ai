@@ -20,8 +20,9 @@ import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Answers as the Hetzner Cloud API does, so no test calls the real one: /server_types in two pages
- * (a trimmed copy of a real answer), and /servers listed by label, created and deleted in memory.
- * Setting {@link #status} makes every route answer with it instead.
+ * (a trimmed copy of a real answer), /servers listed by label, created and deleted in memory, and
+ * /firewalls looked up by name and created in memory. Setting {@link #status} makes every route
+ * answer with it instead.
  */
 public class FakeHetzner implements AutoCloseable {
 
@@ -57,6 +58,7 @@ public class FakeHetzner implements AutoCloseable {
   public final AtomicInteger requests = new AtomicInteger();
   public final List<JsonNode> createBodies = new CopyOnWriteArrayList<>();
   public final Map<Long, ObjectNode> servers = new ConcurrentHashMap<>();
+  public final Map<Long, ObjectNode> firewalls = new ConcurrentHashMap<>();
   public volatile int status = 200;
   private final AtomicLong ids = new AtomicLong(5000);
 
@@ -74,6 +76,7 @@ public class FakeHetzner implements AutoCloseable {
           answer(exchange, 200, page);
         });
     server.createContext("/servers", this::servers);
+    server.createContext("/firewalls", this::firewalls);
     server.start();
   }
 
@@ -109,6 +112,37 @@ public class FakeHetzner implements AutoCloseable {
       case "DELETE" -> {
         var id = Long.parseLong(path.substring(path.lastIndexOf('/') + 1));
         answer(exchange, servers.remove(id) == null ? 404 : 200, "{\"action\":{}}");
+      }
+      default -> answer(exchange, 405, "{}");
+    }
+  }
+
+  private void firewalls(HttpExchange exchange) throws IOException {
+    record(exchange);
+    switch (exchange.getRequestMethod()) {
+      case "GET" -> {
+        var query =
+            URLDecoder.decode(exchange.getRequestURI().getRawQuery(), StandardCharsets.UTF_8);
+        var name = query.replaceAll(".*name=([^&]*).*", "$1");
+        var list = JSON.createArrayNode();
+        firewalls.values().stream()
+            .filter(f -> f.path("name").asString().equals(name))
+            .forEach(list::add);
+        var body = JSON.createObjectNode();
+        body.set("firewalls", list);
+        answer(exchange, 200, body.toString());
+      }
+      case "POST" -> {
+        var request = JSON.readTree(exchange.getRequestBody());
+        var created = JSON.createObjectNode();
+        var id = ids.incrementAndGet();
+        created.put("id", id);
+        created.put("name", request.path("name").asString());
+        created.set("rules", request.path("rules"));
+        firewalls.put(id, created);
+        var body = JSON.createObjectNode();
+        body.set("firewall", created);
+        answer(exchange, 201, body.toString());
       }
       default -> answer(exchange, 405, "{}");
     }
