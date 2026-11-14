@@ -19,11 +19,13 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
 /**
- * Everyone who can sign in: the routes and their OpenAPI documentation.
+ * Everyone who can sign in: the routes and their OpenAPI documentation. Every route is for admins
+ * only and answers 403 to anyone else.
  *
  * @see UserController
  */
@@ -52,6 +54,13 @@ public interface UserApi {
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The signed-in user is not an admin.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
   @GetMapping(produces = JSON)
   ResponseEntity<PagedModel<User>> list(
       @ParameterObject
@@ -62,8 +71,8 @@ public interface UserApi {
       operationId = "createUser",
       summary = "Create a user",
       description =
-          "Creates a user who signs in with this username and password. Surrounding whitespace is "
-              + "trimmed from the username and names.")
+          "Creates a user who signs in with this username and password, as a USER unless the "
+              + "role says ADMIN. Surrounding whitespace is trimmed from the username and names.")
   @ApiResponse(
       responseCode = "201",
       description = "Created.",
@@ -84,8 +93,60 @@ public interface UserApi {
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The signed-in user is not an admin.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(consumes = JSON, produces = JSON)
   ResponseEntity<User> create(@Valid @RequestBody CreateUserRequest request);
+
+  @Operation(
+      operationId = "changeUserRole",
+      summary = "Change a user's role",
+      description =
+          "Makes the user an ADMIN or a USER. It applies to their next request, without signing "
+              + "them out.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Changed.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = User.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "The role is missing or is not USER or ADMIN.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The signed-in user is not an admin.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No user has that id.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description =
+          "That is the signed-in user, who cannot change their own role, so an admin always "
+              + "remains.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PutMapping(path = "/{id}/role", consumes = JSON, produces = JSON)
+  ResponseEntity<User> changeRole(
+      @Parameter(description = "The user's id") @PathVariable UUID id,
+      @Valid @RequestBody RoleRequest request);
 
   @Operation(
       operationId = "deleteUser",
@@ -104,6 +165,13 @@ public interface UserApi {
   @ApiResponse(
       responseCode = "409",
       description = "That is the signed-in user, who cannot delete themselves.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The signed-in user is not an admin.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

@@ -1,9 +1,11 @@
 package io.github.kalpak44.workspacedai.api.user;
 
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -64,7 +66,8 @@ public class UserService {
   }
 
   /** Conflict when the username is taken, by an earlier user or one created at the same time. */
-  public User create(String username, String password, String firstName, String lastName) {
+  public User create(
+      String username, String password, String firstName, String lastName, Role role) {
     var hash = passwords.encode(password);
     try {
       return transactions.execute(
@@ -72,11 +75,27 @@ public class UserService {
             if (users.existsByUsername(username)) {
               throw taken(username);
             }
-            return User.of(users.saveAndFlush(new UserEntity(username, hash, firstName, lastName)));
+            return User.of(
+                users.saveAndFlush(new UserEntity(username, hash, firstName, lastName, role)));
           });
     } catch (DataIntegrityViolationException e) {
       throw taken(username);
     }
+  }
+
+  /** Empty when no user has that id. Refused for oneself, so the last admin cannot step down. */
+  @Transactional
+  public Optional<User> changeRole(UUID id, Role role, UUID requestedBy) {
+    if (id.equals(requestedBy)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "you cannot change your own role");
+    }
+    return users
+        .findById(id)
+        .map(
+            user -> {
+              user.setRole(role);
+              return User.of(user);
+            });
   }
 
   /**

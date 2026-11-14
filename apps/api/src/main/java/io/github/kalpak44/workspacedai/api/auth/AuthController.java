@@ -25,9 +25,8 @@ public class AuthController implements AuthApi {
   public ResponseEntity<LoginResponse> login(LoginRequest body) {
     var signIn = service.login(body.username(), body.password());
     var token = signIn.token();
-    var lifetime = Duration.between(Instant.now(), token.expiresAt());
     return ResponseEntity.ok()
-        .header(HttpHeaders.SET_COOKIE, cookie(token.value(), lifetime).toString())
+        .header(HttpHeaders.SET_COOKIE, cookie(request, token).toString())
         .body(new LoginResponse(signIn.account(), token.value(), token.expiresAt()));
   }
 
@@ -39,7 +38,7 @@ public class AuthController implements AuthApi {
   @Override
   public ResponseEntity<Void> logout() {
     return ResponseEntity.noContent()
-        .header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
+        .header(HttpHeaders.SET_COOKIE, cookie(request, "", Duration.ZERO).toString())
         .build();
   }
 
@@ -47,7 +46,11 @@ public class AuthController implements AuthApi {
    * Scoped to the API's own path, so the frontend's pages never carry it, and Secure whenever the
    * request arrived over HTTPS.
    */
-  private ResponseCookie cookie(String value, Duration maxAge) {
+  static ResponseCookie cookie(HttpServletRequest request, TokenService.Token token) {
+    return cookie(request, token.value(), Duration.between(Instant.now(), token.expiresAt()));
+  }
+
+  private static ResponseCookie cookie(HttpServletRequest request, String value, Duration maxAge) {
     var path = request.getContextPath().isEmpty() ? "/" : request.getContextPath();
     return ResponseCookie.from(SecurityConfiguration.COOKIE, value)
         .httpOnly(true)

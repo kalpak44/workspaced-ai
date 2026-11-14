@@ -260,6 +260,75 @@ class AuthTest {
   }
 
   @Test
+  void aPaddedIdDoesNotSlipPastTheOwnerCheck() throws Exception {
+    var admin = TestUsers.bearer(port);
+    var other = bearerFor("ada", "password1");
+    var created =
+        send(
+            "POST",
+            "/workspaces",
+            admin,
+            "{\"name\":\"Admin's\",\"modelProvider\":\"openrouter\",\"apiKey\":\"sk-or-1\"}");
+    var id = JSON.readTree(created.body()).get("id").asString();
+
+    // Spring MVC trims a UUID path variable before parsing it, so each of these binds to id.
+    for (var padded : new String[] {"%20" + id, id + "%20", "%09" + id, "%20" + id + "%20"}) {
+      assertThat(send("GET", "/workspaces/" + padded + "/secrets", other, null).statusCode())
+          .as(padded)
+          .isEqualTo(404);
+      assertThat(send("GET", "/workspaces/" + padded + "/variables", other, null).statusCode())
+          .as(padded)
+          .isEqualTo(404);
+      assertThat(
+              send("PUT", "/workspaces/" + padded, other, "{\"name\":\"Mine now\"}").statusCode())
+          .as(padded)
+          .isEqualTo(404);
+    }
+    assertThat(send("GET", "/workspaces/%20" + id + "/secrets", admin, null).statusCode())
+        .isEqualTo(200);
+    assertThat(workspaces.findById(UUID.fromString(id)))
+        .hasValueSatisfying(w -> assertThat(w.getName()).isEqualTo("Admin's"));
+  }
+
+  @Test
+  void refusesTheTokenOfADeletedAccount() throws Exception {
+    var ada = bearerFor("ada", "password1");
+    assertThat(send("GET", "/workspaces", ada, null).statusCode()).isEqualTo(200);
+    users.delete(users.findByUsername("ada").orElseThrow());
+    assertThat(send("GET", "/workspaces", ada, null).statusCode()).isEqualTo(401);
+    assertThat(send("GET", "/model-providers", ada, null).statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void changingThePasswordRevokesEveryEarlierToken() throws Exception {
+    var ada = bearerFor("ada", "password1");
+    var elsewhere = "Bearer " + TestUsers.login(port, "ada", "password1");
+    var changed =
+        send(
+            "PUT",
+            "/account/password",
+            ada,
+            "{\"currentPassword\":\"password1\",\"newPassword\":\"password2\"}");
+    assertThat(changed.statusCode()).isEqualTo(204);
+    assertThat(send("GET", "/account", ada, null).statusCode()).isEqualTo(401);
+    assertThat(send("GET", "/account", elsewhere, null).statusCode()).isEqualTo(401);
+
+    // The caller is handed a new sign-in cookie and stays signed in.
+    var cookie = changed.headers().firstValue("Set-Cookie").orElseThrow();
+    assertThat(cookie).startsWith("workspaced_token=");
+    var token = cookie.substring("workspaced_token=".length(), cookie.indexOf(';'));
+    assertThat(sendWithCookie("/account", token).statusCode()).isEqualTo(200);
+  }
+
+  @Test
+  void reportsTheRoleOnTheAccount() throws Exception {
+    var admin = JSON.readTree(send("GET", "/account", TestUsers.bearer(port), null).body());
+    assertThat(admin.get("role").asString()).isEqualTo("ADMIN");
+    var ada = JSON.readTree(send("GET", "/account", bearerFor("ada", "password1"), null).body());
+    assertThat(ada.get("role").asString()).isEqualTo("USER");
+  }
+
+  @Test
   void guardsTheTerminalWebSocketLikeEveryOtherRoute() throws Exception {
     var admin = TestUsers.bearer(port);
     var created =

@@ -1,5 +1,7 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import jakarta.servlet.http.HttpServletRequest;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -10,9 +12,11 @@ import org.springframework.web.server.ResponseStatusException;
 public class AccountController implements AccountApi {
 
   private final AuthService service;
+  private final HttpServletRequest request;
 
-  public AccountController(AuthService service) {
+  public AccountController(AuthService service, HttpServletRequest request) {
     this.service = service;
+    this.request = request;
   }
 
   @Override
@@ -31,12 +35,16 @@ public class AccountController implements AccountApi {
   }
 
   @Override
-  public ResponseEntity<Void> changePassword(PasswordRequest request) {
-    if (!service.changePassword(
-        CurrentUser.id(), request.currentPassword(), request.newPassword())) {
-      throw new ResponseStatusException(
-          HttpStatus.UNPROCESSABLE_CONTENT, "the current password is wrong");
-    }
-    return ResponseEntity.noContent().build();
+  public ResponseEntity<Void> changePassword(PasswordRequest body) {
+    var token =
+        service
+            .changePassword(CurrentUser.id(), body.currentPassword(), body.newPassword())
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.UNPROCESSABLE_CONTENT, "the current password is wrong"));
+    return ResponseEntity.noContent()
+        .header(HttpHeaders.SET_COOKIE, AuthController.cookie(request, token).toString())
+        .build();
   }
 }

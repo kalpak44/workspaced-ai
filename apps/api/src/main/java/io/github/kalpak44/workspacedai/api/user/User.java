@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.user;
 
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
@@ -13,7 +14,8 @@ public record User(
     @Schema(
             description = "The picture as a data: URL; null for the default",
             example = "data:image/png;base64,iVBORw0KGgo=")
-        String avatar) {
+        String avatar,
+    @Schema(description = "An admin also manages users") Role role) {
 
   static User of(UserEntity user) {
     return new User(
@@ -21,6 +23,7 @@ public record User(
         user.getUsername(),
         user.getFirstName(),
         user.getLastName(),
-        user.getAvatar());
+        user.getAvatar(),
+        user.getRole());
   }
 }

@@ -2,6 +2,8 @@ package io.github.kalpak44.workspacedai.api.auth;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
@@ -38,6 +40,14 @@ public class UserEntity {
   @Column(columnDefinition = "text")
   private String avatar;
 
+  @Enumerated(EnumType.STRING)
+  @Column(nullable = false, length = 20)
+  private Role role = Role.USER;
+
+  // Every token carries the version it was issued at; a different one here means it is revoked.
+  @Column(name = "token_version", nullable = false)
+  private int tokenVersion;
+
   // Set by the column default; read only to order the user list.
   @Column(name = "created_at", insertable = false, updatable = false)
   private Instant createdAt;
@@ -57,6 +67,12 @@ public class UserEntity {
     this.lastName = lastName;
   }
 
+  public UserEntity(
+      String username, String passwordHash, String firstName, String lastName, Role role) {
+    this(username, passwordHash, firstName, lastName);
+    this.role = role;
+  }
+
   public UUID getId() {
     return id;
   }
@@ -69,8 +85,10 @@ public class UserEntity {
     return passwordHash;
   }
 
+  /** Revokes every token issued before, since they were signed in with the old password. */
   public void setPasswordHash(String passwordHash) {
     this.passwordHash = passwordHash;
+    tokenVersion++;
   }
 
   public String getFirstName() {
@@ -83,6 +101,18 @@ public class UserEntity {
 
   public String getAvatar() {
     return avatar;
+  }
+
+  public Role getRole() {
+    return role;
+  }
+
+  public void setRole(Role role) {
+    this.role = role;
+  }
+
+  public int getTokenVersion() {
+    return tokenVersion;
   }
 
   public Instant getCreatedAt() {

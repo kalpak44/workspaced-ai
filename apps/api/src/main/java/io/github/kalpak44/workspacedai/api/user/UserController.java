@@ -32,13 +32,22 @@ public class UserController implements UserApi {
             request.trimmedUsername(),
             request.password(),
             request.trimmedFirstName(),
-            request.trimmedLastName());
+            request.trimmedLastName(),
+            request.roleOrUser());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
             .buildAndExpand(user.id())
             .toUri();
     return ResponseEntity.created(location).body(user);
+  }
+
+  @Override
+  public ResponseEntity<User> changeRole(UUID id, RoleRequest request) {
+    return ResponseEntity.ok(
+        service
+            .changeRole(id, request.role(), CurrentUser.id())
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no user " + id)));
   }
 
   @Override

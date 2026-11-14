@@ -117,7 +117,7 @@ describe("user management", () => {
 
   it("sorts the list in the order chosen, newest first by default", async () => {
     const api = installFakeApi();
-    api.users.others.push({ id: "alan-id", username: "turing", firstName: "Alan", lastName: "Turing", avatar: null });
+    api.users.others.push({ id: "alan-id", username: "turing", firstName: "Alan", lastName: "Turing", avatar: null, role: "USER" });
     const user = userEvent.setup();
     const list = await openUsers();
     expect(names(list)).toEqual(["Alan Turing", "Grace Hopper", "admin"]);
@@ -133,7 +133,7 @@ describe("user management", () => {
 
   it("loads the next page as the end of the list scrolls into view", async () => {
     const api = installFakeApi();
-    api.users.others = Array.from({ length: 44 }, (_, i) => ({ id: `u${i}`, username: `user${String(i).padStart(2, "0")}`, firstName: "", lastName: "", avatar: null }));
+    api.users.others = Array.from({ length: 44 }, (_, i) => ({ id: `u${i}`, username: `user${String(i).padStart(2, "0")}`, firstName: "", lastName: "", avatar: null, role: "USER" }));
     const { scrollToEnd } = stubIntersections();
     const user = userEvent.setup();
     const list = await openUsers();
@@ -155,5 +155,45 @@ describe("user management", () => {
     expect(new Set(shown).size).toBe(44);
     expect(shown.at(-1)).toBe("admin");
     expect(api.users.listed.filter((url) => url.includes("page=1"))).toHaveLength(2);
+  });
+
+  it("creates an admin when the box is ticked, and marks them in the list", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    const list = await openUsers();
+    await user.click(screen.getByRole("button", { name: "Add user" }));
+    const dialog = screen.getByRole("dialog", { name: "New user" });
+    await user.type(within(dialog).getByLabelText("Username"), "ada");
+    await user.type(within(dialog).getByLabelText("Password"), "password1");
+    await user.click(within(dialog).getByLabelText("Admin, who also manages users"));
+    await user.click(within(dialog).getByRole("button", { name: "Create user" }));
+    const ada = (await within(list).findByText("ada")).closest("li") as HTMLElement;
+    expect(within(ada).getByText("Admin")).toBeInTheDocument();
+    expect(api.users.others.find((u) => u.username === "ada")?.role).toBe("ADMIN");
+  });
+
+  it("does not offer the Users tab to someone who is not an admin", async () => {
+    const api = installFakeApi();
+    api.auth.account = { ...api.auth.account, role: "USER" };
+    globalThis.history.replaceState(null, "", "/settings");
+    render(<App />);
+    expect(await screen.findByRole("button", { name: "Profile" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Users" })).not.toBeInTheDocument();
+    expect(api.users.listed).toHaveLength(0);
+  });
+
+  it("makes a user an admin and back, but offers no role change for yourself", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    const list = await openUsers();
+    expect(screen.queryByRole("button", { name: /Make admin/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Make grace an admin" }));
+    await waitFor(() => expect(api.users.others[0].role).toBe("ADMIN"));
+    const grace = within(list).getByText("Grace Hopper").closest("li") as HTMLElement;
+    expect(within(grace).getByText("grace · Admin")).toBeInTheDocument();
+
+    await user.click(await screen.findByRole("button", { name: "Make grace a user" }));
+    await waitFor(() => expect(api.users.others[0].role).toBe("USER"));
+    expect(await screen.findByRole("button", { name: "Make grace an admin" })).toBeInTheDocument();
   });
 });

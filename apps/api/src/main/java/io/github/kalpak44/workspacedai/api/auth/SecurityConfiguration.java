@@ -23,9 +23,14 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.convert.ConversionException;
+import org.springframework.core.convert.ConversionService;
+import org.springframework.core.convert.converter.Converter;
+import org.springframework.core.convert.support.DefaultConversionService;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
+import org.springframework.security.authentication.AbstractAuthenticationToken;
 import org.springframework.security.authentication.AuthenticationManager;
 import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
@@ -35,17 +40,20 @@ import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
+import org.springframework.security.oauth2.server.resource.InvalidBearerTokenException;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.security.oauth2.server.resource.web.BearerTokenResolver;
 import org.springframework.security.oauth2.server.resource.web.DefaultBearerTokenResolver;
@@ -72,6 +80,9 @@ import tools.jackson.databind.json.JsonMapper;
  * /auth/csrf and echoes it in X-XSRF-TOKEN, and it is checked against the HttpOnly XSRF-TOKEN
  * cookie. A request without the sign-in cookie has no ambient credential to forge, and a bearer
  * request needs none, since a browser never adds that header on its own.
+ *
+ * <p>Every request also looks the account up: a token outlives a deleted account or a changed
+ * password otherwise, and the role is read from there so a change applies at once.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AuthProperties.class)
@@ -80,6 +91,8 @@ public class SecurityConfiguration {
   static final String COOKIE = "workspaced_token";
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
+  // The conversion Spring MVC binds a UUID path variable with, which trims surrounding whitespace.
+  private static final ConversionService CONVERSIONS = DefaultConversionService.getSharedInstance();
   private static final int MIN_SECRET_BYTES = 32;
 
   private static final String[] PUBLIC = {
@@ -96,9 +109,13 @@ public class SecurityConfiguration {
     "/error"
   };
 
+  private static final String[] ADMIN_ONLY = {"/users", "/users/**"};
+
   @Bean
-  SecurityFilterChain api(HttpSecurity http, WorkspaceRepository workspaces) throws Exception {
+  SecurityFilterChain api(HttpSecurity http, WorkspaceRepository workspaces, UserRepository users)
+      throws Exception {
     var publicPaths = publicPaths();
+    var adminOnly = matcher(ADMIN_ONLY);
     http.csrf(csrf -> csrf.csrfTokenRepository(csrfCookie()))
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
@@ -118,6 +135,8 @@ public class SecurityConfiguration {
                     .authenticated()
                     .requestMatchers("/workspaces/{workspaceId}", "/workspaces/{workspaceId}/**")
                     .access(ownedWorkspace(workspaces))
+                    .requestMatchers(adminOnly)
+                    .hasRole(Role.ADMIN.name())
                     .anyRequest()
                     .authenticated())
         .oauth2ResourceServer(
@@ -125,13 +144,15 @@ public class SecurityConfiguration {
                 server
                     .bearerTokenResolver(headerResolver(publicPaths))
                     .authenticationEntryPoint(SecurityConfiguration::unauthorized)
-                    .jwt(_ -> {}))
+                    .jwt(jwt -> jwt.jwtAuthenticationConverter(currentAccount(users))))
         .addFilterBefore(new CookieToken(publicPaths), BearerTokenAuthenticationFilter.class)
         .exceptionHandling(
             exceptions ->
                 exceptions
                     .authenticationEntryPoint(SecurityConfiguration::unauthorized)
-                    .accessDeniedHandler(SecurityConfiguration::denied));
+                    .accessDeniedHandler(
+                        (request, response, denied) ->
+                            denied(request, response, denied, adminOnly)));
     return http.build();
   }
 
@@ -188,8 +209,30 @@ public class SecurityConfiguration {
   }
 
   private static RequestMatcher publicPaths() {
+    return matcher(PUBLIC);
+  }
+
+  private static RequestMatcher matcher(String... patterns) {
     var matchers = PathPatternRequestMatcher.withDefaults();
-    return new OrRequestMatcher(Arrays.stream(PUBLIC).map(matchers::matcher).toList());
+    return new OrRequestMatcher(Arrays.stream(patterns).map(matchers::matcher).toList());
+  }
+
+  /**
+   * Turns away the token of an account deleted, or whose password changed, since it was issued, and
+   * grants the role the account has now. A token without a version predates them and is refused
+   * too.
+   */
+  private static Converter<Jwt, AbstractAuthenticationToken> currentAccount(UserRepository users) {
+    return jwt -> {
+      var version = jwt.getClaim(CurrentUser.VERSION_CLAIM) instanceof Number n ? n.intValue() : -1;
+      var access =
+          users
+              .findAccessById(UUID.fromString(jwt.getSubject()))
+              .filter(a -> a.getTokenVersion() == version)
+              .orElseThrow(() -> new InvalidBearerTokenException("the token was revoked"));
+      return new JwtAuthenticationToken(
+          jwt, List.of(new SimpleGrantedAuthority(access.getRole().authority())), jwt.getSubject());
+    };
   }
 
   /**
@@ -258,7 +301,9 @@ public class SecurityConfiguration {
 
   /**
    * Allows a workspace route only to its owner. An id that is not a UUID, or that no workspace has,
-   * is let through for the controller to answer 400 or 404 as it always has.
+   * is let through for the controller to answer 400 or 404 as it always has. The id is parsed the
+   * way the controller binds it: a stricter parse here would let " <uuid>" through as "not a UUID"
+   * while the controller trims it and acts on that workspace.
    */
   private static AuthorizationManager<RequestAuthorizationContext> ownedWorkspace(
       WorkspaceRepository workspaces) {
@@ -274,9 +319,12 @@ public class SecurityConfiguration {
     }
     UUID id;
     try {
-      id = UUID.fromString(workspaceId);
-    } catch (IllegalArgumentException _) {
+      id = CONVERSIONS.convert(workspaceId, UUID.class);
+    } catch (ConversionException _) {
       return true;
+    }
+    if (id == null) {
+      return false;
     }
     var user = UUID.fromString(token.getToken().getSubject());
     return workspaces.findOwnerIdById(id).map(user::equals).orElse(true);
@@ -292,14 +340,19 @@ public class SecurityConfiguration {
   }
 
   /**
-   * A missing CSRF token is the client's to fix, so it says so. Any other denial is a workspace the
-   * user does not own, which answers as one that does not exist.
+   * A missing CSRF token is the client's to fix, so it says so, as does an admin-only route. Any
+   * other denial is a workspace the user does not own, which answers as one that does not exist.
    */
   private static void denied(
-      HttpServletRequest request, HttpServletResponse response, AccessDeniedException denied)
+      HttpServletRequest request,
+      HttpServletResponse response,
+      AccessDeniedException denied,
+      RequestMatcher adminOnly)
       throws IOException {
     if (denied instanceof CsrfException) {
       problem(request, response, HttpStatus.FORBIDDEN, "missing or invalid CSRF token");
+    } else if (adminOnly.matches(request)) {
+      problem(request, response, HttpStatus.FORBIDDEN, "only an admin can do that");
     } else {
       problem(request, response, HttpStatus.NOT_FOUND, "no such workspace");
     }

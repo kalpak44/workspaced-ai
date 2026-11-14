@@ -158,11 +158,11 @@ export function installFakeApi(
     signedIn: true,
     password: "admin",
     failProfile: false,
-    account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null } as Account,
+    account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null, role: "ADMIN" } as Account,
   };
   // Everyone else who can sign in; the signed-in account is always listed first.
   const users = {
-    others: [{ id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper", avatar: null }] as User[],
+    others: [{ id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper", avatar: null, role: "USER" }] as User[],
     nextId: 1,
     failDelete: false,
     // Every list URL asked for, to see which pages and orders were fetched.
@@ -179,16 +179,23 @@ export function installFakeApi(
   // Spring's paging: `sort` is "field,direction", repeated, most significant first. The list
   // order stands in for creation order, oldest first, with the signed-in account the oldest.
   function usersResponse(url: string, init?: RequestInit): Response | null {
-    const route = /\/api\/v1\/users(?:\/([^/?]+))?(?:\?(.*))?$/.exec(url);
+    const route = /\/api\/v1\/users(?:\/([^/?]+))?(?:\/role)?(?:\?(.*))?$/.exec(url);
     if (!route) return null;
     if (!auth.signedIn) return json({}, 401);
     const [, id, query] = route;
     if (init?.method === "POST") {
-      const { username, firstName, lastName } = JSON.parse(String(init.body));
+      const { username, firstName, lastName, role } = JSON.parse(String(init.body));
       if (username === auth.account.username || users.others.some((u) => u.username === username)) return json({}, 409);
-      const user: User = { id: `user-${users.nextId++}`, username, firstName, lastName, avatar: null };
+      const user: User = { id: `user-${users.nextId++}`, username, firstName, lastName, avatar: null, role };
       users.others.push(user);
       return json(user, 201);
+    }
+    if (init?.method === "PUT") {
+      if (id === auth.account.id) return json({}, 409);
+      const index = users.others.findIndex((u) => u.id === id);
+      if (index < 0) return json({}, 404);
+      users.others[index] = { ...users.others[index], role: JSON.parse(String(init.body)).role };
+      return json(users.others[index]);
     }
     if (init?.method === "DELETE") {
       if (id === auth.account.id) return json({}, 409);

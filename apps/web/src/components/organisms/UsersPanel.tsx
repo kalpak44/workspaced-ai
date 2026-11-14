@@ -1,6 +1,6 @@
 import { UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { type CreateResult, type NewUser, type User, USER_SORTS, type UserSort } from "../../hooks/useUsers";
+import { type CreateResult, type NewUser, type Role, type User, USER_SORTS, type UserSort } from "../../hooks/useUsers";
 import { Button, Spinner } from "../atoms";
 import { ErrorBanner, SettingsSection, UserItem } from "../molecules";
 import { CreateUserDialog } from "./CreateUserDialog";
@@ -24,6 +24,7 @@ interface Props {
   readonly onDismissError: () => void;
   readonly onCreate: (user: NewUser) => Promise<CreateResult>;
   readonly onRemove: (user: User) => void;
+  readonly onChangeRole: (user: User, role: Role) => void;
 }
 
 /** Everyone who can sign in, in the chosen order and loaded as it scrolls; adding and deleting each go through a dialog. */
@@ -42,6 +43,7 @@ export function UsersPanel({
   onDismissError,
   onCreate,
   onRemove,
+  onChangeRole,
 }: Props) {
   const [creating, setCreating] = useState(false);
   const [confirming, setConfirming] = useState<User | null>(null);
@@ -86,6 +88,7 @@ export function UsersPanel({
                 self={user.id === currentUserId}
                 removing={removing.has(user.id)}
                 onRemove={() => setConfirming(user)}
+                onToggleAdmin={() => onChangeRole(user, user.role === "ADMIN" ? "USER" : "ADMIN")}
               />
             ))}
           </ul>

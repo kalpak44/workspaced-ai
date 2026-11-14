@@ -1,4 +1,4 @@
-import { Trash2 } from "lucide-react";
+import { Shield, ShieldOff, Trash2 } from "lucide-react";
 import type { User } from "../../hooks/useUsers";
 import { IconButton, Spinner } from "../atoms";
 
@@ -8,10 +8,12 @@ interface Props {
   readonly self: boolean;
   readonly removing: boolean;
   readonly onRemove: () => void;
+  /** Makes an admin a user, or a user an admin. */
+  readonly onToggleAdmin: () => void;
 }
 
 /** One user by name and username. */
-export function UserItem({ user, self, removing, onRemove }: Props) {
+export function UserItem({ user, self, removing, onRemove, onToggleAdmin }: Props) {
   const name = `${user.firstName} ${user.lastName}`.trim();
   let action;
   if (self) {
@@ -19,7 +21,13 @@ export function UserItem({ user, self, removing, onRemove }: Props) {
   } else if (removing) {
     action = <Spinner label={`Deleting ${user.username}`} className="size-4 text-zinc-400" />;
   } else {
-    action = <IconButton label={`Delete ${user.username}`} icon={Trash2} onClick={onRemove} />;
+    const admin = user.role === "ADMIN";
+    action = (
+      <div className="flex shrink-0 items-center gap-1">
+        <IconButton label={admin ? `Make ${user.username} a user` : `Make ${user.username} an admin`} icon={admin ? ShieldOff : Shield} onClick={onToggleAdmin} />
+        <IconButton label={`Delete ${user.username}`} icon={Trash2} onClick={onRemove} />
+      </div>
+    );
   }
   return (
     <li className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
@@ -33,7 +41,7 @@ export function UserItem({ user, self, removing, onRemove }: Props) {
         )}
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{name || user.username}</p>
-          {name && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{user.username}</p>}
+          {(name || user.role === "ADMIN") && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{[name && user.username, user.role === "ADMIN" && "Admin"].filter(Boolean).join(" · ")}</p>}
         </div>
       </div>
       {action}

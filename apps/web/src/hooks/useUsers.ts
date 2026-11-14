@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/http";
-import { createUser, deleteUser, listUsers, type NewUser, type User } from "../api/usersApi";
+import type { Role } from "../api/accountApi";
+import { changeUserRole, createUser, deleteUser, listUsers, type NewUser, type User } from "../api/usersApi";
 
+export type { Role } from "../api/accountApi";
 export type { NewUser, User } from "../api/usersApi";
 
 /** "conflict" is a username someone already has. */
@@ -102,6 +104,14 @@ export function useUsers(sort: UserSort) {
         error_ instanceof ApiError && error_.status === 409 ? "conflict" : "failed",
     );
 
+  /** Swaps the changed user in place once the API has accepted it. */
+  const changeRole = (user: User, role: Role) => {
+    changeUserRole(user.id, role).then(
+      (changed) => show(loaded.current.map((u) => (u.id === changed.id ? changed : u))),
+      () => setError(`Could not change the role of ${user.username}`),
+    );
+  };
+
   const remove = (user: User) => {
     const settle = () =>
       setRemoving((current) => {
@@ -134,6 +144,7 @@ export function useUsers(sort: UserSort) {
     dismissError: () => setError(null),
     loadMore,
     create,
+    changeRole,
     remove,
   };
 }

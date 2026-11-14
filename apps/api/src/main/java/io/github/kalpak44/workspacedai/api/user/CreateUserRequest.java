@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.user;
 
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
@@ -14,7 +15,9 @@ public record CreateUserRequest(
         @Size(min = 8, max = 72)
         String password,
     @Schema(example = "Ada", maxLength = 100) @NotNull @Size(max = 100) String firstName,
-    @Schema(example = "Lovelace", maxLength = 100) @NotNull @Size(max = 100) String lastName) {
+    @Schema(example = "Lovelace", maxLength = 100) @NotNull @Size(max = 100) String lastName,
+    @Schema(description = "USER when left out; an ADMIN also manages users", example = "USER")
+        Role role) {
 
   String trimmedUsername() {
     return username.strip();
@@ -26,5 +29,9 @@ public record CreateUserRequest(
 
   String trimmedLastName() {
     return lastName.strip();
+  }
+
+  Role roleOrUser() {
+    return role == null ? Role.USER : role;
   }
 }

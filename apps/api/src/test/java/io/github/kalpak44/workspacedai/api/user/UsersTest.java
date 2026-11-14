@@ -7,6 +7,7 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
@@ -92,6 +93,7 @@ class UsersTest {
     var body = JSON.readTree(created.body());
     assertThat(body.get("username").asString()).isEqualTo("ada");
     assertThat(body.get("lastName").asString()).isEqualTo("Lovelace");
+    assertThat(body.get("role").asString()).isEqualTo("USER");
     assertThat(body.has("passwordHash")).isFalse();
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/users/" + body.get("id").asString()));
@@ -133,6 +135,72 @@ class UsersTest {
   void refusesToDeleteTheSignedInUser() throws Exception {
     assertThat(send("DELETE", "/users/" + TestUsers.ADMIN, null).statusCode()).isEqualTo(409);
     assertThat(users.findById(TestUsers.ADMIN)).isPresent();
+  }
+
+  @Test
+  void refusesEveryoneButAnAdmin() throws Exception {
+    users.save(new UserEntity("ada", passwords.encode("password1")));
+    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    var created =
+        "{\"username\":\"grace\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\"}";
+
+    var listed = send("GET", "/users", null, ada);
+    assertThat(listed.statusCode()).isEqualTo(403);
+    assertThat(listed.headers().firstValue("Content-Type")).hasValue("application/problem+json");
+    assertThat(send("POST", "/users", created, ada).statusCode()).isEqualTo(403);
+    assertThat(send("DELETE", "/users/" + TestUsers.ADMIN, null, ada).statusCode()).isEqualTo(403);
+    assertThat(users.findByUsername("grace")).isEmpty();
+    assertThat(users.findById(TestUsers.ADMIN)).isPresent();
+  }
+
+  @Test
+  void createsAnAdminWhoManagesUsersToo() throws Exception {
+    var created =
+        send(
+            "POST",
+            "/users",
+            "{\"username\":\"grace\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\",\"role\":\"ADMIN\"}");
+    assertThat(created.statusCode()).isEqualTo(201);
+    assertThat(JSON.readTree(created.body()).get("role").asString()).isEqualTo("ADMIN");
+    var grace = "Bearer " + TestUsers.login(port, "grace", "password1");
+    assertThat(send("GET", "/users", null, grace).statusCode()).isEqualTo(200);
+
+    var unknownRole =
+        "{\"username\":\"linus\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\",\"role\":\"ROOT\"}";
+    assertThat(send("POST", "/users", unknownRole).statusCode()).isEqualTo(400);
+  }
+
+  @Test
+  void changesARoleWhichAppliesWithoutSigningIn() throws Exception {
+    var id = users.save(new UserEntity("ada", passwords.encode("password1"))).getId();
+    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    assertThat(send("GET", "/users", null, ada).statusCode()).isEqualTo(403);
+
+    var promoted = send("PUT", "/users/" + id + "/role", "{\"role\":\"ADMIN\"}");
+    assertThat(promoted.statusCode()).isEqualTo(200);
+    assertThat(JSON.readTree(promoted.body()).get("role").asString()).isEqualTo("ADMIN");
+    assertThat(send("GET", "/users", null, ada).statusCode()).isEqualTo(200);
+
+    assertThat(send("PUT", "/users/" + id + "/role", "{\"role\":\"USER\"}").statusCode())
+        .isEqualTo(200);
+    assertThat(send("GET", "/users", null, ada).statusCode()).isEqualTo(403);
+  }
+
+  @Test
+  void refusesARoleChangeForOneselfANonAdminOrAnUnknownUser() throws Exception {
+    var demote = "{\"role\":\"USER\"}";
+    assertThat(send("PUT", "/users/" + TestUsers.ADMIN + "/role", demote).statusCode())
+        .isEqualTo(409);
+    assertThat(send("PUT", "/users/" + java.util.UUID.randomUUID() + "/role", demote).statusCode())
+        .isEqualTo(404);
+    assertThat(send("PUT", "/users/" + TestUsers.ADMIN + "/role", "{}").statusCode())
+        .isEqualTo(400);
+
+    var id = users.save(new UserEntity("ada", passwords.encode("password1"))).getId();
+    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    assertThat(send("PUT", "/users/" + id + "/role", "{\"role\":\"ADMIN\"}", ada).statusCode())
+        .isEqualTo(403);
+    assertThat(users.findById(id).orElseThrow().getRole()).isEqualTo(Role.USER);
   }
 
   @Test

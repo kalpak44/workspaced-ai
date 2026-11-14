@@ -9,4 +9,13 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
   Optional<UserEntity> findByUsername(String username);
 
   boolean existsByUsername(String username);
+
+  /** What each request is checked against, without loading the avatar. */
+  Optional<Access> findAccessById(UUID id);
+
+  interface Access {
+    Role getRole();
+
+    int getTokenVersion();
+  }
 }

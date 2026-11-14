@@ -8,6 +8,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 public final class CurrentUser {
 
   static final String USERNAME_CLAIM = "username";
+  static final String VERSION_CLAIM = "ver";
 
   private CurrentUser() {}
 

@@ -15,7 +15,7 @@ interface Props {
 
 /** Names, a username to sign in with, and a first password the new user can change later. */
 export function CreateUserDialog({ onCreate, onClose }: Props) {
-  const [draft, setDraft] = useState<NewUser>({ username: "", password: "", firstName: "", lastName: "" });
+  const [draft, setDraft] = useState<NewUser>({ username: "", password: "", firstName: "", lastName: "", role: "USER" });
   const [usernameError, setUsernameError] = useState<string | null>(null);
   const [passwordError, setPasswordError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -30,7 +30,7 @@ export function CreateUserDialog({ onCreate, onClose }: Props) {
     }
   };
 
-  const edit = (field: keyof NewUser, value: string) => {
+  const edit = (field: Exclude<keyof NewUser, "role">, value: string) => {
     setDraft((current) => ({ ...current, [field]: value }));
     if (field === "username") setUsernameError(null);
     if (field === "password") setPasswordError(null);
@@ -66,6 +66,10 @@ export function CreateUserDialog({ onCreate, onClose }: Props) {
           </div>
           <TextField id="new-user-username" label="Username" autoComplete="off" spellCheck={false} maxLength={MAX_NAME} disabled={pending} error={usernameError} value={draft.username} onChange={(e) => edit("username", e.currentTarget.value)} />
           <TextField id="new-user-password" label="Password" type="password" autoComplete="new-password" hint="8 to 72 characters." disabled={pending} error={passwordError} value={draft.password} onChange={(e) => edit("password", e.currentTarget.value)} />
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" disabled={pending} checked={draft.role === "ADMIN"} onChange={(e) => { const role = e.currentTarget.checked ? "ADMIN" : "USER"; setDraft((current) => ({ ...current, role })); }} />
+            Admin, who also manages users
+          </label>
         </ModalBody>
         <ModalFooter>
           <Button label="Cancel" variant="secondary" disabled={pending} onClick={close} />

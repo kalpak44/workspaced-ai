@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.authentication.AuthenticationManager;
@@ -57,15 +58,19 @@ public class AuthService {
     return Account.of(user);
   }
 
-  /** False when the current password is wrong; nothing is changed then. */
+  /**
+   * Every token issued before stops working, so this answers a new one for the caller; empty when
+   * the current password is wrong, and nothing is changed then.
+   */
   @Transactional
-  public boolean changePassword(UUID userId, String currentPassword, String newPassword) {
+  public Optional<TokenService.Token> changePassword(
+      UUID userId, String currentPassword, String newPassword) {
     var user = user(userId);
     if (!passwords.matches(currentPassword, user.getPasswordHash())) {
-      return false;
+      return Optional.empty();
     }
     user.setPasswordHash(passwords.encode(newPassword));
-    return true;
+    return Optional.of(tokens.issue(user));
   }
 
   /** A valid token for an account deleted since it was issued counts as not signed in. */

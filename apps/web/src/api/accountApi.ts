@@ -10,7 +10,11 @@ export interface Account {
   readonly lastName: string;
   /** A data: URL of the picture; null for the default. */
   readonly avatar: string | null;
+  /** An admin also manages the other users. */
+  readonly role: Role;
 }
+
+export type Role = "USER" | "ADMIN";
 
 export interface Profile {
   readonly firstName: string;

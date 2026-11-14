@@ -12,7 +12,8 @@ public record Account(
     @Schema(
             description = "The picture as a data: URL; null for the default",
             example = "data:image/png;base64,iVBORw0KGgo=")
-        String avatar) {
+        String avatar,
+    @Schema(description = "An admin also manages users") Role role) {
 
   static Account of(UserEntity user) {
     return new Account(
@@ -20,6 +21,7 @@ public record Account(
         user.getUsername(),
         user.getFirstName(),
         user.getLastName(),
-        user.getAvatar());
+        user.getAvatar(),
+        user.getRole());
   }
 }

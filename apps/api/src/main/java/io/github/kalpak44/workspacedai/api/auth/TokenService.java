@@ -35,6 +35,7 @@ public class TokenService {
             .issuer(ISSUER)
             .subject(user.getId().toString())
             .claim(CurrentUser.USERNAME_CLAIM, user.getUsername())
+            .claim(CurrentUser.VERSION_CLAIM, user.getTokenVersion())
             .issuedAt(now)
             .expiresAt(expiresAt)
             .build();

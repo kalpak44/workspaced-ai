@@ -21,6 +21,8 @@ export function GeneralSettingsPage() {
   const [notice, setNotice] = useState("");
   const [avatarError, setAvatarError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
+  // Only an admin may manage users; the API refuses anyone else, so the tab is not offered.
+  const isAdmin = account?.role === "ADMIN";
   const profileChanged = profile.firstName !== saved.firstName || profile.lastName !== saved.lastName || profile.avatar !== saved.avatar;
 
   async function submitProfile() {
@@ -82,7 +84,7 @@ export function GeneralSettingsPage() {
           </button>
         </div>
           <nav aria-label="Settings sections" className="flex gap-1 p-3 sm:flex-col">
-            {([{ id: "profile", label: "Profile", Icon: UserRound }, { id: "users", label: "Users", Icon: Users }] as const).map(({ id, label, Icon }) => (
+            {([{ id: "profile", label: "Profile", Icon: UserRound }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])] as const).map(({ id, label, Icon }) => (
               <button key={id} type="button" aria-current={section === id ? "page" : undefined}
                 onClick={() => { setSection(id); setNotice(""); }}
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${section === id ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"}`}>
@@ -137,7 +139,7 @@ export function GeneralSettingsPage() {
                 </form>}
               </SettingsSection>
             </div>
-            {section === "users" && <UsersSection currentUserId={account?.id} />}
+            {section === "users" && isAdmin && <UsersSection currentUserId={account?.id} />}
             <p role="status" className="mt-4 min-h-5 text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>
           </div>
       </div>
@@ -148,10 +150,10 @@ export function GeneralSettingsPage() {
 /** Mounted only while its tab is open, so the user list loads when someone looks at it. */
 function UsersSection({ currentUserId }: { readonly currentUserId: string | undefined }) {
   const [sort, setSort] = useState<UserSort>("newest");
-  const { users, total, hasMore, loading, loadingMore, error, removing, dismissError, loadMore, create, remove } = useUsers(sort);
+  const { users, total, hasMore, loading, loadingMore, error, removing, dismissError, loadMore, create, changeRole, remove } = useUsers(sort);
   return (
     <UsersPanel users={users} total={total} currentUserId={currentUserId} sort={sort} onSortChange={setSort}
       loading={loading} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMore} removing={removing}
-      error={error} onDismissError={dismissError} onCreate={create} onRemove={remove} />
+      error={error} onDismissError={dismissError} onCreate={create} onRemove={remove} onChangeRole={changeRole} />
   );
 }

@@ -67,8 +67,9 @@ public interface AccountApi {
       operationId = "changePassword",
       summary = "Change the password",
       description =
-          "Replaces the password once the current one is confirmed. Tokens already issued stay "
-              + "valid until they expire.")
+          "Replaces the password once the current one is confirmed. Every token issued before "
+              + "stops working; the response sets the sign-in cookie to a new one, and a bearer "
+              + "client signs in again.")
   @ApiResponse(responseCode = "204", description = "Changed.")
   @ApiResponse(
       responseCode = "400",
