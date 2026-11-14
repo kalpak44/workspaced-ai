@@ -6,4 +6,3 @@ export { Logo } from "./Logo";
 export { ChoiceCard } from "./ChoiceCard";
 export { Spinner } from "./Spinner";
 export { TextField } from "./TextField";
-export { ProgressBar } from "./ProgressBar";

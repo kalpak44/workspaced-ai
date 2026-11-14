@@ -26,15 +26,9 @@ public class SecretService {
   /** How many a user may add to one workspace, the provider's key not counted. */
   public static final int MAX_SECRETS = 50;
 
-  // Set by the API for the harness; a user secret of the same name would lock the API out, or
-  // be overwritten by the next restore.
+  // Set by the API for the harness; a user secret of the same name would lock the API out.
   private static final Set<String> HARNESS_VARIABLES =
-      Set.of(
-          Harness.PASSWORD_VARIABLE,
-          "OPENCODE_SERVER_PASSWORD",
-          "OPENCODE_SERVER_USERNAME",
-          Harness.RESTORE_URL_VARIABLE,
-          Harness.RESTORE_ID_VARIABLE);
+      Set.of(Harness.PASSWORD_VARIABLE, "OPENCODE_SERVER_PASSWORD", "OPENCODE_SERVER_USERNAME");
 
   private final WorkspaceRepository workspaces;
   private final WorkspaceSecretRepository secrets;

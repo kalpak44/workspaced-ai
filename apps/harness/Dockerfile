@@ -111,8 +111,6 @@ COPY apk.sh /usr/local/bin/apk
 # scheduled task files with the time checked against both, so neither is computed by hand.
 COPY --chmod=0755 now.py /usr/local/bin/now
 COPY --chmod=0755 task.py /usr/local/bin/task
-# Packages the home for a backup the API starts, and puts one back before OpenCode starts.
-COPY --chmod=0755 backup.py /usr/local/bin/workspace-backup
 # The web server's defaults, copied into the home when the user turns it on.
 COPY web/ /usr/share/harness/web/
 COPY --chmod=0755 web-server.sh /usr/local/bin/web-server

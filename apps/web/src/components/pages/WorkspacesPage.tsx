@@ -32,7 +32,6 @@ export function WorkspacesPage() {
     restart,
     remove,
     patch,
-    added,
   } = useWorkspaces();
   // The name the create dialog opens with; null while it is closed.
   const [newName, setNewName] = useState<string | null>(null);
@@ -95,8 +94,6 @@ export function WorkspacesPage() {
         section={route.section}
         onSecretsChanged={() => patch(workspace.id, { restartRequired: true })}
         onRestart={() => setRestartId(workspace.id)}
-        onRestored={(id) => patch(id, { status: "INITIALIZING" })}
-        onCreated={added}
       />
     );
   } else if (route.name === "terminal") {
@@ -137,7 +134,6 @@ export function WorkspacesPage() {
           onSettings={(id) => navigate({ name: "settings", workspaceId: id })}
           onTerminal={(id) => navigate({ name: "terminal", workspaceId: id })}
           onRestart={setRestartId}
-          onBackups={(id) => navigate({ name: "settings", workspaceId: id, section: "backups" })}
           onDelete={setDeleteId}
         />
       }

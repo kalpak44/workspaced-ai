@@ -49,18 +49,12 @@ public class WorkspaceSessionEntity {
   }
 
   public WorkspaceSessionEntity(UUID id, UUID workspaceId, String path, String harnessSessionId) {
-    // Postgres keeps microseconds, so the value read back later equals the one returned now.
-    this(id, workspaceId, path, harnessSessionId, Instant.now().truncatedTo(ChronoUnit.MICROS));
-  }
-
-  /** A session brought back from a backup keeps the time it was first made, and its order. */
-  public WorkspaceSessionEntity(
-      UUID id, UUID workspaceId, String path, String harnessSessionId, Instant createdAt) {
     this.id = id;
     this.workspaceId = workspaceId;
     this.path = path;
     this.harnessSessionId = harnessSessionId;
-    this.createdAt = createdAt;
+    // Postgres keeps microseconds, so the value read back later equals the one returned now.
+    this.createdAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
   }
 
   public UUID getId() {

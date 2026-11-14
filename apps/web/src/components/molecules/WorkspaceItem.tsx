@@ -1,4 +1,4 @@
-import { Archive, MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2 } from "lucide-react";
+import { MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDismiss } from "../../hooks/useDismiss";
@@ -18,8 +18,6 @@ interface Props {
   readonly onSettings: () => void;
   readonly onTerminal: () => void;
   readonly onRestart: () => void;
-  /** Opens this workspace's backups, where it is backed up or restored. */
-  readonly onBackups: () => void;
   readonly onDelete: () => void;
 }
 
@@ -32,7 +30,6 @@ export function WorkspaceItem({
   onSettings,
   onTerminal,
   onRestart,
-  onBackups,
   onDelete,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
@@ -126,18 +123,6 @@ export function WorkspaceItem({
             <span className="flex items-center gap-2">
               <RotateCw aria-hidden className="size-3.5" />
               Restart
-            </span>
-          </MenuItem>
-          <MenuItem
-            className="gap-2 px-3 py-2"
-            onClick={() => {
-              setMenuOpen(false);
-              onBackups();
-            }}
-          >
-            <span className="flex items-center gap-2">
-              <Archive aria-hidden className="size-3.5" />
-              Backups
             </span>
           </MenuItem>
           <div className="mx-2 my-1 border-t border-zinc-200 dark:border-zinc-700" />

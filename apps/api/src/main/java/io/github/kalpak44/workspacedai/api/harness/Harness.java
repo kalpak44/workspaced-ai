@@ -55,20 +55,6 @@ public interface Harness {
    */
   String WEB_DIRECTORY = HOME + "/.config/workspaced/web";
 
-  /**
-   * Where the harness's backup tool takes its job and reports its progress; the tool leaves this
-   * folder out of every archive it makes.
-   */
-  String BACKUP_DIRECTORY = HOME + "/.cache/workspaced/backup";
-
-  /**
-   * A restore the API asks for: the archive's URL and an id the harness records once it has
-   * restored, so a later start does not restore again. No user secret may take either name.
-   */
-  String RESTORE_URL_VARIABLE = "WORKSPACED_RESTORE_URL";
-
-  String RESTORE_ID_VARIABLE = "WORKSPACED_RESTORE_ID";
-
   /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
 
@@ -182,17 +168,6 @@ public interface Harness {
   void writeTask(HarnessEndpoint endpoint, String name, String content);
 
   void deleteTask(HarnessEndpoint endpoint, String name);
-
-  /**
-   * Starts archiving the home and uploading it to that URL, and returns at once; follow it with
-   * {@link #backupStatus}.
-   *
-   * @return false when the harness image predates backups, so nothing was started
-   */
-  boolean startBackup(HarnessEndpoint endpoint, String backupId, URI uploadUrl);
-
-  /** The backup tool's latest report, as JSON; empty before it has written one. */
-  Optional<String> backupStatus(HarnessEndpoint endpoint);
 
   /**
    * Starts the workspace's web server, which answers at that address, and keeps it running across

@@ -7,7 +7,6 @@
 !apk.sh
 !now.py
 !task.py
-!backup.py
 !web/
 !web-server.sh
 **/.DS_Store

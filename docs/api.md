@@ -101,7 +101,7 @@ system secret and the rest of the harness environment (base URL, harness passwor
 the VM's supervisor starts the harness with; restarting marks the VM `RESTARTING`, and its supervisor recreates the
 harness with fresh values. Every call to the harness goes through the agent hub's tunnel to the VM, at
 `WORKSPACED_AGENT_HUB_URL` + `/internal/vms/<vm id>/harness`; the VM's supervisor sets the harness password, so the
-API holds none. Backups and the web server do not reach a VM yet. There is no other runtime: a local run without
+API holds none. The web server does not reach a VM yet. There is no other runtime: a local run without
 `WORKSPACED_VM_MANAGER_URL` cannot create a workspace (`503`).
 
 ### Workspace terminals
@@ -306,46 +306,6 @@ Package install scripts cannot run without root, so a package that relies on one
 
 Workspaces keep the harness image they were created with. **Restart** moves a workspace on an older image to the
 current one, keeping its home; that is how existing workspaces pick up a new harness, the guide included.
-
-## Backups
-
-A backup is a workspace's whole home — files, conversations, instructions, tasks, variables, installed tools — as a
-gzipped tar in S3-compatible storage, plus the settings the database holds: model, session TTL, the session index, and
-the **names** of its secrets. Secret values are never backed up; the backup lists them so they can be added again.
-
-| Method   | Path                                   | Body                              | Answers                                        |
-|----------|----------------------------------------|-----------------------------------|------------------------------------------------|
-| `POST`   | `/api/v1/workspaces/{id}/backups`      |                                   | `202` and the backup, `409` if one is running, `503` |
-| `GET`    | `/api/v1/backups`                      |                                   | `200`, every backup of the caller's, newest first |
-| `GET`    | `/api/v1/workspaces/{id}/restore`      |                                   | `200` and the restore's progress, or `204`      |
-| `GET`    | `/api/v1/backups/{id}`                 |                                   | `200` with `status`, `phase` and `progress` (0–100) |
-| `POST`   | `/api/v1/backups/{id}/download`        |                                   | `200` and `{url, expiresAt}`, a 15-minute link  |
-| `POST`   | `/api/v1/backups/{id}/restore`         |                                   | `202`; `404` once its workspace is gone         |
-| `POST`   | `/api/v1/backups/{id}/workspaces`      | `{"name": "…", "apiKey": "…"}`    | `201` and the new workspace                     |
-| `DELETE` | `/api/v1/backups/{id}`                 |                                   | `204`, or `409` while it runs                   |
-
-The archive never passes through the API. It signs an upload URL and the harness's `workspace-backup run`
-(`apps/harness/backup.py`) packs the home and uploads it, reporting progress in `~/.cache/workspaced/backup/status.json`,
-which the API polls onto the backup's row. SQLite files are copied through SQLite's backup API, so a live OpenCode
-database is consistent. A backup that stops reporting for `stall-timeout` is failed; one still running when the API
-restarts is picked up again.
-
-A restore signs a download URL into the workspace's Secret as `WORKSPACED_RESTORE_URL` and `WORKSPACED_RESTORE_ID` and
-restarts it; `start.sh` runs `workspace-backup restore` before OpenCode starts, downloading and checking the archive
-before it replaces the home, so a broken link leaves the old files. The id is recorded in the home, so later starts
-do not restore again. While it runs, the restore prints a progress line about once a second (downloading,
-checking, extracting), and `GET /api/v1/workspaces/{id}/restore` reads the newest pod's log for the last one: `200`
-with `{phase, done, total, progress}`, or `204` when the workspace is not restoring. The API's service account needs
-`get` on `pods/log` for it. A new workspace from a backup starts the same way; without `apiKey` it reuses the original
-workspace's key while that workspace exists. Backups outlive their workspace and are kept under
-`users/<owner>/workspaces/<workspace>/<backup>.tar.gz`. A harness image from before backups answers `409` until the
-workspace is restarted onto the current one.
-
-| Variable                       | Default             | Meaning                                              |
-|--------------------------------|---------------------|------------------------------------------------------|
-| `WORKSPACED_BACKUP_ENDPOINT`   | none                | S3 API base URL; unset answers every backup route `503` |
-| `WORKSPACED_BACKUP_BUCKET`     | `workspace-backups` | Path-style, so no per-bucket DNS name is needed      |
-| `WORKSPACED_BACKUP_ACCESS_KEY` / `_SECRET_KEY` | none | A user limited to that bucket                  |
 
 ## Workspace secrets
 

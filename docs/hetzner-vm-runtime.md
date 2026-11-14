@@ -26,7 +26,6 @@ flowchart TB
 
         PG["PostgreSQL<br/>Workspaces and VM state"]
         VAULT["Vault<br/>Workspace secrets"]
-        BACKUP["RustFS<br/>Workspace backups"]
 
         TUNNEL --> WEB
         TUNNEL --> API
@@ -61,7 +60,6 @@ flowchart TB
     VMM -->|"Create and delete VM"| HC
     HC --> VM
     AGENT -->|"Outbound authenticated connection · ready and heartbeat"| API
-    AGENT -->|"Presigned backup upload"| BACKUP
 ```
 
 ## VM sizes

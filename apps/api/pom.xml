@@ -28,7 +28,6 @@
         <!-- springdoc 3.x is the line built for Boot 4; 2.x targets Boot 3. -->
         <spring-doc.version>3.2.0</spring-doc.version>
         <shedlock.version>7.11.0</shedlock.version>
-        <awssdk.version>2.57.13</awssdk.version>
 
         <!-- The floor `mvn verify` enforces. It lives here rather than in a CI step so a
              step deleted from the workflow cannot silently disable it. -->
@@ -106,29 +105,6 @@
             <groupId>net.javacrumbs.shedlock</groupId>
             <artifactId>shedlock-provider-jdbc-template</artifactId>
             <version>${shedlock.version}</version>
-        </dependency>
-        <!-- Signs the URLs a workspace uploads its backup to and restores it from, so the
-             storage keys stay in the API. Netty and Apache are the SDK's default clients and
-             neither is needed for a HEAD and a DELETE; the JDK's connection does both. -->
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>s3</artifactId>
-            <version>${awssdk.version}</version>
-            <exclusions>
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>netty-nio-client</artifactId>
-                </exclusion>
-                <exclusion>
-                    <groupId>software.amazon.awssdk</groupId>
-                    <artifactId>apache-client</artifactId>
-                </exclusion>
-            </exclusions>
-        </dependency>
-        <dependency>
-            <groupId>software.amazon.awssdk</groupId>
-            <artifactId>url-connection-client</artifactId>
-            <version>${awssdk.version}</version>
         </dependency>
         <dependency>
             <groupId>org.springdoc</groupId>

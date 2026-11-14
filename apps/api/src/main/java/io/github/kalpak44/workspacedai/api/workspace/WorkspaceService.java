@@ -9,7 +9,6 @@ import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.OutputStream;
 import java.security.SecureRandom;
 import java.util.Base64;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -75,20 +74,6 @@ public class WorkspaceService {
    */
   public Workspace create(
       UUID ownerId, String name, ModelProvider provider, String apiKey, String serverType) {
-    return create(ownerId, name, provider, apiKey, serverType, Map.of());
-  }
-
-  /**
-   * As {@link #create(UUID, String, ModelProvider, String, String)}, with more secrets for the
-   * harness, such as the restore it is to start from.
-   */
-  public Workspace create(
-      UUID ownerId,
-      String name,
-      ModelProvider provider,
-      String apiKey,
-      String serverType,
-      Map<String, String> harnessSecrets) {
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
@@ -105,7 +90,7 @@ public class WorkspaceService {
               serverType,
               new WorkspaceEnvironment(
                   Map.of(provider.baseUrlVariable(), provider.baseUrl()),
-                  secrets(provider, apiKey, harnessSecrets)));
+                  secrets(provider, apiKey)));
       var entity =
           transactions.execute(
               _ -> {
@@ -131,12 +116,8 @@ public class WorkspaceService {
     }
   }
 
-  private static Map<String, String> secrets(
-      ModelProvider provider, String apiKey, Map<String, String> harnessSecrets) {
-    var secrets = new HashMap<>(harnessSecrets);
-    secrets.put(provider.apiKeyVariable(), apiKey);
-    secrets.put(Harness.PASSWORD_VARIABLE, password());
-    return secrets;
+  private static Map<String, String> secrets(ModelProvider provider, String apiKey) {
+    return Map.of(provider.apiKeyVariable(), apiKey, Harness.PASSWORD_VARIABLE, password());
   }
 
   private static String password() {

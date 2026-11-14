@@ -9,7 +9,7 @@ beforeEach(() => {
 });
 
 function setup() {
-  const handlers = { onSelect: vi.fn(), onNew: vi.fn(), onRename: vi.fn(), onSettings: vi.fn(), onTerminal: vi.fn(), onRestart: vi.fn(), onBackups: vi.fn(), onDelete: vi.fn() };
+  const handlers = { onSelect: vi.fn(), onNew: vi.fn(), onRename: vi.fn(), onSettings: vi.fn(), onTerminal: vi.fn(), onRestart: vi.fn(), onDelete: vi.fn() };
   render(<Sidebar workspaces={[
     { id: "alpha", name: "Alpha", status: "READY", modelProvider: "demo", model: null, restartRequired: false },
     { id: "beta", name: "Beta", status: "READY", modelProvider: "demo", model: null, restartRequired: false },

@@ -26,11 +26,6 @@ public record Workspace(
             example = "false")
         boolean restartRequired) {
 
-  /** The same workspace with its model changed, as a restore applies the backup's. */
-  public Workspace withModel(String model) {
-    return new Workspace(id, name, modelProvider, serverType, model, status, restartRequired);
-  }
-
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
     return new Workspace(
         entity.getId(),

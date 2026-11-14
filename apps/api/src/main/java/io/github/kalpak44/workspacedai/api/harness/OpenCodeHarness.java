@@ -202,30 +202,6 @@ public class OpenCodeHarness implements Harness {
     shell(endpoint, "rm -rf -- " + quote(path.toString()));
   }
 
-  /**
-   * The job goes in a file rather than on the command line, which keeps the signed URL out of the
-   * process list. The tool runs in a session of its own so it outlives the shell that starts it.
-   */
-  @Override
-  public boolean startBackup(HarnessEndpoint endpoint, String backupId, URI uploadUrl) {
-    if (shellExit(endpoint, "command -v workspace-backup") != 0) {
-      return false;
-    }
-    var directory = quote(BACKUP_DIRECTORY);
-    shell(endpoint, "mkdir -p -- " + directory + " && rm -f -- " + directory + "/status.json");
-    writeFile(
-        endpoint,
-        BACKUP_DIRECTORY + "/job.json",
-        json.writeValueAsString(Map.of("id", backupId, "uploadUrl", uploadUrl.toString())));
-    shell(endpoint, "setsid workspace-backup run > " + directory + "/log 2>&1 < /dev/null &");
-    return true;
-  }
-
-  @Override
-  public Optional<String> backupStatus(HarnessEndpoint endpoint) {
-    return readFile(endpoint, BACKUP_DIRECTORY, "status.json");
-  }
-
   @Override
   public boolean enableWebServer(HarnessEndpoint endpoint, URI url) {
     if (shellExit(endpoint, "command -v web-server") != 0) {

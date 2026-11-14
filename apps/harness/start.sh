@@ -2,12 +2,6 @@
 # opencode writes into its config directory (a .gitignore, its lockfile), so the defaults
 # baked into the image are copied into the home, the one writable place, on start.
 set -eu
-# A restore the API asked for replaces the whole home, so it runs before anything below reads
-# or seeds it. It fails the start rather than run on a half-restored home; the old files stay
-# until the archive has downloaded and read through cleanly.
-if [ -n "${WORKSPACED_RESTORE_URL:-}" ]; then
-  workspace-backup restore
-fi
 mkdir -p "$HOME/.config/opencode" "$HOME/.local/bin" "$HOME/project"
 cp -R /usr/share/harness/opencode/. "$HOME/.config/opencode/"
 # The user's own instructions, every Markdown file OpenCode finds here. The first start seeds the
