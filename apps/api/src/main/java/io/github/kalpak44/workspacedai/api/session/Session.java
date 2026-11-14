@@ -18,7 +18,8 @@ public record Session(
     @Schema(example = "2026-11-03T15:37:24.531Z") Instant createdAt,
     boolean available,
     @Schema(
-            description = "The scheduled task this session is a run of; null when a user started it",
+            description =
+                "The scheduled task this session is a run of; null when a user started it",
             example = "pr-summary")
         String task) {
 
