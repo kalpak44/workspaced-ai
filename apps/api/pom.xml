@@ -29,7 +29,7 @@
         <spring-doc.version>3.2.0</spring-doc.version>
         <fabric8.version>8.0.0</fabric8.version>
         <shedlock.version>7.11.0</shedlock.version>
-        <awssdk.version>2.57.12</awssdk.version>
+        <awssdk.version>2.57.13</awssdk.version>
 
         <!-- The floor `mvn verify` enforces. It lives here rather than in a CI step so a
              step deleted from the workflow cannot silently disable it. -->
