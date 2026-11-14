@@ -20,7 +20,6 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.core.type.TypeReference;
-import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /** End to end on a random port, with Hetzner answered by a local fake. */
@@ -59,8 +58,6 @@ class VmControllerTest {
     var server = HETZNER.servers.get(vm.serverId());
     assertThat(server.path("labels").path("workspace-id").asString()).isEqualTo(owner);
     assertThat(server.path("labels").path("user-id").asString()).isEqualTo(USER.toString());
-    var group = HETZNER.groups.get(hetznerGroupOf(server));
-    assertThat(group.path("name").asString()).isEqualTo("user-" + USER);
     assertThat(vm.ipv4()).isEqualTo(server.path("public_net").path("ipv4").path("ip").asString());
 
     var again =
@@ -192,19 +189,6 @@ class VmControllerTest {
               .findFirst();
       assertThat(seen).isPresent();
     }
-  }
-
-  private static long hetznerGroupOf(JsonNode server) {
-    return HETZNER.groups.values().stream()
-        .filter(
-            g ->
-                g.path("servers")
-                    .valueStream()
-                    .anyMatch(id -> id.asLong() == server.path("id").asLong()))
-        .findFirst()
-        .orElseThrow()
-        .path("id")
-        .asLong();
   }
 
   private VmDto create() throws Exception {

@@ -24,7 +24,6 @@ public class VmService {
   private final VmProperties properties;
   private final HetznerClient hetzner;
   private final HetznerProperties hetznerProperties;
-  private final UserPlacementGroups placementGroups;
   private final VmInventory inventory;
   private final ApplicationEventPublisher events;
   private final Clock clock;
@@ -34,7 +33,6 @@ public class VmService {
       VmProperties properties,
       HetznerClient hetzner,
       HetznerProperties hetznerProperties,
-      UserPlacementGroups placementGroups,
       VmInventory inventory,
       ApplicationEventPublisher events,
       Clock clock) {
@@ -42,7 +40,6 @@ public class VmService {
     this.properties = properties;
     this.hetzner = hetzner;
     this.hetznerProperties = hetznerProperties;
-    this.placementGroups = placementGroups;
     this.inventory = inventory;
     this.events = events;
     this.clock = clock;
@@ -60,8 +57,7 @@ public class VmService {
   /**
    * The workspace's VM: a second request for the same workspace returns the first one's, so a retry
    * never creates a second server. Synchronized so two concurrent first requests cannot both create
-   * one. Nothing is kept when Hetzner refuses the server. The server joins its user's spread
-   * placement group, so none of their VMs share a physical host.
+   * one. Nothing is kept when Hetzner refuses the server.
    *
    * @param userId who owns the workspace
    * @param serverType blank for the default
@@ -92,7 +88,6 @@ public class VmService {
                 hetznerProperties.location(),
                 hetznerProperties.image(),
                 hetznerProperties.sshKeys(),
-                placementGroups.groupFor(userId),
                 Map.of(
                     HetznerVmInventory.MANAGED_BY, HetznerVmInventory.MANAGER,
                     HetznerVmInventory.VM_ID, id.toString(),
@@ -114,18 +109,13 @@ public class VmService {
     return new Created(vm, true);
   }
 
-  /**
-   * The server first: a VM whose server could not be deleted is kept, so the delete can retry. Then
-   * its user's placement group, if that server was the last in it. Synchronized with {@link
-   * #create}, so a group is never deleted just as a new VM is put in it.
-   */
-  public synchronized void delete(UUID id) {
+  /** The server first: a VM whose server could not be deleted is kept, so the delete can retry. */
+  public void delete(UUID id) {
     var vm = get(id);
     hetzner.deleteServer(vm.serverId());
     if (!vms.deleteById(id)) {
       throw new VmNotFoundException(id);
     }
-    placementGroups.releaseIfEmpty(vm.userId(), vm.serverId());
     events.publishEvent(new VmEvent.Deleted(id));
   }
 

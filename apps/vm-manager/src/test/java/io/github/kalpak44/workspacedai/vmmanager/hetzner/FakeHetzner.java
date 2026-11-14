@@ -16,13 +16,12 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
-import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 
 /**
  * Answers as the Hetzner Cloud API does, so no test calls the real one: /server_types in two pages
- * (a trimmed copy of a real answer), and /servers and /placement_groups listed by label, created
- * and deleted in memory. Setting {@link #status} makes every route answer with it instead.
+ * (a trimmed copy of a real answer), and /servers listed by label, created and deleted in memory.
+ * Setting {@link #status} makes every route answer with it instead.
  */
 public class FakeHetzner implements AutoCloseable {
 
@@ -58,7 +57,6 @@ public class FakeHetzner implements AutoCloseable {
   public final AtomicInteger requests = new AtomicInteger();
   public final List<JsonNode> createBodies = new CopyOnWriteArrayList<>();
   public final Map<Long, ObjectNode> servers = new ConcurrentHashMap<>();
-  public final Map<Long, ObjectNode> groups = new ConcurrentHashMap<>();
   public volatile int status = 200;
   private final AtomicLong ids = new AtomicLong(5000);
 
@@ -76,7 +74,6 @@ public class FakeHetzner implements AutoCloseable {
           answer(exchange, 200, page);
         });
     server.createContext("/servers", this::servers);
-    server.createContext("/placement_groups", this::placementGroups);
     server.start();
   }
 
@@ -104,10 +101,6 @@ public class FakeHetzner implements AutoCloseable {
         created.putObject("public_net").putObject("ipv4").put("ip", "203.0.113." + (id % 250));
         created.set("labels", request.path("labels"));
         servers.put(id, created);
-        if (request.has("placement_group")) {
-          var group = groups.get(request.path("placement_group").asLong());
-          ((ArrayNode) group.get("servers")).add(id);
-        }
         var body = JSON.createObjectNode();
         body.set("server", created);
         body.put("root_password", "never-read");
@@ -116,40 +109,6 @@ public class FakeHetzner implements AutoCloseable {
       case "DELETE" -> {
         var id = Long.parseLong(path.substring(path.lastIndexOf('/') + 1));
         answer(exchange, servers.remove(id) == null ? 404 : 200, "{\"action\":{}}");
-      }
-      default -> answer(exchange, 405, "{}");
-    }
-  }
-
-  private void placementGroups(HttpExchange exchange) throws IOException {
-    record(exchange);
-    var path = exchange.getRequestURI().getPath();
-    switch (exchange.getRequestMethod()) {
-      case "GET" -> {
-        var list = JSON.createArrayNode();
-        groups.values().stream().filter(g -> matches(exchange, g)).forEach(list::add);
-        var body = JSON.createObjectNode();
-        body.set("placement_groups", list);
-        body.putObject("meta").putObject("pagination").putNull("next_page");
-        answer(exchange, 200, body.toString());
-      }
-      case "POST" -> {
-        var request = JSON.readTree(exchange.getRequestBody());
-        var id = ids.incrementAndGet();
-        var group = JSON.createObjectNode();
-        group.put("id", id);
-        group.put("name", request.path("name").asString());
-        group.put("type", request.path("type").asString());
-        group.putArray("servers");
-        group.set("labels", request.path("labels"));
-        groups.put(id, group);
-        var body = JSON.createObjectNode();
-        body.set("placement_group", group);
-        answer(exchange, 201, body.toString());
-      }
-      case "DELETE" -> {
-        var id = Long.parseLong(path.substring(path.lastIndexOf('/') + 1));
-        answer(exchange, groups.remove(id) == null ? 404 : 204, "");
       }
       default -> answer(exchange, 405, "{}");
     }

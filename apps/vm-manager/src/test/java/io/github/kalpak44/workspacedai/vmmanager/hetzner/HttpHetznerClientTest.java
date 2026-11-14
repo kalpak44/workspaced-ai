@@ -78,7 +78,6 @@ class HttpHetznerClientTest {
             "nbg1",
             "ubuntu-24.04",
             List.of("ops"),
-            null,
             Map.of("managed-by", "workspaced-ai-vm-manager", "workspace-id", "w-1"));
 
     var created = client("t0ken").createServer(spec);
@@ -100,11 +99,9 @@ class HttpHetznerClientTest {
     var client = client("t0ken");
     var mine =
         client.createServer(
-            new ServerSpec(
-                "vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), null, Map.of("app", "a")));
+            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "a")));
     client.createServer(
-        new ServerSpec(
-            "vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), null, Map.of("app", "b")));
+        new ServerSpec("vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "b")));
 
     var servers = client.servers("app=a");
 
@@ -121,7 +118,7 @@ class HttpHetznerClientTest {
     var client = client("t0ken");
     var created =
         client.createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), null, Map.of()));
+            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of()));
 
     client.deleteServer(created.id());
     assertThat(hetzner.servers).isEmpty();
@@ -130,41 +127,9 @@ class HttpHetznerClientTest {
   }
 
   @Test
-  void createsListsAndDeletesASpreadPlacementGroup() {
-    var client = client("t0ken");
-
-    var group = client.createPlacementGroup("user-1", Map.of("user-id", "1"));
-    assertThat(hetzner.groups.get(group.id()).path("type").asString()).isEqualTo("spread");
-
-    var server =
-        client.createServer(
-            new ServerSpec(
-                "vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), group.id(), Map.of()));
-    assertThat(hetzner.createBodies.getLast().path("placement_group").asLong())
-        .isEqualTo(group.id());
-
-    var listed = client.placementGroups("user-id=1");
-    assertThat(listed).extracting(PlacementGroup::name).containsExactly("user-1");
-    assertThat(listed.getFirst().servers()).containsExactly(server.id());
-    assertThat(client.placementGroups("user-id=2")).isEmpty();
-
-    client.deletePlacementGroup(group.id());
-    assertThat(hetzner.groups).isEmpty();
-    client.deletePlacementGroup(group.id());
-  }
-
-  @Test
-  void sendsNoPlacementGroupWhenThereIsNone() {
-    client("t0ken")
-        .createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), null, Map.of()));
-    assertThat(hetzner.createBodies.getLast().has("placement_group")).isFalse();
-  }
-
-  @Test
   void reportsAFailedCreate() {
     hetzner.status = 422;
-    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), null, Map.of());
+    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of());
     var client = client("t0ken");
 
     assertThatThrownBy(() -> client.createServer(spec))

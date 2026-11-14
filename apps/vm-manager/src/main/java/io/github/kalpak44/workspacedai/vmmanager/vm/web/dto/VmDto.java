@@ -13,7 +13,7 @@ public record VmDto(
     @Schema(description = "The workspace it runs", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
         UUID workspaceId,
     @Schema(
-            description = "Who owns the workspace; their VMs are spread across physical hosts",
+            description = "Who owns the workspace",
             example = "00000000-0000-0000-0000-000000000001")
         UUID userId,
     @Schema(description = "Hetzner server type", example = "cx23") String serverType,

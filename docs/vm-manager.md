@@ -30,15 +30,11 @@ offered. A missing or malformed `workspaceId` or `userId`, or a `serverType` tha
 Hetzner refusing answers `502` and keeps nothing. Deleting a VM deletes its server, disk included; a server already
 gone counts as deleted, and a VM whose server could not be deleted is kept so the delete can be retried.
 
-### Labels and placement groups
+### Labels
 
 Every server is labelled `managed-by=workspaced-ai-vm-manager`, `vm-id`, `workspace-id` and `user-id`, so any server can
-be traced to its workspace from the Hetzner console (`label_selector=workspace-id=<uuid>`).
-
-Each user's servers share a **spread placement group**, `user-<userId>`: Hetzner puts every server in it on a different
-physical host, so one host failing takes down at most one of that user's workspaces. The group is created with the
-user's first VM and deleted with their last; it costs nothing. Hetzner caps a spread group at 10 servers, and an 11th
-VM is created outside it, with a warning in the log, rather than refused.
+be traced to its workspace and its owner from the Hetzner console (`label_selector=workspace-id=<uuid>`), and the VM
+manager can rebuild its inventory from them.
 
 ### Restarts
 
@@ -72,7 +68,7 @@ the account a root password for each one instead.
 - `hetzner` — `HetznerClient`, the Hetzner Cloud API as this app uses it, and `HttpHetznerClient`, its HTTP
   implementation over an injected `HttpClient`.
 - `vm` — the domain: `Vm` and `VmOption`, `VmRepository` (in memory, rebuilt from Hetzner by `HetznerVmInventory`),
-  `UserPlacementGroups`, and `VmService` / `VmOptionService`.
+  and `VmService` / `VmOptionService`.
   Services take a `Clock`, throw domain exceptions, and publish each change as a `VmEvent`; none of them knows HTTP.
 - `vm.web` — controllers that only map between DTOs (`vm.web.dto`) and the services, `ApiExceptionHandler` turning the
   domain exceptions into problem details, and `VmEventStream`, which sends each `VmEvent` to every open stream through

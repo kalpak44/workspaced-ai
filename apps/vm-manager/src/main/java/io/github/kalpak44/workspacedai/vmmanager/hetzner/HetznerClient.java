@@ -1,7 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.hetzner;
 
 import java.util.List;
-import java.util.Map;
 
 /**
  * The Hetzner Cloud API, as far as this app uses it. An interface so the services above it are
@@ -28,13 +27,4 @@ public interface HetznerClient {
 
   /** A server already gone counts as deleted, so a retried delete succeeds. */
   void deleteServer(long id);
-
-  /** Every placement group carrying the label, as {@link #servers} selects them. */
-  List<PlacementGroup> placementGroups(String labelSelector);
-
-  /** A spread group: each server in it lands on a different physical host. */
-  PlacementGroup createPlacementGroup(String name, Map<String, String> labels);
-
-  /** A group already gone counts as deleted. Hetzner refuses to delete one still in use. */
-  void deletePlacementGroup(long id);
 }

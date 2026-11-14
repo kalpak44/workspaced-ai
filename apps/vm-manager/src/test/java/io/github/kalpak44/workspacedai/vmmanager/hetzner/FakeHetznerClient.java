@@ -9,16 +9,14 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * A HetznerClient that keeps servers and placement groups in memory, for testing the services above
- * it without HTTP. Setting {@link #failure} makes every call throw it.
+ * A HetznerClient that keeps servers in memory, for testing the services above it without HTTP.
+ * Setting {@link #failure} makes every call throw it.
  */
 public class FakeHetznerClient implements HetznerClient {
 
   public final Map<Long, Server> servers = new ConcurrentHashMap<>();
-  public final Map<Long, PlacementGroup> groups = new ConcurrentHashMap<>();
   public final List<ServerSpec> created = new ArrayList<>();
   public final List<Long> deleted = new ArrayList<>();
-  public final List<Long> deletedGroups = new ArrayList<>();
   public volatile List<ServerType> types = List.of();
   public volatile HetznerException failure;
   public int typeCalls;
@@ -54,9 +52,6 @@ public class FakeHetznerClient implements HetznerClient {
         id,
         new Server(
             id, spec.name(), spec.serverType(), ip, Instant.EPOCH, Map.copyOf(spec.labels())));
-    if (spec.placementGroup() != null) {
-      groups.computeIfPresent(spec.placementGroup(), (_, g) -> withServers(g, add(g, id)));
-    }
     return new CreatedServer(id, ip);
   }
 
@@ -65,38 +60,6 @@ public class FakeHetznerClient implements HetznerClient {
     fail();
     deleted.add(id);
     servers.remove(id);
-    groups.replaceAll((_, g) -> withServers(g, g.servers().stream().filter(s -> s != id).toList()));
-  }
-
-  @Override
-  public List<PlacementGroup> placementGroups(String labelSelector) {
-    fail();
-    return groups.values().stream().filter(g -> matches(g.labels(), labelSelector)).toList();
-  }
-
-  @Override
-  public PlacementGroup createPlacementGroup(String name, Map<String, String> labels) {
-    fail();
-    var group = new PlacementGroup(ids.incrementAndGet(), name, List.of(), Map.copyOf(labels));
-    groups.put(group.id(), group);
-    return group;
-  }
-
-  @Override
-  public void deletePlacementGroup(long id) {
-    fail();
-    deletedGroups.add(id);
-    groups.remove(id);
-  }
-
-  private static List<Long> add(PlacementGroup group, long server) {
-    var servers = new ArrayList<>(group.servers());
-    servers.add(server);
-    return servers;
-  }
-
-  private static PlacementGroup withServers(PlacementGroup group, List<Long> servers) {
-    return new PlacementGroup(group.id(), group.name(), List.copyOf(servers), group.labels());
   }
 
   private void fail() {

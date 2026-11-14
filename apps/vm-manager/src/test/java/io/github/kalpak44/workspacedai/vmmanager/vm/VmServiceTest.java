@@ -40,7 +40,6 @@ class VmServiceTest {
               "ubuntu-24.04",
               List.of("ops"),
               Duration.ofSeconds(1)),
-          new UserPlacementGroups(hetzner),
           () -> inventoryLoaded,
           published::add,
           clock);
@@ -66,17 +65,6 @@ class VmServiceTest {
                 "workspace-id", workspace.toString(),
                 "user-id", user.toString()));
     assertThat(vm.userId()).isEqualTo(user);
-  }
-
-  @Test
-  void spreadsAUsersVmsThroughOnePlacementGroupOfTheirs() {
-    service.create(workspace, user, null);
-    service.create(UUID.randomUUID(), user, null);
-    service.create(UUID.randomUUID(), UUID.randomUUID(), null);
-
-    var groups = hetzner.created.stream().map(spec -> spec.placementGroup()).toList();
-    assertThat(groups.get(0)).isNotNull().isEqualTo(groups.get(1)).isNotEqualTo(groups.get(2));
-    assertThat(hetzner.groups.get(groups.get(0)).name()).isEqualTo("user-" + user);
   }
 
   @Test
@@ -171,20 +159,8 @@ class VmServiceTest {
     service.delete(vm.id());
 
     assertThat(hetzner.deleted).containsExactly(vm.serverId());
-    assertThat(hetzner.groups).isEmpty();
     assertThat(published).last().isEqualTo(new VmEvent.Deleted(vm.id()));
     assertThatThrownBy(() -> service.get(vm.id())).isInstanceOf(VmNotFoundException.class);
-  }
-
-  @Test
-  void keepsTheUsersGroupWhileAnotherOfTheirVmsIsInIt() {
-    var first = service.create(workspace, user, null).vm();
-    service.create(UUID.randomUUID(), user, null);
-
-    service.delete(first.id());
-
-    assertThat(hetzner.groups).hasSize(1);
-    assertThat(hetzner.deletedGroups).isEmpty();
   }
 
   @Test

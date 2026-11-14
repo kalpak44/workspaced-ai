@@ -8,7 +8,7 @@ import java.util.UUID;
  * change without changing the contract.
  *
  * @param workspaceId the workspace it runs; also a label on its Hetzner server
- * @param userId who owns that workspace; their VMs share one spread placement group
+ * @param userId who owns that workspace; also a label on its Hetzner server
  * @param serverId the Hetzner server it runs as
  * @param ipv4 its public address; null until it has one
  * @param lastSeenAt when it last reported ready or a heartbeat; null before it has

@@ -73,9 +73,6 @@ public class HttpHetznerClient implements HetznerClient {
     body.put("start_after_create", true);
     var keys = body.putArray("ssh_keys");
     spec.sshKeys().forEach(keys::add);
-    if (spec.placementGroup() != null) {
-      body.put("placement_group", spec.placementGroup());
-    }
     var labels = body.putObject("labels");
     spec.labels().forEach(labels::put);
     var response =
@@ -94,44 +91,6 @@ public class HttpHetznerClient implements HetznerClient {
       send("/servers/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 200);
     } catch (Gone _) {
       // Already deleted, by an earlier attempt or by hand.
-    }
-  }
-
-  @Override
-  public List<PlacementGroup> placementGroups(String labelSelector) {
-    var groups = new ArrayList<PlacementGroup>();
-    var selector = URLEncoder.encode(labelSelector, StandardCharsets.UTF_8);
-    var page = 1;
-    while (page > 0) {
-      var body = get("/placement_groups?per_page=50&label_selector=" + selector + "&page=" + page);
-      body.path("placement_groups").forEach(group -> groups.add(placementGroup(group)));
-      page = nextPage(body);
-    }
-    return List.copyOf(groups);
-  }
-
-  @Override
-  public PlacementGroup createPlacementGroup(String name, Map<String, String> labels) {
-    var body = json.createObjectNode();
-    body.put("name", name);
-    body.put("type", "spread");
-    var labelNode = body.putObject("labels");
-    labels.forEach(labelNode::put);
-    var response =
-        send(
-            "/placement_groups",
-            HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
-            "POST",
-            201);
-    return placementGroup(response.path("placement_group"));
-  }
-
-  @Override
-  public void deletePlacementGroup(long id) {
-    try {
-      send("/placement_groups/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 204);
-    } catch (Gone _) {
-      // Already deleted.
     }
   }
 
@@ -196,16 +155,6 @@ public class HttpHetznerClient implements HetznerClient {
         .properties()
         .forEach(e -> labels.put(e.getKey(), e.getValue().asString()));
     return Map.copyOf(labels);
-  }
-
-  private static PlacementGroup placementGroup(JsonNode group) {
-    var servers = new ArrayList<Long>();
-    group.path("servers").forEach(id -> servers.add(id.asLong()));
-    return new PlacementGroup(
-        group.path("id").asLong(),
-        group.path("name").asString(),
-        List.copyOf(servers),
-        labels(group));
   }
 
   private static Server server(JsonNode server) {

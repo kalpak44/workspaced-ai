@@ -8,7 +8,6 @@ import java.util.Map;
  *
  * @param name a hostname, unique within the project
  * @param sshKeys names or ids of project SSH keys to install; may be empty
- * @param placementGroup the spread group to put it in; null for none
  * @param labels what the server is for; the VM manager rebuilds its inventory from them
  */
 public record ServerSpec(
@@ -17,5 +16,4 @@ public record ServerSpec(
     String location,
     String image,
     List<String> sshKeys,
-    Long placementGroup,
     Map<String, String> labels) {}

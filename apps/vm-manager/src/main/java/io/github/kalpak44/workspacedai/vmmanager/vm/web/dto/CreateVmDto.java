@@ -13,9 +13,7 @@ public record CreateVmDto(
         @NotNull
         UUID workspaceId,
     @Schema(
-            description =
-                "Who owns the workspace. Each user's VMs share a spread placement group, so no "
-                    + "two of them sit on one physical host",
+            description = "Who owns the workspace; kept as a label on its Hetzner server",
             example = "00000000-0000-0000-0000-000000000001")
         @NotNull
         UUID userId,
