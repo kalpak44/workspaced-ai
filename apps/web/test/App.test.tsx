@@ -32,6 +32,9 @@ async function renderLoaded() {
   render(<App />);
   // The sidebar's entry; a breadcrumb may name the workspace too.
   await screen.findAllByRole("button", { name: "Starter" });
+  // The status stream opens in an effect after the list loads, so wait for it before
+  // callers emit events; otherwise an emit can race the subscription.
+  await waitFor(() => expect(() => FakeEventSource.latest()).not.toThrow());
 }
 
 const heading = () => screen.getByRole("heading", { level: 1 });
