@@ -23,8 +23,7 @@ import java.util.stream.Collectors;
 /**
  * Each workspace on a Hetzner VM of its own, created, restarted and deleted through the VM manager,
  * which also keeps its secrets and harness environment in Vault for the VM's supervisor to start
- * the harness with. The harness is reached through the agent hub's tunnel to the VM. Nothing
- * publishes a web server yet.
+ * the harness with. The harness and public nginx are reached through agent-hub tunnels.
  */
 public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
@@ -68,12 +67,12 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
   @Override
   public void publish(UUID workspaceId, String label) {
-    // Nothing routes to a VM yet.
+    // Public names live in WebDomainStore; the gateway resolves them to the VM tunnel.
   }
 
   @Override
   public void unpublish(UUID workspaceId) {
-    // No route was made.
+    // Domain removal is persisted by WebServerService; no runtime route is needed.
   }
 
   @Override

@@ -67,7 +67,10 @@ public class WebServerRequests {
     }
     String result;
     try {
-      if (OFF.equals(request)) {
+      if (request.matches("(?:add|disable|remove) .+")) {
+        var parts = request.split(" ", 2);
+        result = service.domainForAgent(workspaceId, parts[0], parts[1]);
+      } else if (OFF.equals(request)) {
         service.disableForAgent(workspaceId);
         result = OFF;
       } else if (!request.matches(WebServerService.NAME)) {

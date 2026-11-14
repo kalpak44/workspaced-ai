@@ -80,3 +80,53 @@ The account menu links to Swagger at `/api/v1/swagger-ui` without polling the AP
 The terminal uses an ANSI color palette on a dark background. The harness image sets a color-capable terminal type
 and installs an interactive Bash profile with a colored prompt and `ls` output. Existing pods need the rebuilt
 harness image before the shell defaults change.
+
+
+### Multiple public addresses
+
+Settings → Web server → Public addresses adds independently enabled names, for example
+`https://box-site.workspaced.online/` and `https://box-api.workspaced.online/`.
+Disabling an address reserves its name; removing it releases the name. Other addresses
+continue working. Existing single web-server names migrate automatically.
+
+Every address terminates TLS at the public gateway and reaches the same workspace nginx
+on port **80** through agent-hub and the VM supervisor. The original `Host`, request path,
+query, visitor authorization, and WebSocket upgrades are retained. The harness password is
+used only for harness traffic. An older supervisor rejects the new web exchange types.
+The VM exposes nginx only on its loopback binding (`127.0.0.1:8080` → container `80`).
+
+Users own `~/.config/workspaced/web/nginx.conf`. For example, add one server per app:
+
+```nginx
+server {
+    listen 80;
+    server_name box-site.workspaced.online;
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection $connection_upgrade;
+    }
+}
+```
+
+Keep these inside the existing `http` block and use `web-server reload` to validate/apply.
+Another server block can route `box-api.workspaced.online` to another local port.
+With agent access enabled, `web-server publish-domain <name>`, `disable-domain <name>`,
+and `remove-domain <name>` manage additional addresses. Existing `publish` and `unpublish`
+continue to manage the primary address.
+
+The collection API is `GET /workspaces/{id}/web-server/domains`,
+`PUT /workspaces/{id}/web-server/domains/{name}` with `{"enabled":true|false}`, and
+`DELETE /workspaces/{id}/web-server/domains/{name}`. Workspace ownership is required;
+invalid names return 400, global name conflicts return 409, and deleting another
+workspace's address returns 404. Name uniqueness is enforced by PostgreSQL and deletion
+of a workspace cascades to all its domain records.
+
+Deploy the API, agent-hub, gateway, harness and supervisor together. Existing VM snapshots
+pin the supervisor digest, so rebuild the `workspace-vm` snapshot after publishing the new
+supervisor. Existing VMs also need that supervisor update; restarting only the harness does
+not replace the VM's pinned supervisor. Existing persisted nginx configs are migrated from
+`listen 8080;` to `listen 80;` on harness startup.

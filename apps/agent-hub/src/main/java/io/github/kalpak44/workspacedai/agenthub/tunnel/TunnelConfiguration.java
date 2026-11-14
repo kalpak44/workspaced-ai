@@ -30,7 +30,8 @@ public class TunnelConfiguration {
     mapping.setUrlMap(
         Map.of(
             "/agent/tunnel", endpoint(workers, workers, handshake),
-            "/internal/vms/*/harness/**", endpoint(harness, harness, handshake)));
+            "/internal/vms/*/harness/**", endpoint(harness, harness, handshake),
+            "/internal/vms/*/web/**", endpoint(harness, harness, handshake)));
     mapping.setWebSocketUpgradeMatch(true);
     mapping.setOrder(Ordered.HIGHEST_PRECEDENCE);
     return mapping;

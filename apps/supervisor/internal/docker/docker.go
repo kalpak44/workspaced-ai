@@ -54,6 +54,7 @@ type ContainerSpec struct {
 }
 
 type HostConfig struct {
+	Sysctls        map[string]string
 	Mounts         []Mount
 	PortBindings   map[string][]PortBinding
 	RestartPolicy  RestartPolicy

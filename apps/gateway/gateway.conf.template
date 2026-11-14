@@ -1,6 +1,5 @@
-# WORKSPACE_NAMESPACE is the namespace the workspaces' Services are in, and DNS_RESOLVER
-# the cluster's DNS. The variable in proxy_pass makes nginx look each name up per request
-# through that resolver, rather than once at start.
+# Resolve enabled domain names through API_URL, then relay through AGENT_HUB_URL.
+# DNS_RESOLVER is the cluster DNS; upstream service names are resolved per request.
 resolver ${DNS_RESOLVER} valid=10s ipv6=off;
 
 map $http_upgrade $connection_upgrade {
@@ -33,28 +32,41 @@ server {
 
 server {
   listen 8080;
-  # The first label, box-<name>, is the name of the workspace's Service too, so it passes
-  # through unchanged; the domain is whatever the route sends here. Any other host falls to
-  # the server above.
-  server_name ~^(?<service>box-[a-z0-9-]+)\.;
+  # Only box- names may resolve to a workspace. The API owns the name-to-VM mapping.
+  server_name ~^box-(?<workspace_name>[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)\.;
   client_max_body_size 100m;
 
   location / {
-    proxy_pass http://$service.${WORKSPACE_NAMESPACE}.svc.cluster.local;
+    auth_request /_resolve;
+    auth_request_set $workspace_target $upstream_http_x_workspace_target;
+    proxy_pass ${AGENT_HUB_URL}$workspace_target$request_uri;
     proxy_http_version 1.1;
     proxy_set_header Host $host;
-    # The ingress set these from the visitor; pass them on rather than add this hop.
-    proxy_set_header X-Forwarded-For $http_x_forwarded_for;
+    # Internal hub routes refuse forwarded ingress headers. Host still identifies the site.
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header X-Forwarded-Host "";
+    proxy_set_header X-Real-IP "";
     proxy_set_header X-Forwarded-Proto https;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_read_timeout 1h;
   }
 
-  # A name with no Service does not resolve, and a stopped workspace's Service has no
-  # endpoint. nginx reports both as 502, which reads as an outage, not as nothing here.
+  location = /_resolve {
+    internal;
+    proxy_pass ${API_URL}/api/v1/internal/web-domains/$workspace_name;
+    proxy_pass_request_body off;
+    proxy_set_header Content-Length "";
+    proxy_set_header Authorization "";
+    proxy_set_header Cookie "";
+    proxy_set_header X-Forwarded-For "";
+    proxy_set_header X-Forwarded-Host "";
+    proxy_set_header X-Real-IP "";
+  }
+
+  # Missing, disabled and unreachable workspaces get the same friendly 404.
   # A named location, so a workspace's own /404.html is never shadowed.
-  error_page 502 504 =404 @nothing;
+  error_page 401 403 500 502 503 504 =404 @nothing;
   location @nothing {
     root /usr/share/nginx/gateway;
     try_files /404.html =404;

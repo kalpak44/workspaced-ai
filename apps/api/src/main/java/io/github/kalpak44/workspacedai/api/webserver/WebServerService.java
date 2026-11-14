@@ -18,29 +18,29 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.server.ResponseStatusException;
 
 /**
- * Turns a workspace's web server on under a public name and off again. The name is claimed in the
- * database first, where the unique constraint decides who gets it, and only then is the harness
- * asked to start nginx and the runtime to make it reachable by that name.
+ * Owns each workspace's public domain names. Names are claimed in PostgreSQL before nginx starts;
+ * the gateway resolves only enabled names. The singular API remains compatible with older clients
+ * and manages the primary name, while the collection manages independent domains.
  */
 @Service
 public class WebServerService {
 
   /**
    * One DNS label, so the name is exactly one level under the domain's wildcard certificate, and
-   * short enough that box-<name> stays within the 63 characters of a label and a Service name.
+   * short enough that box-<name> stays within the 63 characters of a DNS label.
    */
   static final String NAME = "^[a-z0-9](?:[a-z0-9-]{0,57}[a-z0-9])?$";
 
   /**
    * Every public host is box-<name>, which is all the gateway routes, so no name can ever stand for
-   * another host under the domain. The label is the Service's name too, so the gateway in
-   * apps/gateway/gateway.conf.template passes it through unchanged.
+   * another host under the domain. The gateway resolves its name through the API.
    */
   static final String HOST_PREFIX = "box-";
 
   private static final Logger LOG = LoggerFactory.getLogger(WebServerService.class);
 
   private final WorkspaceRepository workspaces;
+  private final WebDomainStore domains;
   private final WorkspaceRuntime runtime;
   private final Harness harness;
   private final ClusterLocks locks;
@@ -51,7 +51,9 @@ public class WebServerService {
       WorkspaceRuntime runtime,
       Harness harness,
       ClusterLocks locks,
-      WebServerProperties properties) {
+      WebServerProperties properties,
+      WebDomainStore domains) {
+    this.domains = domains;
     this.workspaces = workspaces;
     this.runtime = runtime;
     this.harness = harness;
@@ -68,8 +70,12 @@ public class WebServerService {
   public WebServer setAgentAllowed(UUID workspaceId, boolean allowed) {
     workspace(workspaceId);
     offered();
-    workspaces.updateWebServerAgentAllowed(workspaceId, allowed);
-    return get(workspaceId);
+    return locks.call(
+        lock(workspaceId),
+        () -> {
+          workspaces.updateWebServerAgentAllowed(workspaceId, allowed);
+          return get(workspaceId);
+        });
   }
 
   /** As {@link #enable}, for the workspace's own agent, which the user has to have allowed. */
@@ -82,6 +88,20 @@ public class WebServerService {
   void disableForAgent(UUID workspaceId) {
     agentAllowed(workspaceId);
     disable(workspaceId);
+  }
+
+  String domainForAgent(UUID workspaceId, String operation, String name) {
+    agentAllowed(workspaceId);
+    if (!name.matches(NAME))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid domain name");
+    switch (operation) {
+      case "add" -> saveDomain(workspaceId, name, true);
+      case "disable" -> saveDomain(workspaceId, name, false);
+      case "remove" -> removeDomain(workspaceId, name);
+      default ->
+          throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "unknown domain operation");
+    }
+    return operation + " " + url(name);
   }
 
   private void agentAllowed(UUID workspaceId) {
@@ -114,9 +134,11 @@ public class WebServerService {
     return locks.call(
         lock(workspaceId),
         () -> {
-          var previous = workspace(workspaceId).getWebServerName();
+          var previous = primaryName(workspaceId);
+          var existing = domains.find(name).orElse(null);
+          if (existing != null && !existing.workspaceId().equals(workspaceId)) throw taken(name);
           try {
-            workspaces.updateWebServerName(workspaceId, name);
+            if (existing == null) domains.claim(workspaceId, name);
           } catch (DataIntegrityViolationException e) {
             throw taken(name);
           }
@@ -128,9 +150,11 @@ public class WebServerService {
             }
             runtime.publish(workspaceId, label(name));
           } catch (RuntimeException e) {
+            if (existing == null) domains.delete(name);
             rollBack(workspaceId, endpoint, previous);
             throw e;
           }
+          domains.primary(workspaceId, name);
           return get(workspaceId);
         });
   }
@@ -142,9 +166,13 @@ public class WebServerService {
     locks.run(
         lock(workspaceId),
         () -> {
-          harness.disableWebServer(endpoint);
-          runtime.unpublish(workspaceId);
-          workspaces.updateWebServerName(workspaceId, null);
+          var name = primaryName(workspaceId);
+          if (domains.list(workspaceId).stream()
+              .noneMatch(d -> d.enabled() && !d.primaryDomain())) {
+            harness.disableWebServer(endpoint);
+            runtime.unpublish(workspaceId);
+          }
+          if (name != null) domains.delete(name);
         });
   }
 
@@ -154,9 +182,11 @@ public class WebServerService {
    */
   private void rollBack(UUID workspaceId, HarnessEndpoint endpoint, String previous) {
     try {
-      workspaces.updateWebServerName(workspaceId, previous);
-      if (previous == null) {
+      if (previous == null
+          && domains.list(workspaceId).stream().noneMatch(WebDomainStore.Domain::enabled)) {
         harness.disableWebServer(endpoint);
+      } else if (previous != null) {
+        harness.enableWebServer(endpoint, URI.create(url(previous)));
       }
     } catch (RuntimeException e) {
       LOG.warn("could not roll back the web server of workspace {}", workspaceId, e);
@@ -167,12 +197,84 @@ public class WebServerService {
     if (!properties.enabled()) {
       return new WebServer(null, null, null, false);
     }
-    var name = workspace.getWebServerName();
+    var name = primaryName(workspace.getId());
     return new WebServer(
         properties.domain(),
         name,
         name == null ? null : url(name),
         workspace.isWebServerAgentAllowed());
+  }
+
+  private String primaryName(UUID workspaceId) {
+    return domains.list(workspaceId).stream()
+        .filter(d -> d.primaryDomain() && d.enabled())
+        .map(WebDomainStore.Domain::name)
+        .findFirst()
+        .orElse(null);
+  }
+
+  public record Domain(String name, String url, boolean enabled) {}
+
+  public java.util.List<Domain> domains(UUID workspaceId) {
+    workspace(workspaceId);
+    return domains.list(workspaceId).stream()
+        .map(d -> new Domain(d.name(), url(d.name()), d.enabled()))
+        .toList();
+  }
+
+  public java.util.List<Domain> saveDomain(UUID workspaceId, String name, boolean enabled) {
+    workspace(workspaceId);
+    offered();
+    if (!name.matches(NAME))
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "invalid domain name");
+    if (properties.reserved().contains(name)) throw taken(name);
+    return locks.call(
+        lock(workspaceId),
+        () -> {
+          var previous = domains.find(name).orElse(null);
+          if (previous != null && !previous.workspaceId().equals(workspaceId)) throw taken(name);
+          try {
+            if (previous == null) domains.claim(workspaceId, name);
+          } catch (DataIntegrityViolationException e) {
+            throw taken(name);
+          }
+          try {
+            if (enabled && !harness.enableWebServer(endpoint(workspaceId), URI.create(url(name)))) {
+              throw new ResponseStatusException(
+                  HttpStatus.CONFLICT, "restart the workspace to update its harness");
+            }
+            // Disabling a domain removes only its route. nginx and the other domains keep running.
+            domains.enabled(name, enabled);
+          } catch (RuntimeException e) {
+            if (previous == null) domains.delete(name);
+            throw e;
+          }
+          return domains(workspaceId);
+        });
+  }
+
+  public void removeDomain(UUID workspaceId, String name) {
+    workspace(workspaceId);
+    locks.run(
+        lock(workspaceId),
+        () -> {
+          var domain = domains.find(name).orElse(null);
+          if (domain != null && !domain.workspaceId().equals(workspaceId)) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no such domain");
+          }
+          if (domain != null) domains.delete(name);
+        });
+  }
+
+  /** Internal gateway lookup; only enabled domains may acquire a tunnel. */
+  public String resolveDomain(String name) {
+    offered();
+    var domain =
+        domains
+            .find(name)
+            .filter(WebDomainStore.Domain::enabled)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND));
+    return endpoint(domain.workspaceId()).baseUrl().getPath().replaceFirst("/harness$", "/web");
   }
 
   private static String label(String name) {

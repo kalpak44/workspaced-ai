@@ -10,6 +10,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -149,6 +150,10 @@ func exchange(t *testing.T, harnessURL string, password func() string, head cont
 	proxy, err := NewProxy(harnessURL, password, l.logger())
 	if err != nil {
 		t.Fatal(err)
+	}
+	if head.Type == "web-http" || head.Type == "web-ws" {
+		proxy.WebBase, _ = url.Parse(harnessURL)
+		proxy.base, _ = url.Parse("http://127.0.0.1:1")
 	}
 	accepted := make(chan *websocket.Conn, 1)
 	hub := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -525,4 +530,56 @@ func TestWebSocketRefusedByHarness(t *testing.T) {
 		t.Errorf("got %v", c)
 	}
 	h.waitClosed()
+}
+
+func TestPublicWebKeepsHostAndVisitorAuthWithoutHarnessCredentials(t *testing.T) {
+	web := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "box-site.workspaced.test" {
+			t.Errorf("Host = %q", r.Host)
+		}
+		if r.Header.Get("Authorization") != "Bearer visitor" {
+			t.Errorf("visitor auth replaced: %q", r.Header.Get("Authorization"))
+		}
+		if r.URL.RequestURI() != "/app?q=%2F" {
+			t.Errorf("URI = %q", r.URL.RequestURI())
+		}
+		io.WriteString(w, "site")
+	}))
+	defer web.Close()
+	h, _ := exchange(t, web.URL, fixed(testPassword), control{Type: "web-http", Method: "GET", Path: "/app?q=%2F", Headers: http.Header{"Host": {"box-site.workspaced.test"}, "Authorization": {"Bearer visitor"}}})
+	h.send(control{Type: "end"})
+	head, body := readHTTP(t, h)
+	if head["status"] != float64(200) || body != "site" {
+		t.Fatalf("%v %q", head, body)
+	}
+}
+
+func TestPublicWebSocketKeepsHostAndVisitorAuth(t *testing.T) {
+	web := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Host != "box-app.workspaced.test" || r.Header.Get("Authorization") != "Bearer visitor" {
+			t.Errorf("public socket headers changed: Host=%q auth=%q", r.Host, r.Header.Get("Authorization"))
+		}
+		c, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		defer c.CloseNow()
+		kind, data, err := c.Read(context.Background())
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		_ = c.Write(context.Background(), kind, data)
+		c.Close(websocket.StatusNormalClosure, "done")
+	}))
+	defer web.Close()
+	h, _ := exchange(t, web.URL, fixed(testPassword), control{Type: "web-ws", Path: "/socket", Headers: http.Header{"Host": {"box-app.workspaced.test"}, "Authorization": {"Bearer visitor"}}})
+	if head := h.nextControl(); head["type"] != "open" {
+		t.Fatalf("socket did not open: %v", head)
+	}
+	h.sendBytes([]byte("\x01hello"))
+	if message := h.next(); string(message.data) != "\x01hello" {
+		t.Fatalf("socket echo %q", message.data)
+	}
 }

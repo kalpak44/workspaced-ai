@@ -6,8 +6,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * @param domain each workspace's web server is public as box-<name> under it; blank turns the web
- *     server off, as it is locally. The API only names Services after these names; routing the
- *     domain to them is the cluster's job.
+ *     server off, as it is locally. The API claims names in PostgreSQL and the gateway resolves
+ *     enabled names to their VM tunnels.
  * @param reserved names no workspace may take: "off", which the agent's request uses to turn the
  *     web server off. The box- prefix already keeps every name clear of the domain's own hosts.
  */

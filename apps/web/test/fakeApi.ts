@@ -106,6 +106,7 @@ export function installFakeApi(
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
   // Each workspace's web server name; a name in `takenNames` belongs to some other workspace.
   const webServers = new Map<string, string>();
+  const webDomains = new Map<string, Map<string, boolean>>();
   const webServerAgents = new Set<string>();
   const takenNames = new Set<string>(["taken"]);
   const mcp = new Map<string, McpServer[]>();
@@ -421,6 +422,19 @@ export function installFakeApi(
     if (index < 0) return json({}, 404);
     const method = init?.method ?? "GET";
     if (kind === "web-server") {
+      if (name === "domains" || name?.startsWith("domains/")) {
+        const all = webDomains.get(workspaceId) ?? new Map<string, boolean>();
+        webDomains.set(workspaceId, all);
+        const domainName = name.slice("domains/".length);
+        if (method === "PUT") {
+          if (state.harnessDown) return json({}, 503);
+          if (domainName === "taken") return json({ detail: "name taken" }, 409);
+          all.set(domainName, Boolean(JSON.parse(String(init?.body)).enabled));
+        }
+        if (method === "DELETE") all.delete(domainName);
+        return json([...all].map(([name, enabled]) => ({ name, enabled, url: `https://box-${name}.workspaced.test/` })));
+      }
+
       if (name === "agent") {
         const { allowed } = JSON.parse(String(init?.body)) as { allowed: boolean };
         if (allowed) webServerAgents.add(workspaceId);

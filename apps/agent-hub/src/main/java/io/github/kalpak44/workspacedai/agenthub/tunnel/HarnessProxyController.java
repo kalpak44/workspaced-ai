@@ -47,7 +47,7 @@ public class HarnessProxyController {
   }
 
   @RequestMapping(
-      path = "/internal/vms/{vmId}/harness/**",
+      path = {"/internal/vms/{vmId}/harness/**", "/internal/vms/{vmId}/web/**"},
       method = {
         RequestMethod.GET,
         RequestMethod.HEAD,
@@ -63,10 +63,21 @@ public class HarnessProxyController {
     var target = HarnessTarget.of(request, vmId);
     var head =
         json.createObjectNode()
-            .put("type", "http")
+            .put("type", target.web() ? "web-http" : "http")
             .put("method", request.getMethod())
-            .put("path", target.path());
+            .put("path", target.path())
+            .put("web", target.web());
     head.set("headers", json.valueToTree(ProxyHeaders.ofRequest(request)));
+    if (target.web()) {
+      ((tools.jackson.databind.node.ObjectNode) head.get("headers"))
+          .putArray("Host")
+          .add(request.getHeader("Host"));
+      if (request.getHeader("Authorization") != null) {
+        ((tools.jackson.databind.node.ObjectNode) head.get("headers"))
+            .putArray("Authorization")
+            .add(request.getHeader("Authorization"));
+      }
+    }
     var exchange = new Exchange();
     var worker = workers.start(target.vmId(), exchange, head);
     try {

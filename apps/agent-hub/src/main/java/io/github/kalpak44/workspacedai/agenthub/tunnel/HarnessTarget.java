@@ -10,7 +10,7 @@ import org.springframework.http.HttpStatus;
  * @param path everything after {@code /harness}, undecoded, with the query string; {@code /} when
  *     nothing follows it
  */
-record HarnessTarget(UUID vmId, String path) {
+record HarnessTarget(UUID vmId, String path, boolean web) {
 
   private static final String PREFIX = "/internal/vms/";
   private static final String HARNESS = "/harness";
@@ -22,7 +22,9 @@ record HarnessTarget(UUID vmId, String path) {
     // The raw URI, so whatever the API encoded reaches the harness encoded the same way.
     var uri = request.getRequestURI().substring(request.getContextPath().length());
     var slash = uri.indexOf('/', PREFIX.length());
-    if (!uri.startsWith(PREFIX) || slash < 0 || !uri.startsWith(HARNESS, slash)) {
+    if (!uri.startsWith(PREFIX)
+        || slash < 0
+        || !(uri.startsWith(HARNESS, slash) || uri.startsWith("/web", slash))) {
       throw notFound();
     }
     return target(request, uri, slash, uri.substring(PREFIX.length(), slash));
@@ -32,7 +34,9 @@ record HarnessTarget(UUID vmId, String path) {
   static HarnessTarget of(HttpServletRequest request, String boundVmId) {
     var uri = request.getRequestURI().substring(request.getContextPath().length());
     var slash = uri.indexOf('/', PREFIX.length());
-    if (!uri.startsWith(PREFIX) || slash < 0 || !uri.startsWith(HARNESS, slash)) {
+    if (!uri.startsWith(PREFIX)
+        || slash < 0
+        || !(uri.startsWith(HARNESS, slash) || uri.startsWith("/web", slash))) {
       throw notFound();
     }
     return target(request, uri, slash, boundVmId);
@@ -46,13 +50,14 @@ record HarnessTarget(UUID vmId, String path) {
     } catch (IllegalArgumentException _) {
       throw notFound();
     }
-    var path = uri.substring(slash + HARNESS.length());
+    var web = uri.startsWith("/web", slash);
+    var path = uri.substring(slash + (web ? 4 : HARNESS.length()));
     if (!path.isEmpty() && !path.startsWith("/")) {
       throw notFound();
     }
     var query = request.getQueryString();
     return new HarnessTarget(
-        vmId, (path.isEmpty() ? "/" : path) + (query == null ? "" : "?" + query));
+        vmId, (path.isEmpty() ? "/" : path) + (query == null ? "" : "?" + query), web);
   }
 
   private static TunnelException notFound() {

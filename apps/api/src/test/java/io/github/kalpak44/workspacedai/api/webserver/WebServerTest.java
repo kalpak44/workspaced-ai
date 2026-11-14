@@ -262,6 +262,84 @@ class WebServerTest {
     assertThat(send("PUT", workspace, "/agent", "{}").statusCode()).isEqualTo(400);
   }
 
+  @Test
+  void multipleDomainsAreIndependentAndNamesRemainReservedUntilRemoved() throws Exception {
+    assertThat(send("PUT", workspace, "/domains/site", "{\"enabled\":true}").statusCode())
+        .isEqualTo(200);
+    assertThat(send("PUT", workspace, "/domains/api", "{\"enabled\":true}").statusCode())
+        .isEqualTo(200);
+    var domains = JSON.readTree(send("GET", workspace, "/domains", null).body());
+    assertThat(domains.size()).isEqualTo(2);
+    var other = create("Other");
+    assertThat(send("PUT", other, "/domains/site", "{\"enabled\":true}").statusCode())
+        .isEqualTo(409);
+    assertThat(send("PUT", workspace, "/domains/site", "{\"enabled\":false}").statusCode())
+        .isEqualTo(200);
+    domains = JSON.readTree(send("GET", workspace, "/domains", null).body());
+    assertThat(domains.get(0).path("name").asString()).isEqualTo("api");
+    assertThat(domains.get(0).path("enabled").asBoolean()).isTrue();
+    assertThat(domains.get(1).path("enabled").asBoolean()).isFalse();
+    assertThat(send("PUT", other, "/domains/site", "{\"enabled\":true}").statusCode())
+        .isEqualTo(409);
+    assertThat(send("DELETE", other, "/domains/site", null).statusCode()).isEqualTo(404);
+    assertThat(send("DELETE", workspace, "/domains/site", null).statusCode()).isEqualTo(204);
+    assertThat(send("PUT", other, "/domains/site", "{\"enabled\":true}").statusCode())
+        .isEqualTo(200);
+    verify(runtime, never()).unpublish(any());
+  }
+
+  @Test
+  void validatesDomainsAndRollsBackAnUnusableHarness() throws Exception {
+    assertThat(send("PUT", workspace, "/domains/-invalid", "{\"enabled\":true}").statusCode())
+        .isEqualTo(400);
+    assertThat(send("PUT", workspace, "/domains/site", "{}").statusCode()).isEqualTo(400);
+    OPENCODE.shellExit = 1;
+    assertThat(send("PUT", workspace, "/domains/site", "{\"enabled\":true}").statusCode())
+        .isEqualTo(409);
+    assertThat(JSON.readTree(send("GET", workspace, "/domains", null).body()).size()).isZero();
+  }
+
+  @Test
+  void legacyNamesAndAdditionalDomainsShareOneNamespace() throws Exception {
+    assertThat(send("PUT", workspace, "{\"name\":\"main\"}").statusCode()).isEqualTo(200);
+    assertThat(send("PUT", workspace, "/domains/other", "{\"enabled\":true}").statusCode())
+        .isEqualTo(200);
+    var other = create("Other");
+    assertThat(send("PUT", other, "/domains/main", "{\"enabled\":true}").statusCode())
+        .isEqualTo(409);
+    assertThat(send("PUT", other, "{\"name\":\"other\"}").statusCode()).isEqualTo(409);
+    assertThat(send("DELETE", workspace, null).statusCode()).isEqualTo(204);
+    verify(runtime, never()).unpublish(any());
+    assertThat(JSON.readTree(send("GET", workspace, "/domains", null).body()).size()).isEqualTo(1);
+    workspaces.delete(workspace);
+    assertThat(send("PUT", other, "/domains/other", "{\"enabled\":true}").statusCode())
+        .isEqualTo(200);
+  }
+
+  @Test
+  void gatewayLookupRejectsDisabledNamesAndIngressRequests() throws Exception {
+    send("PUT", workspace, "/domains/site", "{\"enabled\":true}");
+    var uri = URI.create("http://localhost:" + port + "/api/v1/internal/web-domains/site");
+    assertThat(
+            http.send(HttpRequest.newBuilder(uri).GET().build(), BodyHandlers.ofString())
+                .statusCode())
+        .isEqualTo(204);
+    assertThat(
+            http.send(
+                    HttpRequest.newBuilder(uri)
+                        .header("X-Forwarded-For", "127.0.0.1")
+                        .GET()
+                        .build(),
+                    BodyHandlers.ofString())
+                .statusCode())
+        .isEqualTo(404);
+    send("PUT", workspace, "/domains/site", "{\"enabled\":false}");
+    assertThat(
+            http.send(HttpRequest.newBuilder(uri).GET().build(), BodyHandlers.ofString())
+                .statusCode())
+        .isEqualTo(403);
+  }
+
   private UUID create(String name) {
     return workspaces.create(TestUsers.ADMIN, name, ModelProvider.OPENROUTER, "sk-or-1", null).id();
   }

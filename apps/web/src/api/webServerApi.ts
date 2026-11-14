@@ -37,3 +37,20 @@ export async function setWebServerAgentAllowed(workspaceId: string, allowed: boo
 export async function disableWebServer(workspaceId: string): Promise<void> {
   await send(webServerUrl(workspaceId), { method: "DELETE" });
 }
+
+export interface WebDomain {
+  readonly name: string;
+  readonly url: string;
+  readonly enabled: boolean;
+}
+export async function getWebDomains(workspaceId: string): Promise<WebDomain[]> {
+  return (await send(`${webServerUrl(workspaceId)}/domains`)).json();
+}
+export async function saveWebDomain(workspaceId: string, name: string, enabled: boolean): Promise<WebDomain[]> {
+  return (await send(`${webServerUrl(workspaceId)}/domains/${encodeURIComponent(name)}`, {
+    method: "PUT", body: JSON.stringify({ enabled }),
+  })).json();
+}
+export async function removeWebDomain(workspaceId: string, name: string): Promise<void> {
+  await send(`${webServerUrl(workspaceId)}/domains/${encodeURIComponent(name)}`, { method: "DELETE" });
+}

@@ -35,15 +35,6 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Query("update WorkspaceEntity w set w.model = :model where w.id = :id")
   int updateModel(@Param("id") UUID id, @Param("model") String model);
 
-  /**
-   * Its own transaction, for a caller that must not hold one while it asks the harness. A name
-   * another workspace holds fails here, on the unique constraint.
-   */
-  @Transactional
-  @Modifying
-  @Query("update WorkspaceEntity w set w.webServerName = :name where w.id = :id")
-  int updateWebServerName(@Param("id") UUID id, @Param("name") String name);
-
   @Transactional
   @Modifying
   @Query("update WorkspaceEntity w set w.webServerAgentAllowed = :allowed where w.id = :id")

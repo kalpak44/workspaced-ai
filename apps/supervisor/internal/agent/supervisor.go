@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sync/atomic"
@@ -100,6 +101,7 @@ func (s *Supervisor) startTunnel(ctx context.Context, c *Client, log *slog.Logge
 		close(done)
 		return done
 	}
+	proxy.WebBase, _ = url.Parse("http://127.0.0.1:8080")
 	pool := &tunnel.Pool{
 		URL: c.TunnelURL(), Sign: c.SignHeaders, UserAgent: s.UserAgent, Proxy: proxy, Log: log,
 		Idle: s.TunnelIdle, Max: s.TunnelMax, Ping: s.TunnelPing,

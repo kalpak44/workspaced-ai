@@ -95,6 +95,30 @@ class TunnelRoutesTest {
   }
 
   @Test
+  void webTrafficUsesADistinctExchangeAndRetainsVisitorAuthorization() throws Exception {
+    var vm = UUID.randomUUID();
+    var worker = worker(vm, enrolled(vm));
+    var answer =
+        http.sendAsync(
+            HttpRequest.newBuilder(uri("http", "/internal/vms/" + vm + "/web/app?q=%2F"))
+                .header("Authorization", "Bearer visitor")
+                .GET()
+                .build(),
+            BodyHandlers.ofString());
+    var head = worker.nextJson();
+    assertThat(head.path("type").asString()).isEqualTo("web-http");
+    assertThat(head.path("path").asString()).isEqualTo("/app?q=%2F");
+    assertThat(head.path("headers").path("Authorization").get(0).asString())
+        .isEqualTo("Bearer visitor");
+    assertThat(head.path("headers").path("Host").get(0).asString()).startsWith("localhost:");
+    worker.nextJson();
+    worker.send("{\"type\":\"response\",\"status\":200,\"headers\":{}}");
+    worker.send("site".getBytes(StandardCharsets.UTF_8));
+    worker.send("{\"type\":\"end\"}");
+    assertThat(answer.get(5, TimeUnit.SECONDS).body()).isEqualTo("site");
+  }
+
+  @Test
   void carriesAnHttpCallWithItsHeadersAndBodiesBothWays() throws Exception {
     var vm = UUID.randomUUID();
     var worker = worker(vm, enrolled(vm));

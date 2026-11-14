@@ -43,7 +43,7 @@ type Harness struct {
 // same label already runs with exactly these values. JSON sorts the map keys and quotes
 // every string, so no value can pass for a name.
 func ConfigHash(h Harness) string {
-	data, _ := json.Marshal([]any{h.Image, h.Environment})
+	data, _ := json.Marshal([]any{h.Image, h.Environment, "web-port-80-v1"})
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
@@ -62,8 +62,9 @@ func harnessSpec(h Harness) docker.ContainerSpec {
 		Env:          env,
 		User:         "1000:1000",
 		Labels:       map[string]string{configLabel: ConfigHash(h)},
-		ExposedPorts: map[string]struct{}{harnessPort: {}},
+		ExposedPorts: map[string]struct{}{harnessPort: {}, "80/tcp": {}},
 		HostConfig: docker.HostConfig{
+			Sysctls: map[string]string{"net.ipv4.ip_unprivileged_port_start": "0"},
 			// Mounts, not Binds: Binds would create a missing socket path as a directory
 			// while the rootless Docker is still starting; Mounts fails and is retried.
 			Mounts: []docker.Mount{
@@ -71,7 +72,7 @@ func harnessSpec(h Harness) docker.ContainerSpec {
 				// The VM's rootless Docker; the harness never sees the system socket.
 				{Type: "bind", Source: "/run/workspace-docker/docker.sock", Target: "/var/run/docker.sock"},
 			},
-			PortBindings: map[string][]docker.PortBinding{harnessPort: {{HostIp: "127.0.0.1", HostPort: "4096"}}},
+			PortBindings: map[string][]docker.PortBinding{harnessPort: {{HostIp: "127.0.0.1", HostPort: "4096"}}, "80/tcp": {{HostIp: "127.0.0.1", HostPort: "8080"}}},
 			// Not unless-stopped: the daemon would start it at boot before the rootless
 			// Docker exists. The supervisor starts it instead.
 			RestartPolicy:  docker.RestartPolicy{Name: "on-failure"},

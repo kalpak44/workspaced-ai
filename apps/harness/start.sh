@@ -2,6 +2,12 @@
 # opencode writes into its config directory (a .gitignore, its lockfile), so the defaults
 # baked into the image are copied into the home, the one writable place, on start.
 set -eu
+
+# v1 web configs used 8080. The fixed VM web binding now targets nginx on 80.
+web_config="$HOME/.config/workspaced/web/nginx.conf"
+if [ -f "$web_config" ]; then
+  sed -i -E 's/(listen[[:space:]]+)8080([[:space:]]*;)/\180\2/g' "$web_config"
+fi
 mkdir -p "$HOME/.config/opencode" "$HOME/.local/bin" "$HOME/project"
 cp -R /usr/share/harness/opencode/. "$HOME/.config/opencode/"
 # The user's own instructions, every Markdown file OpenCode finds here. The first start seeds the

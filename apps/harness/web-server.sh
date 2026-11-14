@@ -28,8 +28,8 @@ case "${1:-}" in
   disable)
     rm -f "$service" "$dir/url"
     ;;
-  publish | unpublish)
-    if [ "$1" = publish ]; then
+  publish | unpublish | publish-domain | disable-domain | remove-domain)
+    if [ "$1" != unpublish ]; then
       name=${2:-}
       case "$name" in
         '' | -* | *- | *[!a-z0-9-]*)
@@ -41,6 +41,11 @@ case "${1:-}" in
     else
       name=off
     fi
+    case "$1" in
+      publish-domain) name="add $name" ;;
+      disable-domain) name="disable $name" ;;
+      remove-domain) name="remove $name" ;;
+    esac
     mkdir -p "$dir"
     rm -f "$dir/result"
     printf '%s\n' "$name" > "$dir/request"
@@ -70,7 +75,7 @@ case "${1:-}" in
     echo "nginx restarts within a few seconds; its log is ~/.local/state/workspaced/services/nginx.log"
     ;;
   *)
-    echo "usage: web-server publish <name> | unpublish | reload" >&2
+    echo "usage: web-server publish <name> | unpublish | publish-domain <name> | disable-domain <name> | remove-domain <name> | reload" >&2
     exit 2
     ;;
 esac

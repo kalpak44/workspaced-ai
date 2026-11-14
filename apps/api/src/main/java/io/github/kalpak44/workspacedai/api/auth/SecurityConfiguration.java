@@ -83,6 +83,7 @@ public class SecurityConfiguration {
   private static final int MIN_SECRET_BYTES = 32;
 
   private static final String[] PUBLIC = {
+    "/internal/web-domains/*",
     "/auth/login",
     "/auth/logout",
     "/auth/csrf",
