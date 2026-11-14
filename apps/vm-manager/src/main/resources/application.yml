@@ -1,4 +1,5 @@
-# Everything this app serves lives under /api/v1, on 8080, like the workspace API.
+# Everything this app serves lives under /api/v1, docs and health included, on 8080 like
+# the workspace API.
 server:
   servlet:
     context-path: /api/v1
@@ -9,6 +10,9 @@ spring:
   threads:
     virtual:
       enabled: true
+
+  # Errors answer as RFC 9457 problem details (application/problem+json), the shape
+  # VmApi documents for every 4xx.
   mvc:
     problemdetails:
       enabled: true

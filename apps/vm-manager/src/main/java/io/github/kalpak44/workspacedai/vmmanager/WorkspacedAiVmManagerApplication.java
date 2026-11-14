@@ -6,9 +6,9 @@ import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 
 @SpringBootApplication
 @ConfigurationPropertiesScan
-public class VmManagerApplication {
+public class WorkspacedAiVmManagerApplication {
 
   public static void main(String[] args) {
-    SpringApplication.run(VmManagerApplication.class, args);
+    SpringApplication.run(WorkspacedAiVmManagerApplication.class, args);
   }
 }

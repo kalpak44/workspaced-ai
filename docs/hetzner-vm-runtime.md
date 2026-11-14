@@ -74,31 +74,4 @@ fit the cost-focused approach.
 | CX33 — larger option | 4    | 8 GB  | 80 GB         | Builds, several services, or applications needing more memory     |
 | CX43 — later         | 8    | 16 GB | 160 GB        | Heavier builds and larger workloads                               |
 
-`GET /api/v1/vm-options` on the VM manager lists the sizes on offer, default first, with their specs and monthly
-price as Hetzner currently sells them in the configured location. Which sizes exist is configuration
-(`WORKSPACED_VM_SERVER_TYPES`, `cx23,cx33` by default); specs and prices are never restated, they come from
-Hetzner. A size Hetzner deprecates or stops selling in the location drops out of the list, and creating a VM
-with a size that is not listed answers 400. Adding CX43 is `WORKSPACED_VM_SERVER_TYPES=cx23,cx33,cx43`.
-
-## Hetzner access
-
-VMs live in their own Hetzner Cloud project, so its API token can reach nothing else. The token is a Read & Write
-one, kept in Vault at `secret/workspaced-vm-manager-secrets` under `hcloud-token`, and reaches the VM manager as
-`WORKSPACED_HETZNER_TOKEN` through an ExternalSecret. Without it the VM manager still starts, and anything that
-needs Hetzner answers 503. VMs are created in `nbg1` unless `WORKSPACED_HETZNER_LOCATION` says otherwise.
-
-To run it locally against the real project:
-
-```bash
-WORKSPACED_HETZNER_TOKEN=$(vault kv get -field=hcloud-token secret/workspaced-vm-manager-secrets) \
-  mvn -f apps/vm-manager spring-boot:run
-curl -s localhost:8080/api/v1/vm-options
-```
-
-Swagger UI is at `/api/v1/swagger-ui/index.html` and the OpenAPI document at `/api/v1/v3/api-docs`, as on the
-workspace API. With no IngressRoute, reach the cluster's copy through a port-forward:
-
-```bash
-kubectl --context k3s -n workspaced-ai port-forward svc/workspaced-ai-vm-manager 8080
-open http://localhost:8080/api/v1/swagger-ui/index.html
-```
+`GET /api/v1/vm-options` on the VM manager lists them; see [vm-manager.md](vm-manager.md).

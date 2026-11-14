@@ -8,14 +8,12 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import org.springframework.context.event.ContextClosedEvent;
 import org.springframework.context.event.EventListener;
-import org.springframework.scheduling.annotation.EnableScheduling;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /** Sends every VM change to each open event stream; the workspace API is the one listening. */
 @Component
-@EnableScheduling
 public class VmEvents {
 
   static final String STATUS = "status";
