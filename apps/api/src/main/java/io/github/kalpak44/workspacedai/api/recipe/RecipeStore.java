@@ -17,33 +17,62 @@ public class RecipeStore {
 
   /** How a page of recipes is ordered; the id breaks ties, so no recipe shows on two pages. */
   public enum Order {
-    TOP("average DESC, count DESC, r.updated_at DESC, r.id"),
-    NEWEST("COALESCE(r.published_at, r.created_at) DESC, r.id"),
-    UPDATED("r.updated_at DESC, r.id");
-
-    private final String sql;
-
-    Order(String sql) {
-      this.sql = sql;
-    }
+    TOP,
+    NEWEST,
+    UPDATED
   }
 
   /** Which recipes a listing covers, and how it narrows them. */
   public record Filter(boolean publicScope, UUID viewer, String query, String category) {}
 
   // The caller's own rating comes from the second join; avg is over every user's.
-  private static final String SELECT =
+  private static final String COLUMNS =
       """
-      SELECT r.id, r.title, r.summary, r.category, r.tags, r.visibility, r.created_at,
-             r.updated_at, r.published_at, r.author_id, u.username, u.first_name, u.last_name,
-             COALESCE(s.average, 0) AS average, COALESCE(s.count, 0) AS count,
-             m.stars AS my_rating, %s
+      r.id, r.title, r.summary, r.category, r.tags, r.visibility, r.created_at,
+      r.updated_at, r.published_at, r.author_id, u.username, u.first_name, u.last_name,
+      COALESCE(s.average, 0) AS average, COALESCE(s.count, 0) AS count,
+      m.stars AS my_rating""";
+
+  private static final String FROM =
+      """
       FROM recipe r
       JOIN app_user u ON u.id = r.author_id
       LEFT JOIN (SELECT recipe_id, AVG(stars)::float8 AS average, COUNT(*) AS count
                  FROM recipe_rating GROUP BY recipe_id) s ON s.recipe_id = r.id
       LEFT JOIN recipe_rating m ON m.recipe_id = r.id AND m.user_id = ?
       """;
+
+  // Optional filters let one prepared statement serve every combination without dynamic SQL.
+  private static final String FILTER =
+      """
+      WHERE r.visibility = CASE WHEN CAST(? AS boolean) THEN 'PUBLIC' ELSE 'PRIVATE' END
+        AND (CAST(? AS boolean) OR r.author_id = ?)
+        AND (CAST(? AS boolean) OR r.category = ?)
+        AND (CAST(? AS boolean) OR r.title ILIKE ? OR r.summary ILIKE ?
+             OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE t ILIKE ?))
+      """;
+
+  private static final String LIST =
+      "SELECT "
+          + COLUMNS
+          + ", NULL AS content\n"
+          + FROM
+          + FILTER
+          + """
+          ORDER BY
+            CASE WHEN CAST(? AS text) = 'TOP' THEN COALESCE(s.average, 0) END DESC,
+            CASE WHEN CAST(? AS text) = 'TOP' THEN COALESCE(s.count, 0) END DESC,
+            CASE WHEN CAST(? AS text) IN ('TOP', 'UPDATED') THEN r.updated_at END DESC,
+            CASE WHEN CAST(? AS text) = 'NEWEST'
+                 THEN COALESCE(r.published_at, r.created_at) END DESC,
+            r.id
+          LIMIT ? OFFSET ?
+          """;
+
+  private static final String COUNT = "SELECT COUNT(*) FROM recipe r\n" + FILTER;
+
+  private static final String FIND =
+      "SELECT " + COLUMNS + ", r.content\n" + FROM + "WHERE r.id = ?";
 
   private final JdbcTemplate jdbc;
 
@@ -54,37 +83,26 @@ public class RecipeStore {
   public List<Recipe> list(Filter filter, Order order, int limit, long offset) {
     var args = new ArrayList<Object>();
     args.add(filter.viewer());
-    var where = where(filter, args);
+    filterArgs(filter, args);
+    args.add(order.name());
+    args.add(order.name());
+    args.add(order.name());
+    args.add(order.name());
     args.add(limit);
     args.add(offset);
-    return jdbc.query(
-        SELECT.formatted("NULL AS content")
-            + where
-            + " ORDER BY "
-            + order.sql
-            + " LIMIT ? OFFSET ?",
-        (rs, _) -> recipe(rs, filter.viewer()),
-        args.toArray());
+    return jdbc.query(LIST, (rs, _) -> recipe(rs, filter.viewer()), args.toArray());
   }
 
   public long count(Filter filter) {
     var args = new ArrayList<Object>();
-    var where = where(filter, args);
-    var count =
-        jdbc.queryForObject("SELECT COUNT(*) FROM recipe r" + where, Long.class, args.toArray());
+    filterArgs(filter, args);
+    var count = jdbc.queryForObject(COUNT, Long.class, args.toArray());
     return count == null ? 0 : count;
   }
 
   /** Any recipe, whoever may see it; the caller decides that. */
   public Optional<Recipe> find(UUID id, UUID viewer) {
-    return jdbc
-        .query(
-            SELECT.formatted("r.content") + " WHERE r.id = ?",
-            (rs, _) -> recipe(rs, viewer),
-            viewer,
-            id)
-        .stream()
-        .findFirst();
+    return jdbc.query(FIND, (rs, _) -> recipe(rs, viewer), viewer, id).stream().findFirst();
   }
 
   public UUID create(UUID author, RecipeRequest.Fields fields) {
@@ -146,26 +164,20 @@ public class RecipeStore {
     jdbc.update("DELETE FROM recipe_rating WHERE recipe_id = ? AND user_id = ?", recipe, user);
   }
 
-  private static String where(Filter filter, List<Object> args) {
-    var clauses = new ArrayList<String>();
-    if (filter.publicScope()) {
-      clauses.add("r.visibility = 'PUBLIC'");
-    } else {
-      clauses.add("r.visibility = 'PRIVATE' AND r.author_id = ?");
-      args.add(filter.viewer());
-    }
-    if (filter.category() != null) {
-      clauses.add("r.category = ?");
-      args.add(filter.category());
-    }
-    if (filter.query() != null) {
-      var like = "%" + filter.query().replaceAll("[\\\\%_]", "\\\\$0") + "%";
-      clauses.add(
-          "(r.title ILIKE ? OR r.summary ILIKE ? OR EXISTS (SELECT 1 FROM unnest(r.tags) t"
-              + " WHERE t ILIKE ?))");
-      args.addAll(List.of(like, like, like));
-    }
-    return " WHERE " + String.join(" AND ", clauses);
+  private static void filterArgs(Filter filter, List<Object> args) {
+    var publicScope = filter.publicScope();
+    args.add(publicScope);
+    args.add(publicScope);
+    args.add(filter.viewer());
+    var noCategory = filter.category() == null;
+    args.add(noCategory);
+    args.add(noCategory ? "" : filter.category());
+    var noQuery = filter.query() == null;
+    args.add(noQuery);
+    var like = noQuery ? "" : "%" + filter.query().replaceAll("[\\\\%_]", "\\\\$0") + "%";
+    args.add(like);
+    args.add(like);
+    args.add(like);
   }
 
   private static Recipe recipe(ResultSet rs, UUID viewer) throws SQLException {
