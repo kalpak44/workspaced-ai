@@ -1,0 +1,25 @@
+# Everything this app serves lives under /api/v1, like the workspace API.
+server:
+  servlet:
+    context-path: /api/v1
+  port: ${WORKSPACED_VM_MANAGER_PORT:8081}
+
+spring:
+  application:
+    name: workspaced-ai-vm-manager
+  threads:
+    virtual:
+      enabled: true
+  mvc:
+    problemdetails:
+      enabled: true
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true

@@ -3,6 +3,10 @@
 Move workspaces from the current Kubernetes pod runtime to isolated Hetzner VMs, while keeping central management
 on our existing infrastructure to minimize costs.
 
+Central management is a new internal service, `workspaced-ai-vm-manager` (`apps/vm-manager`). It runs in k3s
+behind a ClusterIP Service with no IngressRoute, so only the workspace API reaches it. VMs report ready and send
+heartbeats to the public workspace API, which relays them to the VM manager.
+
 Raw plan:
 
 ```mermaid
@@ -16,10 +20,10 @@ flowchart TB
         subgraph K3S["Existing k3s — Flux CD"]
             WEB["workspaced-ai-web"]
             API["workspaced-ai-api"]
-            WORKER["NEW: provisioning worker"]
+            VMM["NEW: workspaced-ai-vm-manager<br/>Internal Service, no IngressRoute"]
         end
 
-        PG["PostgreSQL<br/>Workspaces and provisioning jobs"]
+        PG["PostgreSQL<br/>Workspaces and VM state"]
         VAULT["Vault<br/>Workspace secrets"]
         BACKUP["RustFS<br/>Workspace backups"]
 
@@ -27,7 +31,9 @@ flowchart TB
         TUNNEL --> API
         WEB --> API
         API --> PG
-        PG -->|"Jobs"| WORKER
+        API -->|"Create, delete, restart VM · relay ready and heartbeat"| VMM
+        VMM -->|"VM status events"| API
+        VMM -->|"VM state"| PG
         API -->|"Scoped secret access"| VAULT
     end
 
@@ -51,8 +57,8 @@ flowchart TB
     USER --> CF
     CF -->|"ai.workspaced.online"| TUNNEL
     CF -->|"Workspace website — direct HTTPS"| NGINX
-    WORKER -->|"Create and delete VM"| HC
+    VMM -->|"Create and delete VM"| HC
     HC --> VM
-    AGENT -->|"Outbound authenticated connection"| API
+    AGENT -->|"Outbound authenticated connection · ready and heartbeat"| API
     AGENT -->|"Presigned backup upload"| BACKUP
 ```
