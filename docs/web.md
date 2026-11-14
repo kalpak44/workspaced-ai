@@ -10,7 +10,7 @@ src/
 │                   secrets, users, theme, voice dictation, popover dismissal)
 ├── lib/            framework-free helpers (routes, relative times, token and price formatting, storage)
 └── components/
-    ├── atoms/      Logo, Button, IconButton, TextField, ChoiceCard, Spinner, Avatar, Divider — props in, markup out, no hooks
+    ├── atoms/      Logo, Button, IconButton, TextField, ChoiceCard, Spinner, Avatar, Divider, Stars, Tag, CategoryTile — props in, markup out, no hooks
     ├── molecules/  ChatComposer, ChatMessageView, EmptyState, ErrorBanner, Markdown, Menu, Modal, PageHeader,
     │               SecretItem, SessionCard, SettingsSection, ThemeSwitch, UserItem, WorkspaceItem, WorkspaceStatusIcon
     ├── organisms/  TopBar, UserMenu, Sidebar, CreateWorkspaceDialog, SessionList, ChatPanel, ChatModelPicker, ModelPanel, McpPanel,
@@ -49,6 +49,15 @@ already answers every path with `index.html`, which is what makes a deep link lo
 | `/workspaces/<id>/sessions/<session>`  | that session's chat                                             |
 | `/workspaces/<id>/settings`            | its MCP servers and secrets                              |
 | `/workspaces/<id>/terminal`            | an interactive Bash PTY through the workspace's OpenCode V2 service |
+| `/store`                               | the recipe store: Public and Private tabs, search, categories, sort |
+| `/store/<recipe>`                      | one recipe: its steps, author, dates, rating, Apply              |
+
+The **Store** link in the top bar opens the recipe store. A recipe is Markdown the agent follows to set something up;
+public ones are everyone's to apply and rate (one to five stars, never your own), private ones only their author's.
+Apply picks a running workspace and starts a session there with the recipe as its first message. A recipe is written
+in the editor, or with an agent: **Draft with the agent** starts a session that saves a draft in the workspace's
+`~/.config/workspaced/recipes/`, and **Import a draft** opens one in the editor to review and save, removing the draft.
+**Edit with the agent** copies the author's recipe into that folder with its id, so importing it updates the recipe.
 
 A link to a session or workspace that no longer exists falls back to its workspace or home, replacing the history
 entry so Back skips it. Typing a task on a workspace page creates a session and opens it; the session page sends the

@@ -1,6 +1,7 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
+import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
 import type { Variable } from "../src/api/variablesApi";
@@ -160,6 +161,84 @@ export function installFakeApi(
     failProfile: false,
     account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null, role: "ADMIN" } as Account,
   };
+  // The store: every recipe, anyone's, and the drafts the agent left in each workspace.
+  const recipes = {
+    rows: [] as Recipe[],
+    drafts: new Map<string, Map<string, string>>(),
+    nextId: 1,
+    listed: [] as string[],
+  };
+
+  function recipesResponse(url: string, init?: RequestInit): Response | null {
+    const drafts = /\/api\/v1\/workspaces\/([^/]+)\/recipe-drafts(?:\/([^/]+))?$/.exec(url);
+    if (drafts) {
+      const [, id, name] = drafts;
+      if (state.harnessDown) return json({}, 503);
+      const files = recipes.drafts.get(id) ?? new Map<string, string>();
+      recipes.drafts.set(id, files);
+      if (init?.method === "PUT") {
+        files.set(name, JSON.parse(String(init.body)).content);
+        return json({ name, content: files.get(name) });
+      }
+      if (init?.method === "DELETE") {
+        return files.delete(name) ? new Response(null, { status: 204 }) : json({}, 404);
+      }
+      return json([...files].sort(([a], [b]) => a.localeCompare(b)).map(([n, content]) => ({ name: n, content })));
+    }
+    const route = /\/api\/v1\/recipes(?:\/([^/?]+))?(\/rating)?(?:\?(.*))?$/.exec(url);
+    if (!route) return null;
+    const [, id, rating, query] = route;
+    const visible = (recipe: Recipe) => recipe.visibility === "PUBLIC" || recipe.author.id === auth.account.id;
+    const mine = (recipe: Recipe) => ({ ...recipe, mine: recipe.author.id === auth.account.id });
+    if (!id && init?.method === "POST") {
+      const input = JSON.parse(String(init.body)) as RecipeInput;
+      const now = new Date().toISOString();
+      const recipe: Recipe = {
+        ...input,
+        id: `recipe-${recipes.nextId++}`,
+        author: { id: auth.account.id, username: auth.account.username, firstName: auth.account.firstName, lastName: auth.account.lastName },
+        createdAt: now,
+        updatedAt: now,
+        publishedAt: input.visibility === "PUBLIC" ? now : null,
+        rating: { average: 0, count: 0 },
+        myRating: null,
+        mine: true,
+      };
+      recipes.rows.push(recipe);
+      return json(recipe, 201);
+    }
+    if (!id) {
+      recipes.listed.push(url);
+      const params = new URLSearchParams(query);
+      const scope = params.get("scope");
+      const q = params.get("q")?.toLowerCase();
+      const content = recipes.rows
+        .filter((recipe) => (scope === "private" ? recipe.visibility === "PRIVATE" && recipe.author.id === auth.account.id : recipe.visibility === "PUBLIC"))
+        .filter((recipe) => !params.get("category") || recipe.category === params.get("category"))
+        .filter((recipe) => !q || recipe.title.toLowerCase().includes(q) || recipe.tags.some((tag) => tag.includes(q)))
+        .map(({ content: _, ...summary }) => mine(summary as Recipe));
+      return json({ content, page: { size: 24, number: 0, totalElements: content.length, totalPages: 1 } });
+    }
+    const index = recipes.rows.findIndex((recipe) => recipe.id === id && visible(recipe));
+    if (index < 0) return json({}, 404);
+    const recipe = recipes.rows[index];
+    if (rating) {
+      if (recipe.author.id === auth.account.id) return json({}, 409);
+      const stars = init?.method === "DELETE" ? null : (JSON.parse(String(init?.body)).stars as number);
+      recipes.rows[index] = { ...recipe, myRating: stars, rating: stars === null ? { average: 0, count: 0 } : { average: stars, count: 1 } };
+      return stars === null ? new Response(null, { status: 204 }) : json({ ...recipes.rows[index].rating, myRating: stars });
+    }
+    if (init?.method === "PUT" || init?.method === "DELETE") {
+      if (recipe.author.id !== auth.account.id && !(init.method === "DELETE" && auth.account.role === "ADMIN")) return json({}, 403);
+      if (init.method === "DELETE") {
+        recipes.rows.splice(index, 1);
+        return new Response(null, { status: 204 });
+      }
+      recipes.rows[index] = { ...recipe, ...(JSON.parse(String(init.body)) as RecipeInput), updatedAt: new Date().toISOString() };
+    }
+    return json(mine(recipes.rows[index]));
+  }
+
   // Everyone else who can sign in; the signed-in account is always listed first.
   const users = {
     others: [{ id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper", avatar: null, role: "USER" }] as User[],
@@ -268,6 +347,10 @@ export function installFakeApi(
     const usersAnswer = usersResponse(url, init);
     if (usersAnswer) {
       return usersAnswer;
+    }
+    const recipesAnswer = recipesResponse(url, init);
+    if (recipesAnswer) {
+      return recipesAnswer;
     }
     if (state.fail) {
       return new Response(null, { status: state.fail });
@@ -592,5 +675,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { webServers, webServerAgents, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { recipes, webServers, webServerAgents, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

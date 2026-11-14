@@ -23,4 +23,12 @@ public final class CurrentUser {
     }
     return UUID.fromString(token.getToken().getSubject());
   }
+
+  /** Whether the current request was authenticated as an admin, as its authorities say. */
+  public static boolean admin() {
+    var authentication = SecurityContextHolder.getContext().getAuthentication();
+    return authentication != null
+        && authentication.getAuthorities().stream()
+            .anyMatch(a -> Role.ADMIN.authority().equals(a.getAuthority()));
+  }
 }

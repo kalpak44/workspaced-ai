@@ -6,3 +6,6 @@ export { Logo } from "./Logo";
 export { ChoiceCard } from "./ChoiceCard";
 export { Spinner } from "./Spinner";
 export { TextField } from "./TextField";
+export { CATEGORIES, CategoryTile, categoryLabel } from "./CategoryTile";
+export { Stars } from "./Stars";
+export { Tag } from "./Tag";

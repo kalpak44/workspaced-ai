@@ -44,6 +44,12 @@ public interface Harness {
   String TASKS_DIRECTORY = HOME + "/.config/workspaced/tasks";
 
   /**
+   * Recipe drafts the agent writes when asked to, which the user publishes to the store from the
+   * app. Nothing reads them on their own: the harness never calls the API.
+   */
+  String RECIPES_DIRECTORY = HOME + "/.config/workspaced/recipes";
+
+  /**
    * The workspace's variables, as NAME=value lines, which the harness sets when it starts. The user
    * edits them in the app; the agent can edit them too.
    */
@@ -168,6 +174,16 @@ public interface Harness {
   void writeTask(HarnessEndpoint endpoint, String name, String content);
 
   void deleteTask(HarnessEndpoint endpoint, String name);
+
+  /** The names of the workspace's recipe drafts, without ".md", in name order. */
+  List<String> recipeDrafts(HarnessEndpoint endpoint);
+
+  /** One recipe draft's text, front matter included; empty when there is no such file. */
+  Optional<String> readRecipeDraft(HarnessEndpoint endpoint, String name);
+
+  void writeRecipeDraft(HarnessEndpoint endpoint, String name, String content);
+
+  void deleteRecipeDraft(HarnessEndpoint endpoint, String name);
 
   /**
    * Starts the workspace's web server, which answers at that address, and keeps it running across

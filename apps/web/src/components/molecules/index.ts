@@ -13,3 +13,6 @@ export { ThemeSwitch } from "./ThemeSwitch";
 export { UserItem } from "./UserItem";
 export { WorkspaceItem } from "./WorkspaceItem";
 export { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";
+export { RatingInput } from "./RatingInput";
+export { RecipeCard } from "./RecipeCard";
+export { Tabs } from "./Tabs";

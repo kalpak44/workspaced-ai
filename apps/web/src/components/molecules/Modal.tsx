@@ -11,13 +11,15 @@ interface Props {
   readonly children: ReactNode;
   /** Keep nested overlays inside their parent's outside-click boundary. */
   readonly portal?: boolean;
+  /** Room for an editor rather than a few fields. */
+  readonly wide?: boolean;
 }
 
 /**
  * A bottom sheet on mobile and centred dialog on desktop; Escape closes it, as does a click on the
  * backdrop. Children are usually a ModalBody then a ModalFooter, inside one form.
  */
-export function Modal({ title, description, onClose, children, portal = true }: Props) {
+export function Modal({ title, description, onClose, children, portal = true, wide = false }: Props) {
   const descriptionId = useId();
 
   useEffect(() => {
@@ -44,7 +46,7 @@ export function Modal({ title, description, onClose, children, portal = true }: 
         open
         aria-label={title}
         aria-describedby={description ? descriptionId : undefined}
-        className="relative m-0 flex max-h-[calc(100dvh-0.75rem)] w-full max-w-none flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white p-0 pb-[env(safe-area-inset-bottom)] text-zinc-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)] sm:max-w-md sm:rounded-xl sm:pb-0 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+        className={`relative m-0 flex max-h-[calc(100dvh-0.75rem)] w-full max-w-none flex-col overflow-hidden rounded-t-2xl border border-zinc-200 bg-white p-0 pb-[env(safe-area-inset-bottom)] text-zinc-900 shadow-2xl sm:max-h-[calc(100dvh-2rem)] ${wide ? "sm:max-w-3xl" : "sm:max-w-md"} sm:rounded-xl sm:pb-0 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100`}
       >
         <header className="flex shrink-0 items-start justify-between gap-3 px-4 pt-4 sm:px-6 sm:pt-6">
           <div className="min-w-0">

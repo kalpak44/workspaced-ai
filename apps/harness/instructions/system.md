@@ -118,3 +118,22 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - They are the user's. The user manages them in the app (the workspace's Instructions page). Add or change a file there only when the user asks you to remember something or to change how you work: keep each file short Markdown on one topic, named for it, like `code-review.md`.
 - OpenCode reads these files when it loads the workspace, not on every message. A file saved or deleted on the Instructions page applies from the next message, in every session. A file you write or change yourself is read at the next reload: the next save on that page, or a restart. So prefer adding to the file that fits best, and tell the user when your change takes effect.
 - This guide is read-only, in `/usr/share/harness/instructions/`. Never try to change it.
+
+## Recipes
+
+- A recipe is Markdown instructions for setting something up, which users share in the app's Store and apply to a workspace. Applying one starts a session whose first message begins "Apply this recipe": follow it step by step, and ask before anything destructive.
+- When the user asks you to write a recipe, or to turn what you just did into one, write a draft at `~/.config/workspaced/recipes/<name>.md` (the name as for tasks), starting with front matter:
+
+  ```
+  ---
+  title: WordPress with a public address
+  summary: One sentence on what it sets up.
+  category: websites   # apps, websites, automation, data, ai, devops or other
+  tags: [wordpress, docker]
+  visibility: private  # or public
+  recipe: <id>         # keep it when it is already there: it marks a revision of a published recipe
+  ---
+  ```
+
+- Then the steps. A good recipe first names every secret it needs, asks the user to add them under Secrets and restart, and checks each is set without printing it; asks for the public address, or which existing one to use, before publishing; installs; checks that it works; and ends by adding an instruction file saying how to reach and maintain what was set up, or a task when something should run regularly. Write it for a fresh workspace: no paths, names or secrets from this one.
+- You never publish: tell the user the draft is ready and that they publish it from the Store with Import. When asked to revise a recipe, the app has already written it there; edit that file in place and keep its `recipe:` line.

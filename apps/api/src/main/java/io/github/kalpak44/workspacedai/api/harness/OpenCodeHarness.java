@@ -586,6 +586,26 @@ public class OpenCodeHarness implements Harness {
     shell(endpoint, "rm -f -- " + quote(TASKS_DIRECTORY + "/" + instructionFile(name)));
   }
 
+  @Override
+  public List<String> recipeDrafts(HarnessEndpoint endpoint) {
+    return markdownFiles(endpoint, RECIPES_DIRECTORY);
+  }
+
+  @Override
+  public Optional<String> readRecipeDraft(HarnessEndpoint endpoint, String name) {
+    return readFile(endpoint, RECIPES_DIRECTORY, instructionFile(name));
+  }
+
+  @Override
+  public void writeRecipeDraft(HarnessEndpoint endpoint, String name, String content) {
+    writeMarkdown(endpoint, RECIPES_DIRECTORY, name, content);
+  }
+
+  @Override
+  public void deleteRecipeDraft(HarnessEndpoint endpoint, String name) {
+    shell(endpoint, "rm -f -- " + quote(RECIPES_DIRECTORY + "/" + instructionFile(name)));
+  }
+
   private void writeMarkdown(
       HarnessEndpoint endpoint, String directory, String name, String content) {
     var file = instructionFile(name);
