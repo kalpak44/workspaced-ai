@@ -69,17 +69,23 @@ public class VmService {
   /**
    * The workspace's VM: a second request for the same workspace returns the first one's, so a retry
    * never creates a second server. Synchronized so two concurrent first requests cannot both create
-   * one. The OpenRouter key goes to Vault before the server is asked for, so a VM never runs
-   * without it; nothing is kept when either refuses. A second request's key is ignored.
+   * one. The OpenRouter key and the harness environment go to Vault before the server is asked for,
+   * so a VM never boots without them; nothing is kept when either refuses. A second request's key
+   * and environment are ignored.
    *
    * @param userId who owns the workspace
    * @param serverType blank for the default
    * @param openRouterApiKey kept as the VM's system secret
+   * @param environment the harness's system environment, kept apart from the user's secrets
    * @throws ServerTypeNotOfferedException when the server type is not one offered
    * @throws VmInventoryNotLoadedException before the VMs already at Hetzner are known
    */
   public synchronized Created create(
-      UUID workspaceId, UUID userId, String serverType, String openRouterApiKey) {
+      UUID workspaceId,
+      UUID userId,
+      String serverType,
+      String openRouterApiKey,
+      Map<String, String> environment) {
     var type =
         serverType == null || serverType.isBlank()
             ? properties.defaultServerType()
@@ -95,9 +101,9 @@ public class VmService {
       return new Created(existing.getFirst(), false);
     }
     var id = UUID.randomUUID();
-    secrets.init(id, openRouterApiKey);
     CreatedServer server;
     try {
+      secrets.init(id, openRouterApiKey, environment);
       var userData = agentHub.bootstrap(id).orElse(null);
       server =
           hetzner.createServer(

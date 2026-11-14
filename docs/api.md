@@ -72,7 +72,7 @@ the order they were created.
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "serverType": "cx23"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its VM is deleted, or `404`          |
-| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its VM reboots, `404`, or `409` with no VM |
+| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM |
 
 A blank or overlong name, an unknown provider, a `serverType` `/vm-sizes` does not list, or an `id` that is not a UUID,
 answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
@@ -96,9 +96,11 @@ In the cluster each workspace runs on a Hetzner VM of its own, which the API ask
 creating a workspace stores it, then creates its VM, and removes both again if that fails, so a failed create leaves
 nothing billing. `serverType` is optional and defaults to the VM manager's default size. Deleting the workspace deletes
 its VM, disk included, and the call answers only once the VM manager has; if it cannot, the workspace is kept and the
-call fails. Restarting reboots the VM. Statuses come from the VM manager's VMs and its event stream. Nothing on a VM
-runs a harness yet, so sessions, terminals, secrets, backups and the web server answer as for a workspace that is not
-running, and the key and base URL reach nothing. There is no other runtime: a local run without
+call fails. Statuses come from the VM manager's VMs and its event stream. The key goes to the VM manager as the VM's
+system secret and the rest of the harness environment (base URL, harness password, …) as its system environment, which
+the VM's supervisor starts the harness with; restarting marks the VM `RESTARTING`, and its supervisor recreates the
+harness with fresh values. Nothing reaches that harness from the API yet, so sessions, terminals, secrets, backups and
+the web server answer as for a workspace that is not running. There is no other runtime: a local run without
 `WORKSPACED_VM_MANAGER_URL` cannot create a workspace (`503`).
 
 ### Workspace terminals

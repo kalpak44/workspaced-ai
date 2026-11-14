@@ -20,6 +20,8 @@ class AgentServiceTest {
 
   static final String READY = "/api/v1/agent/ready";
   static final String HEARTBEAT = "/api/v1/agent/heartbeat";
+  static final String HARNESS_ROUTE = "/api/v1/agent/harness";
+  static final byte[] HARNESS = "{\"image\":\"h\",\"environment\":{}}".getBytes();
 
   final MutableClock clock = new MutableClock(Instant.parse("2026-11-14T10:00:00Z"));
   final InMemoryAgentStore store = new InMemoryAgentStore();
@@ -33,8 +35,15 @@ class AgentServiceTest {
         }
 
         @Override
-        public void heartbeat(UUID vmId) {
+        public String heartbeat(UUID vmId) {
           report("heartbeat", vmId);
+          return "RESTARTING";
+        }
+
+        @Override
+        public byte[] harness(UUID vmId) {
+          report("harness", vmId);
+          return HARNESS;
         }
 
         private void report(String kind, UUID vmId) {
@@ -79,6 +88,29 @@ class AgentServiceTest {
     service.heartbeat(signed(HEARTBEAT, now()));
     assertThat(reports).containsExactly("ready " + vm, "heartbeat " + vm);
     assertThat(store.lastSeen.get(vm)).isEqualTo(clock.instant());
+  }
+
+  @Test
+  void answersTheHeartbeatWithTheVmsStatus() {
+    assertThat(service.heartbeat(signed(HEARTBEAT, now()))).isEqualTo("RESTARTING");
+  }
+
+  @Test
+  void handsAProvenVmItsHarnessAndNoOtherOne() {
+    assertThat(service.harness(signed(HARNESS_ROUTE, now()))).isSameAs(HARNESS);
+    assertThat(store.lastSeen.get(vm)).isEqualTo(clock.instant());
+    var heartbeat = signed(HEARTBEAT, now());
+    var replayed =
+        new SignedRequest(
+            heartbeat.vmId(),
+            heartbeat.timestamp(),
+            heartbeat.signature(),
+            "POST",
+            HARNESS_ROUTE,
+            new byte[0]);
+    assertThatThrownBy(() -> service.harness(replayed))
+        .isInstanceOf(SignatureRefusedException.class);
+    assertThat(reports).containsExactly("harness " + vm);
   }
 
   @Test

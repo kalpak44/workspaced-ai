@@ -6,6 +6,7 @@ import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -15,9 +16,10 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Each workspace on a Hetzner VM of its own, created, rebooted and deleted through the VM manager,
- * which also keeps its secrets in Vault. Nothing on a VM serves a harness, reads those secrets or
- * publishes a web server yet, so the rest answers as if the workspace were not running.
+ * Each workspace on a Hetzner VM of its own, created, restarted and deleted through the VM manager,
+ * which also keeps its secrets and harness environment in Vault for the VM's supervisor to start
+ * the harness with. Nothing reaches that harness or publishes a web server yet, so the rest answers
+ * as if the workspace were not running.
  */
 public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
@@ -28,14 +30,17 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   /**
-   * Only the provider's key goes anywhere, to the VM manager as the VM's system secret; nothing on
-   * the VM would read the rest of the environment yet.
+   * The provider's key goes as the VM's system secret and everything else as its harness
+   * environment, which the VM manager keeps apart so the user can neither list nor remove it.
    */
   @Override
   public String start(
       UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment) {
-    var key = environment.secrets().get(ModelProvider.OPENROUTER.apiKeyVariable());
-    return vmManager.create(workspaceId, ownerId, serverType, key).serverType();
+    var keyVariable = ModelProvider.OPENROUTER.apiKeyVariable();
+    var rest = new HashMap<>(environment.config());
+    rest.putAll(environment.secrets());
+    var key = rest.remove(keyVariable);
+    return vmManager.create(workspaceId, ownerId, serverType, key, rest).serverType();
   }
 
   @Override
@@ -43,6 +48,7 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
     vmManager.deleteFor(workspaceId);
   }
 
+  /** The VM turns RESTARTING, and its supervisor recreates the harness with fresh values. */
   @Override
   public void restart(UUID workspaceId) {
     vmManager.restartFor(workspaceId);

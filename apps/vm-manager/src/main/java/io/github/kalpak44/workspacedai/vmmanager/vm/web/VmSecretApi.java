@@ -79,8 +79,8 @@ public interface VmSecretApi {
       operationId = "addVmSecret",
       summary = "Add a secret to a VM",
       description =
-          "Kept in Vault; nothing on the VM reads it yet. A VM holds at most 50 secrets besides "
-              + "its system secret.")
+          "Kept in Vault and handed to the VM's harness as an environment variable. A VM holds "
+              + "at most 50 secrets besides its system secret.")
   @ApiResponse(
       responseCode = "201",
       description = "Added; its URL is in the Location header.",
@@ -108,7 +108,9 @@ public interface VmSecretApi {
   @ApiResponse(
       responseCode = "409",
       description =
-          "The VM already has that secret, it is the system secret, or the VM already holds 50.",
+          "The VM already has that secret, it is the system secret, it would shadow the "
+              + "workspace's system environment (its name is set there or starts with "
+              + "OPENCODE_), or the VM already holds 50.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

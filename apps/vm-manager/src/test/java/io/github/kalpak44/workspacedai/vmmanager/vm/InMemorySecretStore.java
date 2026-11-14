@@ -1,33 +1,49 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm;
 
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.UnaryOperator;
 
-/** Vault kept in a map. Setting {@link #failure} makes every call throw it instead. */
+/**
+ * Vault kept in maps, one per entry. Setting {@link #failure} makes every call throw it instead.
+ */
 class InMemorySecretStore implements SecretStore {
 
   final Map<UUID, Map<String, String>> entries = new ConcurrentHashMap<>();
+  final Map<UUID, Map<String, String>> system = new ConcurrentHashMap<>();
   volatile RuntimeException failure;
 
+  /** Fails only writes to the system entry, so the first of two writes can land. */
+  volatile RuntimeException systemWriteFailure;
+
   @Override
-  public Set<String> names(UUID vmId) {
+  public Map<String, String> read(UUID vmId, Entry entry) {
     fail();
-    return entries.getOrDefault(vmId, Map.of()).keySet();
+    return of(entry).getOrDefault(vmId, Map.of());
   }
 
   @Override
-  public synchronized void update(UUID vmId, UnaryOperator<Map<String, String>> change) {
+  public synchronized Map<String, String> update(
+      UUID vmId, Entry entry, UnaryOperator<Map<String, String>> change) {
     fail();
-    entries.put(vmId, Map.copyOf(change.apply(entries.getOrDefault(vmId, Map.of()))));
+    if (entry == Entry.SYSTEM && systemWriteFailure != null) {
+      throw systemWriteFailure;
+    }
+    var next = Map.copyOf(change.apply(of(entry).getOrDefault(vmId, Map.of())));
+    of(entry).put(vmId, next);
+    return next;
   }
 
   @Override
   public void deleteAll(UUID vmId) {
     fail();
     entries.remove(vmId);
+    system.remove(vmId);
+  }
+
+  private Map<UUID, Map<String, String>> of(Entry entry) {
+    return entry == Entry.SYSTEM ? system : entries;
   }
 
   private void fail() {

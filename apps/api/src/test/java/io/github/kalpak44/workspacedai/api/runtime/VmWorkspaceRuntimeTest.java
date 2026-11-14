@@ -25,8 +25,13 @@ class VmWorkspaceRuntimeTest {
   private final UUID owner = UUID.randomUUID();
 
   @Test
-  void startsAVmWithTheProvidersKeyAndReportsItsSize() {
-    when(vmManager.create(workspace, owner, null, "sk-or-v1-test"))
+  void startsAVmWithTheProvidersKeyApartFromTheRestOfTheEnvironment() {
+    when(vmManager.create(
+            workspace,
+            owner,
+            null,
+            "sk-or-v1-test",
+            Map.of("OPENROUTER_BASE_URL", "https://or", "OPENCODE_PASSWORD", "p")))
         .thenReturn(vm(workspace, "PROVISIONING"));
 
     var size =
@@ -35,9 +40,21 @@ class VmWorkspaceRuntimeTest {
             owner,
             null,
             new WorkspaceEnvironment(
-                Map.of(), Map.of("OPENROUTER_API_KEY", "sk-or-v1-test", "OPENCODE_PASSWORD", "p")));
+                Map.of("OPENROUTER_BASE_URL", "https://or"),
+                Map.of("OPENROUTER_API_KEY", "sk-or-v1-test", "OPENCODE_PASSWORD", "p")));
 
     assertThat(size).isEqualTo("cx23");
+  }
+
+  @Test
+  void printsNoSecretValue() {
+    var environment =
+        new WorkspaceEnvironment(
+            Map.of("OPENROUTER_BASE_URL", "https://or"), Map.of("OPENROUTER_API_KEY", "sk-secret"));
+
+    assertThat(environment.toString())
+        .contains("OPENROUTER_API_KEY", "https://or")
+        .doesNotContain("sk-secret");
   }
 
   @Test

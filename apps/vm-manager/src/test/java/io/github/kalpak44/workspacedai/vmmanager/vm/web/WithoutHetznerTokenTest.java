@@ -50,6 +50,12 @@ class WithoutHetznerTokenTest {
     assertThat(send("GET", "/vms", null).body()).isEqualTo("[]");
   }
 
+  @Test
+  void hasNoHarnessForAnUnknownVm() throws Exception {
+    assertThat(send("GET", "/vms/" + UUID.randomUUID() + "/harness", null).statusCode())
+        .isEqualTo(404);
+  }
+
   private HttpResponse<String> send(String method, String path, String body) throws Exception {
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1" + path))

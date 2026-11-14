@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.compute;
 
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -24,15 +25,23 @@ public interface VmManager {
    *
    * @param serverType null for the VM manager's default
    * @param openRouterApiKey kept by the VM manager as the VM's system secret
+   * @param environment the rest of what the harness starts with, kept by the VM manager apart from
+   *     the user's secrets
    * @throws ServerTypeRejectedException when the size is not one on offer
    */
-  ProvisionedVm create(UUID workspaceId, UUID userId, String serverType, String openRouterApiKey);
+  ProvisionedVm create(
+      UUID workspaceId,
+      UUID userId,
+      String serverType,
+      String openRouterApiKey,
+      Map<String, String> environment);
 
   /** Deletes every VM of the workspace; none at all counts as deleted. */
   void deleteFor(UUID workspaceId);
 
   /**
-   * Reboots the workspace's VM, keeping its disk.
+   * Marks the workspace's VM restarting, which has its supervisor recreate the harness with fresh
+   * values.
    *
    * @throws IllegalStateException when the workspace has no VM
    */

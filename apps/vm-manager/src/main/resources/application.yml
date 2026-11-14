@@ -67,6 +67,11 @@ workspaced:
     url: ${WORKSPACED_VAULT_URL:}
     # For a local run only; in the cluster it signs in with its service account instead.
     token: ${WORKSPACED_VAULT_TOKEN:}
+  harness:
+    # The image every VM's supervisor runs as its harness, e.g.
+    # ghcr.io/kalpak44/workspaced-ai-harness:85c2bd5. Unset, the app still starts, and a VM
+    # asking for its harness answers 503.
+    image: ${WORKSPACED_HARNESS_IMAGE:}
   vm:
     # The sizes offered, default first. Specs and prices come from Hetzner.
     server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}

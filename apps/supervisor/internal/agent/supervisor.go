@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -18,7 +19,8 @@ const (
 	keyToken = "WORKSPACED_ENROLLMENT_TOKEN"
 )
 
-// Supervisor enrolls the VM once, reports ready once per boot, then heartbeats.
+// Supervisor enrolls the VM once, starts the harness, reports ready once it answers, then
+// heartbeats and follows the status the hub reports back.
 type Supervisor struct {
 	EnvFile   string
 	StateDir  string
@@ -31,6 +33,11 @@ type Supervisor struct {
 	BackoffMax    time.Duration
 	OperatorRetry time.Duration
 	Heartbeat     time.Duration
+
+	Docker        Docker
+	HealthURL     string
+	HealthPoll    time.Duration
+	HealthTimeout time.Duration
 }
 
 // Run returns nil when ctx is cancelled and an error only for unusable local state.
@@ -59,7 +66,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	s.ready(ctx, c, log)
+	s.bringUp(ctx, c, log, false)
 	s.heartbeat(ctx, c, log)
 	return nil
 }
@@ -158,12 +165,31 @@ func (s *Supervisor) heartbeat(ctx context.Context, c *Client, log *slog.Logger)
 			return
 		case <-t.C:
 		}
-		status, err := c.Signed(ctx, "/agent/heartbeat")
+		s.keepRunning(ctx, c, log)
+		status, body, err := c.Call(ctx, "/agent/heartbeat")
 		if ctx.Err() != nil {
 			continue
 		}
-		if err != nil || status != http.StatusNoContent {
+		if err != nil || (status != http.StatusOK && status != http.StatusNoContent) {
 			log.Warn("heartbeat failed", "status", status, "error", errString(err))
+			continue
+		}
+		// An older hub answers 204 with no body; that means nothing to act on.
+		var hb struct{ Status string }
+		_ = json.Unmarshal(body, &hb)
+		switch hb.Status {
+		case "RESTARTING":
+			log.Info("workspace restart requested, recreating the harness")
+			s.bringUp(ctx, c, log, true)
+		case "PROVISIONING":
+			// The VM manager lost this VM's status, usually across its own restart.
+			if s.healthy(ctx) {
+				log.Info("hub reports provisioning and the harness answers, reporting ready again")
+				s.ready(ctx, c, log)
+			} else {
+				log.Info("hub reports provisioning and the harness does not answer, bringing it up")
+				s.bringUp(ctx, c, log, false)
+			}
 		}
 	}
 }

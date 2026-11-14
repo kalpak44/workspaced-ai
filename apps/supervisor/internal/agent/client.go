@@ -52,9 +52,15 @@ func (c *Client) Enroll(ctx context.Context, token string) (int, error) {
 
 // Signed posts an empty, signed body to a path below the agent base URL.
 func (c *Client) Signed(ctx context.Context, subpath string) (int, error) {
+	status, _, err := c.Call(ctx, subpath)
+	return status, err
+}
+
+// Call is Signed that also returns the response body, which may hold secret values.
+func (c *Client) Call(ctx context.Context, subpath string) (int, []byte, error) {
 	req, err := c.newRequest(ctx, subpath, nil)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	ts := c.Now().Unix()
 	// Sign the path as it goes on the wire, so the /api/v1 prefix comes from the URL.
@@ -62,7 +68,7 @@ func (c *Client) Signed(ctx context.Context, subpath string) (int, error) {
 	req.Header.Set("X-Agent-Vm", c.VMID)
 	req.Header.Set("X-Agent-Timestamp", strconv.FormatInt(ts, 10))
 	req.Header.Set("X-Agent-Signature", base64.StdEncoding.EncodeToString(ed25519.Sign(c.Key, []byte(msg))))
-	return c.do(req)
+	return c.doBody(req)
 }
 
 func (c *Client) newRequest(ctx context.Context, subpath string, body []byte) (*http.Request, error) {
@@ -76,12 +82,21 @@ func (c *Client) newRequest(ctx context.Context, subpath string, body []byte) (*
 }
 
 func (c *Client) do(req *http.Request) (int, error) {
+	status, _, err := c.doBody(req)
+	return status, err
+}
+
+// maxBody bounds a response; a harness answer with fifty secrets is far below it.
+const maxBody = 1 << 20
+
+func (c *Client) doBody(req *http.Request) (int, []byte, error) {
 	resp, err := c.HTTP.Do(req)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	defer resp.Body.Close()
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxBody))
 	// Drain so the keep-alive connection is reused for the next heartbeat.
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 64<<10))
-	return resp.StatusCode, nil
+	return resp.StatusCode, body, err
 }

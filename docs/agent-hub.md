@@ -19,7 +19,8 @@ From the VMs:
 |--------|----------------------------|-------------------------------------------------|-------------------------------------------|
 | `POST` | `/api/v1/agent/enroll`     | `{"vmId": "…", "token": "…", "publicKey": "…"}` | `204`, `400`, `401`, or `409`             |
 | `POST` | `/api/v1/agent/ready`      | none, signed                                    | `204`, `401`, `404`, or `502`             |
-| `POST` | `/api/v1/agent/heartbeat`  | none, signed                                    | `204`, `401`, `404`, or `502`             |
+| `POST` | `/api/v1/agent/heartbeat`  | none, signed                                    | `200` and `{"status"}`, `401`, `404`, or `502` |
+| `POST` | `/api/v1/agent/harness`    | none, signed                                    | `200` and `{"image", "environment"}`, `401`, `404`, `502`, or `503` |
 
 From the VM manager:
 
@@ -28,9 +29,12 @@ From the VM manager:
 | `POST`   | `/api/v1/internal/enrollments`    | `{"vmId": "…"}`    | `201` and `{"vmId", "token", "expiresAt"}`, or `409`        |
 | `DELETE` | `/api/v1/internal/agents/{vmId}`  |                    | `204`, whether or not there was anything to forget         |
 
-`ready` and `heartbeat` record when the VM was last seen and call the VM manager's `POST /vms/{id}/ready` or
-`/heartbeat`. The VM manager answering `404` (the VM was deleted) answers `404`; anything else it fails with, or
-not answering within 10 s, answers `502`.
+`ready`, `heartbeat` and `harness` record when the VM was last seen and call the VM manager's `POST /vms/{id}/ready`,
+`/heartbeat` or `GET /vms/{id}/harness`. A heartbeat answers the VM's status there (`READY`, `RESTARTING`,
+`PROVISIONING`), which is how the supervisor learns to recreate its harness. `harness` passes the VM manager's body
+through unread and unlogged, since it holds the VM's secret values, with `Cache-Control: no-store`. The VM manager
+answering `404` (the VM was deleted) answers `404`, `503` (no harness image or no Vault) answers `503`; anything else
+it fails with, or not answering within 10 s, answers `502`.
 
 ## Enrollment
 

@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
@@ -46,7 +47,13 @@ class HttpVmManagerTest {
 
   @Test
   void createsAVmForTheWorkspaceAndItsOwner() {
-    var vm = vmManager.create(workspace, user, " cx33 ", "sk-or-v1-test");
+    var vm =
+        vmManager.create(
+            workspace,
+            user,
+            " cx33 ",
+            "sk-or-v1-test",
+            Map.of("OPENCODE_SERVER_PASSWORD", "pw", "OPENROUTER_BASE_URL", "https://or"));
 
     assertThat(vm.serverType()).isEqualTo("cx33");
     assertThat(fake.vms).containsKey(vm.id());
@@ -55,11 +62,15 @@ class HttpVmManagerTest {
     assertThat(sent.path("userId").asString()).isEqualTo(user.toString());
     assertThat(sent.path("serverType").asString()).isEqualTo("cx33");
     assertThat(sent.path("openRouterApiKey").asString()).isEqualTo("sk-or-v1-test");
+    assertThat(sent.path("environment").path("OPENCODE_SERVER_PASSWORD").asString())
+        .isEqualTo("pw");
+    assertThat(sent.path("environment").path("OPENROUTER_BASE_URL").asString())
+        .isEqualTo("https://or");
   }
 
   @Test
   void addsAndRemovesSecretsOnTheWorkspacesVm() {
-    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
 
     vmManager.putSecret(workspace, "GITHUB_TOKEN", "ghp_x");
     assertThat(fake.secrets.get(vm.id())).containsEntry("GITHUB_TOKEN", "ghp_x");
@@ -83,27 +94,27 @@ class HttpVmManagerTest {
 
   @Test
   void leavesTheSizeToTheVmManagerWhenNoneIsAsked() {
-    vmManager.create(workspace, user, null, "sk-or-v1-test");
+    vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
     assertThat(fake.creates.getFirst().has("serverType")).isFalse();
   }
 
   @Test
   void returnsTheWorkspacesVmWhenAskedAgain() {
-    var first = vmManager.create(workspace, user, null, "sk-or-v1-test");
-    assertThat(vmManager.create(workspace, user, null, "sk-or-v1-test")).isEqualTo(first);
+    var first = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+    assertThat(vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of())).isEqualTo(first);
   }
 
   @Test
   void passesTheVmManagersReasonForARejectedSize() {
-    assertThatThrownBy(() -> vmManager.create(workspace, user, "cx53", "sk-or-v1-test"))
+    assertThatThrownBy(() -> vmManager.create(workspace, user, "cx53", "sk-or-v1-test", Map.of()))
         .isInstanceOf(ServerTypeRejectedException.class)
         .hasMessageContaining("server type cx53 is not offered; choose one of cx23, cx33");
   }
 
   @Test
   void deletesEveryVmOfTheWorkspaceAndNothingElse() {
-    vmManager.create(workspace, user, null, "sk-or-v1-test");
-    var other = vmManager.create(UUID.randomUUID(), user, null, "sk-or-v1-test");
+    vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+    var other = vmManager.create(UUID.randomUUID(), user, null, "sk-or-v1-test", Map.of());
 
     vmManager.deleteFor(workspace);
     vmManager.deleteFor(workspace);
@@ -113,7 +124,7 @@ class HttpVmManagerTest {
 
   @Test
   void listsEveryVmWithItsWorkspaceAndStatus() {
-    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
 
     assertThat(vmManager.vms())
         .containsExactly(new ProvisionedVm(vm.id(), workspace, "cx23", "PROVISIONING"));
@@ -121,7 +132,7 @@ class HttpVmManagerTest {
 
   @Test
   void restartsTheWorkspacesVmAndRefusesOneWithNone() {
-    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
 
     vmManager.restartFor(workspace);
 
@@ -132,7 +143,7 @@ class HttpVmManagerTest {
 
   @Test
   void hearsEachVmFromTheEventStream() throws Exception {
-    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
     var heard = new LinkedBlockingQueue<ProvisionedVm>();
 
     vmManager.watch(heard::add);
@@ -153,7 +164,7 @@ class HttpVmManagerTest {
   void tellsAnOutageFromAFailure() {
     fake.status = 503;
     fake.detail = "the VMs at Hetzner are not loaded yet";
-    assertThatThrownBy(() -> vmManager.create(workspace, user, null, "sk-or-v1-test"))
+    assertThatThrownBy(() -> vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of()))
         .isInstanceOf(VmManagerUnavailableException.class)
         .hasMessageContaining("not loaded yet");
 

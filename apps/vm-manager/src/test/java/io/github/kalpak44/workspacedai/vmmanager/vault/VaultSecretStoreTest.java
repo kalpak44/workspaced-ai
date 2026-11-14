@@ -1,5 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.vault;
 
+import static io.github.kalpak44.workspacedai.vmmanager.vm.SecretStore.Entry.SECRETS;
+import static io.github.kalpak44.workspacedai.vmmanager.vm.SecretStore.Entry.SYSTEM;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
@@ -53,8 +55,8 @@ class VaultSecretStoreTest {
   void signsInOnceWithItsServiceAccountAndKeepsTheToken() throws IOException {
     var store = store(null);
 
-    store.update(vm, _ -> Map.of("OPENROUTER_API_KEY", "sk"));
-    assertThat(store.names(vm)).containsExactly("OPENROUTER_API_KEY");
+    store.update(vm, SECRETS, _ -> Map.of("OPENROUTER_API_KEY", "sk"));
+    assertThat(store.read(vm, SECRETS).keySet()).containsExactly("OPENROUTER_API_KEY");
 
     assertThat(vault.logins).containsExactly("workspaced-ai-vm-manager");
     assertThat(vault.entries.get(key)).containsExactly(Map.entry("OPENROUTER_API_KEY", "sk"));
@@ -63,10 +65,10 @@ class VaultSecretStoreTest {
   @Test
   void signsInAgainOnceTheLeaseIsMostlySpent() throws IOException {
     var store = store(null);
-    store.names(vm);
+    store.read(vm, SECRETS).keySet();
 
     clock.advance(Duration.ofMinutes(50));
-    store.names(vm);
+    store.read(vm, SECRETS).keySet();
 
     assertThat(vault.logins).hasSize(2);
   }
@@ -74,10 +76,10 @@ class VaultSecretStoreTest {
   @Test
   void signsInAgainWhenItsTokenIsRefused() throws IOException {
     var store = store(null);
-    store.names(vm);
+    store.read(vm, SECRETS).keySet();
     vault.tokens.clear();
 
-    store.update(vm, _ -> Map.of("A", "1"));
+    store.update(vm, SECRETS, _ -> Map.of("A", "1"));
 
     assertThat(vault.logins).hasSize(2);
     assertThat(vault.entries.get(key)).containsEntry("A", "1");
@@ -87,15 +89,15 @@ class VaultSecretStoreTest {
   void usesAFixedTokenWithoutSigningIn() throws IOException {
     var store = store(FakeVault.ROOT_TOKEN);
 
-    store.update(vm, _ -> Map.of("A", "1"));
+    store.update(vm, SECRETS, _ -> Map.of("A", "1"));
 
     assertThat(vault.logins).isEmpty();
-    assertThat(store.names(vm)).containsExactly("A");
+    assertThat(store.read(vm, SECRETS).keySet()).containsExactly("A");
   }
 
   @Test
   void keepsOnlyTheLatestVersionOfANewEntry() throws IOException {
-    store(null).update(vm, _ -> Map.of("A", "1"));
+    store(null).update(vm, SECRETS, _ -> Map.of("A", "1"));
 
     assertThat(vault.maxVersions).containsEntry(key, 1);
   }
@@ -103,7 +105,7 @@ class VaultSecretStoreTest {
   @Test
   void runsTheChangeAgainOnTopOfAWriteThatLandedInBetween() throws IOException {
     var store = store(null);
-    store.update(vm, _ -> Map.of("A", "1"));
+    store.update(vm, SECRETS, _ -> Map.of("A", "1"));
     vault.beforeWrite =
         () -> {
           vault.beforeWrite = () -> {};
@@ -112,6 +114,7 @@ class VaultSecretStoreTest {
 
     store.update(
         vm,
+        SECRETS,
         current -> {
           var next = new HashMap<>(current);
           next.put("C", "3");
@@ -122,15 +125,69 @@ class VaultSecretStoreTest {
   }
 
   @Test
-  void deletesTheEntryAndItsHistory() throws IOException {
+  void deletesBothEntriesAndTheirHistory() throws IOException {
     var store = store(null);
-    store.update(vm, _ -> Map.of("A", "1"));
+    store.update(vm, SECRETS, _ -> Map.of("A", "1"));
+    store.update(vm, SYSTEM, _ -> Map.of("B", "2"));
 
     store.deleteAll(vm);
     store.deleteAll(vm);
 
-    assertThat(vault.entries).doesNotContainKey(key);
-    assertThat(store.names(vm)).isEmpty();
+    assertThat(vault.entries).doesNotContainKeys(key, key + "/system");
+    assertThat(store.read(vm, SECRETS)).isEmpty();
+    assertThat(store.read(vm, SYSTEM)).isEmpty();
+  }
+
+  @Test
+  void keepsTheSystemEnvironmentInAnEntryOfItsOwn() throws IOException {
+    var store = store(null);
+    store.update(vm, SECRETS, _ -> Map.of("A", "1"));
+
+    var written = store.update(vm, SYSTEM, _ -> Map.of("B", "2"));
+
+    assertThat(written).containsExactly(Map.entry("B", "2"));
+    assertThat(vault.entries.get(key + "/system")).containsExactly(Map.entry("B", "2"));
+    assertThat(vault.maxVersions).containsEntry(key + "/system", 1);
+    assertThat(store.read(vm, SECRETS)).containsExactly(Map.entry("A", "1"));
+    assertThat(store.read(vm, SYSTEM)).containsExactly(Map.entry("B", "2"));
+  }
+
+  @Test
+  void writesNothingWhenTheChangeAltersNothing() throws IOException {
+    var store = store(null);
+    store.update(vm, SYSTEM, _ -> Map.of("B", "2"));
+
+    var kept = store.update(vm, SYSTEM, current -> current);
+
+    assertThat(kept).containsExactly(Map.entry("B", "2"));
+    assertThat(vault.versions).containsEntry(key + "/system", 1);
+  }
+
+  @Test
+  void createsAnEmptyEntryWhenAskedTo() throws IOException {
+    store(null).update(vm, SYSTEM, _ -> Map.of());
+
+    assertThat(vault.entries.get(key + "/system")).isEmpty();
+  }
+
+  @Test
+  void givesUpWhenEveryAttemptLosesToAnotherWrite() throws IOException {
+    var store = store(null);
+    vault.beforeWrite = () -> vault.put(key, Map.of("X", "1"));
+
+    assertThatThrownBy(() -> store.update(vm, SECRETS, _ -> Map.of("A", "1")))
+        .isInstanceOf(VaultException.class)
+        .hasMessageContaining("kept changing");
+  }
+
+  @Test
+  void namesNoValueInAFailure() throws IOException {
+    var store = store("not-a-token");
+
+    assertThatThrownBy(() -> store.update(vm, SYSTEM, _ -> Map.of("B", "s3cret")))
+        .isInstanceOf(VaultException.class)
+        .hasMessageContaining("403")
+        .hasMessageNotContaining("s3cret");
   }
 
   @Test
@@ -150,7 +207,7 @@ class VaultSecretStoreTest {
             JsonMapper.builder().build(),
             clock);
 
-    assertThatThrownBy(() -> store.names(vm))
+    assertThatThrownBy(() -> store.read(vm, SECRETS).keySet())
         .isInstanceOf(VaultException.class)
         .hasMessageContaining("403");
   }
@@ -171,6 +228,7 @@ class VaultSecretStoreTest {
             JsonMapper.builder().build(),
             clock);
 
-    assertThatThrownBy(() -> store.names(vm)).isInstanceOf(VaultException.NotConfigured.class);
+    assertThatThrownBy(() -> store.read(vm, SECRETS).keySet())
+        .isInstanceOf(VaultException.NotConfigured.class);
   }
 }

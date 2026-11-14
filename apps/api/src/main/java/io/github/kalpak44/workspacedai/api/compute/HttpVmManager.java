@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
@@ -71,11 +72,17 @@ public class HttpVmManager implements VmManager {
 
   @Override
   public ProvisionedVm create(
-      UUID workspaceId, UUID userId, String serverType, String openRouterApiKey) {
+      UUID workspaceId,
+      UUID userId,
+      String serverType,
+      String openRouterApiKey,
+      Map<String, String> environment) {
     var body = json.createObjectNode();
     body.put("workspaceId", workspaceId.toString());
     body.put("userId", userId.toString());
     body.put("openRouterApiKey", openRouterApiKey);
+    var variables = body.putObject("environment");
+    environment.forEach(variables::put);
     if (serverType != null && !serverType.isBlank()) {
       body.put("serverType", serverType.strip());
     }

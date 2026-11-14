@@ -12,7 +12,6 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Set;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
 import org.springframework.stereotype.Component;
@@ -21,9 +20,10 @@ import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Keeps each VM's secrets as one KV version 2 entry, {@code <prefix>/<vm id>}, with one key per
- * secret. One entry rather than one per secret, so a change is a single check-and-set write and two
- * concurrent adds cannot both slip under the limit.
+ * Keeps each VM's secrets as two KV version 2 entries, {@code <prefix>/<vm id>} for the user's and
+ * {@code <prefix>/<vm id>/system} for the harness's, with one key per value. One entry rather than
+ * one per secret, so a change is a single check-and-set write and two concurrent adds cannot both
+ * slip under the limit.
  */
 @Component
 public class VaultSecretStore implements SecretStore {
@@ -46,25 +46,30 @@ public class VaultSecretStore implements SecretStore {
   }
 
   @Override
-  public Set<String> names(UUID vmId) {
-    return read(vmId).data().keySet();
+  public Map<String, String> read(UUID vmId, Entry entry) {
+    return Map.copyOf(read(path(vmId, entry)).data());
   }
 
   @Override
-  public void update(UUID vmId, UnaryOperator<Map<String, String>> change) {
+  public Map<String, String> update(
+      UUID vmId, Entry entry, UnaryOperator<Map<String, String>> change) {
+    var path = path(vmId, entry);
     for (var attempt = 0; attempt < ATTEMPTS; attempt++) {
-      var current = read(vmId);
-      var next = change.apply(Map.copyOf(current.data()));
+      var current = read(path);
+      var next = Map.copyOf(change.apply(Map.copyOf(current.data())));
+      if (current.version() != 0 && next.equals(current.data())) {
+        return next;
+      }
       if (current.version() == 0) {
-        keepOneVersion(vmId);
+        keepOneVersion(path);
       }
       var body = json.createObjectNode();
       body.putObject("options").put("cas", current.version());
       var data = body.putObject("data");
       next.forEach(data::put);
-      var response = send("POST", "/data/", vmId, body.toString());
+      var response = send("POST", "/data/", path, body.toString());
       if (response.statusCode() == 200 || response.statusCode() == 204) {
-        return;
+        return next;
       }
       if (!casMismatch(response)) {
         throw failed(response);
@@ -76,24 +81,31 @@ public class VaultSecretStore implements SecretStore {
   /** The metadata rather than the data, so the values in earlier versions go too. */
   @Override
   public void deleteAll(UUID vmId) {
-    var response = send("DELETE", "/metadata/", vmId, null);
-    if (response.statusCode() != 204 && response.statusCode() != 404) {
-      throw failed(response);
+    for (var entry : Entry.values()) {
+      var response = send("DELETE", "/metadata/", path(vmId, entry), null);
+      if (response.statusCode() != 204 && response.statusCode() != 404) {
+        throw failed(response);
+      }
     }
   }
 
+  private String path(UUID vmId, Entry entry) {
+    var path = properties.prefix() + "/" + vmId;
+    return entry == Entry.SYSTEM ? path + "/system" : path;
+  }
+
   // A removed secret would otherwise stay readable in the entry's history.
-  private void keepOneVersion(UUID vmId) {
-    var response = send("POST", "/metadata/", vmId, "{\"max_versions\":1}");
+  private void keepOneVersion(String path) {
+    var response = send("POST", "/metadata/", path, "{\"max_versions\":1}");
     if (response.statusCode() != 204 && response.statusCode() != 200) {
       throw failed(response);
     }
   }
 
-  private Entry read(UUID vmId) {
-    var response = send("GET", "/data/", vmId, null);
+  private Stored read(String path) {
+    var response = send("GET", "/data/", path, null);
     if (response.statusCode() == 404) {
-      return new Entry(Map.of(), 0);
+      return new Stored(Map.of(), 0);
     }
     if (response.statusCode() != 200) {
       throw failed(response);
@@ -104,7 +116,7 @@ public class VaultSecretStore implements SecretStore {
         .path("data")
         .properties()
         .forEach(e -> data.put(e.getKey(), e.getValue().asString()));
-    return new Entry(data, body.path("data").path("metadata").path("version").asInt());
+    return new Stored(data, body.path("data").path("metadata").path("version").asInt());
   }
 
   private static boolean casMismatch(HttpResponse<String> response) {
@@ -112,11 +124,11 @@ public class VaultSecretStore implements SecretStore {
   }
 
   /** A token that expired or was revoked early gets one fresh sign-in before the call fails. */
-  private HttpResponse<String> send(String method, String kind, UUID vmId, String body) {
+  private HttpResponse<String> send(String method, String kind, String entry, String body) {
     if (!properties.isConfigured()) {
       throw new VaultException.NotConfigured();
     }
-    var path = "/v1/" + properties.kvMount() + kind + properties.prefix() + "/" + vmId;
+    var path = "/v1/" + properties.kvMount() + kind + entry;
     var response = call(method, path, body, token());
     if (response.statusCode() == 403 && !properties.hasToken()) {
       tokenExpiresAt = Instant.MIN;
@@ -199,5 +211,12 @@ public class VaultSecretStore implements SecretStore {
             + response.request().uri().getPath());
   }
 
-  private record Entry(Map<String, String> data, int version) {}
+  private record Stored(Map<String, String> data, int version) {
+
+    // Names only, so a stray log line cannot carry a value.
+    @Override
+    public String toString() {
+      return "Stored[names=" + data.keySet() + ", version=" + version + "]";
+    }
+  }
 }

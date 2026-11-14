@@ -39,11 +39,26 @@ public class AgentService {
     vmManager.ready(vmId);
   }
 
-  /** As {@link #ready}, for the report sent every 30 seconds after it. */
-  public void heartbeat(SignedRequest request) {
+  /**
+   * As {@link #ready}, for the report sent every 30 seconds after it.
+   *
+   * @return the VM's status at the VM manager, so the VM learns when to restart its harness
+   */
+  public String heartbeat(SignedRequest request) {
     var vmId = authenticate(request);
     store.touch(vmId, clock.instant());
-    vmManager.heartbeat(vmId);
+    return vmManager.heartbeat(vmId);
+  }
+
+  /**
+   * As {@link #ready}, for the VM fetching what its harness runs with.
+   *
+   * @return the VM manager's body unparsed, since it carries the VM's secret values
+   */
+  public byte[] harness(SignedRequest request) {
+    var vmId = authenticate(request);
+    store.touch(vmId, clock.instant());
+    return vmManager.harness(vmId);
   }
 
   /** The VM the request is proven to come from. */

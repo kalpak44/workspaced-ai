@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.time.Instant;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,7 +31,7 @@ class VmSecretServiceTest {
             null,
             Instant.EPOCH,
             null));
-    service.init(vm, "sk-or-v1-test");
+    service.init(vm, "sk-or-v1-test", Map.of("OPENROUTER_BASE_URL", "https://or", "PW", "x"));
   }
 
   @Test
@@ -100,11 +102,62 @@ class VmSecretServiceTest {
   }
 
   @Test
+  void neverListsOrCountsTheSystemEnvironment() {
+    assertThat(service.list(vm)).containsExactly(new VmSecret("OPENROUTER_API_KEY", true));
+    assertThat(store.system.get(vm)).containsOnlyKeys("OPENROUTER_BASE_URL", "PW");
+  }
+
+  @Test
+  void refusesASecretThatWouldShadowTheSystemEnvironment() {
+    for (var name : new String[] {"OPENROUTER_BASE_URL", "PW", "OPENCODE_CONFIG"}) {
+      assertThatThrownBy(() -> service.add(vm, name, "v"))
+          .isInstanceOf(SecretRefusedException.class)
+          .hasMessageContaining(name);
+    }
+    assertThat(store.entries.get(vm)).containsOnlyKeys("OPENROUTER_API_KEY");
+  }
+
+  @Test
+  void handsTheHarnessEverythingWithTheSystemEnvironmentOnTop() {
+    service.add(vm, "GITHUB_TOKEN", "ghp_x");
+    store.entries.compute(
+        vm,
+        (_, current) -> {
+          var next = new HashMap<>(current);
+          next.put("OPENROUTER_BASE_URL", "from-the-user");
+          return next;
+        });
+
+    // The API named its own password, so none is generated beside it.
+    assertThat(service.environment(vm))
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of(
+                "OPENROUTER_API_KEY", "sk-or-v1-test",
+                "GITHUB_TOKEN", "ghp_x",
+                "OPENROUTER_BASE_URL", "https://or",
+                "PW", "x"));
+  }
+
+  @Test
+  void givesAVmWithoutASystemEntryAPasswordOnceAndKeepsIt() {
+    store.system.remove(vm);
+
+    var first = service.environment(vm).get(VmSecretService.PASSWORD_VARIABLE);
+    var second = service.environment(vm).get(VmSecretService.PASSWORD_VARIABLE);
+
+    assertThat(first).matches("[A-Za-z0-9_-]{43}").isEqualTo(second);
+    assertThat(store.system.get(vm)).containsExactly(Map.entry("OPENCODE_PASSWORD", first));
+    assertThat(service.list(vm)).hasSize(1);
+  }
+
+  @Test
   void answersNotFoundForAnUnknownVm() {
     var other = UUID.randomUUID();
     assertThatThrownBy(() -> service.list(other)).isInstanceOf(VmNotFoundException.class);
     assertThatThrownBy(() -> service.add(other, "A", "v")).isInstanceOf(VmNotFoundException.class);
     assertThatThrownBy(() -> service.remove(other, "A")).isInstanceOf(VmNotFoundException.class);
+    assertThatThrownBy(() -> service.environment(other)).isInstanceOf(VmNotFoundException.class);
     assertThat(store.entries).containsOnlyKeys(vm);
+    assertThat(store.system).containsOnlyKeys(vm);
   }
 }

@@ -2,8 +2,12 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
+import java.util.Map;
+import java.util.TreeSet;
 import java.util.UUID;
 
 @Schema(name = "CreateVm", description = "A VM to create")
@@ -31,4 +35,36 @@ public record CreateVmDto(
             maxLength = 1000)
         @NotBlank
         @Size(max = 1000)
-        String openRouterApiKey) {}
+        String openRouterApiKey,
+    @Schema(
+            description =
+                "The harness's system environment, kept in Vault apart from the user's secrets and "
+                    + "handed to the harness on the VM; OPENROUTER_API_KEY here is ignored in "
+                    + "favour of openRouterApiKey. Ignored when the workspace already has a VM",
+            example =
+                "{\"OPENROUTER_BASE_URL\":\"https://openrouter.ai/api/v1\","
+                    + "\"OPENCODE_PASSWORD\":\"…\"}")
+        @Size(max = 100)
+        Map<
+                @NotEmpty @Size(max = 100) @Pattern(regexp = CreateVmSecretDto.NAME_PATTERN) String,
+                @NotNull @Size(max = 65536) String>
+            environment) {
+
+  public CreateVmDto {
+    environment = environment == null ? Map.of() : environment;
+  }
+
+  // The key and the environment are secret, and a record would print them.
+  @Override
+  public String toString() {
+    return "CreateVmDto[workspaceId="
+        + workspaceId
+        + ", userId="
+        + userId
+        + ", serverType="
+        + serverType
+        + ", environment="
+        + new TreeSet<>(environment.keySet())
+        + "]";
+  }
+}

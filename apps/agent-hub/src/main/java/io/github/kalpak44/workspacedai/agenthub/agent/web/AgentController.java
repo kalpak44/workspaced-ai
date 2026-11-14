@@ -4,8 +4,11 @@ import io.github.kalpak44.workspacedai.agenthub.agent.AgentService;
 import io.github.kalpak44.workspacedai.agenthub.agent.EnrollmentService;
 import io.github.kalpak44.workspacedai.agenthub.agent.SignedRequest;
 import io.github.kalpak44.workspacedai.agenthub.agent.web.dto.EnrollDto;
+import io.github.kalpak44.workspacedai.agenthub.agent.web.dto.HeartbeatDto;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
+import org.springframework.http.CacheControl;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -46,15 +49,30 @@ public class AgentController {
     return ResponseEntity.noContent().build();
   }
 
-  @PostMapping("/heartbeat")
-  public ResponseEntity<Void> heartbeat(
+  @PostMapping(path = "/heartbeat", produces = MediaType.APPLICATION_JSON_VALUE)
+  public ResponseEntity<HeartbeatDto> heartbeat(
       HttpServletRequest request,
       @RequestHeader(name = "X-Agent-Vm", required = false) String vmId,
       @RequestHeader(name = "X-Agent-Timestamp", required = false) String timestamp,
       @RequestHeader(name = "X-Agent-Signature", required = false) String signature,
       @RequestBody(required = false) byte[] body) {
-    agents.heartbeat(signed(request, vmId, timestamp, signature, body));
-    return ResponseEntity.noContent().build();
+    var status = agents.heartbeat(signed(request, vmId, timestamp, signature, body));
+    return ResponseEntity.ok(new HeartbeatDto(status));
+  }
+
+  /** The VM manager's body as it came; no-store, because it carries the VM's secret values. */
+  @PostMapping("/harness")
+  public ResponseEntity<byte[]> harness(
+      HttpServletRequest request,
+      @RequestHeader(name = "X-Agent-Vm", required = false) String vmId,
+      @RequestHeader(name = "X-Agent-Timestamp", required = false) String timestamp,
+      @RequestHeader(name = "X-Agent-Signature", required = false) String signature,
+      @RequestBody(required = false) byte[] body) {
+    var harness = agents.harness(signed(request, vmId, timestamp, signature, body));
+    return ResponseEntity.ok()
+        .cacheControl(CacheControl.noStore())
+        .contentType(MediaType.APPLICATION_JSON)
+        .body(harness);
   }
 
   // getRequestURI is the path as sent, undecoded and with the context path, which is exactly

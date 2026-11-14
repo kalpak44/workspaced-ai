@@ -33,13 +33,21 @@ type hub struct {
 	mu sync.Mutex
 	// enrollStatus is consumed in order; the last entry repeats.
 	enrollStatus []int
-	pub          ed25519.PublicKey
-	counts       map[string]int
-	bad          []string
+	// harnessStatus is consumed like enrollStatus; a 200 answers with harness.
+	harnessStatus []int
+	harness       Harness
+	// heartbeats are the statuses reported in order; READY once they run out, and
+	// "" answers 204 as an older hub does.
+	heartbeats []string
+	pub        ed25519.PublicKey
+	counts     map[string]int
+	bad        []string
 }
 
 func newHub(t *testing.T, enrollStatus ...int) (*hub, *httptest.Server) {
-	h := &hub{t: t, enrollStatus: enrollStatus, counts: map[string]int{}}
+	h := &hub{t: t, enrollStatus: enrollStatus, counts: map[string]int{},
+		harnessStatus: []int{http.StatusOK},
+		harness:       Harness{Image: testImage, Environment: map[string]string{testSecretName: testSecret, "OPENCODE_SERVER_PASSWORD": "pw-0"}}}
 	srv := httptest.NewServer(h)
 	t.Cleanup(srv.Close)
 	return h, srv
@@ -81,12 +89,42 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			h.pub = pub
 		}
 		w.WriteHeader(status)
-	case "/api/v1/agent/ready", "/api/v1/agent/heartbeat":
+	case "/api/v1/agent/ready":
 		if !h.verify(r, body) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		w.WriteHeader(http.StatusNoContent)
+	case "/api/v1/agent/heartbeat":
+		if !h.verify(r, body) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		status := "READY"
+		if len(h.heartbeats) > 0 {
+			status, h.heartbeats = h.heartbeats[0], h.heartbeats[1:]
+		}
+		if status == "" {
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
+	case "/api/v1/agent/harness":
+		if !h.verify(r, body) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		status := h.harnessStatus[0]
+		if len(h.harnessStatus) > 1 {
+			h.harnessStatus = h.harnessStatus[1:]
+		}
+		if status != http.StatusOK {
+			w.WriteHeader(status)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(h.harness)
 	default:
 		h.fail("unexpected path %s", r.URL.Path)
 		w.WriteHeader(http.StatusNotFound)
@@ -156,6 +194,10 @@ func newFixture(t *testing.T, baseURL string, withToken bool) fixture {
 
 // start runs the supervisor with millisecond intervals and returns a stop function.
 func (f fixture) start(t *testing.T) (stop func()) {
+	return f.startWith(t, newFakeDocker(t))
+}
+
+func (f fixture) startWith(t *testing.T, d *fakeDocker) (stop func()) {
 	var mu sync.Mutex
 	s := &Supervisor{
 		EnvFile:       f.envFile,
@@ -168,6 +210,10 @@ func (f fixture) start(t *testing.T) (stop func()) {
 		BackoffMax:    4 * time.Millisecond,
 		OperatorRetry: 5 * time.Millisecond,
 		Heartbeat:     5 * time.Millisecond,
+		Docker:        d,
+		HealthURL:     d.healthURL,
+		HealthPoll:    time.Millisecond,
+		HealthTimeout: 200 * time.Millisecond,
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -187,6 +233,9 @@ func (f fixture) start(t *testing.T) (stop func()) {
 		defer mu.Unlock()
 		if strings.Contains(f.logs.String(), testToken) {
 			t.Error("logs contain the enrollment token")
+		}
+		if strings.Contains(f.logs.String(), testSecret) {
+			t.Error("logs contain a harness variable's value")
 		}
 	}
 }

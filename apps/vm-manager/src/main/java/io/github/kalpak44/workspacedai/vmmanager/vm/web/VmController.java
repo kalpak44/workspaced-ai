@@ -1,7 +1,9 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
+import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDtoMapper;
 import java.util.List;
@@ -20,11 +22,14 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class VmController implements VmApi {
 
   private final VmService service;
+  private final HarnessService harnesses;
   private final VmEventStream events;
   private final VmDtoMapper mapper;
 
-  public VmController(VmService service, VmEventStream events, VmDtoMapper mapper) {
+  public VmController(
+      VmService service, HarnessService harnesses, VmEventStream events, VmDtoMapper mapper) {
     this.service = service;
+    this.harnesses = harnesses;
     this.events = events;
     this.mapper = mapper;
   }
@@ -48,7 +53,11 @@ public class VmController implements VmApi {
   public ResponseEntity<VmDto> create(CreateVmDto body) {
     var created =
         service.create(
-            body.workspaceId(), body.userId(), body.serverType(), body.openRouterApiKey());
+            body.workspaceId(),
+            body.userId(),
+            body.serverType(),
+            body.openRouterApiKey(),
+            body.environment());
     var vm = mapper.toDto(created.vm());
     if (!created.isNew()) {
       return ResponseEntity.ok(vm);
@@ -75,8 +84,13 @@ public class VmController implements VmApi {
   }
 
   @Override
-  public ResponseEntity<Void> heartbeat(UUID id) {
-    service.heartbeat(id);
-    return ResponseEntity.noContent().build();
+  public ResponseEntity<VmDto> heartbeat(UUID id) {
+    return ResponseEntity.ok(mapper.toDto(service.heartbeat(id)));
+  }
+
+  @Override
+  public ResponseEntity<HarnessDto> harness(UUID id) {
+    var harness = harnesses.get(id);
+    return ResponseEntity.ok(new HarnessDto(harness.image(), harness.environment()));
   }
 }

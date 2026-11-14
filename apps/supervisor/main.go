@@ -1,4 +1,5 @@
-// Command supervisor enrolls a workspace VM with agent-hub and keeps it reported alive.
+// Command supervisor enrolls a workspace VM with agent-hub, runs its harness container and
+// keeps it reported alive.
 package main
 
 import (
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/agent"
+	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/docker"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
@@ -22,6 +24,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
 
+	socket := envOr("SUPERVISOR_DOCKER_SOCKET", "/var/run/docker.sock")
 	s := &agent.Supervisor{
 		EnvFile:       envOr("SUPERVISOR_CONFIG", "/etc/workspaced/agent.env"),
 		StateDir:      envOr("SUPERVISOR_STATE_DIR", "/var/lib/workspaced"),
@@ -33,8 +36,12 @@ func main() {
 		BackoffMax:    60 * time.Second,
 		OperatorRetry: 60 * time.Second,
 		Heartbeat:     30 * time.Second,
+		Docker:        docker.New(socket),
+		HealthURL:     "http://127.0.0.1:4096/api/info",
+		HealthPoll:    2 * time.Second,
+		HealthTimeout: 5 * time.Minute,
 	}
-	log.Info("starting", "config", s.EnvFile, "stateDir", s.StateDir)
+	log.Info("starting", "config", s.EnvFile, "stateDir", s.StateDir, "docker", socket)
 	if err := s.Run(ctx); err != nil {
 		log.Error("supervisor stopped", "error", err.Error())
 		os.Exit(1)

@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetzner;
 import io.github.kalpak44.workspacedai.vmmanager.vault.FakeVault;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -12,6 +13,7 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
@@ -33,6 +35,7 @@ class VmControllerTest {
   private static final UUID USER = UUID.randomUUID();
   // Closes the userId string it follows, so a body reads USER + KEY + "}".
   private static final String KEY = "\",\"openRouterApiKey\":\"sk-or-v1-test\"";
+  private static final String IMAGE = "ghcr.io/kalpak44/workspaced-ai-harness:85c2bd5";
 
   @DynamicPropertySource
   static void hetzner(DynamicPropertyRegistry registry) {
@@ -40,6 +43,7 @@ class VmControllerTest {
     registry.add("workspaced.hetzner.base-url", HETZNER::url);
     registry.add("workspaced.vault.url", VAULT::url);
     registry.add("workspaced.vault.token", () -> FakeVault.ROOT_TOKEN);
+    registry.add("workspaced.harness.image", () -> IMAGE);
   }
 
   @AfterAll
@@ -103,10 +107,13 @@ class VmControllerTest {
     assertThat(restart.statusCode()).isEqualTo(202);
     assertThat(JSON.readValue(restart.body(), VmDto.class).status()).isEqualTo("RESTARTING");
 
-    assertThat(send("POST", "/" + vm.id() + "/heartbeat", null).statusCode()).isEqualTo(204);
-    var fetched = JSON.readValue(send("GET", "/" + vm.id(), null).body(), VmDto.class);
-    assertThat(fetched.status()).isEqualTo("RESTARTING");
-    assertThat(fetched.lastSeenAt()).isAfterOrEqualTo(ready.lastSeenAt());
+    var heartbeat = send("POST", "/" + vm.id() + "/heartbeat", null);
+    assertThat(heartbeat.statusCode()).isEqualTo(200);
+    var beat = JSON.readValue(heartbeat.body(), VmDto.class);
+    assertThat(beat.status()).isEqualTo("RESTARTING");
+    assertThat(beat.lastSeenAt()).isAfterOrEqualTo(ready.lastSeenAt());
+    assertThat(JSON.readValue(send("GET", "/" + vm.id(), null).body(), VmDto.class))
+        .isEqualTo(beat);
   }
 
   @Test
@@ -119,6 +126,88 @@ class VmControllerTest {
     assertThat(send("POST", "/" + vm.id() + "/ready", null).statusCode()).isEqualTo(404);
     assertThat(send("POST", "/" + vm.id() + "/restart", null).statusCode()).isEqualTo(404);
     assertThat(send("POST", "/" + vm.id() + "/heartbeat", null).statusCode()).isEqualTo(404);
+    assertThat(send("GET", "/" + vm.id() + "/harness", null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void handsTheHarnessItsImageAndEveryValueAndListsNoneOfTheSystemOnes() throws Exception {
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\""
+                + UUID.randomUUID()
+                + "\",\"userId\":\""
+                + USER
+                + KEY
+                + ",\"environment\":{\"OPENROUTER_BASE_URL\":\"https://or\","
+                + "\"OPENCODE_PASSWORD\":\"harness-pw\"}}");
+    assertThat(response.statusCode()).isEqualTo(201);
+    var vm = JSON.readValue(response.body(), VmDto.class);
+    var secrets = "/" + vm.id() + "/secrets";
+    assertThat(VAULT.entries.get("workspaced-ai/vms/" + vm.id() + "/system"))
+        .containsOnlyKeys("OPENROUTER_BASE_URL", "OPENCODE_PASSWORD");
+    assertThat(
+            send("POST", secrets, "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_x\"}").statusCode())
+        .isEqualTo(201);
+    for (var name : new String[] {"OPENROUTER_BASE_URL", "OPENCODE_CONFIG"}) {
+      var refused = send("POST", secrets, "{\"name\":\"" + name + "\",\"value\":\"v\"}");
+      assertThat(refused.statusCode()).isEqualTo(409);
+      assertThat(refused.body()).contains(name);
+    }
+    assertThat(send("GET", secrets, null).body()).doesNotContain("OPENROUTER_BASE_URL", "OPENCODE");
+
+    var harness = send("GET", "/" + vm.id() + "/harness", null);
+
+    assertThat(harness.statusCode()).isEqualTo(200);
+    var body = JSON.readValue(harness.body(), HarnessDto.class);
+    assertThat(body.image()).isEqualTo(IMAGE);
+    assertThat(body.environment())
+        .containsExactlyInAnyOrderEntriesOf(
+            Map.of(
+                "OPENROUTER_API_KEY", "sk-or-v1-test",
+                "GITHUB_TOKEN", "ghp_x",
+                "OPENROUTER_BASE_URL", "https://or",
+                "OPENCODE_PASSWORD", "harness-pw"));
+
+    send("DELETE", "/" + vm.id(), null);
+    assertThat(VAULT.entries)
+        .doesNotContainKeys(
+            "workspaced-ai/vms/" + vm.id(), "workspaced-ai/vms/" + vm.id() + "/system");
+  }
+
+  @Test
+  void givesAVmCreatedWithoutAnEnvironmentAPassword() throws Exception {
+    var vm = create();
+
+    var first =
+        JSON.readValue(send("GET", "/" + vm.id() + "/harness", null).body(), HarnessDto.class);
+    var second =
+        JSON.readValue(send("GET", "/" + vm.id() + "/harness", null).body(), HarnessDto.class);
+
+    assertThat(first.environment().get("OPENCODE_PASSWORD"))
+        .isNotBlank()
+        .isEqualTo(second.environment().get("OPENCODE_PASSWORD"));
+  }
+
+  @Test
+  void rejectsAnInvalidEnvironment() throws Exception {
+    for (var environment :
+        new String[] {"{\"1BAD\":\"v\"}", "{\"A-B\":\"v\"}", "{\"OK\":null}", "[]"}) {
+      var response =
+          send(
+              "POST",
+              "",
+              "{\"workspaceId\":\""
+                  + UUID.randomUUID()
+                  + "\",\"userId\":\""
+                  + USER
+                  + KEY
+                  + ",\"environment\":"
+                  + environment
+                  + "}");
+      assertThat(response.statusCode()).as(environment).isEqualTo(400);
+    }
   }
 
   @Test

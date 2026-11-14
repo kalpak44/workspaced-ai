@@ -49,6 +49,13 @@ public class ApiExceptionHandler {
     return ProblemDetail.forStatusAndDetail(HttpStatus.NOT_FOUND, e.getMessage());
   }
 
+  // It lacks its harness image or Vault: its deployment's to fix, which a later retry may find.
+  @ExceptionHandler(VmManagerException.Unavailable.class)
+  ProblemDetail vmManagerUnavailable(VmManagerException.Unavailable e) {
+    log.warn("VM manager unavailable: {}", e.getMessage());
+    return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
+  }
+
   @ExceptionHandler(VmManagerException.class)
   ProblemDetail vmManagerFailed(VmManagerException e) {
     log.warn("VM manager call failed: {}", e.getMessage());

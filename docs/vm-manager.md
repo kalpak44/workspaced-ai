@@ -18,16 +18,19 @@ A VM is one Hetzner Cloud server running one workspace. It has an `id` (UUID, as
 | `GET`    | `/api/v1/vms`                 |                                                          | `200` and every VM; `?workspaceId=` for one     |
 | `GET`    | `/api/v1/vms/events`          |                                                          | `200` and a server-sent event stream            |
 | `GET`    | `/api/v1/vms/{id}`            |                                                          | `200` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms`                 | `{"workspaceId": "…", "userId": "…", "serverType": "cx23", "openRouterApiKey": "…"}` | `201`, the VM, and its URL in `Location`; `200` and the workspace's VM if it has one |
+| `POST`   | `/api/v1/vms`                 | `{"workspaceId": "…", "userId": "…", "serverType": "cx23", "openRouterApiKey": "…", "environment": {…}}` | `201`, the VM, and its URL in `Location`; `200` and the workspace's VM if it has one |
 | `DELETE` | `/api/v1/vms/{id}`            |                                                          | `204`, or `404`                                 |
 | `POST`   | `/api/v1/vms/{id}/restart`    |                                                          | `202` and the VM, or `404`                      |
 | `POST`   | `/api/v1/vms/{id}/ready`      |                                                          | `200` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms/{id}/heartbeat`  |                                                          | `204`, or `404`                                 |
+| `POST`   | `/api/v1/vms/{id}/heartbeat`  |                                                          | `200` and the VM, or `404`                      |
+| `GET`    | `/api/v1/vms/{id}/harness`    |                                                          | `200` and the harness, `404`, or `503`          |
 
-Creating a VM stores `openRouterApiKey` in Vault as its system secret, then creates its server at Hetzner
+Creating a VM stores `openRouterApiKey` in Vault as its system secret and `environment` (optional) as its harness
+environment, then creates its server at Hetzner
 (`ubuntu-24.04` in the configured location) and answers once Hetzner has accepted it; it is `PROVISIONING` until it
 reports ready. `serverType` is optional and defaults to the first one offered. A missing or malformed `workspaceId` or
-`userId`, a missing key, or a `serverType` that is not offered, answers `400`; Hetzner or Vault refusing answers `502`
+`userId`, a missing key, an `environment` name that is not a variable name, or a `serverType` that is not offered,
+answers `400`; Hetzner or Vault refusing answers `502`
 and keeps nothing. Deleting a VM deletes its server, disk included, then its secrets; a server already gone counts as
 deleted, and a VM whose server or secrets could not be deleted is kept so the delete can be retried.
 
@@ -44,7 +47,8 @@ never reachable even while it boots. Opening a port is a rule added to that fire
 Before it asks Hetzner for the server, the VM manager asks the [agent hub](agent-hub.md) for a one-time enrollment
 token and hands the VM a cloud-config writing `/etc/workspaced/agent.env` (root-only): the VM id, the agent hub's
 public address (`WORKSPACED_AGENT_HUB_PUBLIC_URL`) and the token. The supervisor enrolls with it on first boot and
-reports ready and heartbeats through the agent hub, which relays them to `/vms/{id}/ready` and `/heartbeat` here.
+reports ready and heartbeats through the agent hub, which relays them to `/vms/{id}/ready` and `/heartbeat` here; a
+heartbeat answers the VM, so its supervisor learns it is `RESTARTING` and recreates the harness.
 Deleting a VM revokes its agent. Without `WORKSPACED_AGENT_HUB_URL` a VM boots with no agent identity, which is only
 useful locally.
 
@@ -68,8 +72,10 @@ second server for a workspace that has one; a failed read is retried every minut
 ## VM secrets
 
 Each VM keeps its secrets in Vault, one KV v2 entry per VM at `secret/workspaced-ai/vms/<vm id>` holding one key per
-secret. Nothing on a VM reads them yet. `OPENROUTER_API_KEY` is the system secret: set when the VM is created, and
-never added, replaced or removed through these routes. A user may add up to 50 more.
+secret. `OPENROUTER_API_KEY` is the system secret: set when the VM is created, and never added, replaced or removed
+through these routes. A user may add up to 50 more. The harness environment the API hands over at creation
+(`OPENROUTER_BASE_URL`, `OPENCODE_PASSWORD`, …) lives in a second entry, `<vm id>/system`, which these routes
+never list, count or change; deleting the VM deletes both.
 
 | Method   | Path                              | Body                                       | Answers                              |
 |----------|-----------------------------------|--------------------------------------------|--------------------------------------|
@@ -78,9 +84,18 @@ never added, replaced or removed through these routes. A user may add up to 50 m
 | `DELETE` | `/api/v1/vms/{id}/secrets/{name}` |                                            | `204`, `404`, or `409`               |
 
 Names are listed system secret first, then by name, and values never come back. `409` means the VM already has that
-secret, it is the system secret, or the VM already holds 50; adding never replaces. A change is a check-and-set write
+secret, it is the system secret, its name is in the harness environment or starts with `OPENCODE_` (it would be
+shadowed), or the VM already holds 50; adding never replaces. A change is a check-and-set write
 of the whole entry, so two concurrent adds cannot both pass the limit, and the entry keeps one version, so a removed
 value is not left in its history. Without `WORKSPACED_VAULT_URL` these routes and creating a VM answer `503`.
+
+### Harness
+
+`GET /api/v1/vms/{id}/harness` answers `{"image": "…", "environment": {…}}`: the image from `WORKSPACED_HARNESS_IMAGE`
+and the VM's secrets, its key and its harness environment merged, the harness environment winning a clash. It is the
+only route that returns values, and only the agent hub calls it, for a VM that signed its request. A VM with no harness
+environment, one created before it existed, is given an `OPENCODE_PASSWORD` on its first call, written with
+check-and-set so two concurrent calls agree on one. No image configured answers `503`.
 
 ### Vault access
 

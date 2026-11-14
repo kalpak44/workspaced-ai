@@ -144,7 +144,9 @@ class AgentHubRoutesTest {
     var vm = UUID.randomUUID();
     var agent = enrolled(vm);
     assertThat(signed(vm, agent, "/agent/ready", now()).statusCode()).isEqualTo(204);
-    assertThat(signed(vm, agent, "/agent/heartbeat", now()).statusCode()).isEqualTo(204);
+    var heartbeat = signed(vm, agent, "/agent/heartbeat", now());
+    assertThat(heartbeat.statusCode()).isEqualTo(200);
+    assertThat(heartbeat.body()).isEqualTo("{\"status\":\"READY\"}");
     assertThat(VM_MANAGER.reports).contains("ready " + vm, "heartbeat " + vm);
     assertThat(
             jdbc.sql("select last_seen_at from agent where vm_id = ?")
@@ -153,6 +155,36 @@ class AgentHubRoutesTest {
                 .single()
                 .toInstant())
         .isEqualTo(CLOCK.instant());
+  }
+
+  @Test
+  void handsAProvenVmItsHarnessUnchangedAndUncached() throws Exception {
+    var vm = UUID.randomUUID();
+    var agent = enrolled(vm);
+
+    var harness = signed(vm, agent, "/agent/harness", now());
+
+    assertThat(harness.statusCode()).isEqualTo(200);
+    assertThat(harness.body()).isEqualTo(FakeVmManager.HARNESS);
+    assertThat(harness.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(harness.headers().firstValue("Content-Type")).hasValue("application/json");
+    assertThat(signed(vm, new TestAgent(), "/agent/harness", now()).statusCode()).isEqualTo(401);
+  }
+
+  @Test
+  void answersUnavailableWhenTheVmManagerHasNoHarness() throws Exception {
+    var vm = UUID.randomUUID();
+    var agent = enrolled(vm);
+    VM_MANAGER.status = 503;
+    try {
+      var harness = signed(vm, agent, "/agent/harness", now());
+      assertThat(harness.statusCode()).isEqualTo(503);
+      assertThat(harness.headers().firstValue("Content-Type")).hasValue("application/problem+json");
+      VM_MANAGER.status = 500;
+      assertThat(signed(vm, agent, "/agent/harness", now()).statusCode()).isEqualTo(502);
+    } finally {
+      VM_MANAGER.status = 0;
+    }
   }
 
   @Test
@@ -176,6 +208,7 @@ class AgentHubRoutesTest {
     VM_MANAGER.gone.add(vm);
     assertThat(signed(vm, agent, "/agent/heartbeat", now()).statusCode()).isEqualTo(404);
     assertThat(signed(vm, agent, "/agent/ready", now()).statusCode()).isEqualTo(404);
+    assertThat(signed(vm, agent, "/agent/harness", now()).statusCode()).isEqualTo(404);
   }
 
   @Test

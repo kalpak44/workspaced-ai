@@ -1,4 +1,4 @@
-# The harness each workspace pod runs: OpenCode V2's service, with every chat attached to
+# The harness each workspace VM runs: OpenCode V2's service, with every chat attached to
 # the workspace project and terminals served by OpenCode's PTY API.
 # .dockerignore admits only the files it lists, so every file this build copies must be
 # listed there too, or the build fails with "not found".
@@ -69,8 +69,11 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 # nginx is the workspace's public web server, off until the user turns it on (web-server.sh).
 # tzdata lets every tool convert between the UTC clock and the user's time zone; without it
 # a zone name silently reads as UTC, and Python cannot load one at all.
+# The Docker CLI, buildx and compose talk to the VM's rootless Docker through DOCKER_HOST, so
+# the agent builds and runs containers without ever reaching the system daemon.
 RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
       file jq make nano nginx openssh-client py3-pip python3 sqlite tree tzdata uv zip \
+      docker-cli docker-cli-buildx docker-cli-compose \
  && curl -fsSL -o /tmp/yq \
       "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
  && echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c - \

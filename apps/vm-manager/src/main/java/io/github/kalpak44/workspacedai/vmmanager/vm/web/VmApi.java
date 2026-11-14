@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -208,9 +209,16 @@ public interface VmApi {
       operationId = "reportVmHeartbeat",
       summary = "Report a VM alive",
       description =
-          "Periodically while the VM runs, relayed by the workspace API; refreshes lastSeenAt "
-              + "only.")
-  @ApiResponse(responseCode = "204", description = "Recorded.")
+          "Periodically while the VM runs, relayed by the agent hub; refreshes lastSeenAt only. "
+              + "Answers the VM so the VM learns its status, RESTARTING among them.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Recorded.",
+      content =
+          @Content(
+              mediaType = JSON,
+              schema = @Schema(implementation = VmDto.class),
+              examples = @ExampleObject(VM_EXAMPLE)))
   @ApiResponse(
       responseCode = "404",
       description = "There is no such VM.",
@@ -218,6 +226,50 @@ public interface VmApi {
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
-  @PostMapping("/{id}/heartbeat")
-  ResponseEntity<Void> heartbeat(@PathVariable UUID id);
+  @PostMapping(path = "/{id}/heartbeat", produces = JSON)
+  ResponseEntity<VmDto> heartbeat(@PathVariable UUID id);
+
+  @Operation(
+      operationId = "getVmHarness",
+      summary = "Get a VM's harness",
+      description =
+          "The image the VM's supervisor runs and the environment it starts it with, secret values "
+              + "included: the only route that returns them, called only by the agent hub. A VM "
+              + "created without a harness environment is given an OPENCODE_PASSWORD here, "
+              + "kept from then on.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "OK.",
+      content =
+          @Content(
+              mediaType = JSON,
+              schema = @Schema(implementation = HarnessDto.class),
+              examples =
+                  @ExampleObject(
+                      "{\"image\":\"ghcr.io/kalpak44/workspaced-ai-harness:85c2bd5\","
+                          + "\"environment\":{\"OPENROUTER_API_KEY\":\"sk-or-v1-…\","
+                          + "\"OPENCODE_PASSWORD\":\"…\"}}")))
+  @ApiResponse(
+      responseCode = "404",
+      description = "There is no such VM.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description = "Vault failed.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description = "No harness image or no Vault address is configured.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @GetMapping(path = "/{id}/harness", produces = JSON)
+  ResponseEntity<HarnessDto> harness(@PathVariable UUID id);
 }
