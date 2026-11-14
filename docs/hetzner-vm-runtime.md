@@ -99,6 +99,6 @@ Swagger UI is at `/api/v1/swagger-ui/index.html` and the OpenAPI document at `/a
 workspace API. With no IngressRoute, reach the cluster's copy through a port-forward:
 
 ```bash
-kubectl --context k3s -n workspaced-ai port-forward svc/workspaced-ai-vm-manager 8081
+kubectl --context k3s -n workspaced-ai port-forward svc/workspaced-ai-vm-manager 8081:8080
 open http://localhost:8081/api/v1/swagger-ui/index.html
 ```
