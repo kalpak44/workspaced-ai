@@ -33,11 +33,11 @@ class VmControllerTest {
     assertThat(first.statusCode()).isEqualTo(201);
     var vm = JSON.readValue(first.body(), Vm.class);
     assertThat(vm.status()).isEqualTo(VmStatus.PROVISIONING);
-    assertThat(vm.serverType()).isEqualTo("cx22");
+    assertThat(vm.serverType()).isEqualTo("cx23");
     assertThat(first.headers().firstValue("Location"))
         .hasValueSatisfying(location -> assertThat(location).endsWith("/vms/" + vm.id()));
 
-    var again = send("POST", "", "{\"ownerRef\":\"" + owner + "\",\"serverType\":\"cax11\"}");
+    var again = send("POST", "", "{\"ownerRef\":\"" + owner + "\",\"serverType\":\"cx33\"}");
     assertThat(again.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(again.body(), Vm.class).id()).isEqualTo(vm.id());
 
@@ -83,6 +83,29 @@ class VmControllerTest {
     assertThat(response.statusCode()).isEqualTo(400);
     assertThat(response.headers().firstValue("Content-Type"))
         .hasValueSatisfying(type -> assertThat(type).startsWith("application/problem+json"));
+  }
+
+  @Test
+  void rejectsAServerTypeNotOffered() throws Exception {
+    var response =
+        send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\",\"serverType\":\"cx53\"}");
+    assertThat(response.statusCode()).isEqualTo(400);
+    assertThat(response.body()).contains("cx23, cx33");
+  }
+
+  @Test
+  void createsTheSizeAsked() throws Exception {
+    var response =
+        send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\",\"serverType\":\"cx33\"}");
+    assertThat(JSON.readValue(response.body(), Vm.class).serverType()).isEqualTo("cx33");
+  }
+
+  @Test
+  void listsNoOptionsWithoutAToken() throws Exception {
+    var request = HttpRequest.newBuilder(URI.create(base().replace("/vms", "/vm-options"))).build();
+    var response = http.send(request, BodyHandlers.ofString());
+    assertThat(response.statusCode()).isEqualTo(503);
+    assertThat(response.body()).contains("no Hetzner API token");
   }
 
   @Test

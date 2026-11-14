@@ -39,7 +39,12 @@ public class VmController implements VmApi {
 
   @Override
   public ResponseEntity<Vm> create(CreateVmRequest request) {
-    var created = service.create(request);
+    VmService.Created created;
+    try {
+      created = service.create(request);
+    } catch (IllegalArgumentException e) {
+      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, e.getMessage());
+    }
     if (!created.isNew()) {
       return ResponseEntity.ok(created.vm());
     }

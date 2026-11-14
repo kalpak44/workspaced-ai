@@ -39,7 +39,7 @@ public interface VmApi {
 
   String VM_EXAMPLE =
       "{\"id\":\"8d1e4b0a-2f6c-4f7e-9b1d-0c3a5e7f9a21\","
-          + "\"ownerRef\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"serverType\":\"cx22\","
+          + "\"ownerRef\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"serverType\":\"cx23\","
           + "\"status\":\"PROVISIONING\",\"ipv4\":null,"
           + "\"createdAt\":\"2026-11-14T10:00:00Z\",\"lastSeenAt\":null}";
 
@@ -119,7 +119,7 @@ public interface VmApi {
       content = @Content(mediaType = JSON, schema = @Schema(implementation = Vm.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "The ownerRef is blank or longer than 100 characters.",
+      description = "The ownerRef is blank or too long, or the serverType is not offered.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

@@ -14,7 +14,7 @@ public record Vm(
             description = "Whom it belongs to; opaque to the manager, a workspace id in practice",
             example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
         String ownerRef,
-    @Schema(description = "Hetzner server type", example = "cx22") String serverType,
+    @Schema(description = "Hetzner server type", example = "cx23") String serverType,
     @Schema(description = "Where it stands", example = "PROVISIONING") VmStatus status,
     @Schema(description = "Public IPv4; null until it has one", example = "203.0.113.10")
         String ipv4,

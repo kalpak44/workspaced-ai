@@ -12,13 +12,13 @@ public record CreateVmRequest(
         @NotBlank
         @Size(max = 100)
         String ownerRef,
-    @Schema(description = "Hetzner server type; cx22 when omitted", example = "cx22")
+    @Schema(
+            description = "One of the serverTypes /vm-options lists; its default when omitted",
+            example = "cx23")
         @Size(max = 20)
         String serverType) {
 
-  static final String DEFAULT_SERVER_TYPE = "cx22";
-
-  String serverTypeOrDefault() {
-    return serverType == null || serverType.isBlank() ? DEFAULT_SERVER_TYPE : serverType.trim();
+  String serverTypeOr(String fallback) {
+    return serverType == null || serverType.isBlank() ? fallback : serverType.trim();
   }
 }

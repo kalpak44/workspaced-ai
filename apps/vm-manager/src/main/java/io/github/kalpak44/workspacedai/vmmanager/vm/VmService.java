@@ -11,7 +11,7 @@ import java.util.function.UnaryOperator;
 import org.springframework.stereotype.Service;
 
 /**
- * Dummy for now: VMs live in memory and nothing reaches Hetzner. A created VM stays PROVISIONING
+ * Dummy for now: VMs live in memory and none is created at Hetzner. A created VM stays PROVISIONING
  * until something calls {@link #ready}, the way cloud-init will once VMs are real.
  */
 @Service
@@ -19,9 +19,11 @@ public class VmService {
 
   private final Map<UUID, Vm> vms = new ConcurrentHashMap<>();
   private final VmEvents events;
+  private final VmProperties properties;
 
-  public VmService(VmEvents events) {
+  public VmService(VmEvents events, VmProperties properties) {
     this.events = events;
+    this.properties = properties;
   }
 
   /** Oldest first; only that owner's when one is given. */
@@ -36,8 +38,20 @@ public class VmService {
     return Optional.ofNullable(vms.get(id));
   }
 
-  /** The owner's VM; a second request for the same owner returns the first one's VM. */
+  /**
+   * The owner's VM; a second request for the same owner returns the first one's VM.
+   *
+   * @throws IllegalArgumentException when the server type is not one offered
+   */
   public synchronized Created create(CreateVmRequest request) {
+    var serverType = request.serverTypeOr(properties.defaultServerType());
+    if (!properties.offers(serverType)) {
+      throw new IllegalArgumentException(
+          "server type "
+              + serverType
+              + " is not offered; choose one of "
+              + String.join(", ", properties.serverTypes()));
+    }
     var ownerRef = request.ownerRef().trim();
     var existing = list(Optional.of(ownerRef));
     if (!existing.isEmpty()) {
@@ -47,7 +61,7 @@ public class VmService {
         new Vm(
             UUID.randomUUID(),
             ownerRef,
-            request.serverTypeOrDefault(),
+            serverType,
             VmStatus.PROVISIONING,
             null,
             Instant.now(),

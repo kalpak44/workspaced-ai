@@ -23,3 +23,13 @@ management:
     health:
       probes:
         enabled: true
+
+workspaced:
+  hetzner:
+    # A Read & Write token of the Hetzner Cloud project VMs live in. Unset, the app still
+    # starts, and anything that needs Hetzner answers 503.
+    token: ${WORKSPACED_HETZNER_TOKEN:}
+    location: ${WORKSPACED_HETZNER_LOCATION:nbg1}
+  vm:
+    # The sizes offered, default first. Specs and prices come from Hetzner.
+    server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}
