@@ -58,7 +58,9 @@ class AgentServiceTest {
           URI.create("http://vm-manager"),
           Duration.ofMinutes(30),
           Duration.ofSeconds(60),
-          Duration.ofSeconds(10));
+          Duration.ofSeconds(10),
+          Duration.ofSeconds(10),
+          64);
   final AgentService service = new AgentService(store, vmManager, properties, clock);
   final TestAgent agent = new TestAgent();
   final UUID vm = UUID.randomUUID();

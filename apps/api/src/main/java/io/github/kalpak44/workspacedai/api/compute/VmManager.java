@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.compute;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 
@@ -35,6 +36,9 @@ public interface VmManager {
       String serverType,
       String openRouterApiKey,
       Map<String, String> environment);
+
+  /** The id of the workspace's VM; empty when it has none. */
+  Optional<UUID> vmIdFor(UUID workspaceId);
 
   /** Deletes every VM of the workspace; none at all counts as deleted. */
   void deleteFor(UUID workspaceId);

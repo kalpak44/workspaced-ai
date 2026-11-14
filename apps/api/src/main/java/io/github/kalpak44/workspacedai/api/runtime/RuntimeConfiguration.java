@@ -7,11 +7,11 @@ import org.springframework.context.annotation.Configuration;
 
 /** Every workspace runs on a Hetzner VM of its own; there is no other runtime. */
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(WebServerProperties.class)
+@EnableConfigurationProperties({WebServerProperties.class, AgentHubProperties.class})
 public class RuntimeConfiguration {
 
   @Bean
-  WorkspaceRuntime vmWorkspaceRuntime(VmManager vmManager) {
-    return new VmWorkspaceRuntime(vmManager);
+  WorkspaceRuntime vmWorkspaceRuntime(VmManager vmManager, AgentHubProperties agentHub) {
+    return new VmWorkspaceRuntime(vmManager, agentHub);
   }
 }

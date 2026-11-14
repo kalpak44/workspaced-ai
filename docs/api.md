@@ -99,8 +99,9 @@ its VM, disk included, and the call answers only once the VM manager has; if it 
 call fails. Statuses come from the VM manager's VMs and its event stream. The key goes to the VM manager as the VM's
 system secret and the rest of the harness environment (base URL, harness password, …) as its system environment, which
 the VM's supervisor starts the harness with; restarting marks the VM `RESTARTING`, and its supervisor recreates the
-harness with fresh values. Nothing reaches that harness from the API yet, so sessions, terminals, secrets, backups and
-the web server answer as for a workspace that is not running. There is no other runtime: a local run without
+harness with fresh values. Every call to the harness goes through the agent hub's tunnel to the VM, at
+`WORKSPACED_AGENT_HUB_URL` + `/internal/vms/<vm id>/harness`; the VM's supervisor sets the harness password, so the
+API holds none. Backups and the web server do not reach a VM yet. There is no other runtime: a local run without
 `WORKSPACED_VM_MANAGER_URL` cannot create a workspace (`503`).
 
 ### Workspace terminals

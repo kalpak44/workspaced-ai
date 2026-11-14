@@ -103,6 +103,7 @@ func (s *Supervisor) bringUp(ctx context.Context, c *Client, log *slog.Logger, f
 			backoff = s.next(backoff)
 			continue
 		}
+		s.keepPassword(h.Environment)
 		if s.waitHealthy(ctx) {
 			log.Info("harness answers")
 			s.ready(ctx, c, log)
@@ -204,6 +205,8 @@ func (s *Supervisor) keepRunning(ctx context.Context, c *Client, log *slog.Logge
 		}
 		if err := s.ensure(ctx, h, false, log); err != nil {
 			log.Warn("harness ensure failed", "error", redact(err.Error(), h.Environment))
+		} else {
+			s.keepPassword(h.Environment)
 		}
 	case !cur.Running:
 		log.Warn("harness is not running, starting it")

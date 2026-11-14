@@ -62,13 +62,34 @@ func (c *Client) Call(ctx context.Context, subpath string) (int, []byte, error) 
 	if err != nil {
 		return 0, nil, err
 	}
-	ts := c.Now().Unix()
 	// Sign the path as it goes on the wire, so the /api/v1 prefix comes from the URL.
-	msg := SignMessage(req.Method, req.URL.EscapedPath(), ts, nil)
-	req.Header.Set("X-Agent-Vm", c.VMID)
-	req.Header.Set("X-Agent-Timestamp", strconv.FormatInt(ts, 10))
-	req.Header.Set("X-Agent-Signature", base64.StdEncoding.EncodeToString(ed25519.Sign(c.Key, []byte(msg))))
+	for k, v := range c.SignHeaders(req.Method, req.URL.EscapedPath()) {
+		req.Header[k] = v
+	}
 	return c.doBody(req)
+}
+
+// SignHeaders signs a request with no body, such as the tunnel's WebSocket handshake.
+func (c *Client) SignHeaders(method, path string) http.Header {
+	ts := c.Now().Unix()
+	msg := SignMessage(method, path, ts, nil)
+	h := http.Header{}
+	h.Set("X-Agent-Vm", c.VMID)
+	h.Set("X-Agent-Timestamp", strconv.FormatInt(ts, 10))
+	h.Set("X-Agent-Signature", base64.StdEncoding.EncodeToString(ed25519.Sign(c.Key, []byte(msg))))
+	return h
+}
+
+// TunnelURL is the worker endpoint below the base URL, as a WebSocket URL.
+func (c *Client) TunnelURL() string {
+	u := strings.TrimRight(c.BaseURL, "/") + "/agent/tunnel"
+	if rest, ok := strings.CutPrefix(u, "https://"); ok {
+		return "wss://" + rest
+	}
+	if rest, ok := strings.CutPrefix(u, "http://"); ok {
+		return "ws://" + rest
+	}
+	return u
 }
 
 func (c *Client) newRequest(ctx context.Context, subpath string, body []byte) (*http.Request, error) {

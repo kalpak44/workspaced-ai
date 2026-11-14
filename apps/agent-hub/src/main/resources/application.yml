@@ -45,3 +45,7 @@ workspaced:
     enrollment-ttl: ${WORKSPACED_ENROLLMENT_TTL:30m}
     # How far a signed request's timestamp may be from this clock, either way.
     signature-skew: ${WORKSPACED_SIGNATURE_SKEW:60s}
+    # How long a call to a harness waits for one of its VM's tunnel workers to come free.
+    worker-wait: ${WORKSPACED_AGENT_HUB_WORKER_WAIT:10s}
+    # How many tunnel workers one VM may hold open, idle and busy together.
+    max-workers: ${WORKSPACED_AGENT_HUB_MAX_WORKERS:64}

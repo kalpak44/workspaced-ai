@@ -4,15 +4,19 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.compute.ProvisionedVm;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
+import io.github.kalpak44.workspacedai.api.compute.VmManagerUnavailableException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.net.URI;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.junit.jupiter.api.Test;
@@ -20,7 +24,10 @@ import org.junit.jupiter.api.Test;
 class VmWorkspaceRuntimeTest {
 
   private final VmManager vmManager = mock(VmManager.class);
-  private final VmWorkspaceRuntime runtime = new VmWorkspaceRuntime(vmManager);
+  private final VmWorkspaceRuntime runtime =
+      new VmWorkspaceRuntime(
+          vmManager,
+          new AgentHubProperties(URI.create("http://workspaced-ai-agent-hub:8080/api/v1/")));
   private final UUID workspace = UUID.randomUUID();
   private final UUID owner = UUID.randomUUID();
 
@@ -110,10 +117,49 @@ class VmWorkspaceRuntimeTest {
   }
 
   @Test
-  void runsNoHarnessAndKeepsNoSecretYet() {
-    runtime.putSecret(workspace, "KEY", "value");
+  void reachesTheHarnessThroughTheAgentHubsTunnelAskingForTheVmOnce() {
+    var vm = UUID.randomUUID();
+    when(vmManager.vmIdFor(workspace)).thenReturn(Optional.of(vm));
+
+    var first = runtime.harness(workspace).orElseThrow();
+    runtime.harness(workspace);
+
+    assertThat(first.baseUrl())
+        .isEqualTo(
+            URI.create(
+                "http://workspaced-ai-agent-hub:8080/api/v1/internal/vms/" + vm + "/harness"));
+    assertThat(first.password()).isEmpty();
+    verify(vmManager, times(1)).vmIdFor(workspace);
+  }
+
+  @Test
+  void forgetsTheVmOnceTheWorkspaceStops() {
+    when(vmManager.vmIdFor(workspace)).thenReturn(Optional.of(UUID.randomUUID()));
+    runtime.harness(workspace);
+
+    runtime.stop(workspace);
+    runtime.harness(workspace);
+
+    verify(vmManager, times(2)).vmIdFor(workspace);
+  }
+
+  @Test
+  void hasNoHarnessWithoutAVmOrAVmManagerOrAnAgentHub() {
+    var other = UUID.randomUUID();
+    when(vmManager.vmIdFor(workspace)).thenReturn(Optional.empty());
+    when(vmManager.vmIdFor(other)).thenThrow(new VmManagerUnavailableException("down", null));
+    when(vmManager.vmIdFor(owner)).thenReturn(Optional.of(UUID.randomUUID()));
 
     assertThat(runtime.harness(workspace)).isEmpty();
+    assertThat(runtime.harness(other)).isEmpty();
+    assertThat(new VmWorkspaceRuntime(vmManager, new AgentHubProperties(null)).harness(owner))
+        .isEmpty();
+  }
+
+  @Test
+  void keepsNoSecretValueAndNoLog() {
+    runtime.putSecret(workspace, "KEY", "value");
+
     assertThat(runtime.secret(workspace, "KEY")).isEmpty();
     assertThat(runtime.recentLog(workspace, 10)).isEmpty();
   }

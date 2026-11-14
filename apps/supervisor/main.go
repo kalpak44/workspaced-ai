@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -25,6 +27,7 @@ func main() {
 	defer stop()
 
 	socket := envOr("SUPERVISOR_DOCKER_SOCKET", "/var/run/docker.sock")
+	harness := envOr("SUPERVISOR_HARNESS_URL", "http://127.0.0.1:4096")
 	s := &agent.Supervisor{
 		EnvFile:       envOr("SUPERVISOR_CONFIG", "/etc/workspaced/agent.env"),
 		StateDir:      envOr("SUPERVISOR_STATE_DIR", "/var/lib/workspaced"),
@@ -37,11 +40,16 @@ func main() {
 		OperatorRetry: 60 * time.Second,
 		Heartbeat:     30 * time.Second,
 		Docker:        docker.New(socket),
-		HealthURL:     "http://127.0.0.1:4096/api/info",
+		HealthURL:     strings.TrimRight(harness, "/") + "/api/info",
 		HealthPoll:    2 * time.Second,
 		HealthTimeout: 5 * time.Minute,
+		HarnessURL:    harness,
+		TunnelIdle:    envInt(log, "SUPERVISOR_TUNNEL_IDLE", 4),
+		TunnelMax:     envInt(log, "SUPERVISOR_TUNNEL_MAX", 64),
+		TunnelPing:    25 * time.Second,
 	}
-	log.Info("starting", "config", s.EnvFile, "stateDir", s.StateDir, "docker", socket)
+	log.Info("starting", "config", s.EnvFile, "stateDir", s.StateDir, "docker", socket,
+		"harness", harness, "tunnelIdle", s.TunnelIdle, "tunnelMax", s.TunnelMax)
 	if err := s.Run(ctx); err != nil {
 		log.Error("supervisor stopped", "error", err.Error())
 		os.Exit(1)
@@ -54,4 +62,18 @@ func envOr(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// envInt falls back to def for an unset or malformed value, so a typo cannot stop the tunnel.
+func envInt(log *slog.Logger, key string, def int) int {
+	v := os.Getenv(key)
+	if v == "" {
+		return def
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 0 {
+		log.Warn("ignoring malformed setting", "key", key, "default", def)
+		return def
+	}
+	return n
 }

@@ -46,6 +46,10 @@ workspaced:
   # locally, workspace routes answer 503.
   vm-manager:
     url: ${WORKSPACED_VM_MANAGER_URL:}
+  # Every harness is reached through this service's tunnel to its VM. Left unset, as it is
+  # locally, no workspace's harness answers.
+  agent-hub:
+    url: ${WORKSPACED_AGENT_HUB_URL:}
   auth:
     # Signs the login tokens (HS256), so it must be at least 32 bytes. No default, like the
     # database password: every instance has to sign with the same key, or a token from one

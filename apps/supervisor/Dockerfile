@@ -1,7 +1,7 @@
 FROM golang:1.27-alpine AS build
 ARG VERSION=dev
 WORKDIR /src
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # Static binary, because the distroless static base carries no libc.

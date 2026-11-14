@@ -4,6 +4,7 @@ import io.github.kalpak44.workspacedai.agenthub.agent.AlreadyEnrolledException;
 import io.github.kalpak44.workspacedai.agenthub.agent.EnrollmentRefusedException;
 import io.github.kalpak44.workspacedai.agenthub.agent.MalformedKeyException;
 import io.github.kalpak44.workspacedai.agenthub.agent.SignatureRefusedException;
+import io.github.kalpak44.workspacedai.agenthub.tunnel.TunnelException;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmManagerException;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmNotFoundException;
 import org.slf4j.Logger;
@@ -54,6 +55,12 @@ public class ApiExceptionHandler {
   ProblemDetail vmManagerUnavailable(VmManagerException.Unavailable e) {
     log.warn("VM manager unavailable: {}", e.getMessage());
     return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
+  }
+
+  // No worker came free, the harness refused, or the worker dropped before an answer.
+  @ExceptionHandler(TunnelException.class)
+  ProblemDetail tunnel(TunnelException e) {
+    return ProblemDetail.forStatusAndDetail(e.status(), e.getMessage());
   }
 
   @ExceptionHandler(VmManagerException.class)

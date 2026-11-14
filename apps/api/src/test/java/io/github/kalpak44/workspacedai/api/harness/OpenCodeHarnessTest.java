@@ -362,4 +362,14 @@ class OpenCodeHarnessTest {
     assertThat(new HarnessEndpoint(URI.create("http://h:1"), "secret").toString())
         .isEqualTo("HarnessEndpoint[http://h:1]");
   }
+
+  @Test
+  void opensTerminalsUnderTheBasesOwnPathSoTheyGoThroughTheTunnel() {
+    var tunnel = URI.create("http://hub:8080/api/v1/internal/vms/v/harness");
+
+    assertThat(OpenCodeHarness.websocket(tunnel, "/api/pty/p/connect"))
+        .isEqualTo(URI.create("ws://hub:8080/api/v1/internal/vms/v/harness/api/pty/p/connect"));
+    assertThat(OpenCodeHarness.websocket(URI.create("https://h:1/"), "/api/pty/p/connect"))
+        .isEqualTo(URI.create("wss://h:1/api/pty/p/connect"));
+  }
 }

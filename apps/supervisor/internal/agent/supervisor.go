@@ -10,7 +10,10 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"time"
+
+	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/tunnel"
 )
 
 const (
@@ -38,6 +41,16 @@ type Supervisor struct {
 	HealthURL     string
 	HealthPoll    time.Duration
 	HealthTimeout time.Duration
+
+	// The tunnel starts after the first ready and carries the API's calls to HarnessURL;
+	// TunnelIdle zero leaves it off.
+	HarnessURL string
+	TunnelIdle int
+	TunnelMax  int
+	TunnelPing time.Duration
+
+	// password is the harness password of the container running now.
+	password atomic.Pointer[string]
 }
 
 // Run returns nil when ctx is cancelled and an error only for unusable local state.
@@ -67,8 +80,55 @@ func (s *Supervisor) Run(ctx context.Context) error {
 		return nil
 	}
 	s.bringUp(ctx, c, log, false)
+	tunnelDone := s.startTunnel(ctx, c, log)
 	s.heartbeat(ctx, c, log)
+	<-tunnelDone
 	return nil
+}
+
+// startTunnel runs the worker pool until ctx ends; the returned channel closes once every
+// worker and exchange has finished.
+func (s *Supervisor) startTunnel(ctx context.Context, c *Client, log *slog.Logger) <-chan struct{} {
+	done := make(chan struct{})
+	if s.TunnelIdle <= 0 || ctx.Err() != nil {
+		close(done)
+		return done
+	}
+	proxy, err := tunnel.NewProxy(s.HarnessURL, s.harnessPassword, log)
+	if err != nil {
+		log.Error("tunnel not started", "error", err.Error())
+		close(done)
+		return done
+	}
+	pool := &tunnel.Pool{
+		URL: c.TunnelURL(), Sign: c.SignHeaders, UserAgent: s.UserAgent, Proxy: proxy, Log: log,
+		Idle: s.TunnelIdle, Max: s.TunnelMax, Ping: s.TunnelPing,
+		BackoffMin: s.BackoffMin, BackoffMax: s.BackoffMax,
+	}
+	go func() {
+		defer close(done)
+		if err := pool.Run(ctx); err != nil {
+			log.Error("tunnel not started", "error", err.Error())
+		}
+	}()
+	return done
+}
+
+// harnessPassword is read per exchange, so a recreated harness's new password applies at once.
+func (s *Supervisor) harnessPassword() string {
+	if p := s.password.Load(); p != nil {
+		return *p
+	}
+	return ""
+}
+
+// keepPassword records the password of the environment the harness now runs with.
+func (s *Supervisor) keepPassword(env map[string]string) {
+	pw := env["OPENCODE_PASSWORD"]
+	if pw == "" {
+		pw = env["OPENCODE_SERVER_PASSWORD"]
+	}
+	s.password.Store(&pw)
 }
 
 func (s *Supervisor) enroll(ctx context.Context, c *Client, log *slog.Logger) error {

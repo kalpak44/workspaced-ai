@@ -1079,9 +1079,11 @@ public class OpenCodeHarness implements Harness {
     return URLEncoder.encode(value, StandardCharsets.UTF_8);
   }
 
-  private static URI websocket(URI base, String path) {
+  // Keeps the base's own path, which is the tunnel's prefix for a harness on a VM.
+  static URI websocket(URI base, String path) {
     var scheme = "https".equals(base.getScheme()) ? "wss" : "ws";
-    return URI.create(scheme + "://" + base.getAuthority() + path);
+    var prefix = base.getRawPath() == null ? "" : base.getRawPath().replaceAll("/+$", "");
+    return URI.create(scheme + "://" + base.getAuthority() + prefix + path);
   }
 
   private static Instant instant(Number millis) {

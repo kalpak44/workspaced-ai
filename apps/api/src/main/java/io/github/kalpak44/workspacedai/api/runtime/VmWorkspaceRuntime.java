@@ -2,15 +2,20 @@ package io.github.kalpak44.workspacedai.api.runtime;
 
 import io.github.kalpak44.workspacedai.api.compute.ProvisionedVm;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
+import io.github.kalpak44.workspacedai.api.compute.VmManagerFailedException;
+import io.github.kalpak44.workspacedai.api.compute.VmManagerUnavailableException;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
+import java.net.URI;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
@@ -18,15 +23,21 @@ import java.util.stream.Collectors;
 /**
  * Each workspace on a Hetzner VM of its own, created, restarted and deleted through the VM manager,
  * which also keeps its secrets and harness environment in Vault for the VM's supervisor to start
- * the harness with. Nothing reaches that harness or publishes a web server yet, so the rest answers
- * as if the workspace were not running.
+ * the harness with. The harness is reached through the agent hub's tunnel to the VM. Nothing
+ * publishes a web server yet.
  */
 public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
   private final VmManager vmManager;
+  private final AgentHubProperties agentHub;
 
-  public VmWorkspaceRuntime(VmManager vmManager) {
+  // A workspace keeps its one VM until it is deleted, so its id never needs refreshing, and the
+  // harness is asked for on every call to it.
+  private final ConcurrentMap<UUID, UUID> vmIds = new ConcurrentHashMap<>();
+
+  public VmWorkspaceRuntime(VmManager vmManager, AgentHubProperties agentHub) {
     this.vmManager = vmManager;
+    this.agentHub = agentHub;
   }
 
   /**
@@ -46,6 +57,7 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
   @Override
   public void stop(UUID workspaceId) {
     vmManager.deleteFor(workspaceId);
+    vmIds.remove(workspaceId);
   }
 
   /** The VM turns RESTARTING, and its supervisor recreates the harness with fresh values. */
@@ -85,9 +97,40 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
     return List.of();
   }
 
+  /**
+   * The agent hub's tunnel to the workspace's VM. No password: the VM's supervisor sets the
+   * harness's own on every call, so it never leaves the VM. A VM manager that cannot be asked reads
+   * as no harness, the same as a VM that is not connected.
+   */
   @Override
   public Optional<HarnessEndpoint> harness(UUID workspaceId) {
-    return Optional.empty();
+    if (!agentHub.isConfigured()) {
+      return Optional.empty();
+    }
+    return vmId(workspaceId)
+        .map(
+            vm ->
+                new HarnessEndpoint(
+                    URI.create(
+                        agentHub.url().toString().replaceAll("/+$", "")
+                            + "/internal/vms/"
+                            + vm
+                            + "/harness"),
+                    ""));
+  }
+
+  private Optional<UUID> vmId(UUID workspaceId) {
+    var known = vmIds.get(workspaceId);
+    if (known != null) {
+      return Optional.of(known);
+    }
+    try {
+      var found = vmManager.vmIdFor(workspaceId);
+      found.ifPresent(vm -> vmIds.put(workspaceId, vm));
+      return found;
+    } catch (VmManagerUnavailableException | VmManagerFailedException e) {
+      return Optional.empty();
+    }
   }
 
   /** A workspace whose VM is gone, deleted by hand or never made, has failed. */

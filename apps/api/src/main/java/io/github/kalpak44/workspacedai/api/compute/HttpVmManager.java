@@ -157,6 +157,11 @@ public class HttpVmManager implements VmManager {
     }
   }
 
+  @Override
+  public Optional<UUID> vmIdFor(UUID workspaceId) {
+    return vmIdOf(workspaceId).map(UUID::fromString);
+  }
+
   private Optional<String> vmIdOf(UUID workspaceId) {
     var listed = send(get("/vms?workspaceId=" + workspaceId));
     expect(listed, 200);

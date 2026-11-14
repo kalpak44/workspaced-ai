@@ -21,7 +21,12 @@ class HttpVmManagerClientTest {
   HttpVmManagerClient client(URI url) {
     var properties =
         new AgentHubProperties(
-            url, Duration.ofMinutes(30), Duration.ofSeconds(60), Duration.ofSeconds(2));
+            url,
+            Duration.ofMinutes(30),
+            Duration.ofSeconds(60),
+            Duration.ofSeconds(2),
+            Duration.ofSeconds(10),
+            64);
     return new HttpVmManagerClient(
         properties, HttpClient.newHttpClient(), JsonMapper.builder().build());
   }

@@ -61,6 +61,18 @@ public class AgentService {
     return vmManager.harness(vmId);
   }
 
+  /**
+   * Checks the handshake of a tunnel worker socket, which counts as the VM being seen; there is
+   * nothing to pass on.
+   *
+   * @return the VM the handshake is proven to come from
+   */
+  public UUID connect(SignedRequest request) {
+    var vmId = authenticate(request);
+    store.touch(vmId, clock.instant());
+    return vmId;
+  }
+
   /** The VM the request is proven to come from. */
   UUID authenticate(SignedRequest request) {
     if (request.vmId() == null || request.timestamp() == null || request.signature() == null) {

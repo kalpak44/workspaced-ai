@@ -21,7 +21,9 @@ class EnrollmentServiceTest {
           URI.create("http://vm-manager"),
           Duration.ofMinutes(30),
           Duration.ofSeconds(60),
-          Duration.ofSeconds(10));
+          Duration.ofSeconds(10),
+          Duration.ofSeconds(10),
+          64);
   final EnrollmentService service = new EnrollmentService(store, properties, clock);
   final TestAgent agent = new TestAgent();
   final UUID vm = UUID.randomUUID();

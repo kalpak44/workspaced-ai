@@ -9,6 +9,16 @@ container whose image and environment hash matches its `io.workspaced.config` la
 one that exited is started again. Requests are signed with an Ed25519 key that never leaves the
 VM; the environment's values are never logged.
 
+Once the harness first reports ready, the supervisor also keeps a pool of signed WebSocket
+workers open to `{WORKSPACED_AGENT_URL}/agent/tunnel`, since the VM accepts no inbound
+connection: 4 idle (`SUPERVISOR_TUNNEL_IDLE`, 0 turns it off) and at most 64 in all
+(`SUPERVISOR_TUNNEL_MAX`), pinged every 25 s and redialled with 1 s to 60 s backoff. Each worker
+carries one HTTP request or WebSocket from the API to the harness (`SUPERVISOR_HARNESS_URL`,
+default `http://127.0.0.1:4096`) and is replaced the moment it is taken. Response bodies go out
+one frame per read, so the event stream is not buffered. The hub's `Authorization` is replaced by
+basic auth with the running harness's `OPENCODE_PASSWORD` (or `OPENCODE_SERVER_PASSWORD`), so the
+password never leaves the VM; only method, path without query, status and duration are logged.
+
 Files:
 
 - `/etc/workspaced/agent.env` (`SUPERVISOR_CONFIG`) — `WORKSPACED_VM_ID`, `WORKSPACED_AGENT_URL`,

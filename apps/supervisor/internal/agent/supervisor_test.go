@@ -19,6 +19,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/coder/websocket"
 )
 
 const (
@@ -58,6 +60,10 @@ func (h *hub) fail(format string, args ...any) {
 }
 
 func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.URL.Path == "/api/v1/agent/tunnel" {
+		h.tunnel(w, r)
+		return
+	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	body, _ := io.ReadAll(r.Body)
@@ -131,6 +137,33 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// tunnel accepts a signed worker and leaves it idle; it must never come before ready.
+func (h *hub) tunnel(w http.ResponseWriter, r *http.Request) {
+	h.mu.Lock()
+	h.counts[r.URL.Path]++
+	ok := h.verify(r, nil)
+	if r.Method != http.MethodGet {
+		h.fail("tunnel method %s", r.Method)
+	}
+	if ua := r.Header.Get("User-Agent"); ua != testUA {
+		h.fail("tunnel user agent %q", ua)
+	}
+	if h.counts["/api/v1/agent/ready"] == 0 {
+		h.fail("tunnel worker before ready")
+	}
+	h.mu.Unlock()
+	if !ok {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+	c, err := websocket.Accept(w, r, nil)
+	if err != nil {
+		return
+	}
+	// Reads answer the pool's pings until the supervisor closes the worker.
+	c.CloseRead(context.Background())
+}
+
 func (h *hub) verify(r *http.Request, body []byte) bool {
 	if h.pub == nil {
 		h.fail("signed request before enrollment")
@@ -197,7 +230,7 @@ func (f fixture) start(t *testing.T) (stop func()) {
 	return f.startWith(t, newFakeDocker(t))
 }
 
-func (f fixture) startWith(t *testing.T, d *fakeDocker) (stop func()) {
+func (f fixture) startWith(t *testing.T, d *fakeDocker, opts ...func(*Supervisor)) (stop func()) {
 	var mu sync.Mutex
 	s := &Supervisor{
 		EnvFile:       f.envFile,
@@ -214,6 +247,9 @@ func (f fixture) startWith(t *testing.T, d *fakeDocker) (stop func()) {
 		HealthURL:     d.healthURL,
 		HealthPoll:    time.Millisecond,
 		HealthTimeout: 200 * time.Millisecond,
+	}
+	for _, o := range opts {
+		o(s)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -431,4 +467,45 @@ func abs(n int64) int64 {
 		return -n
 	}
 	return n
+}
+
+func TestTunnelStartsAfterReadyWithSignedWorkers(t *testing.T) {
+	h, srv := newHub(t, http.StatusNoContent)
+	f := newFixture(t, srv.URL, true)
+	d := newFakeDocker(t)
+	stop := f.startWith(t, d, func(s *Supervisor) {
+		s.HarnessURL = strings.TrimSuffix(d.healthURL, "/api/info")
+		s.TunnelIdle = 2
+		s.TunnelMax = 4
+		s.TunnelPing = 10 * time.Millisecond
+	})
+	waitFor(t, "two tunnel workers", func() bool { return h.count("tunnel") >= 2 })
+	stop()
+	h.check()
+}
+
+func TestHarnessPasswordFollowsEnvironment(t *testing.T) {
+	s := &Supervisor{}
+	if s.harnessPassword() != "" {
+		t.Error("password before any harness ran")
+	}
+	s.keepPassword(map[string]string{"OPENCODE_SERVER_PASSWORD": "server"})
+	if got := s.harnessPassword(); got != "server" {
+		t.Errorf("got %q, want the fallback", got)
+	}
+	s.keepPassword(map[string]string{"OPENCODE_PASSWORD": "newer", "OPENCODE_SERVER_PASSWORD": "server"})
+	if got := s.harnessPassword(); got != "newer" {
+		t.Errorf("got %q, want OPENCODE_PASSWORD", got)
+	}
+}
+
+func TestTunnelURL(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://agent.workspaced.online/api/v1": "wss://agent.workspaced.online/api/v1/agent/tunnel",
+		"http://127.0.0.1:8080/api/v1/":          "ws://127.0.0.1:8080/api/v1/agent/tunnel",
+	} {
+		if got := (&Client{BaseURL: in}).TunnelURL(); got != want {
+			t.Errorf("%s: got %s, want %s", in, got, want)
+		}
+	}
 }

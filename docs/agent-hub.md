@@ -21,6 +21,7 @@ From the VMs:
 | `POST` | `/api/v1/agent/ready`      | none, signed                                    | `204`, `401`, `404`, or `502`             |
 | `POST` | `/api/v1/agent/heartbeat`  | none, signed                                    | `200` and `{"status"}`, `401`, `404`, or `502` |
 | `POST` | `/api/v1/agent/harness`    | none, signed                                    | `200` and `{"image", "environment"}`, `401`, `404`, `502`, or `503` |
+| `GET`  | `/api/v1/agent/tunnel`     | WebSocket upgrade, signed                       | a worker socket, or `401` before the upgrade |
 
 From the VM manager:
 
@@ -28,6 +29,12 @@ From the VM manager:
 |----------|-----------------------------------|--------------------|------------------------------------------------------------|
 | `POST`   | `/api/v1/internal/enrollments`    | `{"vmId": "…"}`    | `201` and `{"vmId", "token", "expiresAt"}`, or `409`        |
 | `DELETE` | `/api/v1/internal/agents/{vmId}`  |                    | `204`, whether or not there was anything to forget         |
+
+From the API:
+
+| Method | Path                                      | Answers                                                         |
+|--------|-------------------------------------------|-----------------------------------------------------------------|
+| any    | `/api/v1/internal/vms/{vmId}/harness/**`  | the VM's harness's answer, or `503` when none of its workers is free within 10 s |
 
 `ready`, `heartbeat` and `harness` record when the VM was last seen and call the VM manager's `POST /vms/{id}/ready`,
 `/heartbeat` or `GET /vms/{id}/harness`. A heartbeat answers the VM's status there (`READY`, `RESTARTING`,
@@ -70,6 +77,19 @@ and `agent`, are created by the API's `V15__agent_hub.sql`. **Deploy the API fir
 a database without them and every route fails. The tests create the same tables from `src/test/resources/schema.sql`,
 which must stay identical to that migration.
 
+## Tunnel
+
+A VM accepts no connection, so the API reaches its harness through sockets the VM opens. Each supervisor keeps four
+idle, signed worker sockets on `/agent/tunnel` (at most 64 per VM, the rest refused with `1008`), and every one
+carries a single exchange: the hub sends a JSON head, `{"type": "http", "method", "path", "headers"}` then body frames
+and `{"type": "end"}`, and the supervisor answers `{"type": "response", "status", "headers"}`, the body frame by frame
+as the harness writes it, and `{"type": "end"}`. A WebSocket on the same prefix — a terminal — sends
+`{"type": "ws", "path", "headers"}`, waits for `{"type": "open", "protocol"}`, then relays every message as a binary
+frame whose first byte is `0x01` (text) or `0x02` (binary). `{"type": "error", "status", "message"}` ends either kind.
+The supervisor replaces a worker the moment it is taken, so no call waits for a handshake, and sets the harness's
+password on each call itself, so the password never crosses the tunnel and the API's `Authorization` is dropped.
+Workers live in this pod's memory, which is why it runs as one replica, replaced rather than rolled.
+
 ## Configuration
 
 | Variable                       | Default                                          | What                                        |
@@ -82,6 +102,8 @@ which must stay identical to that migration.
 | `WORKSPACED_VM_MANAGER_URL`    | `http://workspaced-ai-vm-manager:8080/api/v1`    | where reports are passed on                 |
 | `WORKSPACED_ENROLLMENT_TTL`    | `30m`                                            | how long a token stays usable               |
 | `WORKSPACED_SIGNATURE_SKEW`    | `60s`                                            | how far a timestamp may be from this clock  |
+| `WORKSPACED_AGENT_HUB_WORKER_WAIT` | `10s`                                        | how long a call waits for a free worker     |
+| `WORKSPACED_AGENT_HUB_MAX_WORKERS` | `64`                                         | how many workers one VM may hold open       |
 
 ## Code layout
 
