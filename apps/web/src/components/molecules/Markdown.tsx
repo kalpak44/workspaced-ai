@@ -2,7 +2,7 @@ import { Download } from "lucide-react";
 import type { ReactNode } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { isSessionFileLink, useFileLink } from "../../hooks/useSessionFiles";
+import { isSessionFileLink, sessionFilePath, useFileLink } from "../../hooks/useSessionFiles";
 
 /**
  * A link to a file in the session's folder becomes a download, since the browser cannot open a
@@ -11,8 +11,9 @@ import { isSessionFileLink, useFileLink } from "../../hooks/useSessionFiles";
 function Link({ href, children }: { readonly href?: string; readonly children?: ReactNode }) {
   const open = useFileLink();
   if (open && isSessionFileLink(href)) {
+    const path = sessionFilePath(href);
     return (
-      <button type="button" onClick={() => open(href)} title={`Download ${href}`}
+      <button type="button" onClick={() => open(path)} title={`Download ${path}`}
         className="inline-flex items-center gap-1 rounded-md border border-zinc-300 px-1.5 py-0.5 align-baseline text-[0.95em] hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800">
         <Download aria-hidden className="size-3.5" />
         {children}

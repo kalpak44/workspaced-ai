@@ -33,6 +33,18 @@ export function isSessionFileLink(href: string | undefined): href is string {
   return !href.startsWith("/") && !/^[a-z][a-z0-9+.-]*:/i.test(href);
 }
 
+/**
+ * The file a session link names. Markdown needs a space written as %20 in a link, so the raw
+ * href is never the file's name; one that is not valid percent-encoding is taken as it is.
+ */
+export function sessionFilePath(href: string): string {
+  try {
+    return decodeURIComponent(href);
+  } catch {
+    return href;
+  }
+}
+
 /** Names the uploaded files under the message, so the agent knows to read them. */
 export function attachmentNote(text: string, paths: readonly string[]): string {
   if (paths.length === 0) return text;

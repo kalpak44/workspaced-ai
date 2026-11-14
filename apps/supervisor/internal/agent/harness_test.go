@@ -217,7 +217,7 @@ func TestHarnessCreatedFromHubConfig(t *testing.T) {
 	}
 	if hc.RestartPolicy.Name != "on-failure" || !hc.Init || !hc.ReadonlyRootfs ||
 		!reflect.DeepEqual(hc.CapDrop, []string{"ALL"}) || !reflect.DeepEqual(hc.SecurityOpt, []string{"no-new-privileges"}) ||
-		!reflect.DeepEqual(hc.Tmpfs, map[string]string{"/tmp": ""}) {
+		!reflect.DeepEqual(hc.Tmpfs, map[string]string{"/tmp": "rw,exec,nosuid,nodev"}) {
 		t.Errorf("host config %+v", hc)
 	}
 }

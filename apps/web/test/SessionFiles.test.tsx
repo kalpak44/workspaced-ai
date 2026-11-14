@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import { safeFileName } from "../src/api/sessionFilesApi";
-import { isSessionFileLink } from "../src/hooks/useSessionFiles";
+import { isSessionFileLink, sessionFilePath } from "../src/hooks/useSessionFiles";
 import { installFakeApi } from "./fakeApi";
 
 /** A session page with one finished conversation, opened by its URL. */
@@ -34,6 +34,11 @@ describe("session files", () => {
     expect(isSessionFileLink("#top")).toBe(false);
     expect(isSessionFileLink("/etc/passwd")).toBe(false);
     expect(isSessionFileLink(undefined)).toBe(false);
+  });
+
+  it("reads a linked file's name decoded, as Markdown requires spaces to be encoded", () => {
+    expect(sessionFilePath("outbox/OwnAI%20proposal%20-%20Final.zip")).toBe("outbox/OwnAI proposal - Final.zip");
+    expect(sessionFilePath("outbox/100%.txt")).toBe("outbox/100%.txt");
   });
 
   it("uploads attached files and names them in the message", async () => {
@@ -129,6 +134,18 @@ describe("session files", () => {
     expect(await screen.findByRole("link", { name: "docs" })).toHaveAttribute("href", "https://example.com");
     await user.click(await screen.findByRole("button", { name: "report.pdf" }));
     await waitFor(() => expect(open).toHaveBeenCalledWith("https://app/api/v1/files/token-outbox/report.pdf", "_blank", "noopener"));
+    open.mockRestore();
+  });
+
+  it("downloads a linked file whose name has spaces", async () => {
+    const api = installFakeApi();
+    api.sessionFiles.add("s-1/outbox/My report - Final.zip");
+    const open = vi.spyOn(globalThis, "open").mockReturnValue(null);
+    const user = userEvent.setup();
+    await openSession(api, "Done: [My report - Final.zip](outbox/My%20report%20-%20Final.zip)");
+    await user.click(await screen.findByRole("button", { name: "My report - Final.zip" }));
+    await waitFor(() => expect(open).toHaveBeenCalledWith("https://app/api/v1/files/token-outbox/My report - Final.zip", "_blank", "noopener"));
+    expect(screen.queryByText(/is not in this session/)).not.toBeInTheDocument();
     open.mockRestore();
   });
 

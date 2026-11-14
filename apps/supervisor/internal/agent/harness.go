@@ -79,7 +79,9 @@ func harnessSpec(h Harness) docker.ContainerSpec {
 			SecurityOpt:    []string{"no-new-privileges"},
 			Init:           true,
 			ReadonlyRootfs: true,
-			Tmpfs:          map[string]string{"/tmp": ""},
+			// exec, which Docker's tmpfs default leaves out: OpenCode loads its terminals'
+			// native library from here, and without it every terminal fails to start.
+			Tmpfs: map[string]string{"/tmp": "rw,exec,nosuid,nodev"},
 		},
 	}
 }
