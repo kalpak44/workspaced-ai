@@ -50,15 +50,24 @@ final class TokenReviewVerifier implements CallerVerifier {
 
   TokenReviewVerifier(CallerProperties properties, URI apiServer, JsonMapper json, Clock clock)
       throws IOException, GeneralSecurityException {
-    this.properties = properties;
-    this.reviews = apiServer.resolve("/apis/authentication.k8s.io/v1/tokenreviews");
-    this.json = json;
-    this.clock = clock;
-    this.http =
+    this(
+        properties,
+        apiServer,
         HttpClient.newBuilder()
             .connectTimeout(TIMEOUT)
             .sslContext(trusting(properties.serviceAccountDir().resolve("ca.crt")))
-            .build();
+            .build(),
+        json,
+        clock);
+  }
+
+  TokenReviewVerifier(
+      CallerProperties properties, URI apiServer, HttpClient http, JsonMapper json, Clock clock) {
+    this.properties = properties;
+    this.reviews = apiServer.resolve("/apis/authentication.k8s.io/v1/tokenreviews");
+    this.http = http;
+    this.json = json;
+    this.clock = clock;
   }
 
   @Override
@@ -111,7 +120,7 @@ final class TokenReviewVerifier implements CallerVerifier {
     } catch (IOException e) {
       log.warn("TokenReview failed: {}", e.getMessage());
       return Optional.empty();
-    } catch (InterruptedException e) {
+    } catch (InterruptedException _) {
       Thread.currentThread().interrupt();
       return Optional.empty();
     }
