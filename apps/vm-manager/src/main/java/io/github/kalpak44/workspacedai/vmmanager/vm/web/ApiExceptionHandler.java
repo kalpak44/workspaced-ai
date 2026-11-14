@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
+import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHubException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.vault.VaultException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.SecretNotFoundException;
@@ -57,6 +58,12 @@ public class ApiExceptionHandler {
             ? HttpStatus.SERVICE_UNAVAILABLE
             : HttpStatus.BAD_GATEWAY;
     return ProblemDetail.forStatusAndDetail(status, e.getMessage());
+  }
+
+  @ExceptionHandler(AgentHubException.class)
+  ProblemDetail agentHubFailed(AgentHubException e) {
+    log.warn("agent hub call failed: {}", e.getMessage());
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_GATEWAY, e.getMessage());
   }
 
   // As for Hetzner: an address left unset is this deployment's fault, anything else is Vault's.

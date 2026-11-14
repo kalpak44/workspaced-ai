@@ -1,0 +1,47 @@
+# Everything this app serves lives under /api/v1, health included, on 8080 like the other
+# workspaced-ai services.
+server:
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: workspaced-ai-agent-hub
+  threads:
+    virtual:
+      enabled: true
+
+  # Errors answer as RFC 9457 problem details (application/problem+json), which the
+  # supervisor and the VM manager both expect.
+  mvc:
+    problemdetails:
+      enabled: true
+
+  # The API's database and credentials: its migration V15__agent_hub.sql creates the two
+  # tables this app uses, so the API must be deployed first. No password default, so a
+  # fallback cannot reach production unnoticed.
+  datasource:
+    url: jdbc:postgresql://${WORKSPACED_DB_HOST:localhost}:${WORKSPACED_DB_PORT:5432}/${WORKSPACED_DB_NAME:workspaced}
+    username: ${WORKSPACED_DB_USERNAME:workspaced}
+    password: ${WORKSPACED_DB_PASSWORD}
+    hikari:
+      pool-name: agent-hub-pool
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+workspaced:
+  agent-hub:
+    # Where ready and heartbeat reports are passed on to.
+    vm-manager-url: ${WORKSPACED_VM_MANAGER_URL:http://workspaced-ai-vm-manager:8080/api/v1}
+    # How long a VM has from its token being issued to enrolling with it.
+    enrollment-ttl: ${WORKSPACED_ENROLLMENT_TTL:30m}
+    # How far a signed request's timestamp may be from this clock, either way.
+    signature-skew: ${WORKSPACED_SIGNATURE_SKEW:60s}

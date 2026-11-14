@@ -39,6 +39,19 @@ allows, so nothing on the internet can open a connection to a VM, SSH included, 
 API and to package mirrors. The firewall goes in the create request rather than being applied after it, so a VM is
 never reachable even while it boots. Opening a port is a rule added to that firewall, never a server outside it.
 
+### Enrollment
+
+Before it asks Hetzner for the server, the VM manager asks the [agent hub](agent-hub.md) for a one-time enrollment
+token and hands the VM a cloud-config writing `/etc/workspaced/agent.env` (root-only): the VM id, the agent hub's
+public address (`WORKSPACED_AGENT_HUB_PUBLIC_URL`) and the token. The supervisor enrolls with it on first boot and
+reports ready and heartbeats through the agent hub, which relays them to `/vms/{id}/ready` and `/heartbeat` here.
+Deleting a VM revokes its agent. Without `WORKSPACED_AGENT_HUB_URL` a VM boots with no agent identity, which is only
+useful locally.
+
+With `WORKSPACED_HETZNER_IMAGE_SELECTOR` (`image=workspace-vm` in the cluster), every VM is created from the newest
+snapshot carrying that label, the image with Docker and the supervisor installed; no such snapshot fails the create
+rather than falling back to a plain image.
+
 ### Labels
 
 Every server is labelled `managed-by=workspaced-ai-vm-manager`, `vm-id`, `workspace-id` and `user-id`, so any server can

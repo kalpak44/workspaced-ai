@@ -66,18 +66,22 @@ public class HttpHetznerClient implements HetznerClient {
    */
   @Override
   public CreatedServer createServer(ServerSpec spec) {
+    var image = properties.hasImageSelector() ? newestSnapshot() : spec.image();
     var firewall = firewallId();
     var body = json.createObjectNode();
     body.put("name", spec.name());
     body.put("server_type", spec.serverType());
     body.put("location", spec.location());
-    body.put("image", spec.image());
+    body.put("image", image);
     body.put("start_after_create", true);
     var keys = body.putArray("ssh_keys");
     spec.sshKeys().forEach(keys::add);
     var labels = body.putObject("labels");
     spec.labels().forEach(labels::put);
     body.putArray("firewalls").addObject().put("firewall", firewall);
+    if (spec.userData() != null) {
+      body.put("user_data", spec.userData());
+    }
     var response =
         send(
             "/servers",
@@ -95,6 +99,21 @@ public class HttpHetznerClient implements HetznerClient {
     } catch (Gone _) {
       // Already deleted, by an earlier attempt or by hand.
     }
+  }
+
+  /**
+   * Looked up on every create, so a VM always starts from the latest build. None at all fails the
+   * create rather than falling back to a plain image the rest of the system does not expect.
+   */
+  private String newestSnapshot() {
+    var selector = URLEncoder.encode(properties.imageSelector(), StandardCharsets.UTF_8);
+    var images =
+        get("/images?type=snapshot&sort=created:desc&per_page=1&label_selector=" + selector)
+            .path("images");
+    if (images.isEmpty()) {
+      throw new HetznerException("no snapshot is labelled " + properties.imageSelector());
+    }
+    return images.get(0).path("id").asString();
   }
 
   /**

@@ -59,6 +59,7 @@ public class FakeHetzner implements AutoCloseable {
   public final List<JsonNode> createBodies = new CopyOnWriteArrayList<>();
   public final Map<Long, ObjectNode> servers = new ConcurrentHashMap<>();
   public final Map<Long, ObjectNode> firewalls = new ConcurrentHashMap<>();
+  public final Map<Long, ObjectNode> images = new ConcurrentHashMap<>();
   public volatile int status = 200;
   private final AtomicLong ids = new AtomicLong(5000);
 
@@ -77,6 +78,7 @@ public class FakeHetzner implements AutoCloseable {
         });
     server.createContext("/servers", this::servers);
     server.createContext("/firewalls", this::firewalls);
+    server.createContext("/images", this::images);
     server.start();
   }
 
@@ -146,6 +148,32 @@ public class FakeHetzner implements AutoCloseable {
       }
       default -> answer(exchange, 405, "{}");
     }
+  }
+
+  /** A snapshot labelled {@code image=<image>}, as the image build leaves it. */
+  public void snapshot(long id, String image, String created) {
+    var snapshot = JSON.createObjectNode();
+    snapshot.put("id", id);
+    snapshot.put("type", "snapshot");
+    snapshot.put("created", created);
+    snapshot.putObject("labels").put("image", image);
+    images.put(id, snapshot);
+  }
+
+  // Newest first, honouring per_page, as the client asks for.
+  private void images(HttpExchange exchange) throws IOException {
+    record(exchange);
+    var query = URLDecoder.decode(exchange.getRequestURI().getRawQuery(), StandardCharsets.UTF_8);
+    var perPage = Integer.parseInt(query.replaceAll(".*per_page=(\\d+).*", "$1"));
+    var list = JSON.createArrayNode();
+    images.values().stream()
+        .filter(i -> matches(exchange, i))
+        .sorted((a, b) -> b.path("created").asString().compareTo(a.path("created").asString()))
+        .limit(perPage)
+        .forEach(list::add);
+    var body = JSON.createObjectNode();
+    body.set("images", list);
+    answer(exchange, 200, body.toString());
   }
 
   // The label_selector query parameter: comma-joined key=value pairs, all of which must match.

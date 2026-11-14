@@ -4,8 +4,9 @@ Move workspaces from the current Kubernetes pod runtime to isolated Hetzner VMs,
 on our existing infrastructure to minimize costs.
 
 Central management is a new internal service, `workspaced-ai-vm-manager` (`apps/vm-manager`). It runs in k3s
-behind a ClusterIP Service with no IngressRoute, so only the workspace API reaches it. VMs report ready and send
-heartbeats to the public workspace API, which relays them to the VM manager.
+behind a ClusterIP Service with no IngressRoute, so only the workspace API and the agent hub reach it. Each VM runs
+the supervisor (`apps/supervisor`), which enrolls with the [agent hub](agent-hub.md) at `agent.workspaced.online`
+and sends it signed ready and heartbeat reports; the agent hub relays them to the VM manager.
 
 Raw plan:
 
@@ -80,6 +81,7 @@ fit the cost-focused approach.
 
 Every VM is to boot from `workspace-vm`, a Hetzner snapshot rather than an ISO: Hetzner Cloud cannot create a server
 from an uploaded ISO, so the homelab's `packer-build` pipeline boots a throwaway server, installs Docker and unattended
-upgrades, masks SSH, and saves the disk as a snapshot labelled `image=workspace-vm`. It holds no secrets and nothing
-specific to one VM, is rebuilt weekly, and the three newest are kept. The VM manager still creates VMs from
-`ubuntu-24.04` until it is switched to the newest snapshot by that label.
+upgrades, masks SSH, installs the supervisor as a systemd unit pinned to the digest `:latest` resolved to at build
+time, and saves the disk as a snapshot labelled `image=workspace-vm`. It holds no secrets and nothing specific to one
+VM, is rebuilt weekly, and the three newest are kept; the VM manager creates every VM from the newest. A new
+supervisor reaches VMs with the next image build, so rebuild by hand after releasing one.

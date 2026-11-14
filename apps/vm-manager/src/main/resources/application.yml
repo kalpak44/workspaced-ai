@@ -52,6 +52,15 @@ workspaced:
     # Every VM is created behind this Cloud Firewall, made with no rules when it is missing, so
     # no inbound connection reaches a VM; outbound still works.
     firewall: ${WORKSPACED_HETZNER_FIREWALL:workspaced-ai-vms}
+    # A label selector, e.g. image=workspace-vm: every VM is created from the newest snapshot
+    # carrying it, which has the supervisor installed. Empty uses the plain image above.
+    image-selector: ${WORKSPACED_HETZNER_IMAGE_SELECTOR:}
+  agent-hub:
+    # Issues each VM's enrollment token. Unset, VMs boot with no agent identity, which is
+    # only useful locally.
+    url: ${WORKSPACED_AGENT_HUB_URL:}
+    # Where a VM reaches the agent hub; it goes into the VM's cloud-config.
+    public-url: ${WORKSPACED_AGENT_HUB_PUBLIC_URL:https://agent.workspaced.online/api/v1}
   vault:
     # Where each VM's secrets are kept. Unset, the app still starts, and creating a VM or
     # touching its secrets answers 503.

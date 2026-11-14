@@ -78,7 +78,8 @@ class HttpHetznerClientTest {
             "nbg1",
             "ubuntu-24.04",
             List.of("ops"),
-            Map.of("managed-by", "workspaced-ai-vm-manager", "workspace-id", "w-1"));
+            Map.of("managed-by", "workspaced-ai-vm-manager", "workspace-id", "w-1"),
+            "#cloud-config\n");
 
     var created = client("t0ken").createServer(spec);
 
@@ -92,15 +93,42 @@ class HttpHetznerClientTest {
     assertThat(body.path("start_after_create").asBoolean()).isTrue();
     assertThat(body.path("ssh_keys").get(0).asString()).isEqualTo("ops");
     assertThat(body.path("labels").path("workspace-id").asString()).isEqualTo("w-1");
+    assertThat(body.path("user_data").asString()).isEqualTo("#cloud-config\n");
+  }
+
+  @Test
+  void createsFromTheNewestSnapshotCarryingTheLabel() {
+    hetzner.snapshot(41, "workspace-vm", "2026-11-01T00:00:00Z");
+    hetzner.snapshot(42, "workspace-vm", "2026-11-14T00:00:00Z");
+    hetzner.snapshot(43, "other", "2026-11-15T00:00:00Z");
+
+    client("t0ken", "image=workspace-vm")
+        .createServer(
+            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
+
+    var body = hetzner.createBodies.getFirst();
+    assertThat(body.path("image").asString()).isEqualTo("42");
+    assertThat(body.has("user_data")).isFalse();
+  }
+
+  @Test
+  void createsNothingWhenNoSnapshotCarriesTheLabel() {
+    var client = client("t0ken", "image=workspace-vm");
+    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null);
+
+    assertThatThrownBy(() -> client.createServer(spec))
+        .isInstanceOf(HetznerException.class)
+        .hasMessageContaining("no snapshot is labelled image=workspace-vm");
+    assertThat(hetzner.createBodies).isEmpty();
   }
 
   @Test
   void createsEveryServerBehindOneFirewallThatLetsNothingIn() {
     var client = client("t0ken");
     client.createServer(
-        new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of()));
+        new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
     client.createServer(
-        new ServerSpec("vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of()));
+        new ServerSpec("vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
 
     assertThat(hetzner.firewalls).hasSize(1);
     var firewall = hetzner.firewalls.values().iterator().next();
@@ -118,9 +146,11 @@ class HttpHetznerClientTest {
     var client = client("t0ken");
     var mine =
         client.createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "a")));
+            new ServerSpec(
+                "vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "a"), null));
     client.createServer(
-        new ServerSpec("vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "b")));
+        new ServerSpec(
+            "vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "b"), null));
 
     var servers = client.servers("app=a");
 
@@ -137,7 +167,7 @@ class HttpHetznerClientTest {
     var client = client("t0ken");
     var created =
         client.createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of()));
+            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
 
     client.deleteServer(created.id());
     assertThat(hetzner.servers).isEmpty();
@@ -148,7 +178,7 @@ class HttpHetznerClientTest {
   @Test
   void reportsAFailedCreate() {
     hetzner.status = 422;
-    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of());
+    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null);
     var client = client("t0ken");
 
     assertThatThrownBy(() -> client.createServer(spec))
@@ -157,6 +187,10 @@ class HttpHetznerClientTest {
   }
 
   private HttpHetznerClient client(String token) {
+    return client(token, null);
+  }
+
+  private HttpHetznerClient client(String token, String imageSelector) {
     var properties =
         new HetznerProperties(
             token,
@@ -165,7 +199,8 @@ class HttpHetznerClientTest {
             "ubuntu-24.04",
             List.of(),
             "workspaced-ai-vms",
-            Duration.ofSeconds(5));
+            Duration.ofSeconds(5),
+            imageSelector);
     return new HttpHetznerClient(
         properties, HttpClient.newHttpClient(), JsonMapper.builder().build());
   }

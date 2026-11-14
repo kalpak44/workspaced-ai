@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.vmmanager.MutableClock;
+import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHub;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
@@ -28,6 +29,25 @@ class VmServiceTest {
   final FakeHetznerClient hetzner = new FakeHetznerClient();
   final VmRepository vms = new InMemoryVmRepository();
   final InMemorySecretStore secrets = new InMemorySecretStore();
+  final List<UUID> bootstrapped = new ArrayList<>();
+  final List<UUID> revoked = new ArrayList<>();
+  RuntimeException agentHubFailure;
+  final AgentHub agentHub =
+      new AgentHub() {
+        @Override
+        public Optional<String> bootstrap(UUID vmId) {
+          if (agentHubFailure != null) {
+            throw agentHubFailure;
+          }
+          bootstrapped.add(vmId);
+          return Optional.of("#cloud-config for " + vmId);
+        }
+
+        @Override
+        public void revoke(UUID vmId) {
+          revoked.add(vmId);
+        }
+      };
   boolean inventoryLoaded = true;
   final VmService service =
       new VmService(
@@ -41,9 +61,11 @@ class VmServiceTest {
               "ubuntu-24.04",
               List.of("ops"),
               "workspaced-ai-vms",
-              Duration.ofSeconds(1)),
+              Duration.ofSeconds(1),
+              null),
           () -> inventoryLoaded,
           new VmSecretService(vms, secrets),
+          agentHub,
           published::add,
           clock);
 
@@ -141,6 +163,41 @@ class VmServiceTest {
     assertThatThrownBy(() -> service.create(workspace, user, null, KEY)).isSameAs(secrets.failure);
     assertThat(hetzner.created).isEmpty();
     assertThat(vms.findAll()).isEmpty();
+  }
+
+  @Test
+  void bootsTheServerWithItsEnrollmentCloudConfig() {
+    var vm = service.create(workspace, user, null, KEY).vm();
+
+    assertThat(bootstrapped).containsExactly(vm.id());
+    assertThat(hetzner.created.getFirst().userData()).isEqualTo("#cloud-config for " + vm.id());
+  }
+
+  @Test
+  void createsNothingAndForgetsTheKeyWhenTheAgentHubFails() {
+    agentHubFailure = new IllegalStateException("agent hub answered 500");
+
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY)).isSameAs(agentHubFailure);
+    assertThat(hetzner.created).isEmpty();
+    assertThat(secrets.entries).isEmpty();
+    assertThat(vms.findAll()).isEmpty();
+  }
+
+  @Test
+  void revokesTheAgentWhenHetznerRefuses() {
+    hetzner.failure = new HetznerException("Hetzner answered 422 on POST /servers");
+
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY)).isSameAs(hetzner.failure);
+    assertThat(revoked).containsExactlyElementsOf(bootstrapped);
+  }
+
+  @Test
+  void revokesItsAgentWithIt() {
+    var vm = service.create(workspace, user, null, KEY).vm();
+
+    service.delete(vm.id());
+
+    assertThat(revoked).containsExactly(vm.id());
   }
 
   @Test

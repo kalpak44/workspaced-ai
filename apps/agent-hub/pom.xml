@@ -1,0 +1,178 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-starter-parent</artifactId>
+        <version>4.1.2</version>
+        <relativePath />
+    </parent>
+
+    <groupId>io.github.kalpak44</groupId>
+    <artifactId>workspaced-ai-agent-hub</artifactId>
+    <version>0.0.1-SNAPSHOT</version>
+    <name>workspaced-ai agent hub</name>
+    <description>The one endpoint workspace VMs talk to: enrolls their agents and checks what they sign</description>
+
+    <properties>
+        <java.version>25</java.version>
+        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+        <maven.enforcer.plugin.version>3.7.0</maven.enforcer.plugin.version>
+        <fmt.plugin.version>2.29</fmt.plugin.version>
+        <jacoco.plugin.version>0.8.16</jacoco.plugin.version>
+        <sonar.plugin.version>5.8.0.7211</sonar.plugin.version>
+
+        <jacoco.line.minimum>0.80</jacoco.line.minimum>
+
+        <sonar.projectKey>workspaced-ai-agent-hub</sonar.projectKey>
+        <sonar.organization>kalpak44</sonar.organization>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+
+        <ghcr.image>ghcr.io/kalpak44/workspaced-ai-agent-hub</ghcr.image>
+    </properties>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-webmvc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-jdbc</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.postgresql</groupId>
+            <artifactId>postgresql</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- A real PostgreSQL, so a dialect difference cannot pass here and fail in the cluster. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-testcontainers</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.testcontainers</groupId>
+            <artifactId>testcontainers-postgresql</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Same image setup as the API and the VM manager: buildpacks, no Dockerfile. -->
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <configuration>
+                    <image>
+                        <imagePlatform>linux/amd64</imagePlatform>
+                        <createdDate>now</createdDate>
+                        <tags>
+                            <tag>${ghcr.image}:latest</tag>
+                        </tags>
+                        <env>
+                            <BP_JVM_VERSION>${java.version}</BP_JVM_VERSION>
+                            <BPE_OVERRIDE_BPL_JVM_THREAD_COUNT>50</BPE_OVERRIDE_BPL_JVM_THREAD_COUNT>
+                            <BPE_DELIM_JAVA_TOOL_OPTIONS xml:space="preserve"> </BPE_DELIM_JAVA_TOOL_OPTIONS>
+                            <BPE_APPEND_JAVA_TOOL_OPTIONS>-XX:ReservedCodeCacheSize=64M</BPE_APPEND_JAVA_TOOL_OPTIONS>
+                            <BP_OCI_SOURCE>https://github.com/kalpak44/workspaced-ai</BP_OCI_SOURCE>
+                            <BP_RESPONSE_HEADER_TIMEOUT>60</BP_RESPONSE_HEADER_TIMEOUT>
+                        </env>
+                    </image>
+                </configuration>
+            </plugin>
+
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <version>${maven.enforcer.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <id>enforce-java</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <requireJavaVersion>
+                                    <version>${java.version}</version>
+                                </requireJavaVersion>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>com.spotify.fmt</groupId>
+                <artifactId>fmt-maven-plugin</artifactId>
+                <version>${fmt.plugin.version}</version>
+            </plugin>
+
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>${jacoco.plugin.version}</version>
+                <executions>
+                    <execution>
+                        <goals>
+                            <goal>prepare-agent</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>report</id>
+                        <phase>test</phase>
+                        <goals>
+                            <goal>report</goal>
+                        </goals>
+                    </execution>
+                    <execution>
+                        <id>check</id>
+                        <goals>
+                            <goal>check</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>LINE</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>${jacoco.line.minimum}</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+
+            <plugin>
+                <groupId>org.sonarsource.scanner.maven</groupId>
+                <artifactId>sonar-maven-plugin</artifactId>
+                <version>${sonar.plugin.version}</version>
+            </plugin>
+        </plugins>
+    </build>
+</project>

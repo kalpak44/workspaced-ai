@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm;
 
+import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHub;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.CreatedServer;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
@@ -31,6 +32,7 @@ public class VmService {
   private final HetznerProperties hetznerProperties;
   private final VmInventory inventory;
   private final VmSecretService secrets;
+  private final AgentHub agentHub;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
@@ -41,6 +43,7 @@ public class VmService {
       HetznerProperties hetznerProperties,
       VmInventory inventory,
       VmSecretService secrets,
+      AgentHub agentHub,
       ApplicationEventPublisher events,
       Clock clock) {
     this.vms = vms;
@@ -49,6 +52,7 @@ public class VmService {
     this.hetznerProperties = hetznerProperties;
     this.inventory = inventory;
     this.secrets = secrets;
+    this.agentHub = agentHub;
     this.events = events;
     this.clock = clock;
   }
@@ -94,6 +98,7 @@ public class VmService {
     secrets.init(id, openRouterApiKey);
     CreatedServer server;
     try {
+      var userData = agentHub.bootstrap(id).orElse(null);
       server =
           hetzner.createServer(
               new ServerSpec(
@@ -106,9 +111,10 @@ public class VmService {
                       HetznerVmInventory.MANAGED_BY, HetznerVmInventory.MANAGER,
                       HetznerVmInventory.VM_ID, id.toString(),
                       HetznerVmInventory.WORKSPACE_ID, workspaceId.toString(),
-                      HetznerVmInventory.USER_ID, userId.toString())));
+                      HetznerVmInventory.USER_ID, userId.toString()),
+                  userData));
     } catch (RuntimeException e) {
-      forgetSecrets(id);
+      forget(id);
       throw e;
     }
     var vm =
@@ -128,13 +134,14 @@ public class VmService {
   }
 
   /**
-   * The server first, then its secrets: a VM either of them could not be deleted for is kept, so
-   * the delete can retry, and a server already gone counts as deleted on the retry.
+   * The server first, then its secrets and its agent: a VM any of them could not be deleted for is
+   * kept, so the delete can retry, and a server already gone counts as deleted on the retry.
    */
   public void delete(UUID id) {
     var vm = get(id);
     hetzner.deleteServer(vm.serverId());
     secrets.deleteAll(id);
+    agentHub.revoke(id);
     if (!vms.deleteById(id)) {
       throw new VmNotFoundException(id);
     }
@@ -142,11 +149,12 @@ public class VmService {
   }
 
   // Best effort: the create has already failed, and that failure is the one to report.
-  private void forgetSecrets(UUID id) {
+  private void forget(UUID id) {
     try {
       secrets.deleteAll(id);
+      agentHub.revoke(id);
     } catch (RuntimeException e) {
-      log.error("VM {} failed to create and its secrets could not be removed from Vault", id, e);
+      log.error("VM {} failed to create and could not be fully cleaned up", id, e);
     }
   }
 
