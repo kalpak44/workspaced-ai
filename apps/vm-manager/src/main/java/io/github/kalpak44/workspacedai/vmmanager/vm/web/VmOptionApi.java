@@ -1,5 +1,6 @@
-package io.github.kalpak44.workspacedai.vmmanager.vm;
+package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmOptionDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
 import io.swagger.v3.oas.annotations.media.Content;
@@ -39,7 +40,7 @@ public interface VmOptionApi {
       content =
           @Content(
               mediaType = VmApi.JSON,
-              array = @ArraySchema(schema = @Schema(implementation = VmOption.class)),
+              array = @ArraySchema(schema = @Schema(implementation = VmOptionDto.class)),
               examples = @ExampleObject("[" + OPTION_EXAMPLE + "]")))
   @ApiResponse(
       responseCode = "502",
@@ -56,5 +57,5 @@ public interface VmOptionApi {
               mediaType = VmApi.PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @GetMapping(produces = VmApi.JSON)
-  ResponseEntity<List<VmOption>> list();
+  ResponseEntity<List<VmOptionDto>> list();
 }

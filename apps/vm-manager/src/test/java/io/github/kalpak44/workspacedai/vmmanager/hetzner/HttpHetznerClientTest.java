@@ -4,10 +4,13 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.math.BigDecimal;
+import java.net.http.HttpClient;
+import java.time.Duration;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
-class HetznerClientTest {
+class HttpHetznerClientTest {
 
   final FakeHetzner hetzner = new FakeHetzner();
 
@@ -64,7 +67,9 @@ class HetznerClientTest {
         .hasMessageContaining("401");
   }
 
-  private HetznerClient client(String token) {
-    return new HetznerClient(new HetznerProperties(token, hetzner.url(), "nbg1"));
+  private HttpHetznerClient client(String token) {
+    var properties = new HetznerProperties(token, hetzner.url(), "nbg1", Duration.ofSeconds(5));
+    return new HttpHetznerClient(
+        properties, HttpClient.newHttpClient(), JsonMapper.builder().build());
   }
 }

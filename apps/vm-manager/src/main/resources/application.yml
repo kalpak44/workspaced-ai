@@ -43,6 +43,7 @@ workspaced:
     # A Read & Write token of the Hetzner Cloud project VMs live in. Unset, the app still
     # starts, and anything that needs Hetzner answers 503.
     token: ${WORKSPACED_HETZNER_TOKEN:}
+    # Nuremberg, Germany. fsn1 (Falkenstein) is the other German location.
     location: ${WORKSPACED_HETZNER_LOCATION:nbg1}
   vm:
     # The sizes offered, default first. Specs and prices come from Hetzner.

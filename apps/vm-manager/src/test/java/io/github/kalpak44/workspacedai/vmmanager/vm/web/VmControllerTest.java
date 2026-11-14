@@ -1,7 +1,8 @@
-package io.github.kalpak44.workspacedai.vmmanager.vm;
+package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,19 +32,19 @@ class VmControllerTest {
     var owner = UUID.randomUUID().toString();
     var first = send("POST", "", "{\"ownerRef\":\"" + owner + "\"}");
     assertThat(first.statusCode()).isEqualTo(201);
-    var vm = JSON.readValue(first.body(), Vm.class);
-    assertThat(vm.status()).isEqualTo(VmStatus.PROVISIONING);
+    var vm = JSON.readValue(first.body(), VmDto.class);
+    assertThat(vm.status()).isEqualTo("PROVISIONING");
     assertThat(vm.serverType()).isEqualTo("cx23");
     assertThat(first.headers().firstValue("Location"))
         .hasValueSatisfying(location -> assertThat(location).endsWith("/vms/" + vm.id()));
 
     var again = send("POST", "", "{\"ownerRef\":\"" + owner + "\",\"serverType\":\"cx33\"}");
     assertThat(again.statusCode()).isEqualTo(200);
-    assertThat(JSON.readValue(again.body(), Vm.class).id()).isEqualTo(vm.id());
+    assertThat(JSON.readValue(again.body(), VmDto.class).id()).isEqualTo(vm.id());
 
     var listed = send("GET", "?ownerRef=" + owner, null);
-    assertThat(JSON.readValue(listed.body(), new TypeReference<List<Vm>>() {}))
-        .extracting(Vm::id)
+    assertThat(JSON.readValue(listed.body(), new TypeReference<List<VmDto>>() {}))
+        .extracting(VmDto::id)
         .containsExactly(vm.id());
   }
 
@@ -52,17 +53,17 @@ class VmControllerTest {
     var vm = create();
     assertThat(vm.lastSeenAt()).isNull();
 
-    var ready = JSON.readValue(send("POST", "/" + vm.id() + "/ready", null).body(), Vm.class);
-    assertThat(ready.status()).isEqualTo(VmStatus.READY);
+    var ready = JSON.readValue(send("POST", "/" + vm.id() + "/ready", null).body(), VmDto.class);
+    assertThat(ready.status()).isEqualTo("READY");
     assertThat(ready.lastSeenAt()).isNotNull();
 
     var restart = send("POST", "/" + vm.id() + "/restart", null);
     assertThat(restart.statusCode()).isEqualTo(202);
-    assertThat(JSON.readValue(restart.body(), Vm.class).status()).isEqualTo(VmStatus.RESTARTING);
+    assertThat(JSON.readValue(restart.body(), VmDto.class).status()).isEqualTo("RESTARTING");
 
     assertThat(send("POST", "/" + vm.id() + "/heartbeat", null).statusCode()).isEqualTo(204);
-    var fetched = JSON.readValue(send("GET", "/" + vm.id(), null).body(), Vm.class);
-    assertThat(fetched.status()).isEqualTo(VmStatus.RESTARTING);
+    var fetched = JSON.readValue(send("GET", "/" + vm.id(), null).body(), VmDto.class);
+    assertThat(fetched.status()).isEqualTo("RESTARTING");
     assertThat(fetched.lastSeenAt()).isAfterOrEqualTo(ready.lastSeenAt());
   }
 
@@ -97,7 +98,7 @@ class VmControllerTest {
   void createsTheSizeAsked() throws Exception {
     var response =
         send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\",\"serverType\":\"cx33\"}");
-    assertThat(JSON.readValue(response.body(), Vm.class).serverType()).isEqualTo("cx33");
+    assertThat(JSON.readValue(response.body(), VmDto.class).serverType()).isEqualTo("cx33");
   }
 
   @Test
@@ -124,9 +125,27 @@ class VmControllerTest {
     }
   }
 
-  private Vm create() throws Exception {
+  @Test
+  void streamsChangesMadeAfterConnecting() throws Exception {
+    // One VM exists first, so the stream has an event to send and its headers arrive.
+    create();
+    var request =
+        HttpRequest.newBuilder(URI.create(base() + "/events"))
+            .header("Accept", "text/event-stream")
+            .build();
+    try (var lines = http.send(request, BodyHandlers.ofLines()).body()) {
+      var later = create();
+      var seen =
+          lines
+              .filter(line -> line.startsWith("data:") && line.contains(later.id().toString()))
+              .findFirst();
+      assertThat(seen).isPresent();
+    }
+  }
+
+  private VmDto create() throws Exception {
     var response = send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\"}");
-    return JSON.readValue(response.body(), Vm.class);
+    return JSON.readValue(response.body(), VmDto.class);
   }
 
   private HttpResponse<String> send(String method, String path, String body) throws Exception {

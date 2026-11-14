@@ -1,5 +1,7 @@
-package io.github.kalpak44.workspacedai.vmmanager.vm;
+package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -58,10 +60,10 @@ public interface VmApi {
       content =
           @Content(
               mediaType = JSON,
-              array = @ArraySchema(schema = @Schema(implementation = Vm.class)),
+              array = @ArraySchema(schema = @Schema(implementation = VmDto.class)),
               examples = @ExampleObject("[" + VM_EXAMPLE + "]")))
   @GetMapping(produces = JSON)
-  ResponseEntity<List<Vm>> list(
+  ResponseEntity<List<VmDto>> list(
       @Parameter(description = "Only this owner's VMs") @RequestParam Optional<String> ownerRef);
 
   @Operation(
@@ -85,7 +87,7 @@ public interface VmApi {
       content =
           @Content(
               mediaType = JSON,
-              schema = @Schema(implementation = Vm.class),
+              schema = @Schema(implementation = VmDto.class),
               examples = @ExampleObject(VM_EXAMPLE)))
   @ApiResponse(
       responseCode = "404",
@@ -96,7 +98,7 @@ public interface VmApi {
               schema = @Schema(implementation = ProblemDetail.class),
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
   @GetMapping(path = "/{id}", produces = JSON)
-  ResponseEntity<Vm> get(@PathVariable UUID id);
+  ResponseEntity<VmDto> get(@PathVariable UUID id);
 
   @Operation(
       operationId = "createVm",
@@ -111,12 +113,12 @@ public interface VmApi {
       content =
           @Content(
               mediaType = JSON,
-              schema = @Schema(implementation = Vm.class),
+              schema = @Schema(implementation = VmDto.class),
               examples = @ExampleObject(VM_EXAMPLE)))
   @ApiResponse(
       responseCode = "200",
       description = "The owner already had this VM.",
-      content = @Content(mediaType = JSON, schema = @Schema(implementation = Vm.class)))
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = VmDto.class)))
   @ApiResponse(
       responseCode = "400",
       description = "The ownerRef is blank or too long, or the serverType is not offered.",
@@ -125,7 +127,7 @@ public interface VmApi {
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(consumes = JSON, produces = JSON)
-  ResponseEntity<Vm> create(@Valid @RequestBody CreateVmRequest request);
+  ResponseEntity<VmDto> create(@Valid @RequestBody CreateVmDto body);
 
   @Operation(
       operationId = "deleteVm",
@@ -150,7 +152,7 @@ public interface VmApi {
   @ApiResponse(
       responseCode = "202",
       description = "Restarting.",
-      content = @Content(mediaType = JSON, schema = @Schema(implementation = Vm.class)))
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = VmDto.class)))
   @ApiResponse(
       responseCode = "404",
       description = "There is no such VM.",
@@ -159,7 +161,7 @@ public interface VmApi {
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/{id}/restart", produces = JSON)
-  ResponseEntity<Vm> restart(@PathVariable UUID id);
+  ResponseEntity<VmDto> restart(@PathVariable UUID id);
 
   @Operation(
       operationId = "reportVmReady",
@@ -170,7 +172,7 @@ public interface VmApi {
   @ApiResponse(
       responseCode = "200",
       description = "OK.",
-      content = @Content(mediaType = JSON, schema = @Schema(implementation = Vm.class)))
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = VmDto.class)))
   @ApiResponse(
       responseCode = "404",
       description = "There is no such VM.",
@@ -179,7 +181,7 @@ public interface VmApi {
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/{id}/ready", produces = JSON)
-  ResponseEntity<Vm> ready(@PathVariable UUID id);
+  ResponseEntity<VmDto> ready(@PathVariable UUID id);
 
   @Operation(
       operationId = "reportVmHeartbeat",

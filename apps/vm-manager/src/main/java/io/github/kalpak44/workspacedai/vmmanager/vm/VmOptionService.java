@@ -1,7 +1,9 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm;
 
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerClient;
+import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.ServerType;
+import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -18,20 +20,28 @@ import org.springframework.stereotype.Service;
  * exist; Hetzner supplies their specs and price, so neither is restated here.
  */
 @Service
-public class VmOptions {
+public class VmOptionService {
 
-  private static final Logger log = LoggerFactory.getLogger(VmOptions.class);
+  private static final Logger log = LoggerFactory.getLogger(VmOptionService.class);
 
   // Specs and prices change rarely, and every create screen would otherwise call Hetzner.
-  private static final Duration CACHE_FOR = Duration.ofMinutes(10);
+  static final Duration CACHE_FOR = Duration.ofMinutes(10);
 
   private final VmProperties properties;
+  private final HetznerProperties hetznerProperties;
   private final HetznerClient hetzner;
+  private final Clock clock;
   private final AtomicReference<Snapshot> snapshot = new AtomicReference<>();
 
-  public VmOptions(VmProperties properties, HetznerClient hetzner) {
+  public VmOptionService(
+      VmProperties properties,
+      HetznerProperties hetznerProperties,
+      HetznerClient hetzner,
+      Clock clock) {
     this.properties = properties;
+    this.hetznerProperties = hetznerProperties;
     this.hetzner = hetzner;
+    this.clock = clock;
   }
 
   /**
@@ -39,17 +49,18 @@ public class VmOptions {
    * and logged, rather than offered and then refused on create.
    */
   public List<VmOption> list() {
+    var now = clock.instant();
     var current = snapshot.get();
-    if (current != null && current.takenAt().plus(CACHE_FOR).isAfter(Instant.now())) {
+    if (current != null && now.isBefore(current.takenAt().plus(CACHE_FOR))) {
       return current.options();
     }
     var options = fetch();
-    snapshot.set(new Snapshot(options, Instant.now()));
+    snapshot.set(new Snapshot(options, now));
     return options;
   }
 
   private List<VmOption> fetch() {
-    var location = hetzner.location();
+    var location = hetznerProperties.location();
     var types =
         hetzner.serverTypes().stream()
             .collect(Collectors.toMap(ServerType::name, Function.identity(), (a, _) -> a));

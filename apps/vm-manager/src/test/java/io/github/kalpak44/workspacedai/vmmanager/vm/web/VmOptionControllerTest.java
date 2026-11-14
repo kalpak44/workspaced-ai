@@ -1,8 +1,9 @@
-package io.github.kalpak44.workspacedai.vmmanager.vm;
+package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetzner;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmOptionDto;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -47,10 +48,10 @@ class VmOptionControllerTest {
   void offersOnlyWhatHetznerSellsInTheLocationDefaultFirst() throws Exception {
     var response = get();
     assertThat(response.statusCode()).isEqualTo(200);
-    var options = JSON.readValue(response.body(), new TypeReference<List<VmOption>>() {});
+    var options = JSON.readValue(response.body(), new TypeReference<List<VmOptionDto>>() {});
 
-    assertThat(options).extracting(VmOption::serverType).containsExactly("cx23", "cx33");
-    assertThat(options).extracting(VmOption::isDefault).containsExactly(true, false);
+    assertThat(options).extracting(VmOptionDto::serverType).containsExactly("cx23", "cx33");
+    assertThat(options).extracting(VmOptionDto::isDefault).containsExactly(true, false);
     var cx33 = options.get(1);
     assertThat(cx33.cores()).isEqualTo(4);
     assertThat(cx33.memoryGb()).isEqualTo(8.0);

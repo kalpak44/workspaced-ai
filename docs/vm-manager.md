@@ -45,6 +45,19 @@ kept in Vault at `secret/workspaced-vm-manager-secrets` under `hcloud-token`, an
 `WORKSPACED_HETZNER_TOKEN` through its own ExternalSecret, so the API pod never holds it. VMs are created in `nbg1`
 unless `WORKSPACED_HETZNER_LOCATION` says otherwise.
 
+## Code layout
+
+- `hetzner` — `HetznerClient`, the Hetzner Cloud API as this app uses it, and `HttpHetznerClient`, its HTTP
+  implementation over an injected `HttpClient`.
+- `vm` — the domain: `Vm` and `VmOption`, `VmRepository` (in memory for now), and `VmService` / `VmOptionService`.
+  Services take a `Clock`, throw domain exceptions, and publish each change as a `VmEvent`; none of them knows HTTP.
+- `vm.web` — controllers that only map between DTOs (`vm.web.dto`) and the services, `ApiExceptionHandler` turning the
+  domain exceptions into problem details, and `VmEventStream`, which sends each `VmEvent` to every open stream through
+  its own `SseOutbox` so a client that stops reading holds up no one else.
+
+Services are unit-tested against stand-ins (an in-memory repository, a lambda `HetznerClient`, a hand-moved clock);
+the HTTP client against a local fake Hetzner; the routes end to end on a random port.
+
 ## Running locally
 
 It needs no database. Without a token it still starts, and only what needs Hetzner answers `503`. It listens on 8080
