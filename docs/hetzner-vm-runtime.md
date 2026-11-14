@@ -92,13 +92,13 @@ To run it locally against the real project:
 ```bash
 WORKSPACED_HETZNER_TOKEN=$(vault kv get -field=hcloud-token secret/workspaced-vm-manager-secrets) \
   mvn -f apps/vm-manager spring-boot:run
-curl -s localhost:8081/api/v1/vm-options
+curl -s localhost:8080/api/v1/vm-options
 ```
 
 Swagger UI is at `/api/v1/swagger-ui/index.html` and the OpenAPI document at `/api/v1/v3/api-docs`, as on the
 workspace API. With no IngressRoute, reach the cluster's copy through a port-forward:
 
 ```bash
-kubectl --context k3s -n workspaced-ai port-forward svc/workspaced-ai-vm-manager 8081:8080
-open http://localhost:8081/api/v1/swagger-ui/index.html
+kubectl --context k3s -n workspaced-ai port-forward svc/workspaced-ai-vm-manager 8080
+open http://localhost:8080/api/v1/swagger-ui/index.html
 ```

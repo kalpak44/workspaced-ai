@@ -1,8 +1,7 @@
-# Everything this app serves lives under /api/v1, like the workspace API.
+# Everything this app serves lives under /api/v1, on 8080, like the workspace API.
 server:
   servlet:
     context-path: /api/v1
-  port: ${WORKSPACED_VM_MANAGER_PORT:8081}
 
 spring:
   application:
