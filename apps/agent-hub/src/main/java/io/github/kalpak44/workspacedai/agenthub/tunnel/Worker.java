@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.agenthub.tunnel;
 
 import java.io.IOException;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
@@ -25,7 +26,7 @@ final class Worker {
   private final ReentrantLock sending = new ReentrantLock();
   // Only the socket's own thread touches it, one message at a time.
   private final StringBuilder text = new StringBuilder();
-  private volatile WorkerListener listener;
+  private final AtomicReference<WorkerListener> listener = new AtomicReference<>();
 
   Worker(UUID vmId, WebSocketSession session, JsonMapper json) {
     this.vmId = vmId;
@@ -39,7 +40,7 @@ final class Worker {
 
   /** Hands the worker to an exchange, then sends the exchange's head. */
   void start(WorkerListener listener, JsonNode head) throws IOException {
-    this.listener = listener;
+    this.listener.set(listener);
     send(head);
   }
 
@@ -76,7 +77,7 @@ final class Worker {
     }
     var message = text.toString();
     text.setLength(0);
-    var current = listener;
+    var current = listener.get();
     if (current == null) {
       // An idle worker has nothing to say, so the supervisor is not speaking this protocol.
       close(CloseStatus.PROTOCOL_ERROR);
@@ -90,7 +91,7 @@ final class Worker {
   }
 
   void received(BinaryMessage part) {
-    var current = listener;
+    var current = listener.get();
     if (current == null) {
       close(CloseStatus.PROTOCOL_ERROR);
       return;
@@ -99,7 +100,7 @@ final class Worker {
   }
 
   void closed(CloseStatus status) {
-    var current = listener;
+    var current = listener.get();
     if (current != null) {
       current.closed(status);
     }

@@ -12,7 +12,9 @@ import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestMethod;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.socket.CloseStatus;
 import tools.jackson.databind.JsonNode;
@@ -44,9 +46,21 @@ public class HarnessProxyController {
     this.json = json;
   }
 
-  @RequestMapping("/internal/vms/{vmId}/harness/**")
-  public void proxy(HttpServletRequest request, HttpServletResponse response) throws IOException {
-    var target = HarnessTarget.of(request);
+  @RequestMapping(
+      path = "/internal/vms/{vmId}/harness/**",
+      method = {
+        RequestMethod.GET,
+        RequestMethod.HEAD,
+        RequestMethod.POST,
+        RequestMethod.PUT,
+        RequestMethod.PATCH,
+        RequestMethod.DELETE,
+        RequestMethod.OPTIONS,
+        RequestMethod.TRACE
+      })
+  public void proxy(
+      @PathVariable String vmId, HttpServletRequest request, HttpServletResponse response) {
+    var target = HarnessTarget.of(request, vmId);
     var head =
         json.createObjectNode()
             .put("type", "http")

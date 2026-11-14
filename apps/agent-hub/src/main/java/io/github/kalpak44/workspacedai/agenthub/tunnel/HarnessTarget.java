@@ -25,10 +25,25 @@ record HarnessTarget(UUID vmId, String path) {
     if (!uri.startsWith(PREFIX) || slash < 0 || !uri.startsWith(HARNESS, slash)) {
       throw notFound();
     }
+    return target(request, uri, slash, uri.substring(PREFIX.length(), slash));
+  }
+
+  /** The controller's route binds the VM, so it passes the segment Spring already resolved. */
+  static HarnessTarget of(HttpServletRequest request, String boundVmId) {
+    var uri = request.getRequestURI().substring(request.getContextPath().length());
+    var slash = uri.indexOf('/', PREFIX.length());
+    if (!uri.startsWith(PREFIX) || slash < 0 || !uri.startsWith(HARNESS, slash)) {
+      throw notFound();
+    }
+    return target(request, uri, slash, boundVmId);
+  }
+
+  private static HarnessTarget target(
+      HttpServletRequest request, String uri, int slash, String vmIdValue) {
     UUID vmId;
     try {
-      vmId = UUID.fromString(uri.substring(PREFIX.length(), slash));
-    } catch (IllegalArgumentException e) {
+      vmId = UUID.fromString(vmIdValue);
+    } catch (IllegalArgumentException _) {
       throw notFound();
     }
     var path = uri.substring(slash + HARNESS.length());

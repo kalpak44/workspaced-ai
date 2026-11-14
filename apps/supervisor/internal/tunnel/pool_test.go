@@ -63,10 +63,15 @@ func (h *fakeHub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
-	if h.reject.Load() > 0 {
-		h.reject.Add(-1)
-		w.WriteHeader(http.StatusUnauthorized)
-		return
+	for {
+		rejected := h.reject.Load()
+		if rejected == 0 {
+			break
+		}
+		if h.reject.CompareAndSwap(rejected, rejected-1) {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
 	}
 	c, err := websocket.Accept(w, r, &websocket.AcceptOptions{
 		OnPingReceived: func(context.Context, []byte) bool { h.pings.Add(1); return true },

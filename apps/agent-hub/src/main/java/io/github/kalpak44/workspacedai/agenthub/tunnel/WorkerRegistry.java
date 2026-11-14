@@ -118,7 +118,7 @@ public class WorkerRegistry {
         if (left <= 0) {
           throw TunnelException.notConnected();
         }
-        added.awaitNanos(left);
+        left = added.awaitNanos(left);
       }
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();

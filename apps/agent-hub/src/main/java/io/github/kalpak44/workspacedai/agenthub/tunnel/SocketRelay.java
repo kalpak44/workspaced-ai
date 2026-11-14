@@ -13,6 +13,7 @@ import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.ReentrantLock;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.socket.BinaryMessage;
@@ -44,7 +45,7 @@ final class SocketRelay implements WorkerListener {
   private final List<WebSocketMessage<?>> pending = new ArrayList<>();
   private WebSocketSession api;
   private CloseStatus pendingClose;
-  private volatile Worker worker;
+  private final AtomicReference<Worker> worker = new AtomicReference<>();
   // Each is only touched by the thread of the socket it reassembles.
   private final ByteArrayOutputStream fromWorker = new ByteArrayOutputStream();
   private final ByteArrayOutputStream fromApi = new ByteArrayOutputStream();
@@ -54,7 +55,7 @@ final class SocketRelay implements WorkerListener {
   }
 
   void attach(Worker worker) {
-    this.worker = worker;
+    this.worker.set(worker);
   }
 
   /**
@@ -98,7 +99,7 @@ final class SocketRelay implements WorkerListener {
   /** Abandons the exchange before the API's socket exists. */
   void abandon() {
     ended.set(true);
-    var current = worker;
+    var current = worker.get();
     if (current != null) {
       current.close(CloseStatus.NORMAL);
     }
@@ -230,7 +231,7 @@ final class SocketRelay implements WorkerListener {
     var message = fromApi.toByteArray();
     fromApi.reset();
     try {
-      worker.send(message);
+      worker.get().send(message);
     } catch (IOException e) {
       toApi(CloseStatus.SERVER_ERROR.withReason("the harness connection closed"));
     }
@@ -238,7 +239,7 @@ final class SocketRelay implements WorkerListener {
 
   /** The API closed its socket: tells the harness's side, then lets the worker go. */
   void apiClosed(CloseStatus status) {
-    var current = worker;
+    var current = worker.get();
     if (ended.compareAndSet(false, true)) {
       var end = closeStatus(status.getCode(), status.getReason() == null ? "" : status.getReason());
       try {
