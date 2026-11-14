@@ -6,6 +6,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
@@ -26,7 +27,7 @@ public class VmOptions {
 
   private final VmProperties properties;
   private final HetznerClient hetzner;
-  private volatile Snapshot snapshot;
+  private final AtomicReference<Snapshot> snapshot = new AtomicReference<>();
 
   public VmOptions(VmProperties properties, HetznerClient hetzner) {
     this.properties = properties;
@@ -38,12 +39,12 @@ public class VmOptions {
    * and logged, rather than offered and then refused on create.
    */
   public List<VmOption> list() {
-    var current = snapshot;
+    var current = snapshot.get();
     if (current != null && current.takenAt().plus(CACHE_FOR).isAfter(Instant.now())) {
       return current.options();
     }
     var options = fetch();
-    snapshot = new Snapshot(options, Instant.now());
+    snapshot.set(new Snapshot(options, Instant.now()));
     return options;
   }
 

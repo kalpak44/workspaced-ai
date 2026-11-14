@@ -34,10 +34,10 @@ class HetznerClientTest {
     assertThat(cx23.deprecated()).isFalse();
     assertThat(cx23.priceIn("nbg1"))
         .hasValueSatisfying(
-            price -> {
-              assertThat(price.monthlyNet()).isEqualTo(new BigDecimal("5.49"));
-              assertThat(price.monthlyGross()).isEqualTo(new BigDecimal("6.59"));
-            });
+            price -> assertThat(price.monthlyNet()).isEqualTo(new BigDecimal("5.49")));
+    assertThat(cx23.priceIn("nbg1"))
+        .hasValueSatisfying(
+            price -> assertThat(price.monthlyGross()).isEqualTo(new BigDecimal("6.59")));
     assertThat(cx23.priceIn("ash")).isEmpty();
   }
 

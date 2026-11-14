@@ -34,11 +34,11 @@ public class VmEvents {
     return emitter;
   }
 
-  void status(Vm vm) {
+  void publishStatus(Vm vm) {
     emitters.forEach(emitter -> send(emitter, statusEvent(vm)));
   }
 
-  void deleted(UUID id) {
+  void publishDeleted(UUID id) {
     emitters.forEach(
         emitter -> send(emitter, SseEmitter.event().name(DELETED).data(Map.of("id", id))));
   }
@@ -66,7 +66,7 @@ public class VmEvents {
   private void send(SseEmitter emitter, SseEmitter.SseEventBuilder event) {
     try {
       emitter.send(event);
-    } catch (IOException | IllegalStateException e) {
+    } catch (IOException | IllegalStateException _) {
       emitters.remove(emitter);
     }
   }

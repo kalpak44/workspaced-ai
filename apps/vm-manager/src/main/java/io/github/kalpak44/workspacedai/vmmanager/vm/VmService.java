@@ -67,7 +67,7 @@ public class VmService {
             Instant.now(),
             null);
     vms.put(vm.id(), vm);
-    events.status(vm);
+    events.publishStatus(vm);
     return new Created(vm, true);
   }
 
@@ -77,7 +77,7 @@ public class VmService {
     if (removed == null) {
       return false;
     }
-    events.deleted(id);
+    events.publishDeleted(id);
     return true;
   }
 
@@ -96,7 +96,7 @@ public class VmService {
 
   private Optional<Vm> change(UUID id, UnaryOperator<Vm> update) {
     var changed = Optional.ofNullable(vms.computeIfPresent(id, (_, vm) -> update.apply(vm)));
-    changed.ifPresent(events::status);
+    changed.ifPresent(events::publishStatus);
     return changed;
   }
 
