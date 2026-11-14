@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.agenthub.agent.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.agenthub.MutableClock;
+import io.github.kalpak44.workspacedai.agenthub.TestCallers;
 import io.github.kalpak44.workspacedai.agenthub.TestDatabase;
 import io.github.kalpak44.workspacedai.agenthub.agent.TestAgent;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.FakeVmManager;
@@ -40,7 +41,7 @@ import tools.jackson.databind.json.JsonMapper;
  * fake and a clock moved by hand.
  */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
-@Import({TestDatabase.class, AgentHubRoutesTest.Clocks.class})
+@Import({TestDatabase.class, TestCallers.class, AgentHubRoutesTest.Clocks.class})
 class AgentHubRoutesTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -212,6 +213,26 @@ class AgentHubRoutesTest {
   }
 
   @Test
+  void issuesEnrollmentsOnlyToTheVmManager() throws Exception {
+    var vm = UUID.randomUUID();
+    var body = "{\"vmId\":\"" + vm + "\"}";
+    var none =
+        send("POST", "/internal/enrollments", body, Map.of(InternalRoutesFilter.TOKEN_HEADER, ""));
+    assertThat(none.statusCode()).isEqualTo(401);
+    for (var other : new String[] {TestCallers.API, TestCallers.GATEWAY}) {
+      var token = Map.of(InternalRoutesFilter.TOKEN_HEADER, other);
+      assertThat(send("POST", "/internal/enrollments", body, token).statusCode()).isEqualTo(403);
+      assertThat(send("DELETE", "/internal/agents/" + vm, null, token).statusCode()).isEqualTo(403);
+    }
+    assertThat(
+            jdbc.sql("select count(*) from enrollment_token where vm_id = ?")
+                .param(vm)
+                .query(Long.class)
+                .single())
+        .isZero();
+  }
+
+  @Test
   void refusesInternalRoutesThroughTheIngress() throws Exception {
     var vm = UUID.randomUUID();
     for (var header : new String[] {"X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip"}) {
@@ -286,6 +307,10 @@ class AgentHubRoutesTest {
             .method(method, body == null ? BodyPublishers.noBody() : BodyPublishers.ofString(body));
     if (body != null) {
       request.header("Content-Type", "application/json");
+    }
+    // The VM manager's token on its routes, unless the test says otherwise.
+    if (path.startsWith("/internal") && !headers.containsKey(InternalRoutesFilter.TOKEN_HEADER)) {
+      request.header(InternalRoutesFilter.TOKEN_HEADER, TestCallers.VM_MANAGER);
     }
     headers.forEach(request::header);
     return http.send(request.build(), BodyHandlers.ofString());

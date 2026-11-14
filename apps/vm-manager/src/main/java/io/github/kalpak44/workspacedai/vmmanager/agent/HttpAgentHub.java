@@ -6,15 +6,21 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.file.Files;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.json.JsonMapper;
 
-/** Calls the agent hub's internal routes over HTTP inside the cluster; they take no credential. */
+/**
+ * Calls the agent hub's internal routes over HTTP inside the cluster, with this pod's service
+ * account token, which the hub accepts on the enrollment routes alone.
+ */
 @Component
 public class HttpAgentHub implements AgentHub {
+
+  private static final String TOKEN_HEADER = "X-Agent-Hub-Token";
 
   private final AgentHubProperties properties;
   private final JsonMapper json;
@@ -92,6 +98,7 @@ public class HttpAgentHub implements AgentHub {
     if (body != null) {
       request.header("Content-Type", "application/json");
     }
+    callerToken().ifPresent(token -> request.header(TOKEN_HEADER, token));
     try {
       return http.send(request.build(), BodyHandlers.ofString());
     } catch (IOException e) {
@@ -99,6 +106,15 @@ public class HttpAgentHub implements AgentHub {
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
       throw new AgentHubException("interrupted on " + method + " " + path, e);
+    }
+  }
+
+  // Absent outside a cluster, where the hub refuses the call and says so.
+  private Optional<String> callerToken() {
+    try {
+      return Optional.of(Files.readString(properties.tokenFile()).strip());
+    } catch (IOException _) {
+      return Optional.empty();
     }
   }
 

@@ -9,6 +9,8 @@ import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
@@ -16,12 +18,15 @@ import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.json.JsonMapper;
 
 /** The client against a local stand-in for the agent hub's internal routes. */
 class HttpAgentHubTest {
 
   final List<String> requests = new CopyOnWriteArrayList<>();
+  final List<String> tokens = new CopyOnWriteArrayList<>();
+  @TempDir Path dir;
   volatile int status = 0;
   HttpServer server;
 
@@ -39,6 +44,7 @@ class HttpAgentHubTest {
 
   private void answer(HttpExchange exchange) throws IOException {
     var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+    tokens.add(String.valueOf(exchange.getRequestHeaders().getFirst("X-Agent-Hub-Token")));
     requests.add(
         exchange.getRequestMethod() + " " + exchange.getRequestURI().getPath() + " " + body);
     var post = exchange.getRequestMethod().equals("POST");
@@ -54,7 +60,10 @@ class HttpAgentHubTest {
   HttpAgentHub hub(URI url) {
     return new HttpAgentHub(
         new AgentHubProperties(
-            url, URI.create("https://agent.example/api/v1"), Duration.ofSeconds(5)),
+            url,
+            URI.create("https://agent.example/api/v1"),
+            Duration.ofSeconds(5),
+            dir.resolve("token")),
         JsonMapper.builder().build());
   }
 
@@ -86,6 +95,18 @@ class HttpAgentHubTest {
     hub(url()).revoke(vm);
 
     assertThat(requests).containsExactly("DELETE /api/v1/internal/agents/" + vm + " ");
+  }
+
+  @Test
+  void sendsTheServiceAccountTokenAsItIsNow() throws IOException {
+    var hub = hub(url());
+    hub.revoke(UUID.randomUUID());
+    Files.writeString(dir.resolve("token"), "first\n");
+    hub.revoke(UUID.randomUUID());
+    Files.writeString(dir.resolve("token"), "rotated");
+    hub.revoke(UUID.randomUUID());
+
+    assertThat(tokens).containsExactly("null", "first", "rotated");
   }
 
   @Test

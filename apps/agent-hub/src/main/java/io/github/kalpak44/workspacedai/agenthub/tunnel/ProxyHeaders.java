@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.agenthub.tunnel;
 
+import io.github.kalpak44.workspacedai.agenthub.agent.web.InternalRoutesFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -31,6 +32,9 @@ final class ProxyHeaders {
           "sec-websocket-extensions",
           "sec-websocket-accept");
 
+  private static final String CALLER_TOKEN =
+      InternalRoutesFilter.TOKEN_HEADER.toLowerCase(Locale.ROOT);
+
   private ProxyHeaders() {}
 
   /** An HTTP call's headers, for its head. */
@@ -47,9 +51,11 @@ final class ProxyHeaders {
     var headers = new LinkedHashMap<String, List<String>>();
     for (var name : Collections.list(request.getHeaderNames())) {
       var lower = name.toLowerCase(Locale.ROOT);
-      // The harness takes the supervisor's password, so the API's never needs to leave the hub.
+      // The harness takes the supervisor's password, so the API's never needs to leave the hub,
+      // and a VM given a caller's token could replay it here.
       if (dropped(lower)
           || lower.equals("authorization")
+          || lower.equals(CALLER_TOKEN)
           || handshake && HANDSHAKE.contains(lower)) {
         continue;
       }

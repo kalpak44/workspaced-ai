@@ -24,6 +24,8 @@ public class FakeOpenCode implements AutoCloseable {
   public record Request(String method, String path, String directory, String auth, String body) {}
 
   public final List<Request> requests = new CopyOnWriteArrayList<>();
+  // The agent hub's caller token on each request, "null" when none was sent.
+  public final List<String> callerTokens = new CopyOnWriteArrayList<>();
   public final Map<String, ObjectNode> terminals = new java.util.concurrent.ConcurrentHashMap<>();
   public volatile boolean rejectTerminals;
   private final java.util.concurrent.atomic.AtomicInteger nextTerminal =
@@ -84,6 +86,7 @@ public class FakeOpenCode implements AutoCloseable {
     var path = exchange.getRequestURI().getPath();
     var method = exchange.getRequestMethod();
     var auth = exchange.getRequestHeaders().getFirst("Authorization");
+    callerTokens.add(String.valueOf(exchange.getRequestHeaders().getFirst("X-Agent-Hub-Token")));
     requests.add(
         new Request(
             method,

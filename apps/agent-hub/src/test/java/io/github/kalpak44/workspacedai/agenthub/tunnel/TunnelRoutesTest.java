@@ -2,9 +2,11 @@ package io.github.kalpak44.workspacedai.agenthub.tunnel;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kalpak44.workspacedai.agenthub.TestCallers;
 import io.github.kalpak44.workspacedai.agenthub.TestDatabase;
 import io.github.kalpak44.workspacedai.agenthub.agent.EnrollmentService;
 import io.github.kalpak44.workspacedai.agenthub.agent.TestAgent;
+import io.github.kalpak44.workspacedai.agenthub.agent.web.InternalRoutesFilter;
 import java.io.InputStream;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -40,7 +42,7 @@ import tools.jackson.databind.json.JsonMapper;
 @SpringBootTest(
     webEnvironment = WebEnvironment.RANDOM_PORT,
     properties = {"workspaced.agent-hub.worker-wait=300ms", "workspaced.agent-hub.max-workers=3"})
-@Import(TestDatabase.class)
+@Import({TestDatabase.class, TestCallers.class})
 class TunnelRoutesTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
@@ -100,7 +102,7 @@ class TunnelRoutesTest {
     var worker = worker(vm, enrolled(vm));
     var answer =
         http.sendAsync(
-            HttpRequest.newBuilder(uri("http", "/internal/vms/" + vm + "/web/app?q=%2F"))
+            gateway(uri("http", "/internal/vms/" + vm + "/web/app?q=%2F"))
                 .header("Authorization", "Bearer visitor")
                 .GET()
                 .build(),
@@ -125,7 +127,7 @@ class TunnelRoutesTest {
 
     var answer =
         http.sendAsync(
-            HttpRequest.newBuilder(harness(vm, "/api/session?x=1&y=%2F"))
+            api(harness(vm, "/api/session?x=1&y=%2F"))
                 .header("Authorization", "Basic YXBpOnNlY3JldA==")
                 .header("Content-Type", "application/json")
                 .header("X-Custom", "kept")
@@ -174,9 +176,7 @@ class TunnelRoutesTest {
     var vm = UUID.randomUUID();
     var worker = worker(vm, enrolled(vm));
     var answer =
-        http.sendAsync(
-            HttpRequest.newBuilder(harness(vm, "/api/event")).GET().build(),
-            BodyHandlers.ofInputStream());
+        http.sendAsync(api(harness(vm, "/api/event")).GET().build(), BodyHandlers.ofInputStream());
     assertThat(worker.nextJson().path("path").asString()).isEqualTo("/api/event");
     assertThat(worker.nextJson().path("type").asString()).isEqualTo("end");
 
@@ -213,7 +213,7 @@ class TunnelRoutesTest {
     enrolled(vm);
 
     var started = System.nanoTime();
-    var response = send(HttpRequest.newBuilder(harness(vm, "/api/info")).GET());
+    var response = send(api(harness(vm, "/api/info")).GET());
 
     assertThat(response.statusCode()).isEqualTo(503);
     assertThat(response.headers().firstValue("Content-Type")).hasValue("application/problem+json");
@@ -227,9 +227,7 @@ class TunnelRoutesTest {
     var vm = UUID.randomUUID();
     var agent = enrolled(vm);
     var answer =
-        http.sendAsync(
-            HttpRequest.newBuilder(harness(vm, "/api/info")).GET().build(),
-            BodyHandlers.ofString());
+        http.sendAsync(api(harness(vm, "/api/info")).GET().build(), BodyHandlers.ofString());
 
     // Connected directly: the waiting call takes it at once, so it is never counted idle.
     var worker = TestSocket.connect(http, tunnel(), signed(vm, agent)).get(5, TimeUnit.SECONDS);
@@ -248,9 +246,7 @@ class TunnelRoutesTest {
 
     var refused = worker(vm, agent);
     var answer =
-        http.sendAsync(
-            HttpRequest.newBuilder(harness(vm, "/api/info")).GET().build(),
-            BodyHandlers.ofString());
+        http.sendAsync(api(harness(vm, "/api/info")).GET().build(), BodyHandlers.ofString());
     refused.nextJson();
     refused.nextJson();
     refused.send("{\"type\":\"error\",\"status\":502,\"message\":\"connection refused\"}");
@@ -260,10 +256,7 @@ class TunnelRoutesTest {
         .isEqualTo("connection refused");
 
     var dropped = worker(vm, agent);
-    answer =
-        http.sendAsync(
-            HttpRequest.newBuilder(harness(vm, "/api/info")).GET().build(),
-            BodyHandlers.ofString());
+    answer = http.sendAsync(api(harness(vm, "/api/info")).GET().build(), BodyHandlers.ofString());
     dropped.nextJson();
     dropped.nextJson();
     dropped.socket.sendClose(1001, "going").join();
@@ -277,7 +270,7 @@ class TunnelRoutesTest {
 
     var opening =
         TestSocket.connect(
-            http, socket(vm, "/api/pty/pty_1/connect?ticket=t"), Map.of(), "opencode", "other");
+            http, socket(vm, "/api/pty/pty_1/connect?ticket=t"), API_TOKEN, "opencode", "other");
     var head = worker.nextJson();
     assertThat(head.path("type").asString()).isEqualTo("ws");
     assertThat(head.path("path").asString()).isEqualTo("/api/pty/pty_1/connect?ticket=t");
@@ -313,7 +306,7 @@ class TunnelRoutesTest {
   void closesTheApisSocketWhenTheHarnessEndsIt() throws Exception {
     var vm = UUID.randomUUID();
     var worker = worker(vm, enrolled(vm));
-    var opening = TestSocket.connect(http, socket(vm, "/api/pty/pty_2/connect"), Map.of());
+    var opening = TestSocket.connect(http, socket(vm, "/api/pty/pty_2/connect"), API_TOKEN);
     worker.nextJson();
     worker.send("{\"type\":\"open\",\"protocol\":\"\"}");
     var api = opening.get(5, TimeUnit.SECONDS);
@@ -328,7 +321,7 @@ class TunnelRoutesTest {
   void closesTheApisSocketWhenTheWorkerDrops() throws Exception {
     var vm = UUID.randomUUID();
     var worker = worker(vm, enrolled(vm));
-    var opening = TestSocket.connect(http, socket(vm, "/api/pty/pty_3/connect"), Map.of());
+    var opening = TestSocket.connect(http, socket(vm, "/api/pty/pty_3/connect"), API_TOKEN);
     worker.nextJson();
     worker.send("{\"type\":\"open\",\"protocol\":\"\"}");
     var api = opening.get(5, TimeUnit.SECONDS);
@@ -342,14 +335,14 @@ class TunnelRoutesTest {
   void refusesTheUpgradeWhenTheHarnessSocketCannotOpen() throws Exception {
     var vm = UUID.randomUUID();
     var worker = worker(vm, enrolled(vm));
-    var opening = TestSocket.connect(http, socket(vm, "/api/pty/pty_4/connect"), Map.of());
+    var opening = TestSocket.connect(http, socket(vm, "/api/pty/pty_4/connect"), API_TOKEN);
     worker.nextJson();
 
     worker.send("{\"type\":\"error\",\"status\":502,\"message\":\"no such terminal\"}");
 
     assertThat(handshakeStatus(opening)).isEqualTo(502);
     assertThat(worker.nextClose().code()).isEqualTo(1000);
-    assertThat(handshakeStatus(TestSocket.connect(http, socket(vm, "/api/pty"), Map.of())))
+    assertThat(handshakeStatus(TestSocket.connect(http, socket(vm, "/api/pty"), API_TOKEN)))
         .isEqualTo(503);
   }
 
@@ -357,9 +350,11 @@ class TunnelRoutesTest {
   void refusesTheHarnessRoutesThroughTheIngress() throws Exception {
     var vm = UUID.randomUUID();
     worker(vm, enrolled(vm));
-    var forwarded = Map.of("X-Forwarded-For", "203.0.113.7");
+    var forwarded =
+        Map.of(
+            "X-Forwarded-For", "203.0.113.7", InternalRoutesFilter.TOKEN_HEADER, TestCallers.API);
 
-    var call = HttpRequest.newBuilder(harness(vm, "/api/info")).GET();
+    var call = api(harness(vm, "/api/info")).GET();
     forwarded.forEach(call::header);
     var response = send(call);
     assertThat(response.statusCode()).isEqualTo(404);
@@ -371,10 +366,66 @@ class TunnelRoutesTest {
   }
 
   @Test
-  void answersNotFoundForAPathThatNamesNoVm() throws Exception {
+  void letsEachCallerReachOnlyItsOwnRoutes() throws Exception {
+    var vm = UUID.randomUUID();
+    worker(vm, enrolled(vm));
+    var info = harness(vm, "/api/info");
+    var site = uri("http", "/internal/vms/" + vm + "/web/");
+
+    assertThat(send(HttpRequest.newBuilder(info).GET()).statusCode()).isEqualTo(401);
+    assertThat(send(token(info, "forged").GET()).statusCode()).isEqualTo(401);
+    assertThat(send(token(info, TestCallers.GATEWAY).GET()).statusCode()).isEqualTo(403);
+    assertThat(send(token(info, TestCallers.VM_MANAGER).GET()).statusCode()).isEqualTo(403);
+    assertThat(send(token(site, TestCallers.API).GET()).statusCode()).isEqualTo(403);
     assertThat(
-            send(HttpRequest.newBuilder(uri("http", "/internal/vms/nope/harness/api/info")).GET())
-                .statusCode())
+            handshakeStatus(
+                TestSocket.connect(
+                    http,
+                    socket(vm, "/api/pty"),
+                    Map.of(InternalRoutesFilter.TOKEN_HEADER, TestCallers.GATEWAY))))
+        .isEqualTo(403);
+    assertThat(handshakeStatus(TestSocket.connect(http, socket(vm, "/api/pty"), Map.of())))
+        .isEqualTo(401);
+    // None took the worker.
+    assertThat(registry.idle(vm)).isEqualTo(1);
+  }
+
+  @Test
+  void refusesAPathTheServerWouldReadDifferently() throws Exception {
+    var vm = UUID.randomUUID();
+    worker(vm, enrolled(vm));
+    for (var path :
+        new String[] {
+          "/web/..;/harness/api/info",
+          "/web/;x/api",
+          "/web/%2e%2e/harness/api/info",
+          "/harness/.%2E/web/x",
+          "/web//x"
+        }) {
+      var response = send(gateway(uri("http", "/internal/vms/" + vm + path)).GET());
+      assertThat(response.statusCode()).as(path).isIn(400, 404);
+    }
+    assertThat(registry.idle(vm)).isEqualTo(1);
+  }
+
+  @Test
+  void neverPassesTheCallerTokenToTheVm() throws Exception {
+    var vm = UUID.randomUUID();
+    var worker = worker(vm, enrolled(vm));
+    var answer =
+        http.sendAsync(api(harness(vm, "/api/info")).GET().build(), BodyHandlers.ofString());
+    var head = worker.nextJson();
+    assertThat(head.path("headers").propertyNames())
+        .noneMatch(name -> name.equalsIgnoreCase(InternalRoutesFilter.TOKEN_HEADER));
+    worker.nextJson();
+    worker.send("{\"type\":\"response\",\"status\":204,\"headers\":{}}");
+    worker.send("{\"type\":\"end\"}");
+    assertThat(answer.get(5, TimeUnit.SECONDS).statusCode()).isEqualTo(204);
+  }
+
+  @Test
+  void answersNotFoundForAPathThatNamesNoVm() throws Exception {
+    assertThat(send(api(uri("http", "/internal/vms/nope/harness/api/info")).GET()).statusCode())
         .isEqualTo(404);
   }
 
@@ -427,6 +478,22 @@ class TunnelRoutesTest {
 
   private static String read(InputStream body, int length) throws Exception {
     return new String(body.readNBytes(length), StandardCharsets.UTF_8);
+  }
+
+  private static final Map<String, String> API_TOKEN =
+      Map.of(InternalRoutesFilter.TOKEN_HEADER, TestCallers.API);
+
+  private static HttpRequest.Builder api(URI uri) {
+    return HttpRequest.newBuilder(uri).header(InternalRoutesFilter.TOKEN_HEADER, TestCallers.API);
+  }
+
+  private static HttpRequest.Builder token(URI uri, String token) {
+    return HttpRequest.newBuilder(uri).header(InternalRoutesFilter.TOKEN_HEADER, token);
+  }
+
+  private static HttpRequest.Builder gateway(URI uri) {
+    return HttpRequest.newBuilder(uri)
+        .header(InternalRoutesFilter.TOKEN_HEADER, TestCallers.GATEWAY);
   }
 
   private HttpResponse<String> send(HttpRequest.Builder request) throws Exception {

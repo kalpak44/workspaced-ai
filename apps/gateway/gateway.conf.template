@@ -47,6 +47,8 @@ server {
     proxy_set_header X-Forwarded-Host "";
     proxy_set_header X-Real-IP "";
     proxy_set_header X-Forwarded-Proto https;
+    # Replaces any a visitor sent; an empty value drops the header.
+    proxy_set_header X-Agent-Hub-Token $agent_hub_token;
     proxy_set_header Upgrade $http_upgrade;
     proxy_set_header Connection $connection_upgrade;
     proxy_read_timeout 1h;

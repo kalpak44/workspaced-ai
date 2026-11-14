@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import java.net.URI;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
@@ -14,6 +16,7 @@ import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
 import tools.jackson.databind.json.JsonMapper;
 
 class OpenCodeHarnessTest {
@@ -39,6 +42,19 @@ class OpenCodeHarnessTest {
     assertThat(opencode.requests)
         .extracting(FakeOpenCode.Request::path, FakeOpenCode.Request::directory)
         .containsExactly(Tuple.tuple("/api/info", null), Tuple.tuple("/api/location", DIRECTORY));
+  }
+
+  @Test
+  void sendsTheHubItsCallerTokenAsTheFileHoldsItNow(@TempDir Path dir) throws Exception {
+    var file = dir.resolve("token");
+    var endpoint = new HarnessEndpoint(opencode.endpoint().baseUrl(), "pw", file);
+    harness.validate(opencode.endpoint(), DIRECTORY);
+    Files.writeString(file, "first\n");
+    harness.validate(endpoint, DIRECTORY);
+    Files.writeString(file, "rotated");
+    harness.validate(endpoint, DIRECTORY);
+    assertThat(opencode.callerTokens)
+        .containsExactly("null", "null", "first", "first", "rotated", "rotated");
   }
 
   @Test

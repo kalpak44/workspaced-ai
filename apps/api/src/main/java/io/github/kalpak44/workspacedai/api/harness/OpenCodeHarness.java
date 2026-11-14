@@ -16,6 +16,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.net.http.WebSocket;
 import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
 import java.time.Instant;
@@ -47,6 +48,8 @@ public class OpenCodeHarness implements Harness {
 
   private static final Logger LOG = LoggerFactory.getLogger(OpenCodeHarness.class);
   private static final String USER = "opencode";
+  // What the agent hub knows this API by; it never reaches the VM.
+  private static final String CALLER_TOKEN = "X-Agent-Hub-Token";
   private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(5);
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
   private static final Duration SHELL_TIMEOUT = Duration.ofSeconds(30);
@@ -760,11 +763,9 @@ public class OpenCodeHarness implements Harness {
     var closed = new AtomicBoolean();
     WebSocket socket;
     try {
-      socket =
-          http.newWebSocketBuilder()
-              .connectTimeout(CONNECT_TIMEOUT)
-              .buildAsync(socketUri, new TerminalListener(output, closed, onExit))
-              .join();
+      var builder = http.newWebSocketBuilder().connectTimeout(CONNECT_TIMEOUT);
+      callerToken(endpoint).ifPresent(token -> builder.header(CALLER_TOKEN, token));
+      socket = builder.buildAsync(socketUri, new TerminalListener(output, closed, onExit)).join();
     } catch (RuntimeException error) {
       throw new HarnessUnavailableException("could not connect to the terminal", error);
     }
@@ -1021,12 +1022,28 @@ public class OpenCodeHarness implements Harness {
 
   private HttpRequest.Builder request(HarnessEndpoint endpoint, String path) {
     var credentials = USER + ":" + endpoint.password();
-    return HttpRequest.newBuilder(URI.create(endpoint.baseUrl() + path))
-        .timeout(REQUEST_TIMEOUT)
-        .header(
-            "Authorization",
-            "Basic "
-                + Base64.getEncoder().encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
+    var request =
+        HttpRequest.newBuilder(URI.create(endpoint.baseUrl() + path))
+            .timeout(REQUEST_TIMEOUT)
+            .header(
+                "Authorization",
+                "Basic "
+                    + Base64.getEncoder()
+                        .encodeToString(credentials.getBytes(StandardCharsets.UTF_8)));
+    callerToken(endpoint).ifPresent(token -> request.header(CALLER_TOKEN, token));
+    return request;
+  }
+
+  // Absent outside a cluster, where the hub refuses the call and says so.
+  private static Optional<String> callerToken(HarnessEndpoint endpoint) {
+    if (endpoint.callerToken() == null) {
+      return Optional.empty();
+    }
+    try {
+      return Optional.of(Files.readString(endpoint.callerToken()).strip());
+    } catch (IOException _) {
+      return Optional.empty();
+    }
   }
 
   private HttpResponse<String> send(HttpRequest.Builder request) {

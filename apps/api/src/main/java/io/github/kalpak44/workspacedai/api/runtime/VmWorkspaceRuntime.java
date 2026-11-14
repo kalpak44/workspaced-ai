@@ -98,8 +98,9 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
   /**
    * The agent hub's tunnel to the workspace's VM. No password: the VM's supervisor sets the
-   * harness's own on every call, so it never leaves the VM. A VM manager that cannot be asked reads
-   * as no harness, the same as a VM that is not connected.
+   * harness's own on every call, so it never leaves the VM. The hub takes this pod's service
+   * account token instead. A VM manager that cannot be asked reads as no harness, the same as a VM
+   * that is not connected.
    */
   @Override
   public Optional<HarnessEndpoint> harness(UUID workspaceId) {
@@ -115,7 +116,8 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
                             + "/internal/vms/"
                             + vm
                             + "/harness"),
-                    ""));
+                    "",
+                    agentHub.tokenFile()));
   }
 
   private Optional<UUID> vmId(UUID workspaceId) {

@@ -14,6 +14,7 @@ ENV NGINX_ENVSUBST_OUTPUT_DIR=/tmp \
     API_URL=http://workspaced-ai-api:8080 \
     AGENT_HUB_URL=http://workspaced-ai-agent-hub:8080
 COPY nginx.conf /etc/nginx/nginx.conf
+COPY caller.js /etc/nginx/caller.js
 COPY gateway.conf.template /etc/nginx/templates/gateway.conf.template
 COPY 404.html /usr/share/nginx/gateway/404.html
 EXPOSE 8080

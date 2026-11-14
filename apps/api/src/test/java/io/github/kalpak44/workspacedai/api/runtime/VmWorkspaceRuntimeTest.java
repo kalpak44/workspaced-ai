@@ -13,6 +13,7 @@ import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmManagerUnavailableException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.net.URI;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -27,7 +28,8 @@ class VmWorkspaceRuntimeTest {
   private final VmWorkspaceRuntime runtime =
       new VmWorkspaceRuntime(
           vmManager,
-          new AgentHubProperties(URI.create("http://workspaced-ai-agent-hub:8080/api/v1/")));
+          new AgentHubProperties(
+              URI.create("http://workspaced-ai-agent-hub:8080/api/v1/"), Path.of("/token")));
   private final UUID workspace = UUID.randomUUID();
   private final UUID owner = UUID.randomUUID();
 
@@ -129,6 +131,7 @@ class VmWorkspaceRuntimeTest {
             URI.create(
                 "http://workspaced-ai-agent-hub:8080/api/v1/internal/vms/" + vm + "/harness"));
     assertThat(first.password()).isEmpty();
+    assertThat(first.callerToken()).isEqualTo(Path.of("/token"));
     verify(vmManager, times(1)).vmIdFor(workspace);
   }
 
@@ -152,7 +155,7 @@ class VmWorkspaceRuntimeTest {
 
     assertThat(runtime.harness(workspace)).isEmpty();
     assertThat(runtime.harness(other)).isEmpty();
-    assertThat(new VmWorkspaceRuntime(vmManager, new AgentHubProperties(null)).harness(owner))
+    assertThat(new VmWorkspaceRuntime(vmManager, new AgentHubProperties(null, null)).harness(owner))
         .isEmpty();
   }
 
