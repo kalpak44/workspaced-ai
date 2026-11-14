@@ -25,9 +25,9 @@ public class InMemoryVmRepository implements VmRepository {
   }
 
   @Override
-  public List<Vm> findByOwnerRef(String ownerRef) {
+  public List<Vm> findByWorkspaceId(UUID workspaceId) {
     return vms.values().stream()
-        .filter(vm -> vm.ownerRef().equals(ownerRef))
+        .filter(vm -> vm.workspaceId().equals(workspaceId))
         .sorted(OLDEST_FIRST)
         .toList();
   }

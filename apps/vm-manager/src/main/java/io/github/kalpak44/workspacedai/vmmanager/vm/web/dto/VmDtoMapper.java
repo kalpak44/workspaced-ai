@@ -11,8 +11,10 @@ public class VmDtoMapper {
   public VmDto toDto(Vm vm) {
     return new VmDto(
         vm.id(),
-        vm.ownerRef(),
+        vm.workspaceId(),
+        vm.userId(),
         vm.serverType(),
+        vm.serverId(),
         vm.status().name(),
         vm.ipv4(),
         vm.createdAt(),

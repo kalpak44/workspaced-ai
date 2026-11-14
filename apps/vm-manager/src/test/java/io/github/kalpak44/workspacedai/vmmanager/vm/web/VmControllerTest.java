@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetzner;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -11,17 +12,35 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
+/** End to end on a random port, with Hetzner answered by a local fake. */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 class VmControllerTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().findAndAddModules().build();
+  private static final FakeHetzner HETZNER = new FakeHetzner();
+  private static final UUID USER = UUID.randomUUID();
+
+  @DynamicPropertySource
+  static void hetzner(DynamicPropertyRegistry registry) {
+    registry.add("workspaced.hetzner.token", () -> "t0ken");
+    registry.add("workspaced.hetzner.base-url", HETZNER::url);
+  }
+
+  @AfterAll
+  static void stop() {
+    HETZNER.close();
+  }
 
   @LocalServerPort int port;
 
@@ -30,19 +49,36 @@ class VmControllerTest {
   @Test
   void createsOneVmPerOwner() throws Exception {
     var owner = UUID.randomUUID().toString();
-    var first = send("POST", "", "{\"ownerRef\":\"" + owner + "\"}");
+    var first = send("POST", "", "{\"workspaceId\":\"" + owner + "\",\"userId\":\"" + USER + "\"}");
     assertThat(first.statusCode()).isEqualTo(201);
     var vm = JSON.readValue(first.body(), VmDto.class);
     assertThat(vm.status()).isEqualTo("PROVISIONING");
     assertThat(vm.serverType()).isEqualTo("cx23");
     assertThat(first.headers().firstValue("Location"))
         .hasValueSatisfying(location -> assertThat(location).endsWith("/vms/" + vm.id()));
+    var server = HETZNER.servers.get(vm.serverId());
+    assertThat(server.path("labels").path("workspace-id").asString()).isEqualTo(owner);
+    assertThat(server.path("labels").path("user-id").asString()).isEqualTo(USER.toString());
+    var group = HETZNER.groups.get(hetznerGroupOf(server));
+    assertThat(group.path("name").asString()).isEqualTo("user-" + USER);
+    assertThat(vm.ipv4()).isEqualTo(server.path("public_net").path("ipv4").path("ip").asString());
 
-    var again = send("POST", "", "{\"ownerRef\":\"" + owner + "\",\"serverType\":\"cx33\"}");
+    var again =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\""
+                + owner
+                + "\",\"userId\":\""
+                + USER
+                + "\",\"serverType\":\"cx33\"}");
     assertThat(again.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(again.body(), VmDto.class).id()).isEqualTo(vm.id());
+    assertThat(HETZNER.servers.values())
+        .filteredOn(s -> s.path("labels").path("workspace-id").asString().equals(owner))
+        .hasSize(1);
 
-    var listed = send("GET", "?ownerRef=" + owner, null);
+    var listed = send("GET", "?workspaceId=" + owner, null);
     assertThat(JSON.readValue(listed.body(), new TypeReference<List<VmDto>>() {}))
         .extracting(VmDto::id)
         .containsExactly(vm.id());
@@ -71,6 +107,7 @@ class VmControllerTest {
   void deletesAndThenNoLongerFindsIt() throws Exception {
     var vm = create();
     assertThat(send("DELETE", "/" + vm.id(), null).statusCode()).isEqualTo(204);
+    assertThat(HETZNER.servers).doesNotContainKey(vm.serverId());
     assertThat(send("GET", "/" + vm.id(), null).statusCode()).isEqualTo(404);
     assertThat(send("DELETE", "/" + vm.id(), null).statusCode()).isEqualTo(404);
     assertThat(send("POST", "/" + vm.id() + "/ready", null).statusCode()).isEqualTo(404);
@@ -79,17 +116,32 @@ class VmControllerTest {
   }
 
   @Test
-  void rejectsBlankOwner() throws Exception {
-    var response = send("POST", "", "{\"ownerRef\":\"  \"}");
-    assertThat(response.statusCode()).isEqualTo(400);
-    assertThat(response.headers().firstValue("Content-Type"))
-        .hasValueSatisfying(type -> assertThat(type).startsWith("application/problem+json"));
+  void rejectsAMissingOrMalformedWorkspaceId() throws Exception {
+    var valid = "\"userId\":\"" + USER + "\"";
+    for (var body :
+        new String[] {
+          "{" + valid + "}",
+          "{\"workspaceId\":\"not-a-uuid\"," + valid + "}",
+          "{\"workspaceId\":\"" + UUID.randomUUID() + "\"}"
+        }) {
+      var response = send("POST", "", body);
+      assertThat(response.statusCode()).isEqualTo(400);
+      assertThat(response.headers().firstValue("Content-Type"))
+          .hasValueSatisfying(type -> assertThat(type).startsWith("application/problem+json"));
+    }
   }
 
   @Test
   void rejectsAServerTypeNotOffered() throws Exception {
     var response =
-        send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\",\"serverType\":\"cx53\"}");
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\""
+                + UUID.randomUUID()
+                + "\",\"userId\":\""
+                + USER
+                + "\",\"serverType\":\"cx53\"}");
     assertThat(response.statusCode()).isEqualTo(400);
     assertThat(response.body()).contains("cx23, cx33");
   }
@@ -97,16 +149,15 @@ class VmControllerTest {
   @Test
   void createsTheSizeAsked() throws Exception {
     var response =
-        send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\",\"serverType\":\"cx33\"}");
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\""
+                + UUID.randomUUID()
+                + "\",\"userId\":\""
+                + USER
+                + "\",\"serverType\":\"cx33\"}");
     assertThat(JSON.readValue(response.body(), VmDto.class).serverType()).isEqualTo("cx33");
-  }
-
-  @Test
-  void listsNoOptionsWithoutAToken() throws Exception {
-    var request = HttpRequest.newBuilder(URI.create(base().replace("/vms", "/vm-options"))).build();
-    var response = http.send(request, BodyHandlers.ofString());
-    assertThat(response.statusCode()).isEqualTo(503);
-    assertThat(response.body()).contains("no Hetzner API token");
   }
 
   @Test
@@ -143,8 +194,25 @@ class VmControllerTest {
     }
   }
 
+  private static long hetznerGroupOf(JsonNode server) {
+    return HETZNER.groups.values().stream()
+        .filter(
+            g ->
+                g.path("servers")
+                    .valueStream()
+                    .anyMatch(id -> id.asLong() == server.path("id").asLong()))
+        .findFirst()
+        .orElseThrow()
+        .path("id")
+        .asLong();
+  }
+
   private VmDto create() throws Exception {
-    var response = send("POST", "", "{\"ownerRef\":\"" + UUID.randomUUID() + "\"}");
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\"" + UUID.randomUUID() + "\",\"userId\":\"" + USER + "\"}");
     return JSON.readValue(response.body(), VmDto.class);
   }
 

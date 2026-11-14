@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.vmmanager.MutableClock;
+import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.ServerType;
@@ -13,14 +14,13 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.List;
-import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 
-/** Against a stand-in HetznerClient, so what is offered is decided here, not by the network. */
+/** Against Hetzner kept in memory, so what is offered is decided here, not by the network. */
 class VmOptionServiceTest {
 
   final MutableClock clock = new MutableClock(Instant.parse("2026-11-14T10:00:00Z"));
-  final AtomicInteger calls = new AtomicInteger();
+  final FakeHetznerClient hetzner = new FakeHetznerClient();
 
   static ServerType type(String name, boolean deprecated, String... locations) {
     var prices =
@@ -30,28 +30,30 @@ class VmOptionServiceTest {
     return new ServerType(name, 2, 4.0, 40, "shared", "x86", deprecated, prices);
   }
 
-  VmOptionService service(List<String> offered, List<ServerType> types) {
+  VmOptionService service(List<String> offered) {
     return new VmOptionService(
         new VmProperties(offered),
-        new HetznerProperties("t0ken", URI.create("http://unused"), "nbg1", Duration.ofSeconds(1)),
-        () -> {
-          calls.incrementAndGet();
-          return types;
-        },
+        new HetznerProperties(
+            "t0ken",
+            URI.create("http://unused"),
+            "nbg1",
+            "ubuntu-24.04",
+            List.of(),
+            Duration.ofSeconds(1)),
+        hetzner,
         clock);
   }
 
   @Test
   void offersWhatIsOnSaleInTheLocationInConfiguredOrder() {
-    var options =
-        service(
-                List.of("cx33", "cx23", "cx22", "cx43", "cx53"),
-                List.of(
-                    type("cx23", false, "nbg1"),
-                    type("cx33", false, "nbg1", "hel1"),
-                    type("cx22", true, "nbg1"),
-                    type("cx43", false, "hel1")))
-            .list();
+    hetzner.types =
+        List.of(
+            type("cx23", false, "nbg1"),
+            type("cx33", false, "nbg1", "hel1"),
+            type("cx22", true, "nbg1"),
+            type("cx43", false, "hel1"));
+
+    var options = service(List.of("cx33", "cx23", "cx22", "cx43", "cx53")).list();
 
     assertThat(options).extracting(VmOption::serverType).containsExactly("cx33", "cx23");
     assertThat(options).extracting(VmOption::isDefault).containsExactly(true, false);
@@ -61,32 +63,28 @@ class VmOptionServiceTest {
 
   @Test
   void asksHetznerAgainOnlyOnceTheCacheHasExpired() {
-    var service = service(List.of("cx23"), List.of(type("cx23", false, "nbg1")));
+    hetzner.types = List.of(type("cx23", false, "nbg1"));
+    var service = service(List.of("cx23"));
 
     service.list();
     clock.advance(VmOptionService.CACHE_FOR.minusSeconds(1));
     service.list();
-    assertThat(calls).hasValue(1);
+    assertThat(hetzner.typeCalls).isEqualTo(1);
 
     clock.advance(Duration.ofSeconds(1));
     service.list();
-    assertThat(calls).hasValue(2);
+    assertThat(hetzner.typeCalls).isEqualTo(2);
   }
 
   @Test
   void letsAHetznerFailureThroughAndCachesNothing() {
-    var service =
-        new VmOptionService(
-            new VmProperties(List.of("cx23")),
-            new HetznerProperties(null, URI.create("http://unused"), "nbg1", Duration.ofSeconds(1)),
-            () -> {
-              calls.incrementAndGet();
-              throw new HetznerException.NotConfigured();
-            },
-            clock);
+    var service = service(List.of("cx23"));
+    hetzner.failure = new HetznerException.NotConfigured();
 
     assertThatThrownBy(service::list).isInstanceOf(HetznerException.NotConfigured.class);
-    assertThatThrownBy(service::list).isInstanceOf(HetznerException.NotConfigured.class);
-    assertThat(calls).hasValue(2);
+
+    hetzner.failure = null;
+    hetzner.types = List.of(type("cx23", false, "nbg1"));
+    assertThat(service.list()).hasSize(1);
   }
 }

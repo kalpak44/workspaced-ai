@@ -30,8 +30,8 @@ public class VmController implements VmApi {
   }
 
   @Override
-  public ResponseEntity<List<VmDto>> list(Optional<String> ownerRef) {
-    return ResponseEntity.ok(service.list(ownerRef).stream().map(mapper::toDto).toList());
+  public ResponseEntity<List<VmDto>> list(Optional<UUID> workspaceId) {
+    return ResponseEntity.ok(service.list(workspaceId).stream().map(mapper::toDto).toList());
   }
 
   @Override
@@ -46,7 +46,7 @@ public class VmController implements VmApi {
 
   @Override
   public ResponseEntity<VmDto> create(CreateVmDto body) {
-    var created = service.create(body.ownerRef(), body.serverType());
+    var created = service.create(body.workspaceId(), body.userId(), body.serverType());
     var vm = mapper.toDto(created.vm());
     if (!created.isNew()) {
       return ResponseEntity.ok(vm);

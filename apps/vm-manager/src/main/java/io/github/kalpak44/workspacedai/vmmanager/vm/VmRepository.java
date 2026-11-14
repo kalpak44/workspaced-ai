@@ -17,7 +17,7 @@ public interface VmRepository {
   List<Vm> findAll();
 
   /** Oldest first. */
-  List<Vm> findByOwnerRef(String ownerRef);
+  List<Vm> findByWorkspaceId(UUID workspaceId);
 
   Optional<Vm> findById(UUID id);
 

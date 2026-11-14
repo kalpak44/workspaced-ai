@@ -4,11 +4,16 @@ import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -36,13 +41,106 @@ public class HttpHetznerClient implements HetznerClient {
     while (page > 0) {
       var body = get("/server_types?per_page=50&page=" + page);
       body.path("server_types").forEach(type -> types.add(serverType(type)));
-      var next = body.path("meta").path("pagination").path("next_page");
-      page = next.isNumber() ? next.asInt() : 0;
+      page = nextPage(body);
     }
     return List.copyOf(types);
   }
 
+  @Override
+  public List<Server> servers(String labelSelector) {
+    var servers = new ArrayList<Server>();
+    var selector = URLEncoder.encode(labelSelector, StandardCharsets.UTF_8);
+    var page = 1;
+    while (page > 0) {
+      var body = get("/servers?per_page=50&label_selector=" + selector + "&page=" + page);
+      body.path("servers").forEach(server -> servers.add(server(server)));
+      page = nextPage(body);
+    }
+    return List.copyOf(servers);
+  }
+
+  /**
+   * Public IPv4 and IPv6 both on, so the VM can reach the API with no network of ours. The answer
+   * also carries a root password when no SSH key is given; it is deliberately never read.
+   */
+  @Override
+  public CreatedServer createServer(ServerSpec spec) {
+    var body = json.createObjectNode();
+    body.put("name", spec.name());
+    body.put("server_type", spec.serverType());
+    body.put("location", spec.location());
+    body.put("image", spec.image());
+    body.put("start_after_create", true);
+    var keys = body.putArray("ssh_keys");
+    spec.sshKeys().forEach(keys::add);
+    if (spec.placementGroup() != null) {
+      body.put("placement_group", spec.placementGroup());
+    }
+    var labels = body.putObject("labels");
+    spec.labels().forEach(labels::put);
+    var response =
+        send(
+            "/servers",
+            HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
+            "POST",
+            201);
+    var server = response.path("server");
+    return new CreatedServer(server.path("id").asLong(), ipv4(server));
+  }
+
+  @Override
+  public void deleteServer(long id) {
+    try {
+      send("/servers/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 200);
+    } catch (Gone _) {
+      // Already deleted, by an earlier attempt or by hand.
+    }
+  }
+
+  @Override
+  public List<PlacementGroup> placementGroups(String labelSelector) {
+    var groups = new ArrayList<PlacementGroup>();
+    var selector = URLEncoder.encode(labelSelector, StandardCharsets.UTF_8);
+    var page = 1;
+    while (page > 0) {
+      var body = get("/placement_groups?per_page=50&label_selector=" + selector + "&page=" + page);
+      body.path("placement_groups").forEach(group -> groups.add(placementGroup(group)));
+      page = nextPage(body);
+    }
+    return List.copyOf(groups);
+  }
+
+  @Override
+  public PlacementGroup createPlacementGroup(String name, Map<String, String> labels) {
+    var body = json.createObjectNode();
+    body.put("name", name);
+    body.put("type", "spread");
+    var labelNode = body.putObject("labels");
+    labels.forEach(labelNode::put);
+    var response =
+        send(
+            "/placement_groups",
+            HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
+            "POST",
+            201);
+    return placementGroup(response.path("placement_group"));
+  }
+
+  @Override
+  public void deletePlacementGroup(long id) {
+    try {
+      send("/placement_groups/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 204);
+    } catch (Gone _) {
+      // Already deleted.
+    }
+  }
+
   private JsonNode get(String path) {
+    return send(path, HttpRequest.BodyPublishers.noBody(), "GET", 200);
+  }
+
+  private JsonNode send(
+      String path, HttpRequest.BodyPublisher body, String method, int expectedStatus) {
     if (!properties.hasToken()) {
       throw new HetznerException.NotConfigured();
     }
@@ -50,21 +148,74 @@ public class HttpHetznerClient implements HetznerClient {
         HttpRequest.newBuilder(URI.create(properties.baseUrl() + path))
             .header("Authorization", "Bearer " + properties.token())
             .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
             .timeout(properties.timeout())
-            .GET()
+            .method(method, body)
             .build();
     try {
       var response = http.send(request, BodyHandlers.ofString());
-      if (response.statusCode() != 200) {
-        throw new HetznerException("Hetzner answered " + response.statusCode() + " on " + path);
+      if (response.statusCode() == 404) {
+        throw new Gone(method + " " + path);
       }
-      return json.readTree(response.body());
+      if (response.statusCode() != expectedStatus) {
+        throw new HetznerException(
+            "Hetzner answered " + response.statusCode() + " on " + method + " " + path);
+      }
+      // A 204 has no body to read.
+      return response.body().isBlank() ? json.missingNode() : json.readTree(response.body());
     } catch (IOException | JacksonException e) {
-      throw new HetznerException("could not read " + path + " from Hetzner", e);
+      throw new HetznerException("could not read " + method + " " + path + " from Hetzner", e);
     } catch (InterruptedException e) {
       Thread.currentThread().interrupt();
-      throw new HetznerException("interrupted while asking Hetzner for " + path, e);
+      throw new HetznerException("interrupted on " + method + " " + path + " at Hetzner", e);
     }
+  }
+
+  /** A 404: only a delete treats it as success, everywhere else it is a failure like any other. */
+  private static final class Gone extends HetznerException {
+    Gone(String request) {
+      super("Hetzner answered 404 on " + request);
+    }
+  }
+
+  // Zero once there is no next page.
+  private static int nextPage(JsonNode body) {
+    var next = body.path("meta").path("pagination").path("next_page");
+    return next.isNumber() ? next.asInt() : 0;
+  }
+
+  private static String ipv4(JsonNode server) {
+    var ip = server.path("public_net").path("ipv4").path("ip");
+    return ip.isString() ? ip.asString() : null;
+  }
+
+  private static Map<String, String> labels(JsonNode resource) {
+    var labels = new HashMap<String, String>();
+    resource
+        .path("labels")
+        .properties()
+        .forEach(e -> labels.put(e.getKey(), e.getValue().asString()));
+    return Map.copyOf(labels);
+  }
+
+  private static PlacementGroup placementGroup(JsonNode group) {
+    var servers = new ArrayList<Long>();
+    group.path("servers").forEach(id -> servers.add(id.asLong()));
+    return new PlacementGroup(
+        group.path("id").asLong(),
+        group.path("name").asString(),
+        List.copyOf(servers),
+        labels(group));
+  }
+
+  private static Server server(JsonNode server) {
+    return new Server(
+        server.path("id").asLong(),
+        server.path("name").asString(),
+        server.path("server_type").path("name").asString(),
+        ipv4(server),
+        Instant.parse(server.path("created").asString()),
+        labels(server));
   }
 
   private static ServerType serverType(JsonNode type) {

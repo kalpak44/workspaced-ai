@@ -9,23 +9,43 @@ and only the workspace API calls it. Every error body is an RFC 9457 problem det
 
 ## VMs
 
-A VM has an `id` (UUID, assigned by the server), the `ownerRef` it belongs to (a workspace id in practice), its
-`serverType`, a `status` (`PROVISIONING`, `READY`, `RESTARTING`), its public `ipv4` once it has one, and `createdAt` /
-`lastSeenAt`. VMs are still kept in memory, and none is created at Hetzner yet.
+A VM is one Hetzner Cloud server running one workspace. It has an `id` (UUID, assigned by the server), the
+`workspaceId` it runs and the `userId` who owns that workspace, its `serverType`, the Hetzner `serverId`, a `status`
+(`PROVISIONING`, `READY`, `RESTARTING`), its public `ipv4`, and `createdAt` / `lastSeenAt`.
 
-| Method   | Path                          | Body                                         | Answers                                         |
-|----------|-------------------------------|----------------------------------------------|-------------------------------------------------|
-| `GET`    | `/api/v1/vms`                 |                                              | `200` and every VM; `?ownerRef=` for one owner's |
-| `GET`    | `/api/v1/vms/events`          |                                              | `200` and a server-sent event stream            |
-| `GET`    | `/api/v1/vms/{id}`            |                                              | `200` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms`                 | `{"ownerRef": "…", "serverType": "cx23"}`    | `201`, the VM, and its URL in `Location`; `200` and the owner's VM if it has one |
-| `DELETE` | `/api/v1/vms/{id}`            |                                              | `204`, or `404`                                 |
-| `POST`   | `/api/v1/vms/{id}/restart`    |                                              | `202` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms/{id}/ready`      |                                              | `200` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms/{id}/heartbeat`  |                                              | `204`, or `404`                                 |
+| Method   | Path                          | Body                                                     | Answers                                         |
+|----------|-------------------------------|----------------------------------------------------------|-------------------------------------------------|
+| `GET`    | `/api/v1/vms`                 |                                                          | `200` and every VM; `?workspaceId=` for one     |
+| `GET`    | `/api/v1/vms/events`          |                                                          | `200` and a server-sent event stream            |
+| `GET`    | `/api/v1/vms/{id}`            |                                                          | `200` and the VM, or `404`                      |
+| `POST`   | `/api/v1/vms`                 | `{"workspaceId": "…", "userId": "…", "serverType": "cx23"}` | `201`, the VM, and its URL in `Location`; `200` and the workspace's VM if it has one |
+| `DELETE` | `/api/v1/vms/{id}`            |                                                          | `204`, or `404`                                 |
+| `POST`   | `/api/v1/vms/{id}/restart`    |                                                          | `202` and the VM, or `404`                      |
+| `POST`   | `/api/v1/vms/{id}/ready`      |                                                          | `200` and the VM, or `404`                      |
+| `POST`   | `/api/v1/vms/{id}/heartbeat`  |                                                          | `204`, or `404`                                 |
 
-`serverType` is optional and defaults to the first one offered. A blank `ownerRef`, or a `serverType` that is not
-offered, answers `400`.
+Creating a VM creates its server at Hetzner (`ubuntu-24.04` in the configured location) and answers once Hetzner has
+accepted it; it is `PROVISIONING` until it reports ready. `serverType` is optional and defaults to the first one
+offered. A missing or malformed `workspaceId` or `userId`, or a `serverType` that is not offered, answers `400`;
+Hetzner refusing answers `502` and keeps nothing. Deleting a VM deletes its server, disk included; a server already
+gone counts as deleted, and a VM whose server could not be deleted is kept so the delete can be retried.
+
+### Labels and placement groups
+
+Every server is labelled `managed-by=workspaced-ai-vm-manager`, `vm-id`, `workspace-id` and `user-id`, so any server can
+be traced to its workspace from the Hetzner console (`label_selector=workspace-id=<uuid>`).
+
+Each user's servers share a **spread placement group**, `user-<userId>`: Hetzner puts every server in it on a different
+physical host, so one host failing takes down at most one of that user's workspaces. The group is created with the
+user's first VM and deleted with their last; it costs nothing. Hetzner caps a spread group at 10 servers, and an 11th
+VM is created outside it, with a warning in the log, rather than refused.
+
+### Restarts
+
+Hetzner is the record of which VMs exist. At startup the VM manager reads every labelled server back into its
+inventory, so a restart forgets only statuses and heartbeats, which the VMs report again, never a server that is still
+billing. Until that read has succeeded, creating a VM answers `503`, because a retried create could otherwise make a
+second server for a workspace that has one; a failed read is retried every minute.
 
 ## VM options
 
@@ -43,13 +63,16 @@ Without a Hetzner token it answers `503`; when Hetzner fails or answers unexpect
 VMs live in their own Hetzner Cloud project, so its API token can reach nothing else. The token is a Read & Write one,
 kept in Vault at `secret/workspaced-vm-manager-secrets` under `hcloud-token`, and reaches the VM manager as
 `WORKSPACED_HETZNER_TOKEN` through its own ExternalSecret, so the API pod never holds it. VMs are created in `nbg1`
-unless `WORKSPACED_HETZNER_LOCATION` says otherwise.
+(Nuremberg, Germany) unless `WORKSPACED_HETZNER_LOCATION` says otherwise, from `WORKSPACED_HETZNER_IMAGE`
+(`ubuntu-24.04`). `WORKSPACED_HETZNER_SSH_KEYS` names project SSH keys to put on every VM; left empty, Hetzner emails
+the account a root password for each one instead.
 
 ## Code layout
 
 - `hetzner` — `HetznerClient`, the Hetzner Cloud API as this app uses it, and `HttpHetznerClient`, its HTTP
   implementation over an injected `HttpClient`.
-- `vm` — the domain: `Vm` and `VmOption`, `VmRepository` (in memory for now), and `VmService` / `VmOptionService`.
+- `vm` — the domain: `Vm` and `VmOption`, `VmRepository` (in memory, rebuilt from Hetzner by `HetznerVmInventory`),
+  `UserPlacementGroups`, and `VmService` / `VmOptionService`.
   Services take a `Clock`, throw domain exceptions, and publish each change as a `VmEvent`; none of them knows HTTP.
 - `vm.web` — controllers that only map between DTOs (`vm.web.dto`) and the services, `ApiExceptionHandler` turning the
   domain exceptions into problem details, and `VmEventStream`, which sends each `VmEvent` to every open stream through

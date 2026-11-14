@@ -45,6 +45,10 @@ workspaced:
     token: ${WORKSPACED_HETZNER_TOKEN:}
     # Nuremberg, Germany. fsn1 (Falkenstein) is the other German location.
     location: ${WORKSPACED_HETZNER_LOCATION:nbg1}
+    image: ${WORKSPACED_HETZNER_IMAGE:ubuntu-24.04}
+    # Comma-separated names of project SSH keys put on every VM. Empty, Hetzner emails a root
+    # password for each one instead.
+    ssh-keys: ${WORKSPACED_HETZNER_SSH_KEYS:}
   vm:
     # The sizes offered, default first. Specs and prices come from Hetzner.
     server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}

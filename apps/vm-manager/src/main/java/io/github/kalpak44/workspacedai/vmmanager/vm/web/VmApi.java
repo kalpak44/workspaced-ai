@@ -41,8 +41,9 @@ public interface VmApi {
 
   String VM_EXAMPLE =
       "{\"id\":\"8d1e4b0a-2f6c-4f7e-9b1d-0c3a5e7f9a21\","
-          + "\"ownerRef\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\",\"serverType\":\"cx23\","
-          + "\"status\":\"PROVISIONING\",\"ipv4\":null,"
+          + "\"workspaceId\":\"3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11\","
+          + "\"userId\":\"00000000-0000-0000-0000-000000000001\",\"serverType\":\"cx23\","
+          + "\"serverId\":112233445,\"status\":\"PROVISIONING\",\"ipv4\":\"203.0.113.10\","
           + "\"createdAt\":\"2026-11-14T10:00:00Z\",\"lastSeenAt\":null}";
 
   String NOT_FOUND_EXAMPLE =
@@ -53,7 +54,7 @@ public interface VmApi {
   @Operation(
       operationId = "listVms",
       summary = "List VMs",
-      description = "Every VM, oldest first; only one owner's when ownerRef is given.")
+      description = "Every VM, oldest first; only one workspace's when workspaceId is given.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",
@@ -64,7 +65,8 @@ public interface VmApi {
               examples = @ExampleObject("[" + VM_EXAMPLE + "]")))
   @GetMapping(produces = JSON)
   ResponseEntity<List<VmDto>> list(
-      @Parameter(description = "Only this owner's VMs") @RequestParam Optional<String> ownerRef);
+      @Parameter(description = "Only this workspace's VM") @RequestParam
+          Optional<UUID> workspaceId);
 
   @Operation(
       operationId = "streamVmEvents",
@@ -104,9 +106,10 @@ public interface VmApi {
       operationId = "createVm",
       summary = "Create a VM",
       description =
-          "Requests a VM for the owner and returns at once; it is PROVISIONING until it reports "
-              + "ready. An owner has at most one VM: asking again returns the one it has, with "
-              + "200 instead of 201, so a retried request never creates a second.")
+          "Creates a Hetzner server for the workspace and returns once Hetzner has accepted it; it is "
+              + "PROVISIONING until it reports ready. A workspace has at most one VM: asking again "
+              + "returns the one it has, with 200 instead of 201, so a retried request never "
+              + "creates a second.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -117,11 +120,27 @@ public interface VmApi {
               examples = @ExampleObject(VM_EXAMPLE)))
   @ApiResponse(
       responseCode = "200",
-      description = "The owner already had this VM.",
+      description = "The workspace already had this VM.",
       content = @Content(mediaType = JSON, schema = @Schema(implementation = VmDto.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "The ownerRef is blank or too long, or the serverType is not offered.",
+      description =
+          "The workspaceId or userId is missing or not a UUID, or the serverType is not offered.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description = "Hetzner refused or failed the create; nothing was kept.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "503",
+      description =
+          "No Hetzner token is configured, or the VMs already at Hetzner are not loaded yet.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
@@ -132,7 +151,9 @@ public interface VmApi {
   @Operation(
       operationId = "deleteVm",
       summary = "Delete a VM",
-      description = "Deletes the VM and its disk.")
+      description =
+          "Deletes its Hetzner server, disk included, then the VM. A server already gone at "
+              + "Hetzner counts as deleted.")
   @ApiResponse(responseCode = "204", description = "Deleted.")
   @ApiResponse(
       responseCode = "404",

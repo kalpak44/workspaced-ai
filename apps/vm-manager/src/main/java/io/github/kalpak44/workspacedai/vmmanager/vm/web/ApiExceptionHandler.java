@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.ServerTypeNotOfferedException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.VmInventoryNotLoadedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -27,6 +28,11 @@ public class ApiExceptionHandler {
   @ExceptionHandler(ServerTypeNotOfferedException.class)
   ProblemDetail notOffered(ServerTypeNotOfferedException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(VmInventoryNotLoadedException.class)
+  ProblemDetail notLoaded(VmInventoryNotLoadedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.SERVICE_UNAVAILABLE, e.getMessage());
   }
 
   // A missing token is this deployment's fault; anything else is Hetzner's.
