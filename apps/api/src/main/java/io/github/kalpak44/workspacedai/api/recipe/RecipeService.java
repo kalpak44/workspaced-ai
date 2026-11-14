@@ -50,6 +50,10 @@ public class RecipeService {
       throw invalid("the page is 0 or more and its size 1 or more");
     }
     var pageable = PageRequest.of(page, Math.min(size, MAX_PAGE_SIZE));
+    // A query offset is an int; a page past it could only ever be empty.
+    if (pageable.getOffset() > Integer.MAX_VALUE) {
+      throw invalid("the page is past the last recipe");
+    }
     var filter =
         new RecipeStore.Filter(
             publicScope,
@@ -57,12 +61,13 @@ public class RecipeService {
             query == null || query.isBlank() ? null : query.trim(),
             category == null || category.isBlank() ? null : category);
     var recipes =
-        store.list(filter, order, pageable.getPageSize(), pageable.getOffset()).stream()
+        store.list(filter, order, pageable.getPageSize(), (int) pageable.getOffset()).stream()
             .map(Recipe::toSummary)
             .toList();
     return new PageImpl<>(recipes, pageable, store.count(filter));
   }
 
+  @Transactional(readOnly = true)
   public Recipe get(UUID id, UUID viewer) {
     return visible(id, viewer);
   }

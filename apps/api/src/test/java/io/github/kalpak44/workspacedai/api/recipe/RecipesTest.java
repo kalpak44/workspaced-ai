@@ -16,6 +16,8 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.Executors;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -188,6 +190,36 @@ class RecipesTest {
     var after = JSON.readTree(send("GET", "/recipes/" + recipe, null, admin).body());
     assertThat(after.get("rating").get("average").asDouble()).isEqualTo(3.0);
     assertThat(after.get("myRating").asInt()).isEqualTo(3);
+  }
+
+  @Test
+  void ratingsSentAtOnceByOneUserLeaveOneRating() throws Exception {
+    var recipe = id(create("Shared", "PUBLIC", ada));
+    try (var threads = Executors.newVirtualThreadPerTaskExecutor()) {
+      var sent =
+          IntStream.rangeClosed(1, 5)
+              .mapToObj(
+                  stars ->
+                      threads.submit(
+                          () ->
+                              send(
+                                  "PUT",
+                                  "/recipes/" + recipe + "/rating",
+                                  "{\"stars\":" + stars + "}",
+                                  admin)))
+              .toList();
+      for (var response : sent) {
+        assertThat(response.get().statusCode()).isEqualTo(200);
+      }
+    }
+    var rated = JSON.readTree(send("GET", "/recipes/" + recipe, null, admin).body());
+    assertThat(rated.get("rating").get("count").asInt()).isEqualTo(1);
+  }
+
+  @Test
+  void refusesAPagePastTheLargestOffset() throws Exception {
+    var path = "/recipes?page=" + Integer.MAX_VALUE + "&size=100";
+    assertThat(send("GET", path, null, ada).statusCode()).isEqualTo(400);
   }
 
   @Test

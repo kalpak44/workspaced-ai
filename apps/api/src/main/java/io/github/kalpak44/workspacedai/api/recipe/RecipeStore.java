@@ -1,17 +1,29 @@
 package io.github.kalpak44.workspacedai.api.recipe;
 
-import java.sql.ResultSet;
-import java.sql.SQLException;
+import io.github.kalpak44.workspacedai.api.auth.UserEntity;
+import io.github.kalpak44.workspacedai.api.auth.UserEntity_;
+import jakarta.persistence.EntityManager;
+import jakarta.persistence.Tuple;
+import jakarta.persistence.criteria.CriteriaQuery;
+import jakarta.persistence.criteria.Expression;
+import jakarta.persistence.criteria.JoinType;
+import jakarta.persistence.criteria.Predicate;
+import jakarta.persistence.criteria.Root;
+import jakarta.persistence.criteria.Selection;
 import java.time.Instant;
-import java.time.OffsetDateTime;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.List;
+import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
-import org.springframework.jdbc.core.JdbcTemplate;
+import org.hibernate.query.criteria.HibernateCriteriaBuilder;
 import org.springframework.stereotype.Repository;
 
+/**
+ * Reads recipes with their ratings summed up, through the Criteria API over the JPA metamodel, and
+ * writes them through the entities. A listing leaves the Markdown out; only a single recipe carries
+ * it. Callers hold the transaction.
+ */
 @Repository
 public class RecipeStore {
 
@@ -25,187 +37,226 @@ public class RecipeStore {
   /** Which recipes a listing covers, and how it narrows them. */
   public record Filter(boolean publicScope, UUID viewer, String query, String category) {}
 
-  // The caller's own rating comes from the second join; avg is over every user's.
-  private static final String COLUMNS =
-      """
-      r.id, r.title, r.summary, r.category, r.tags, r.visibility, r.created_at,
-      r.updated_at, r.published_at, r.author_id, u.username, u.first_name, u.last_name,
-      COALESCE(s.average, 0) AS average, COALESCE(s.count, 0) AS count,
-      m.stars AS my_rating""";
+  private static final char ESCAPE = '\\';
 
-  private static final String FROM =
-      """
-      FROM recipe r
-      JOIN app_user u ON u.id = r.author_id
-      LEFT JOIN (SELECT recipe_id, AVG(stars)::float8 AS average, COUNT(*) AS count
-                 FROM recipe_rating GROUP BY recipe_id) s ON s.recipe_id = r.id
-      LEFT JOIN recipe_rating m ON m.recipe_id = r.id AND m.user_id = ?
-      """;
+  // Tuple aliases for the columns that are not an entity attribute of their own name.
+  private static final String AUTHOR_ID = "authorId";
+  private static final String AVERAGE = "average";
+  private static final String COUNT = "count";
+  private static final String MY_RATING = "myRating";
 
-  // Optional filters let one prepared statement serve every combination without dynamic SQL.
-  private static final String FILTER =
-      """
-      WHERE r.visibility = CASE WHEN CAST(? AS boolean) THEN 'PUBLIC' ELSE 'PRIVATE' END
-        AND (CAST(? AS boolean) OR r.author_id = ?)
-        AND (CAST(? AS boolean) OR r.category = ?)
-        AND (CAST(? AS boolean) OR r.title ILIKE ? OR r.summary ILIKE ?
-             OR EXISTS (SELECT 1 FROM unnest(r.tags) t WHERE t ILIKE ?))
-      """;
+  private final EntityManager entities;
+  private final RecipeRepository recipes;
+  private final RecipeRatingRepository ratings;
 
-  private static final String LIST =
-      "SELECT "
-          + COLUMNS
-          + ", NULL AS content\n"
-          + FROM
-          + FILTER
-          + """
-          ORDER BY
-            CASE WHEN CAST(? AS text) = 'TOP' THEN COALESCE(s.average, 0) END DESC,
-            CASE WHEN CAST(? AS text) = 'TOP' THEN COALESCE(s.count, 0) END DESC,
-            CASE WHEN CAST(? AS text) IN ('TOP', 'UPDATED') THEN r.updated_at END DESC,
-            CASE WHEN CAST(? AS text) = 'NEWEST'
-                 THEN COALESCE(r.published_at, r.created_at) END DESC,
-            r.id
-          LIMIT ? OFFSET ?
-          """;
-
-  private static final String COUNT = "SELECT COUNT(*) FROM recipe r\n" + FILTER;
-
-  private static final String FIND =
-      "SELECT " + COLUMNS + ", r.content\n" + FROM + "WHERE r.id = ?";
-
-  private final JdbcTemplate jdbc;
-
-  public RecipeStore(JdbcTemplate jdbc) {
-    this.jdbc = jdbc;
+  public RecipeStore(
+      EntityManager entities, RecipeRepository recipes, RecipeRatingRepository ratings) {
+    this.entities = entities;
+    this.recipes = recipes;
+    this.ratings = ratings;
   }
 
-  public List<Recipe> list(Filter filter, Order order, int limit, long offset) {
-    var args = new ArrayList<Object>();
-    args.add(filter.viewer());
-    filterArgs(filter, args);
-    args.add(order.name());
-    args.add(order.name());
-    args.add(order.name());
-    args.add(order.name());
-    args.add(limit);
-    args.add(offset);
-    return jdbc.query(LIST, (rs, _) -> recipe(rs, filter.viewer()), args.toArray());
+  public List<Recipe> list(Filter filter, Order order, int limit, int offset) {
+    var cb = builder();
+    var query = cb.createTupleQuery();
+    var recipe = query.from(RecipeEntity.class);
+    var columns = select(cb, query, recipe, filter.viewer(), false);
+    var id = recipe.get(RecipeEntity_.id);
+    var updated = recipe.get(RecipeEntity_.updatedAt);
+    query
+        .where(matching(cb, recipe, filter))
+        .orderBy(
+            switch (order) {
+              case TOP ->
+                  List.of(
+                      cb.desc(columns.average()),
+                      cb.desc(columns.count()),
+                      cb.desc(updated),
+                      cb.asc(id));
+              case NEWEST ->
+                  List.of(
+                      cb.desc(
+                          cb.coalesce(
+                              recipe.get(RecipeEntity_.publishedAt),
+                              recipe.get(RecipeEntity_.createdAt))),
+                      cb.asc(id));
+              case UPDATED -> List.of(cb.desc(updated), cb.asc(id));
+            });
+    return entities
+        .createQuery(query)
+        .setFirstResult(offset)
+        .setMaxResults(limit)
+        .getResultStream()
+        .map(row -> recipe(row, filter.viewer(), false))
+        .toList();
   }
 
   public long count(Filter filter) {
-    var args = new ArrayList<Object>();
-    filterArgs(filter, args);
-    var count = jdbc.queryForObject(COUNT, Long.class, args.toArray());
-    return count == null ? 0 : count;
+    var cb = builder();
+    var query = cb.createQuery(Long.class);
+    var recipe = query.from(RecipeEntity.class);
+    query.select(cb.count(recipe)).where(matching(cb, recipe, filter));
+    return entities.createQuery(query).getSingleResult();
   }
 
   /** Any recipe, whoever may see it; the caller decides that. */
   public Optional<Recipe> find(UUID id, UUID viewer) {
-    return jdbc.query(FIND, (rs, _) -> recipe(rs, viewer), viewer, id).stream().findFirst();
+    var cb = builder();
+    var query = cb.createTupleQuery();
+    var recipe = query.from(RecipeEntity.class);
+    select(cb, query, recipe, viewer, true);
+    query.where(cb.equal(recipe.get(RecipeEntity_.id), id));
+    return entities
+        .createQuery(query)
+        .getResultStream()
+        .findFirst()
+        .map(row -> recipe(row, viewer, true));
   }
 
   public UUID create(UUID author, RecipeRequest.Fields fields) {
-    var id = UUID.randomUUID();
-    jdbc.update(
-        """
-        INSERT INTO recipe (id, author_id, title, summary, category, tags, content, visibility,
-                            published_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, CASE WHEN ? = 'PUBLIC' THEN now() END)
-        """,
-        id,
-        author,
-        fields.title(),
-        fields.summary(),
-        fields.category(),
-        fields.tags().toArray(String[]::new),
-        fields.content(),
-        fields.visibility().name(),
-        fields.visibility().name());
-    return id;
+    return recipes
+        .save(new RecipeEntity(entities.getReference(UserEntity.class, author), fields))
+        .getId();
   }
 
-  /** Replaces every field; published_at is set the first time it turns public and kept after. */
   public void update(UUID id, RecipeRequest.Fields fields) {
-    jdbc.update(
-        """
-        UPDATE recipe SET title = ?, summary = ?, category = ?, tags = ?, content = ?,
-               visibility = ?, updated_at = now(),
-               published_at = COALESCE(published_at, CASE WHEN ? = 'PUBLIC' THEN now() END)
-        WHERE id = ?
-        """,
-        fields.title(),
-        fields.summary(),
-        fields.category(),
-        fields.tags().toArray(String[]::new),
-        fields.content(),
-        fields.visibility().name(),
-        fields.visibility().name(),
-        id);
+    recipes.findById(id).ifPresent(recipe -> recipe.update(fields));
   }
 
   public void delete(UUID id) {
-    jdbc.update("DELETE FROM recipe WHERE id = ?", id);
+    recipes.deleteById(id);
   }
 
-  /** Rating again replaces the user's earlier rating. */
-  public void rate(UUID recipe, UUID user, int stars) {
-    jdbc.update(
-        """
-        INSERT INTO recipe_rating (recipe_id, user_id, stars) VALUES (?, ?, ?)
-        ON CONFLICT (recipe_id, user_id) DO UPDATE SET stars = EXCLUDED.stars
-        """,
-        recipe,
-        user,
-        stars);
+  /**
+   * Rating again replaces the user's earlier rating. The recipe's row is locked first, so two
+   * ratings sent at once by the same user cannot both insert and collide on the key.
+   */
+  public void rate(UUID recipeId, UUID user, int stars) {
+    var recipe = recipes.lockById(recipeId).orElseThrow();
+    ratings
+        .findById(new RecipeRatingEntity.Key(recipeId, user))
+        .ifPresentOrElse(
+            rating -> rating.setStars(stars),
+            () -> ratings.save(new RecipeRatingEntity(recipe, user, stars)));
   }
 
   public void unrate(UUID recipe, UUID user) {
-    jdbc.update("DELETE FROM recipe_rating WHERE recipe_id = ? AND user_id = ?", recipe, user);
+    ratings.deleteById(new RecipeRatingEntity.Key(recipe, user));
   }
 
-  private static void filterArgs(Filter filter, List<Object> args) {
-    var publicScope = filter.publicScope();
-    args.add(publicScope);
-    args.add(publicScope);
-    args.add(filter.viewer());
-    var noCategory = filter.category() == null;
-    args.add(noCategory);
-    args.add(noCategory ? "" : filter.category());
-    var noQuery = filter.query() == null;
-    args.add(noQuery);
-    var like = noQuery ? "" : "%" + filter.query().replaceAll("[\\\\%_]", "\\\\$0") + "%";
-    args.add(like);
-    args.add(like);
-    args.add(like);
+  private HibernateCriteriaBuilder builder() {
+    return (HibernateCriteriaBuilder) entities.getCriteriaBuilder();
   }
 
-  private static Recipe recipe(ResultSet rs, UUID viewer) throws SQLException {
-    var author = rs.getObject("author_id", UUID.class);
-    var myRating = rs.getObject("my_rating", Integer.class);
+  /** The aggregates a listing also orders by. */
+  private record Columns(Expression<Double> average, Expression<Long> count) {}
+
+  // Every user's ratings are averaged through the join; the viewer's own comes from a subquery,
+  // so it does not narrow what is averaged. Counting stars, not the join, keeps a recipe with no
+  // ratings at zero: its one joined row is all nulls.
+  private static Columns select(
+      HibernateCriteriaBuilder cb,
+      CriteriaQuery<Tuple> query,
+      Root<RecipeEntity> recipe,
+      UUID viewer,
+      boolean withContent) {
+    var author = recipe.join(RecipeEntity_.author);
+    var rating = recipe.join(RecipeEntity_.ratings, JoinType.LEFT);
+    var stars = rating.get(RecipeRatingEntity_.stars);
+    var average = cb.coalesce(cb.avg(stars), 0.0);
+    var count = cb.count(stars);
+
+    var own = query.subquery(Short.class);
+    var mine = own.from(RecipeRatingEntity.class);
+    own.select(mine.get(RecipeRatingEntity_.stars))
+        .where(
+            cb.equal(mine.get(RecipeRatingEntity_.recipe), recipe),
+            cb.equal(
+                mine.get(RecipeRatingEntity_.id).get(RecipeRatingEntity_.Key_.userId), viewer));
+
+    var selection =
+        new ArrayList<Selection<?>>(
+            List.of(
+                recipe.get(RecipeEntity_.id).alias(RecipeEntity_.ID),
+                recipe.get(RecipeEntity_.title).alias(RecipeEntity_.TITLE),
+                recipe.get(RecipeEntity_.summary).alias(RecipeEntity_.SUMMARY),
+                recipe.get(RecipeEntity_.category).alias(RecipeEntity_.CATEGORY),
+                recipe.get(RecipeEntity_.tags).alias(RecipeEntity_.TAGS),
+                recipe.get(RecipeEntity_.visibility).alias(RecipeEntity_.VISIBILITY),
+                recipe.get(RecipeEntity_.createdAt).alias(RecipeEntity_.CREATED_AT),
+                recipe.get(RecipeEntity_.updatedAt).alias(RecipeEntity_.UPDATED_AT),
+                recipe.get(RecipeEntity_.publishedAt).alias(RecipeEntity_.PUBLISHED_AT),
+                author.get(UserEntity_.id).alias(AUTHOR_ID),
+                author.get(UserEntity_.username).alias(UserEntity_.USERNAME),
+                author.get(UserEntity_.firstName).alias(UserEntity_.FIRST_NAME),
+                author.get(UserEntity_.lastName).alias(UserEntity_.LAST_NAME),
+                average.alias(AVERAGE),
+                count.alias(COUNT),
+                own.alias(MY_RATING)));
+    if (withContent) {
+      selection.add(recipe.get(RecipeEntity_.content).alias(RecipeEntity_.CONTENT));
+    }
+    query.multiselect(selection).groupBy(recipe.get(RecipeEntity_.id), author.get(UserEntity_.id));
+    return new Columns(average, count);
+  }
+
+  private static Predicate[] matching(
+      HibernateCriteriaBuilder cb, Root<RecipeEntity> recipe, Filter filter) {
+    var where = new ArrayList<Predicate>();
+    if (filter.publicScope()) {
+      where.add(cb.equal(recipe.get(RecipeEntity_.visibility), Visibility.PUBLIC));
+    } else {
+      where.add(cb.equal(recipe.get(RecipeEntity_.visibility), Visibility.PRIVATE));
+      where.add(cb.equal(recipe.get(RecipeEntity_.author).get(UserEntity_.id), filter.viewer()));
+    }
+    if (filter.category() != null) {
+      where.add(cb.equal(recipe.get(RecipeEntity_.category), filter.category()));
+    }
+    if (filter.query() != null) {
+      var like = "%" + escapeLike(filter.query().toLowerCase(Locale.ROOT)) + "%";
+      where.add(
+          cb.or(
+              contains(cb, recipe.get(RecipeEntity_.title), like),
+              contains(cb, recipe.get(RecipeEntity_.summary), like),
+              contains(cb, cb.collectionToString(recipe.get(RecipeEntity_.tags), " "), like)));
+    }
+    return where.toArray(Predicate[]::new);
+  }
+
+  private static Predicate contains(
+      HibernateCriteriaBuilder cb, Expression<String> field, String like) {
+    return cb.like(cb.lower(field), like, ESCAPE);
+  }
+
+  /** The user's text is matched literally: % and _ in it are not wildcards. */
+  static String escapeLike(String text) {
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_");
+  }
+
+  @SuppressWarnings("unchecked")
+  private static Recipe recipe(Tuple row, UUID viewer, boolean withContent) {
+    var author = row.get(AUTHOR_ID, UUID.class);
+    var own = row.get(MY_RATING, Short.class);
+    var tags = (List<String>) row.get(RecipeEntity_.TAGS);
     return new Recipe(
-        rs.getObject("id", UUID.class),
-        rs.getString("title"),
-        rs.getString("summary"),
-        rs.getString("category"),
-        Arrays.asList((String[]) rs.getArray("tags").getArray()),
-        Visibility.valueOf(rs.getString("visibility")),
+        row.get(RecipeEntity_.ID, UUID.class),
+        row.get(RecipeEntity_.TITLE, String.class),
+        row.get(RecipeEntity_.SUMMARY, String.class),
+        row.get(RecipeEntity_.CATEGORY, String.class),
+        tags == null ? List.of() : List.copyOf(tags),
+        row.get(RecipeEntity_.VISIBILITY, Visibility.class),
         new RecipeAuthor(
             author,
-            rs.getString("username"),
-            rs.getString("first_name"),
-            rs.getString("last_name")),
-        instant(rs, "created_at"),
-        instant(rs, "updated_at"),
-        instant(rs, "published_at"),
-        RecipeRating.of(rs.getDouble("average"), rs.getInt("count")),
-        myRating,
+            row.get(UserEntity_.USERNAME, String.class),
+            row.get(UserEntity_.FIRST_NAME, String.class),
+            row.get(UserEntity_.LAST_NAME, String.class)),
+        row.get(RecipeEntity_.CREATED_AT, Instant.class),
+        row.get(RecipeEntity_.UPDATED_AT, Instant.class),
+        row.get(RecipeEntity_.PUBLISHED_AT, Instant.class),
+        RecipeRating.of(
+            row.get(AVERAGE, Double.class), Math.toIntExact(row.get(COUNT, Long.class))),
+        own == null ? null : own.intValue(),
         author.equals(viewer),
-        rs.getString("content"));
-  }
-
-  private static Instant instant(ResultSet rs, String column) throws SQLException {
-    var time = rs.getObject(column, OffsetDateTime.class);
-    return time == null ? null : time.toInstant();
+        withContent ? row.get(RecipeEntity_.CONTENT, String.class) : null);
   }
 }

@@ -177,6 +177,23 @@
                 </configuration>
             </plugin>
 
+            <!-- Generates the JPA static metamodel (RecipeEntity_ and the like), so Criteria
+                 queries name attributes the compiler checks. Since JDK 23 javac runs no
+                 processor it is not given explicitly. -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-compiler-plugin</artifactId>
+                <configuration>
+                    <annotationProcessorPaths>
+                        <path>
+                            <groupId>org.hibernate.orm</groupId>
+                            <artifactId>hibernate-processor</artifactId>
+                            <version>${hibernate.version}</version>
+                        </path>
+                    </annotationProcessorPaths>
+                </configuration>
+            </plugin>
+
             <!-- The pom declares Java 25 but the compiler only needs a 25 bytecode
                  target, which an older JDK can be asked for and then fail on a 25
                  language feature. Fail on the JDK itself instead. -->
