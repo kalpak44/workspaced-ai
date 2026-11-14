@@ -67,12 +67,10 @@ public class WorkspaceService {
   }
 
   /**
-   * A key, when given, is checked before anything is stored, so a rejected key leaves nothing
-   * behind. The workspace receives it as a secret and the base URL as config; neither is kept in
-   * the database. The harness gets a password of its own, which only the API and the workspace ever
-   * see.
+   * The key is checked before anything is stored, so a rejected key leaves nothing behind. The
+   * workspace receives it as a secret and the base URL as config; neither is kept in the database.
+   * The harness gets a password of its own, which only the API and the workspace ever see.
    *
-   * @param apiKey null for none
    * @param serverType null for the default size
    */
   public Workspace create(
@@ -91,7 +89,7 @@ public class WorkspaceService {
       String apiKey,
       String serverType,
       Map<String, String> harnessSecrets) {
-    if (apiKey != null && !keyCheck.accepts(provider, apiKey)) {
+    if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
     var id =
@@ -136,9 +134,7 @@ public class WorkspaceService {
   private static Map<String, String> secrets(
       ModelProvider provider, String apiKey, Map<String, String> harnessSecrets) {
     var secrets = new HashMap<>(harnessSecrets);
-    if (apiKey != null) {
-      secrets.put(provider.apiKeyVariable(), apiKey);
-    }
+    secrets.put(provider.apiKeyVariable(), apiKey);
     secrets.put(Harness.PASSWORD_VARIABLE, password());
     return secrets;
   }

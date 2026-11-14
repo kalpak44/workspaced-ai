@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { uniqueName, useWorkspaces } from "../src/hooks/useWorkspaces";
 import { FakeEventSource, installFakeApi } from "./fakeApi";
 
-const request = (name: string) => ({ name, serverType: "cx23" });
+const request = (name: string) => ({ name, serverType: "cx23", modelProvider: "openrouter", apiKey: " sk-or-v1-test\n" });
 
 describe("uniqueName", () => {
   it("keeps a free name", () => {

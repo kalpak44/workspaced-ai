@@ -25,12 +25,29 @@ class VmWorkspaceRuntimeTest {
   private final UUID owner = UUID.randomUUID();
 
   @Test
-  void startsAVmForTheWorkspaceAndItsOwnerAndReportsItsSize() {
-    when(vmManager.create(workspace, owner, null)).thenReturn(vm(workspace, "PROVISIONING"));
+  void startsAVmWithTheProvidersKeyAndReportsItsSize() {
+    when(vmManager.create(workspace, owner, null, "sk-or-v1-test"))
+        .thenReturn(vm(workspace, "PROVISIONING"));
 
-    var size = runtime.start(workspace, owner, null, new WorkspaceEnvironment(Map.of(), Map.of()));
+    var size =
+        runtime.start(
+            workspace,
+            owner,
+            null,
+            new WorkspaceEnvironment(
+                Map.of(), Map.of("OPENROUTER_API_KEY", "sk-or-v1-test", "OPENCODE_PASSWORD", "p")));
 
     assertThat(size).isEqualTo("cx23");
+  }
+
+  @Test
+  void keepsSecretsThroughTheVmManagerAndReadsNoneBack() {
+    runtime.putSecret(workspace, "GITHUB_TOKEN", "ghp_x");
+    runtime.removeSecret(workspace, "GITHUB_TOKEN");
+
+    verify(vmManager).putSecret(workspace, "GITHUB_TOKEN", "ghp_x");
+    verify(vmManager).removeSecret(workspace, "GITHUB_TOKEN");
+    assertThat(runtime.secret(workspace, "GITHUB_TOKEN")).isEmpty();
   }
 
   @Test

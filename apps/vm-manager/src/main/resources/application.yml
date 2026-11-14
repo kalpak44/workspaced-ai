@@ -52,6 +52,12 @@ workspaced:
     # Every VM is created behind this Cloud Firewall, made with no rules when it is missing, so
     # no inbound connection reaches a VM; outbound still works.
     firewall: ${WORKSPACED_HETZNER_FIREWALL:workspaced-ai-vms}
+  vault:
+    # Where each VM's secrets are kept. Unset, the app still starts, and creating a VM or
+    # touching its secrets answers 503.
+    url: ${WORKSPACED_VAULT_URL:}
+    # For a local run only; in the cluster it signs in with its service account instead.
+    token: ${WORKSPACED_VAULT_TOKEN:}
   vm:
     # The sizes offered, default first. Specs and prices come from Hetzner.
     server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}

@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetzner;
+import io.github.kalpak44.workspacedai.vmmanager.vault.FakeVault;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -28,17 +29,23 @@ class VmControllerTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().findAndAddModules().build();
   private static final FakeHetzner HETZNER = new FakeHetzner();
+  private static final FakeVault VAULT = new FakeVault();
   private static final UUID USER = UUID.randomUUID();
+  // Closes the userId string it follows, so a body reads USER + KEY + "}".
+  private static final String KEY = "\",\"openRouterApiKey\":\"sk-or-v1-test\"";
 
   @DynamicPropertySource
   static void hetzner(DynamicPropertyRegistry registry) {
     registry.add("workspaced.hetzner.token", () -> "t0ken");
     registry.add("workspaced.hetzner.base-url", HETZNER::url);
+    registry.add("workspaced.vault.url", VAULT::url);
+    registry.add("workspaced.vault.token", () -> FakeVault.ROOT_TOKEN);
   }
 
   @AfterAll
   static void stop() {
     HETZNER.close();
+    VAULT.close();
   }
 
   @LocalServerPort int port;
@@ -48,7 +55,8 @@ class VmControllerTest {
   @Test
   void createsOneVmPerOwner() throws Exception {
     var owner = UUID.randomUUID().toString();
-    var first = send("POST", "", "{\"workspaceId\":\"" + owner + "\",\"userId\":\"" + USER + "\"}");
+    var first =
+        send("POST", "", "{\"workspaceId\":\"" + owner + "\",\"userId\":\"" + USER + KEY + "}");
     assertThat(first.statusCode()).isEqualTo(201);
     var vm = JSON.readValue(first.body(), VmDto.class);
     assertThat(vm.status()).isEqualTo("PROVISIONING");
@@ -68,7 +76,8 @@ class VmControllerTest {
                 + owner
                 + "\",\"userId\":\""
                 + USER
-                + "\",\"serverType\":\"cx33\"}");
+                + KEY
+                + ",\"serverType\":\"cx33\"}");
     assertThat(again.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(again.body(), VmDto.class).id()).isEqualTo(vm.id());
     assertThat(HETZNER.servers.values())
@@ -113,8 +122,61 @@ class VmControllerTest {
   }
 
   @Test
+  void keepsTheKeyInVaultAndManagesTheRestOfItsSecrets() throws Exception {
+    var vm = create();
+    var secrets = "/" + vm.id() + "/secrets";
+    assertThat(VAULT.entries.get("workspaced-ai/vms/" + vm.id()))
+        .containsEntry("OPENROUTER_API_KEY", "sk-or-v1-test");
+
+    var added = send("POST", secrets, "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_x\"}");
+    assertThat(added.statusCode()).isEqualTo(201);
+    assertThat(added.headers().firstValue("Location"))
+        .hasValueSatisfying(location -> assertThat(location).endsWith(secrets + "/GITHUB_TOKEN"));
+    assertThat(added.body()).doesNotContain("ghp_x");
+    assertThat(send("POST", secrets, "{\"name\":\"GITHUB_TOKEN\",\"value\":\"y\"}").statusCode())
+        .isEqualTo(409);
+
+    var listed = send("GET", secrets, null);
+    assertThat(listed.body())
+        .isEqualTo(
+            "[{\"name\":\"OPENROUTER_API_KEY\",\"system\":true},"
+                + "{\"name\":\"GITHUB_TOKEN\",\"system\":false}]");
+
+    assertThat(send("DELETE", secrets + "/OPENROUTER_API_KEY", null).statusCode()).isEqualTo(409);
+    assertThat(send("DELETE", secrets + "/GITHUB_TOKEN", null).statusCode()).isEqualTo(204);
+    assertThat(send("DELETE", secrets + "/GITHUB_TOKEN", null).statusCode()).isEqualTo(404);
+
+    assertThat(send("DELETE", "/" + vm.id(), null).statusCode()).isEqualTo(204);
+    assertThat(VAULT.entries).doesNotContainKey("workspaced-ai/vms/" + vm.id());
+    assertThat(send("GET", secrets, null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void rejectsAnInvalidSecret() throws Exception {
+    var secrets = "/" + create().id() + "/secrets";
+    for (var body :
+        new String[] {
+          "{\"name\":\"1BAD\",\"value\":\"v\"}",
+          "{\"name\":\"A-B\",\"value\":\"v\"}",
+          "{\"name\":\"OK\",\"value\":\"\"}"
+        }) {
+      assertThat(send("POST", secrets, body).statusCode()).isEqualTo(400);
+    }
+  }
+
+  @Test
+  void createsNoVmWithoutAKey() throws Exception {
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\"" + UUID.randomUUID() + "\",\"userId\":\"" + USER + "\"}");
+    assertThat(response.statusCode()).isEqualTo(400);
+  }
+
+  @Test
   void rejectsAMissingOrMalformedWorkspaceId() throws Exception {
-    var valid = "\"userId\":\"" + USER + "\"";
+    var valid = "\"userId\":\"" + USER + KEY;
     for (var body :
         new String[] {
           "{" + valid + "}",
@@ -138,7 +200,8 @@ class VmControllerTest {
                 + UUID.randomUUID()
                 + "\",\"userId\":\""
                 + USER
-                + "\",\"serverType\":\"cx53\"}");
+                + KEY
+                + ",\"serverType\":\"cx53\"}");
     assertThat(response.statusCode()).isEqualTo(400);
     assertThat(response.body()).contains("cx23, cx33");
   }
@@ -153,7 +216,8 @@ class VmControllerTest {
                 + UUID.randomUUID()
                 + "\",\"userId\":\""
                 + USER
-                + "\",\"serverType\":\"cx33\"}");
+                + KEY
+                + ",\"serverType\":\"cx33\"}");
     assertThat(JSON.readValue(response.body(), VmDto.class).serverType()).isEqualTo("cx33");
   }
 
@@ -196,7 +260,7 @@ class VmControllerTest {
         send(
             "POST",
             "",
-            "{\"workspaceId\":\"" + UUID.randomUUID() + "\",\"userId\":\"" + USER + "\"}");
+            "{\"workspaceId\":\"" + UUID.randomUUID() + "\",\"userId\":\"" + USER + KEY + "}");
     return JSON.readValue(response.body(), VmDto.class);
   }
 

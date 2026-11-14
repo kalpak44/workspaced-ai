@@ -1,6 +1,6 @@
 import { Plus, RotateCw, TriangleAlert } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
-import { type AddResult, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
+import { type AddResult, MAX_SECRETS, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
 import { Button, Spinner, TextField } from "../atoms";
 import { ErrorBanner, SecretItem, SettingsSection } from "../molecules";
 
@@ -39,6 +39,8 @@ export function SecretsPanel({
   const [value, setValue] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
+  const used = secrets.filter((s) => !s.managed).length;
+  const full = used >= MAX_SECRETS;
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
@@ -54,6 +56,8 @@ export function SecretsPanel({
         setValue("");
       } else if (result === "conflict") {
         setNameError(`${name} is already set for this workspace`);
+      } else if (result === "full") {
+        setNameError(`A workspace holds at most ${MAX_SECRETS} secrets`);
       } else {
         setNameError("Could not add the secret");
       }
@@ -92,6 +96,15 @@ export function SecretsPanel({
       {loading ? (
         <Spinner label="Loading secrets" className="size-5 text-zinc-400" />
       ) : (
+        <p
+          aria-label="Secrets used"
+          className={`text-sm ${full ? "text-amber-600 dark:text-amber-400" : "text-zinc-500 dark:text-zinc-400"}`}
+        >
+          {used} of {MAX_SECRETS} secrets used
+          {full && ". Remove one to add another."}
+        </p>
+      )}
+      {!loading && (
         <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
           {secrets.map((secret) => (
             <SecretItem
@@ -114,7 +127,7 @@ export function SecretsPanel({
             spellCheck={false}
             value={name}
             maxLength={MAX_NAME}
-            disabled={pending}
+            disabled={pending || full}
             error={nameError}
             onChange={(e) => {
               setName(e.currentTarget.value);
@@ -131,7 +144,7 @@ export function SecretsPanel({
             autoComplete="off"
             value={value}
             maxLength={MAX_VALUE}
-            disabled={pending}
+            disabled={pending || full}
             onChange={(e) => setValue(e.currentTarget.value)}
           />
         </div>
@@ -141,7 +154,7 @@ export function SecretsPanel({
             type="submit"
             icon={Plus}
             busy={pending}
-            disabled={!name || !value}
+            disabled={!name || !value || full}
           />
         </div>
       </form>

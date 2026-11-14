@@ -119,11 +119,11 @@ public interface WorkspaceApi {
       operationId = "createWorkspace",
       summary = "Create a workspace",
       description =
-          "Checks the API key with the model provider when one is given, then assigns the id "
-              + "and creates the workspace's VM, of the chosen serverType or the default one; it "
-              + "is INITIALIZING until the VM reports ready. The key and the provider's base URL "
-              + "reach the runtime only; the key is not stored by the API. Surrounding whitespace "
-              + "is trimmed from the name and the key.")
+          "Checks the API key with the model provider, then assigns the id and creates the "
+              + "workspace's VM, of the chosen serverType or the default one; it is INITIALIZING "
+              + "until the VM reports ready. The key goes to the VM manager, which keeps it in "
+              + "Vault as the workspace's provider secret; the API does not store it. Surrounding "
+              + "whitespace is trimmed from the name and the key.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -135,8 +135,9 @@ public interface WorkspaceApi {
   @ApiResponse(
       responseCode = "400",
       description =
-          "The name is blank or longer than 100 characters, the model provider is not one "
-              + "/model-providers lists, or the serverType is not one /vm-sizes lists.",
+          "The name is blank or longer than 100 characters, the API key is missing, the model "
+              + "provider is not one /model-providers lists, or the serverType is not one "
+              + "/vm-sizes lists.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

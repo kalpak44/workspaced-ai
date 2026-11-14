@@ -2,7 +2,7 @@ import { act, cleanup, render, screen, waitFor, within } from "@testing-library/
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
-import { FakeEventSource, installFakeApi } from "./fakeApi";
+import { FakeEventSource, installFakeApi, REJECTED_KEY } from "./fakeApi";
 
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
@@ -46,6 +46,13 @@ async function chooseVmType(user: User, type?: string) {
   await user.click(screen.getByRole("button", { name: "Next" }));
   const radio = await screen.findByRole("radio", { name: new RegExp(type ?? "cx23") });
   if (type) await user.click(radio);
+}
+
+/** The last step: move on from the VM type, and paste a key for the preselected provider. */
+async function enterKey(user: User, key = "sk-or-v1-test") {
+  await user.click(screen.getByRole("button", { name: "Next" }));
+  const field = await screen.findByLabelText("OpenRouter API key");
+  await user.type(field, key);
 }
 
 const path = () => globalThis.location.pathname;
@@ -92,15 +99,18 @@ describe("App", () => {
     const field = within(dialog).getByRole("textbox", { name: "Name" });
     expect(field).toHaveValue("New Workspace");
     expect(field).toHaveFocus();
-    // Enter moves on from the name, then creates with the default VM type.
+    // Enter moves on from the name and the default VM type, then creates once a key is typed.
     await user.keyboard("{Enter}");
     await screen.findByRole("radio", { name: /cx23/ });
     await user.keyboard("{Enter}");
+    await waitFor(() => expect(screen.getByLabelText("OpenRouter API key")).toHaveFocus());
+    await user.keyboard("sk-or-v1-test{Enter}");
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("New Workspace 2");
     await chooseVmType(user);
+    await enterKey(user);
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     expect(await within(sidebar()).findByText("New Workspace 2")).toBeInTheDocument();
     expect(heading()).toHaveTextContent("New Workspace 2");
@@ -114,6 +124,7 @@ describe("App", () => {
     // Typing replaces the selected suggestion, the way it does in a browser.
     await user.keyboard("Research");
     await chooseVmType(user, "cx33");
+    await enterKey(user, " sk-or-v1-test ");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
     expect(path()).toBe("/workspaces/ws-1");
@@ -124,7 +135,39 @@ describe("App", () => {
       name: "Research",
       serverType: "cx33",
       modelProvider: "openrouter",
+      apiKey: "sk-or-v1-test",
     });
+  });
+
+  it("offers OpenRouter as the provider, chosen already, and asks for its key", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    await chooseVmType(user);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+
+    expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Model provider");
+    const providers = screen.getByRole("group", { name: "Model provider" });
+    expect(await within(providers).findByRole("radio", { name: /OpenRouter/ })).toBeChecked();
+    expect(within(providers).getAllByRole("radio")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+  });
+
+  it("keeps the dialog open on a key the provider refuses, and says so", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    await chooseVmType(user);
+    await enterKey(user, REJECTED_KEY);
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+
+    expect(await screen.findByText("OpenRouter did not accept this key")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(api.rows).toHaveLength(1);
+
+    await user.type(screen.getByLabelText("OpenRouter API key"), "x");
+    expect(screen.queryByText("OpenRouter did not accept this key")).not.toBeInTheDocument();
   });
 
   it("offers each VM type with its resources and no price, the default chosen", async () => {
@@ -170,7 +213,7 @@ describe("App", () => {
     const types = screen.getByRole("group", { name: "VM type" });
     expect(await within(types).findByText(/Could not load VM types/)).toBeInTheDocument();
     expect(within(types).queryByRole("radio")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
   });
 
   it("closes the dialog on Cancel, Escape or the backdrop without creating anything", async () => {
@@ -200,13 +243,14 @@ describe("App", () => {
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     await chooseVmType(user);
+    await enterKey(user);
     await user.keyboard("{Enter}");
 
     const create = screen.getByRole("button", { name: "Create workspace" });
     expect(create).toHaveAttribute("aria-busy", "true");
     expect(create).toBeDisabled();
     expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled();
+    expect(screen.getByLabelText("OpenRouter API key")).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -219,9 +263,12 @@ describe("App", () => {
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     await chooseVmType(user, "cx33");
+    await enterKey(user);
     api.state.fail = 503;
     await user.keyboard("{Enter}");
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not create the workspace");
+    expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-v1-test");
+    await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("radio", { name: /cx33/ })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("New Workspace");
@@ -478,6 +525,7 @@ describe("App", () => {
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
     await chooseVmType(user);
+    await enterKey(user);
     await user.keyboard("{Enter}");
 
     expect(await screen.findByText("Starting the workspace")).toBeInTheDocument();
@@ -541,6 +589,32 @@ describe("App", () => {
     expect(within(secrets).getByLabelText("Value")).toHaveValue("");
     expect(screen.queryByText("ghp_secret")).not.toBeInTheDocument();
     expect(api.sent).toEqual([{ name: "GITHUB_TOKEN", value: "ghp_secret" }]);
+  });
+
+  it("counts the secrets added against the limit, the provider key not counted", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    const secrets = await openSettings(user);
+    expect(within(secrets).getByLabelText("Secrets used")).toHaveTextContent("0 of 50 secrets used");
+
+    await user.type(within(secrets).getByRole("textbox", { name: "Name" }), "GITHUB_TOKEN");
+    await user.type(within(secrets).getByLabelText("Value"), "ghp_secret");
+    await user.click(within(secrets).getByRole("button", { name: "Add" }));
+    await within(secrets).findByText("GITHUB_TOKEN");
+    expect(within(secrets).getByLabelText("Secrets used")).toHaveTextContent("1 of 50 secrets used");
+  });
+
+  it("stops adding once the workspace holds fifty", async () => {
+    api.secrets.set("starter", Array.from({ length: 50 }, (_, i) => `S${i}`));
+    const user = userEvent.setup();
+    await renderLoaded();
+    const secrets = await openSettings(user);
+
+    expect(within(secrets).getByLabelText("Secrets used")).toHaveTextContent(
+      "50 of 50 secrets used. Remove one to add another.",
+    );
+    expect(within(secrets).getByRole("textbox", { name: "Name" })).toBeDisabled();
+    expect(within(secrets).getByRole("button", { name: "Add" })).toBeDisabled();
   });
 
   it("warns that changed secrets need a restart, and restarts from the warning", async () => {

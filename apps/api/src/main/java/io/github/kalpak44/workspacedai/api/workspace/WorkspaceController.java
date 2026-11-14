@@ -47,7 +47,7 @@ public class WorkspaceController implements WorkspaceApi {
             CurrentUser.id(),
             request.trimmedName(),
             provider,
-            request.trimmedApiKeyOrNull(),
+            request.trimmedApiKey(),
             request.serverTypeOrNull());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()

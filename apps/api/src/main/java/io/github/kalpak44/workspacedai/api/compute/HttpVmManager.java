@@ -2,13 +2,16 @@ package io.github.kalpak44.workspacedai.api.compute;
 
 import java.io.IOException;
 import java.net.URI;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import java.util.function.Consumer;
 import org.slf4j.Logger;
@@ -67,10 +70,12 @@ public class HttpVmManager implements VmManager {
   }
 
   @Override
-  public ProvisionedVm create(UUID workspaceId, UUID userId, String serverType) {
+  public ProvisionedVm create(
+      UUID workspaceId, UUID userId, String serverType, String openRouterApiKey) {
     var body = json.createObjectNode();
     body.put("workspaceId", workspaceId.toString());
     body.put("userId", userId.toString());
+    body.put("openRouterApiKey", openRouterApiKey);
     if (serverType != null && !serverType.isBlank()) {
       body.put("serverType", serverType.strip());
     }
@@ -103,17 +108,53 @@ public class HttpVmManager implements VmManager {
 
   @Override
   public void restartFor(UUID workspaceId) {
+    var vm =
+        vmIdOf(workspaceId)
+            .orElseThrow(
+                () -> new IllegalStateException("workspace " + workspaceId + " has no VM"));
+    var restarted =
+        send(request("/vms/" + vm + "/restart").POST(HttpRequest.BodyPublishers.noBody()));
+    expect(restarted, 202);
+  }
+
+  @Override
+  public void putSecret(UUID workspaceId, String name, String value) {
+    var vm =
+        vmIdOf(workspaceId)
+            .orElseThrow(
+                () -> new IllegalStateException("workspace " + workspaceId + " has no VM"));
+    var body = json.createObjectNode();
+    body.put("name", name);
+    body.put("value", value);
+    var response =
+        send(
+            request("/vms/" + vm + "/secrets")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))));
+    if (response.statusCode() == 409) {
+      throw new VmSecretRefusedException(detail(response));
+    }
+    expect(response, 201);
+  }
+
+  @Override
+  public void removeSecret(UUID workspaceId, String name) {
+    var vm = vmIdOf(workspaceId);
+    if (vm.isEmpty()) {
+      return;
+    }
+    var path = "/vms/" + vm.get() + "/secrets/" + URLEncoder.encode(name, StandardCharsets.UTF_8);
+    var response = send(request(path).DELETE());
+    if (response.statusCode() != 404) {
+      expect(response, 204);
+    }
+  }
+
+  private Optional<String> vmIdOf(UUID workspaceId) {
     var listed = send(get("/vms?workspaceId=" + workspaceId));
     expect(listed, 200);
     var vms = read(listed);
-    if (vms.isEmpty()) {
-      throw new IllegalStateException("workspace " + workspaceId + " has no VM");
-    }
-    var restarted =
-        send(
-            request("/vms/" + vms.get(0).path("id").asString() + "/restart")
-                .POST(HttpRequest.BodyPublishers.noBody()));
-    expect(restarted, 202);
+    return vms.isEmpty() ? Optional.empty() : Optional.of(vms.get(0).path("id").asString());
   }
 
   /**

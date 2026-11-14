@@ -77,13 +77,13 @@ the order they were created.
 A blank or overlong name, an unknown provider, a `serverType` `/vm-sizes` does not list, or an `id` that is not a UUID,
 answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
 
-`apiKey` is optional. When it is given, creating a workspace first calls the provider with it (OpenRouter's `GET /key`):
-a key the provider refuses answers `422` and creates nothing, and a provider that cannot be reached answers `502`. The
-key is never stored by the API.
+`apiKey` is required. Creating a workspace first calls the provider with it (OpenRouter's `GET /key`): a key the
+provider refuses answers `422` and creates nothing, and a provider that cannot be reached answers `502`. The key goes
+to the VM manager, which keeps it in Vault as the workspace's provider secret; the API never stores it.
 
 ```sh
 curl -X POST localhost:8080/api/v1/workspaces -H 'Content-Type: application/json' \
-  -d '{"name":"Docs","modelProvider":"openrouter","serverType":"cx23"}'
+  -d '{"name":"Docs","modelProvider":"openrouter","apiKey":"sk-or-v1-…","serverType":"cx23"}'
 curl localhost:8080/api/v1/workspaces
 curl -X PUT localhost:8080/api/v1/workspaces/$ID -H 'Content-Type: application/json' -d '{"name":"Notes"}'
 curl -X DELETE localhost:8080/api/v1/workspaces/$ID
@@ -346,9 +346,10 @@ workspace is restarted onto the current one.
 
 ## Workspace secrets
 
-Environment variables a workspace keeps secret. The database holds their names only; each value lives in the
-workspace's Kubernetes Secret and is never returned. The provider key is listed first, marked `managed`, and is not
-a database row at all.
+Environment variables a workspace keeps secret. The database holds their names only; each value goes to the VM
+manager, which keeps it in Vault beside the provider key (see [vm-manager.md](vm-manager.md#vm-secrets)), and is never
+returned. The provider key is listed first, marked `managed`, and is not a database row at all. A workspace holds at
+most 50 besides it; the API counts before it calls the VM manager, which holds the same limit.
 
 | Method   | Path                                     | Body                                   | Answers                                    |
 |----------|------------------------------------------|----------------------------------------|--------------------------------------------|
@@ -357,7 +358,7 @@ a database row at all.
 | `DELETE` | `/api/v1/workspaces/{id}/secrets/{name}` |                                        | `204`, `404`, or `409`                     |
 
 A name must be a valid environment variable name (`[A-Za-z_][A-Za-z0-9_]*`, at most 100 characters), else `400`.
-`409` means the workspace already has that secret, or its provider or harness sets it (`OPENROUTER_API_KEY`,
+`409` means the workspace already has that secret, holds 50 already, has no VM yet, or its provider or harness sets it (`OPENROUTER_API_KEY`,
 `OPENROUTER_BASE_URL`, `OPENCODE_SERVER_PASSWORD`, `OPENCODE_SERVER_USERNAME`), which no user secret may shadow or
 remove. A pod reads its environment once, when it starts,
 so a running workspace sees a change only after it restarts.

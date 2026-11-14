@@ -79,8 +79,8 @@ public interface SecretApi {
       operationId = "addWorkspaceSecret",
       summary = "Add a secret to a workspace",
       description =
-          "The value goes to the workspace's runtime only. A running workspace sees it once "
-              + "it restarts.")
+          "The value goes to the workspace's VM manager, which keeps it in Vault. A workspace "
+              + "holds at most 50 besides its provider's key, and sees a change once it restarts.")
   @ApiResponse(
       responseCode = "201",
       description = "Added.",
@@ -107,7 +107,9 @@ public interface SecretApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @ApiResponse(
       responseCode = "409",
-      description = "The workspace already has that secret, or its model provider sets it.",
+      description =
+          "The workspace already has that secret, its model provider sets it, it already holds "
+              + "50, or it has no VM yet.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

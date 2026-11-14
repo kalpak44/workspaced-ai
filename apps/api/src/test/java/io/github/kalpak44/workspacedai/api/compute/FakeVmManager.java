@@ -39,6 +39,7 @@ class FakeVmManager implements AutoCloseable {
   final Map<UUID, ObjectNode> vms = new ConcurrentHashMap<>();
   final List<JsonNode> creates = new CopyOnWriteArrayList<>();
   final List<UUID> restarts = new CopyOnWriteArrayList<>();
+  final Map<UUID, Map<String, String>> secrets = new ConcurrentHashMap<>();
   volatile int status = 0;
   volatile String detail = "";
 
@@ -57,6 +58,10 @@ class FakeVmManager implements AutoCloseable {
     var path = exchange.getRequestURI().getPath();
     switch (exchange.getRequestMethod()) {
       case "GET" -> {
+        if (path.contains("/secrets")) {
+          answer(exchange, 405, "{}");
+          return;
+        }
         if (path.endsWith("/events")) {
           events(exchange);
           return;
@@ -70,6 +75,19 @@ class FakeVmManager implements AutoCloseable {
         answer(exchange, 200, list.toString());
       }
       case "POST" -> {
+        if (path.endsWith("/secrets")) {
+          var id = UUID.fromString(path.split("/")[4]);
+          var request = JSON.readTree(exchange.getRequestBody());
+          var name = request.path("name").asString();
+          var kept = secrets.computeIfAbsent(id, _ -> new ConcurrentHashMap<>());
+          if (kept.containsKey(name)) {
+            answer(exchange, 409, "{\"detail\":\"the VM already has a secret " + name + "\"}");
+            return;
+          }
+          kept.put(name, request.path("value").asString());
+          answer(exchange, 201, "{\"name\":\"" + name + "\",\"system\":false}");
+          return;
+        }
         if (path.endsWith("/restart")) {
           var id = UUID.fromString(path.split("/")[4]);
           restarts.add(id);
@@ -108,6 +126,15 @@ class FakeVmManager implements AutoCloseable {
         answer(exchange, 201, vm.toString());
       }
       case "DELETE" -> {
+        if (path.contains("/secrets/")) {
+          var parts = path.split("/");
+          var kept = secrets.getOrDefault(UUID.fromString(parts[4]), Map.of());
+          answer(
+              exchange,
+              kept.containsKey(parts[6]) && kept.remove(parts[6]) != null ? 204 : 404,
+              "");
+          return;
+        }
         var id = UUID.fromString(path.substring(path.lastIndexOf('/') + 1));
         answer(exchange, vms.remove(id) == null ? 404 : 204, "");
       }

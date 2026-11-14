@@ -46,7 +46,9 @@ public class VmController implements VmApi {
 
   @Override
   public ResponseEntity<VmDto> create(CreateVmDto body) {
-    var created = service.create(body.workspaceId(), body.userId(), body.serverType());
+    var created =
+        service.create(
+            body.workspaceId(), body.userId(), body.serverType(), body.openRouterApiKey());
     var vm = mapper.toDto(created.vm());
     if (!created.isNew()) {
       return ResponseEntity.ok(vm);

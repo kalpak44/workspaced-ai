@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { ApiError } from "../api/http";
 import {
   createWorkspace,
   type DeletedEvent,
@@ -15,7 +16,8 @@ import {
 
 export type { NewWorkspace, Workspace, WorkspaceStatus } from "../api/workspacesApi";
 
-export type CreateResult = "created" | "failed";
+/** "rejected" is the provider refusing the key, which the form can point at; "failed" is anything else. */
+export type CreateResult = "created" | "rejected" | "failed";
 
 export const DEFAULT_NAME = "New Workspace";
 
@@ -80,12 +82,15 @@ export function useWorkspaces() {
 
   // Plain functions, not async ones: they are handed to click handlers that expect no
   // return value, so each settles its own promise, failure included.
-  /** A failure goes to the banner. `onCreated` hears the new workspace, e.g. to open it. */
+  /**
+   * A rejected key is left to the form to show; any other failure goes to the banner.
+   * `onCreated` hears the new workspace, e.g. to open it.
+   */
   const create = (
     request: NewWorkspace,
     onCreated?: (workspace: Workspace) => void,
   ): Promise<CreateResult> =>
-    createWorkspace({ ...request, name: request.name.trim() }).then(
+    createWorkspace({ ...request, name: request.name.trim(), apiKey: request.apiKey.trim() }).then(
       (created): CreateResult => {
         const workspace = { ...created, status: latest.current.get(created.id) ?? created.status };
         setWorkspaces((current) => [...current, workspace]);
@@ -93,7 +98,10 @@ export function useWorkspaces() {
         onCreated?.(workspace);
         return "created";
       },
-      (): CreateResult => {
+      (error_: unknown): CreateResult => {
+        if (error_ instanceof ApiError && error_.status === 422) {
+          return "rejected";
+        }
         setError("Could not create the workspace");
         return "failed";
       },

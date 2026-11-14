@@ -11,4 +11,6 @@ public interface WorkspaceSecretRepository extends JpaRepository<WorkspaceSecret
   List<WorkspaceSecretEntity> findAllByWorkspaceIdOrderByCreatedAtAscNameAsc(UUID workspaceId);
 
   Optional<WorkspaceSecretEntity> findByWorkspaceIdAndName(UUID workspaceId, String name);
+
+  long countByWorkspaceId(UUID workspaceId);
 }

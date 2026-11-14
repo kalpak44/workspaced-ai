@@ -97,14 +97,14 @@ class WorkspaceControllerTest {
   }
 
   @Test
-  void createsWithoutAKeyAndChecksNone() throws Exception {
+  void createsNothingWithoutAKey() throws Exception {
     var blank = send("POST", "", body("Blank", "openrouter", "  "));
     var none = send("POST", "", "{\"name\":\"None\",\"modelProvider\":\"openrouter\"}");
 
-    assertThat(blank.statusCode()).isEqualTo(201);
-    assertThat(none.statusCode()).isEqualTo(201);
+    assertThat(blank.statusCode()).isEqualTo(400);
+    assertThat(none.statusCode()).isEqualTo(400);
     verify(keyCheck, never()).accepts(any(), any());
-    assertThat(list()).extracting(Workspace::name).containsExactly("Blank", "None");
+    assertThat(list()).isEmpty();
   }
 
   @Test

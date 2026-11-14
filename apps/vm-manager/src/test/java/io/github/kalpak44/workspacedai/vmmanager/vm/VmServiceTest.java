@@ -27,6 +27,7 @@ class VmServiceTest {
   final List<Object> published = new ArrayList<>();
   final FakeHetznerClient hetzner = new FakeHetznerClient();
   final VmRepository vms = new InMemoryVmRepository();
+  final InMemorySecretStore secrets = new InMemorySecretStore();
   boolean inventoryLoaded = true;
   final VmService service =
       new VmService(
@@ -42,15 +43,17 @@ class VmServiceTest {
               "workspaced-ai-vms",
               Duration.ofSeconds(1)),
           () -> inventoryLoaded,
+          new VmSecretService(vms, secrets),
           published::add,
           clock);
 
   final UUID workspace = UUID.randomUUID();
   final UUID user = UUID.randomUUID();
+  static final String KEY = "sk-or-v1-test";
 
   @Test
   void createsAHetznerServerLabelledWithItsWorkspaceAndUser() {
-    var vm = service.create(workspace, user, null).vm();
+    var vm = service.create(workspace, user, null, KEY).vm();
 
     var spec = hetzner.created.getFirst();
     assertThat(spec.name()).isEqualTo("vm-" + vm.id());
@@ -70,7 +73,7 @@ class VmServiceTest {
 
   @Test
   void keepsWhatHetznerAssignedAndPublishesIt() {
-    var created = service.create(workspace, user, "cx33");
+    var created = service.create(workspace, user, "cx33", KEY);
 
     assertThat(created.isNew()).isTrue();
     var vm = created.vm();
@@ -86,10 +89,10 @@ class VmServiceTest {
 
   @Test
   void givesAWorkspaceOneServerAndPublishesNothingTheSecondTime() {
-    var first = service.create(workspace, user, "cx33").vm();
+    var first = service.create(workspace, user, "cx33", KEY).vm();
     published.clear();
 
-    var again = service.create(workspace, user, "cx23");
+    var again = service.create(workspace, user, "cx23", KEY);
 
     assertThat(again.isNew()).isFalse();
     assertThat(again.vm()).isEqualTo(first);
@@ -99,7 +102,7 @@ class VmServiceTest {
 
   @Test
   void refusesATypeNotOfferedBeforeAskingHetzner() {
-    assertThatThrownBy(() -> service.create(workspace, user, "cx53"))
+    assertThatThrownBy(() -> service.create(workspace, user, "cx53", KEY))
         .isInstanceOf(ServerTypeNotOfferedException.class)
         .hasMessage("server type cx53 is not offered; choose one of cx23, cx33");
     assertThat(hetzner.created).isEmpty();
@@ -109,7 +112,7 @@ class VmServiceTest {
   void refusesToCreateBeforeTheInventoryIsLoaded() {
     inventoryLoaded = false;
 
-    assertThatThrownBy(() -> service.create(workspace, user, null))
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY))
         .isInstanceOf(VmInventoryNotLoadedException.class);
     assertThat(hetzner.created).isEmpty();
   }
@@ -118,16 +121,55 @@ class VmServiceTest {
   void keepsNothingWhenHetznerRefuses() {
     hetzner.failure = new HetznerException("Hetzner answered 422 on POST /servers");
 
-    assertThatThrownBy(() -> service.create(workspace, user, null)).isSameAs(hetzner.failure);
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY)).isSameAs(hetzner.failure);
     assertThat(vms.findAll()).isEmpty();
+    assertThat(secrets.entries).isEmpty();
     assertThat(published).isEmpty();
   }
 
   @Test
+  void keepsTheKeyAsTheSystemSecretBeforeAskingHetzner() {
+    var vm = service.create(workspace, user, null, KEY).vm();
+
+    assertThat(secrets.entries.get(vm.id())).containsExactly(Map.entry("OPENROUTER_API_KEY", KEY));
+  }
+
+  @Test
+  void asksHetznerForNothingWhenVaultRefuses() {
+    secrets.failure = new IllegalStateException("Vault answered 500");
+
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY)).isSameAs(secrets.failure);
+    assertThat(hetzner.created).isEmpty();
+    assertThat(vms.findAll()).isEmpty();
+  }
+
+  @Test
+  void deletesItsSecretsWithIt() {
+    var vm = service.create(workspace, user, null, KEY).vm();
+
+    service.delete(vm.id());
+
+    assertThat(secrets.entries).doesNotContainKey(vm.id());
+  }
+
+  @Test
+  void keepsTheVmWhenItsSecretsCouldNotBeDeleted() {
+    var vm = service.create(workspace, user, null, KEY).vm();
+    secrets.failure = new IllegalStateException("Vault answered 500");
+
+    assertThatThrownBy(() -> service.delete(vm.id())).isSameAs(secrets.failure);
+    assertThat(service.get(vm.id())).isEqualTo(vm);
+
+    secrets.failure = null;
+    service.delete(vm.id());
+    assertThat(vms.findAll()).isEmpty();
+  }
+
+  @Test
   void listsOldestFirstAndByWorkspace() {
-    var a = service.create(UUID.randomUUID(), user, null).vm();
+    var a = service.create(UUID.randomUUID(), user, null, KEY).vm();
     clock.advance(Duration.ofSeconds(1));
-    var b = service.create(workspace, user, null).vm();
+    var b = service.create(workspace, user, null, KEY).vm();
 
     assertThat(service.list(Optional.empty())).containsExactly(a, b);
     assertThat(service.list(Optional.of(workspace))).containsExactly(b);
@@ -135,7 +177,7 @@ class VmServiceTest {
 
   @Test
   void followsReadyRestartAndHeartbeatOnTheClock() {
-    var vm = service.create(workspace, user, null).vm();
+    var vm = service.create(workspace, user, null, KEY).vm();
 
     clock.advance(Duration.ofMinutes(1));
     var ready = service.ready(vm.id());
@@ -155,7 +197,7 @@ class VmServiceTest {
 
   @Test
   void deletesTheServerThenTheVm() {
-    var vm = service.create(workspace, user, null).vm();
+    var vm = service.create(workspace, user, null, KEY).vm();
 
     service.delete(vm.id());
 
@@ -166,7 +208,7 @@ class VmServiceTest {
 
   @Test
   void keepsTheVmWhenItsServerCouldNotBeDeleted() {
-    var vm = service.create(workspace, user, null).vm();
+    var vm = service.create(workspace, user, null, KEY).vm();
     hetzner.failure = new HetznerException("Hetzner answered 503 on DELETE /servers/1");
 
     assertThatThrownBy(() -> service.delete(vm.id())).isSameAs(hetzner.failure);

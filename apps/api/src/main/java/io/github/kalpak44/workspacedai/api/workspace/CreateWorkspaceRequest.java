@@ -4,7 +4,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
 
-/** A key, when given, is checked with the provider and handed to the workspace, never stored. */
+/** The key is checked with the provider and handed to the workspace's VM, never stored here. */
 @Schema(description = "A new workspace: its name, its VM size and its model provider")
 public record CreateWorkspaceRequest(
     @Schema(example = "Research", maxLength = 100) @NotBlank @Size(max = 100) String name,
@@ -12,9 +12,11 @@ public record CreateWorkspaceRequest(
         String modelProvider,
     @Schema(
             description =
-                "Optional; checked with the provider before the workspace is created when given",
+                "Checked with the provider before the workspace is created, then kept as its "
+                    + "provider secret, which cannot be removed",
             example = "sk-or-v1-…",
             maxLength = 1000)
+        @NotBlank
         @Size(max = 1000)
         String apiKey,
     @Schema(description = "One of /vm-sizes; the default size when omitted", example = "cx23")
@@ -31,8 +33,8 @@ public record CreateWorkspaceRequest(
     return name.strip();
   }
 
-  /** A key pasted with a trailing newline is the same key; a blank one is none. */
-  String trimmedApiKeyOrNull() {
-    return apiKey == null || apiKey.isBlank() ? null : apiKey.strip();
+  /** A key pasted with a trailing newline is the same key. */
+  String trimmedApiKey() {
+    return apiKey.strip();
   }
 }

@@ -3,10 +3,10 @@ import { ApiError } from "../api/http";
 import { addSecret, listSecrets, removeSecret, type Secret } from "../api/secretsApi";
 
 export type { Secret } from "../api/secretsApi";
-export { SECRET_NAME } from "../api/secretsApi";
+export { MAX_SECRETS, SECRET_NAME } from "../api/secretsApi";
 
-/** "conflict" is a name the workspace already has or its provider sets. */
-export type AddResult = "added" | "conflict" | "failed";
+/** "conflict" is a name the workspace already has or its provider sets; "full" is the limit. */
+export type AddResult = "added" | "conflict" | "full" | "failed";
 
 /**
  * A workspace's secrets, by name. Like the workspace list, it changes only once the API
@@ -46,8 +46,13 @@ export function useSecrets(workspaceId: string | null, onChanged?: () => void) {
         onChanged?.();
         return "added";
       },
-      (error_: unknown): AddResult =>
-        error_ instanceof ApiError && error_.status === 409 ? "conflict" : "failed",
+      (error_: unknown): AddResult => {
+        if (!(error_ instanceof ApiError) || error_.status !== 409) {
+          return "failed";
+        }
+        // Both refusals are a 409; only the detail tells the limit from a taken name.
+        return error_.detail?.includes("at most") ? "full" : "conflict";
+      },
     );
   };
 

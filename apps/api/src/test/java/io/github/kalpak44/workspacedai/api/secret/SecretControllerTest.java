@@ -126,6 +126,19 @@ class SecretControllerTest {
   }
 
   @Test
+  void holdsFiftyBesidesTheProviderKeyAndNoMore() throws Exception {
+    for (var i = 0; i < SecretService.MAX_SECRETS; i++) {
+      assertThat(send("POST", "", "{\"name\":\"S" + i + "\",\"value\":\"v\"}").statusCode())
+          .isEqualTo(201);
+    }
+
+    var refused = send("POST", "", "{\"name\":\"ONE_MORE\",\"value\":\"v\"}");
+    assertThat(refused.statusCode()).isEqualTo(409);
+    assertThat(refused.body()).contains("at most 50");
+    assertThat(list()).hasSize(SecretService.MAX_SECRETS + 1);
+  }
+
+  @Test
   void refusesADuplicate() throws Exception {
     send("POST", "", "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_1\"}");
     assertThat(send("POST", "", "{\"name\":\"GITHUB_TOKEN\",\"value\":\"ghp_2\"}").statusCode())

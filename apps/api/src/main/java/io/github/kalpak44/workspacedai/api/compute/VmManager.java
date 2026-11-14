@@ -23,9 +23,10 @@ public interface VmManager {
    * The workspace's VM. Idempotent: asking again for the same workspace returns the VM it has.
    *
    * @param serverType null for the VM manager's default
+   * @param openRouterApiKey kept by the VM manager as the VM's system secret
    * @throws ServerTypeRejectedException when the size is not one on offer
    */
-  ProvisionedVm create(UUID workspaceId, UUID userId, String serverType);
+  ProvisionedVm create(UUID workspaceId, UUID userId, String serverType, String openRouterApiKey);
 
   /** Deletes every VM of the workspace; none at all counts as deleted. */
   void deleteFor(UUID workspaceId);
@@ -36,6 +37,17 @@ public interface VmManager {
    * @throws IllegalStateException when the workspace has no VM
    */
   void restartFor(UUID workspaceId);
+
+  /**
+   * Adds a secret to the workspace's VM, which keeps it in Vault.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   * @throws VmSecretRefusedException when the VM already has it or holds as many as it may
+   */
+  void putSecret(UUID workspaceId, String name, String value);
+
+  /** Removes a secret from the workspace's VM; one it does not have, or no VM, is not an error. */
+  void removeSecret(UUID workspaceId, String name);
 
   /**
    * Hears every VM change from now on, on a thread of its own, reconnecting for as long as the app

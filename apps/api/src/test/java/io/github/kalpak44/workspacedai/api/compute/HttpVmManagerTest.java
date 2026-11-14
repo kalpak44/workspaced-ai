@@ -46,7 +46,7 @@ class HttpVmManagerTest {
 
   @Test
   void createsAVmForTheWorkspaceAndItsOwner() {
-    var vm = vmManager.create(workspace, user, " cx33 ");
+    var vm = vmManager.create(workspace, user, " cx33 ", "sk-or-v1-test");
 
     assertThat(vm.serverType()).isEqualTo("cx33");
     assertThat(fake.vms).containsKey(vm.id());
@@ -54,31 +54,56 @@ class HttpVmManagerTest {
     assertThat(sent.path("workspaceId").asString()).isEqualTo(workspace.toString());
     assertThat(sent.path("userId").asString()).isEqualTo(user.toString());
     assertThat(sent.path("serverType").asString()).isEqualTo("cx33");
+    assertThat(sent.path("openRouterApiKey").asString()).isEqualTo("sk-or-v1-test");
+  }
+
+  @Test
+  void addsAndRemovesSecretsOnTheWorkspacesVm() {
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
+
+    vmManager.putSecret(workspace, "GITHUB_TOKEN", "ghp_x");
+    assertThat(fake.secrets.get(vm.id())).containsEntry("GITHUB_TOKEN", "ghp_x");
+
+    assertThatThrownBy(() -> vmManager.putSecret(workspace, "GITHUB_TOKEN", "again"))
+        .isInstanceOf(VmSecretRefusedException.class)
+        .hasMessageContaining("already has");
+
+    vmManager.removeSecret(workspace, "GITHUB_TOKEN");
+    vmManager.removeSecret(workspace, "GITHUB_TOKEN");
+    assertThat(fake.secrets.get(vm.id())).doesNotContainKey("GITHUB_TOKEN");
+  }
+
+  @Test
+  void refusesASecretForAWorkspaceWithNoVmAndRemovesNothing() {
+    var none = UUID.randomUUID();
+    assertThatThrownBy(() -> vmManager.putSecret(none, "A", "v"))
+        .isInstanceOf(IllegalStateException.class);
+    vmManager.removeSecret(none, "A");
   }
 
   @Test
   void leavesTheSizeToTheVmManagerWhenNoneIsAsked() {
-    vmManager.create(workspace, user, null);
+    vmManager.create(workspace, user, null, "sk-or-v1-test");
     assertThat(fake.creates.getFirst().has("serverType")).isFalse();
   }
 
   @Test
   void returnsTheWorkspacesVmWhenAskedAgain() {
-    var first = vmManager.create(workspace, user, null);
-    assertThat(vmManager.create(workspace, user, null)).isEqualTo(first);
+    var first = vmManager.create(workspace, user, null, "sk-or-v1-test");
+    assertThat(vmManager.create(workspace, user, null, "sk-or-v1-test")).isEqualTo(first);
   }
 
   @Test
   void passesTheVmManagersReasonForARejectedSize() {
-    assertThatThrownBy(() -> vmManager.create(workspace, user, "cx53"))
+    assertThatThrownBy(() -> vmManager.create(workspace, user, "cx53", "sk-or-v1-test"))
         .isInstanceOf(ServerTypeRejectedException.class)
         .hasMessageContaining("server type cx53 is not offered; choose one of cx23, cx33");
   }
 
   @Test
   void deletesEveryVmOfTheWorkspaceAndNothingElse() {
-    vmManager.create(workspace, user, null);
-    var other = vmManager.create(UUID.randomUUID(), user, null);
+    vmManager.create(workspace, user, null, "sk-or-v1-test");
+    var other = vmManager.create(UUID.randomUUID(), user, null, "sk-or-v1-test");
 
     vmManager.deleteFor(workspace);
     vmManager.deleteFor(workspace);
@@ -88,7 +113,7 @@ class HttpVmManagerTest {
 
   @Test
   void listsEveryVmWithItsWorkspaceAndStatus() {
-    var vm = vmManager.create(workspace, user, null);
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
 
     assertThat(vmManager.vms())
         .containsExactly(new ProvisionedVm(vm.id(), workspace, "cx23", "PROVISIONING"));
@@ -96,7 +121,7 @@ class HttpVmManagerTest {
 
   @Test
   void restartsTheWorkspacesVmAndRefusesOneWithNone() {
-    var vm = vmManager.create(workspace, user, null);
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
 
     vmManager.restartFor(workspace);
 
@@ -107,7 +132,7 @@ class HttpVmManagerTest {
 
   @Test
   void hearsEachVmFromTheEventStream() throws Exception {
-    var vm = vmManager.create(workspace, user, null);
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test");
     var heard = new LinkedBlockingQueue<ProvisionedVm>();
 
     vmManager.watch(heard::add);
@@ -128,7 +153,7 @@ class HttpVmManagerTest {
   void tellsAnOutageFromAFailure() {
     fake.status = 503;
     fake.detail = "the VMs at Hetzner are not loaded yet";
-    assertThatThrownBy(() -> vmManager.create(workspace, user, null))
+    assertThatThrownBy(() -> vmManager.create(workspace, user, null, "sk-or-v1-test"))
         .isInstanceOf(VmManagerUnavailableException.class)
         .hasMessageContaining("not loaded yet");
 

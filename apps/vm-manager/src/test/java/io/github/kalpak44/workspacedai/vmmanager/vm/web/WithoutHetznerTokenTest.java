@@ -45,7 +45,7 @@ class WithoutHetznerTokenTest {
                 + UUID.randomUUID()
                 + "\",\"userId\":\""
                 + UUID.randomUUID()
-                + "\"}");
+                + "\",\"openRouterApiKey\":\"sk-or-v1-test\"}");
     assertThat(response.statusCode()).isEqualTo(503);
     assertThat(send("GET", "/vms", null).body()).isEqualTo("[]");
   }

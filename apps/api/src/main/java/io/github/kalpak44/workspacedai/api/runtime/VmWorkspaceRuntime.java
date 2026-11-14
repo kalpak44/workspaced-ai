@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.runtime;
 import io.github.kalpak44.workspacedai.api.compute.ProvisionedVm;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
+import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
 import java.util.List;
@@ -14,9 +15,9 @@ import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
- * Each workspace on a Hetzner VM of its own, created, rebooted and deleted through the VM manager.
- * Nothing on a VM serves a harness, keeps secrets or publishes a web server yet, so those answer as
- * if the workspace were not running and keep nothing.
+ * Each workspace on a Hetzner VM of its own, created, rebooted and deleted through the VM manager,
+ * which also keeps its secrets in Vault. Nothing on a VM serves a harness, reads those secrets or
+ * publishes a web server yet, so the rest answers as if the workspace were not running.
  */
 public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
@@ -26,11 +27,15 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
     this.vmManager = vmManager;
   }
 
-  /** The environment goes nowhere yet: nothing on the VM would read it. */
+  /**
+   * Only the provider's key goes anywhere, to the VM manager as the VM's system secret; nothing on
+   * the VM would read the rest of the environment yet.
+   */
   @Override
   public String start(
       UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment) {
-    return vmManager.create(workspaceId, ownerId, serverType).serverType();
+    var key = environment.secrets().get(ModelProvider.OPENROUTER.apiKeyVariable());
+    return vmManager.create(workspaceId, ownerId, serverType, key).serverType();
   }
 
   @Override
@@ -55,9 +60,10 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
   @Override
   public void putSecret(UUID workspaceId, String name, String value) {
-    // Nothing on the VM could read it, so the value is not kept anywhere.
+    vmManager.putSecret(workspaceId, name, value);
   }
 
+  /** The VM manager never hands a value back, so none can be reused. */
   @Override
   public Optional<String> secret(UUID workspaceId, String name) {
     return Optional.empty();
@@ -65,7 +71,7 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
 
   @Override
   public void removeSecret(UUID workspaceId, String name) {
-    // Nothing was kept, so there is nothing to remove.
+    vmManager.removeSecret(workspaceId, name);
   }
 
   @Override

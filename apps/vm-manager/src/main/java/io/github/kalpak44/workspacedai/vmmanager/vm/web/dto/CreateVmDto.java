@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 import java.util.UUID;
@@ -21,4 +22,13 @@ public record CreateVmDto(
             description = "One of the serverTypes /vm-options lists; its default when omitted",
             example = "cx23")
         @Size(max = 20)
-        String serverType) {}
+        String serverType,
+    @Schema(
+            description =
+                "The OpenRouter key the workspace was created with, kept in Vault as the VM's "
+                    + "system secret OPENROUTER_API_KEY; ignored when the workspace already has a VM",
+            example = "sk-or-v1-…",
+            maxLength = 1000)
+        @NotBlank
+        @Size(max = 1000)
+        String openRouterApiKey) {}

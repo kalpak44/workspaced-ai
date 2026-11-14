@@ -42,7 +42,10 @@ public interface WorkspaceRuntime {
   /** Takes its web server's name away; one that has none is not an error. */
   void unpublish(UUID workspaceId);
 
-  /** Adds or replaces one secret. A running workspace sees it only once it restarts. */
+  /**
+   * Adds one secret; a VM refuses one it already has rather than replacing it. A running workspace
+   * sees it only once it restarts.
+   */
   void putSecret(UUID workspaceId, String name, String value);
 
   /** One secret's value; empty when the workspace has no such secret, or none at all. */

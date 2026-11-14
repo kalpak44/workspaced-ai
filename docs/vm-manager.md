@@ -18,17 +18,18 @@ A VM is one Hetzner Cloud server running one workspace. It has an `id` (UUID, as
 | `GET`    | `/api/v1/vms`                 |                                                          | `200` and every VM; `?workspaceId=` for one     |
 | `GET`    | `/api/v1/vms/events`          |                                                          | `200` and a server-sent event stream            |
 | `GET`    | `/api/v1/vms/{id}`            |                                                          | `200` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms`                 | `{"workspaceId": "…", "userId": "…", "serverType": "cx23"}` | `201`, the VM, and its URL in `Location`; `200` and the workspace's VM if it has one |
+| `POST`   | `/api/v1/vms`                 | `{"workspaceId": "…", "userId": "…", "serverType": "cx23", "openRouterApiKey": "…"}` | `201`, the VM, and its URL in `Location`; `200` and the workspace's VM if it has one |
 | `DELETE` | `/api/v1/vms/{id}`            |                                                          | `204`, or `404`                                 |
 | `POST`   | `/api/v1/vms/{id}/restart`    |                                                          | `202` and the VM, or `404`                      |
 | `POST`   | `/api/v1/vms/{id}/ready`      |                                                          | `200` and the VM, or `404`                      |
 | `POST`   | `/api/v1/vms/{id}/heartbeat`  |                                                          | `204`, or `404`                                 |
 
-Creating a VM creates its server at Hetzner (`ubuntu-24.04` in the configured location) and answers once Hetzner has
-accepted it; it is `PROVISIONING` until it reports ready. `serverType` is optional and defaults to the first one
-offered. A missing or malformed `workspaceId` or `userId`, or a `serverType` that is not offered, answers `400`;
-Hetzner refusing answers `502` and keeps nothing. Deleting a VM deletes its server, disk included; a server already
-gone counts as deleted, and a VM whose server could not be deleted is kept so the delete can be retried.
+Creating a VM stores `openRouterApiKey` in Vault as its system secret, then creates its server at Hetzner
+(`ubuntu-24.04` in the configured location) and answers once Hetzner has accepted it; it is `PROVISIONING` until it
+reports ready. `serverType` is optional and defaults to the first one offered. A missing or malformed `workspaceId` or
+`userId`, a missing key, or a `serverType` that is not offered, answers `400`; Hetzner or Vault refusing answers `502`
+and keeps nothing. Deleting a VM deletes its server, disk included, then its secrets; a server already gone counts as
+deleted, and a VM whose server or secrets could not be deleted is kept so the delete can be retried.
 
 ### No inbound access
 
@@ -50,6 +51,31 @@ Hetzner is the record of which VMs exist. At startup the VM manager reads every 
 inventory, so a restart forgets only statuses and heartbeats, which the VMs report again, never a server that is still
 billing. Until that read has succeeded, creating a VM answers `503`, because a retried create could otherwise make a
 second server for a workspace that has one; a failed read is retried every minute.
+
+## VM secrets
+
+Each VM keeps its secrets in Vault, one KV v2 entry per VM at `secret/workspaced-ai/vms/<vm id>` holding one key per
+secret. Nothing on a VM reads them yet. `OPENROUTER_API_KEY` is the system secret: set when the VM is created, and
+never added, replaced or removed through these routes. A user may add up to 50 more.
+
+| Method   | Path                              | Body                                       | Answers                              |
+|----------|-----------------------------------|--------------------------------------------|--------------------------------------|
+| `GET`    | `/api/v1/vms/{id}/secrets`        |                                            | `200` and the names, or `404`        |
+| `POST`   | `/api/v1/vms/{id}/secrets`        | `{"name": "GITHUB_TOKEN", "value": "…"}`   | `201`, `400`, `404`, or `409`        |
+| `DELETE` | `/api/v1/vms/{id}/secrets/{name}` |                                            | `204`, `404`, or `409`               |
+
+Names are listed system secret first, then by name, and values never come back. `409` means the VM already has that
+secret, it is the system secret, or the VM already holds 50; adding never replaces. A change is a check-and-set write
+of the whole entry, so two concurrent adds cannot both pass the limit, and the entry keeps one version, so a removed
+value is not left in its history. Without `WORKSPACED_VAULT_URL` these routes and creating a VM answer `503`.
+
+### Vault access
+
+The VM manager holds no Vault credential. It signs in through Vault's Kubernetes auth as the role
+`workspaced-ai-vm-manager`, bound to its own ServiceAccount, with a short-lived token projected into the pod, and
+renews the sign-in before its one-hour lease runs out. The role's policy reaches only `secret/data/workspaced-ai/vms/*`
+and its metadata, so it can read neither its own Hetzner token nor any other secret. Locally,
+`WORKSPACED_VAULT_TOKEN` takes a token directly.
 
 ## VM options
 
@@ -75,8 +101,9 @@ the account a root password for each one instead.
 
 - `hetzner` — `HetznerClient`, the Hetzner Cloud API as this app uses it, and `HttpHetznerClient`, its HTTP
   implementation over an injected `HttpClient`.
+- `vault` — `VaultSecretStore`, the `SecretStore` the domain keeps secrets in, over Vault's HTTP API.
 - `vm` — the domain: `Vm` and `VmOption`, `VmRepository` (in memory, rebuilt from Hetzner by `HetznerVmInventory`),
-  and `VmService` / `VmOptionService`.
+  and `VmService` / `VmOptionService` / `VmSecretService`.
   Services take a `Clock`, throw domain exceptions, and publish each change as a `VmEvent`; none of them knows HTTP.
 - `vm.web` — controllers that only map between DTOs (`vm.web.dto`) and the services, `ApiExceptionHandler` turning the
   domain exceptions into problem details, and `VmEventStream`, which sends each `VmEvent` to every open stream through
@@ -93,6 +120,7 @@ like the API, so run one of them on another port (`SERVER_PORT=8081`) to have bo
 ```sh
 cd apps/vm-manager
 WORKSPACED_HETZNER_TOKEN=$(vault kv get -field=hcloud-token secret/workspaced-vm-manager-secrets) \
+WORKSPACED_VAULT_URL=$VAULT_ADDR WORKSPACED_VAULT_TOKEN=$(cat ~/.vault-token) \
   mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor

@@ -39,8 +39,15 @@ class SecretRollbackTest {
 
   @Test
   void keepsNoNameWhoseValueCouldNotBeStored() {
-    doThrow(new IllegalStateException("cluster down")).when(runtime).putSecret(any(), any(), any());
-    assertThatThrownBy(() -> service.add(id, "TOKEN", "x")).hasMessage("cluster down");
+    doThrow(new RuntimeException("VM manager down")).when(runtime).putSecret(any(), any(), any());
+    assertThatThrownBy(() -> service.add(id, "TOKEN", "x")).hasMessage("VM manager down");
+    assertThat(secrets.findAll()).isEmpty();
+  }
+
+  @Test
+  void keepsNoNameForAWorkspaceWithNoVm() {
+    doThrow(new IllegalStateException("no VM")).when(runtime).putSecret(any(), any(), any());
+    assertThatThrownBy(() -> service.add(id, "TOKEN", "x")).hasMessageContaining("409");
     assertThat(secrets.findAll()).isEmpty();
   }
 

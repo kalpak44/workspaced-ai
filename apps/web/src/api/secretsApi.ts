@@ -11,6 +11,9 @@ export interface Secret {
 // so anything else is refused before it can steer the request elsewhere.
 export const SECRET_NAME = /^[A-Za-z_]\w*$/;
 
+/** How many a user may add to one workspace; the provider's key does not count. */
+export const MAX_SECRETS = 50;
+
 function secretsUrl(workspaceId: string): string {
   return `${workspaceUrl(workspaceId)}/secrets`;
 }

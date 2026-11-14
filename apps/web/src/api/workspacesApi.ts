@@ -15,14 +15,15 @@ export interface Workspace {
   readonly restartRequired: boolean;
 }
 
+/** The key is checked with the provider before anything is created, and never shown again. */
 export interface NewWorkspace {
   readonly name: string;
   /** One of /vm-sizes. */
   readonly serverType: string;
+  /** One of /model-providers. */
+  readonly modelProvider: string;
+  readonly apiKey: string;
 }
-
-/** Every workspace uses OpenRouter until choosing a provider and its key comes back. */
-export const MODEL_PROVIDER = "openrouter";
 
 /** Sent once a workspace's deletion has committed, to every open stream. */
 export interface DeletedEvent {
@@ -55,8 +56,7 @@ export async function listWorkspaces(): Promise<Workspace[]> {
 }
 
 export async function createWorkspace(workspace: NewWorkspace): Promise<Workspace> {
-  const body = JSON.stringify({ ...workspace, modelProvider: MODEL_PROVIDER });
-  return (await send(BASE, { method: "POST", body })).json();
+  return (await send(BASE, { method: "POST", body: JSON.stringify(workspace) })).json();
 }
 
 export async function renameWorkspace(id: string, name: string): Promise<Workspace> {

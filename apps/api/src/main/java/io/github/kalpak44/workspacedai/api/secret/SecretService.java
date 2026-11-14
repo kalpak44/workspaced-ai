@@ -23,6 +23,9 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class SecretService {
 
+  /** How many a user may add to one workspace, the provider's key not counted. */
+  public static final int MAX_SECRETS = 50;
+
   // Set by the API for the harness; a user secret of the same name would lock the API out, or
   // be overwritten by the next restore.
   private static final Set<String> HARNESS_VARIABLES =
@@ -69,9 +72,17 @@ public class SecretService {
     if (secrets.findByWorkspaceIdAndName(workspaceId, name).isPresent()) {
       throw conflict("the workspace already has a secret " + name);
     }
+    // The VM manager holds the same limit; checking here first spares it the call.
+    if (secrets.countByWorkspaceId(workspaceId) >= MAX_SECRETS) {
+      throw conflict("a workspace holds at most " + MAX_SECRETS + " secrets; remove one first");
+    }
     secrets.saveAndFlush(new WorkspaceSecretEntity(workspaceId, name));
     workspace.setSecretsPendingRestart(true);
-    runtime.putSecret(workspaceId, name, value);
+    try {
+      runtime.putSecret(workspaceId, name, value);
+    } catch (IllegalStateException e) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace has no VM yet", e);
+    }
     return new Secret(name, false);
   }
 

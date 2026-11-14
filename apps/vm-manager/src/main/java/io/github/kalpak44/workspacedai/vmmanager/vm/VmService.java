@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm;
 
+import io.github.kalpak44.workspacedai.vmmanager.hetzner.CreatedServer;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.ServerSpec;
@@ -9,6 +10,8 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.UnaryOperator;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -20,11 +23,14 @@ import org.springframework.stereotype.Service;
 @Service
 public class VmService {
 
+  private static final Logger log = LoggerFactory.getLogger(VmService.class);
+
   private final VmRepository vms;
   private final VmProperties properties;
   private final HetznerClient hetzner;
   private final HetznerProperties hetznerProperties;
   private final VmInventory inventory;
+  private final VmSecretService secrets;
   private final ApplicationEventPublisher events;
   private final Clock clock;
 
@@ -34,6 +40,7 @@ public class VmService {
       HetznerClient hetzner,
       HetznerProperties hetznerProperties,
       VmInventory inventory,
+      VmSecretService secrets,
       ApplicationEventPublisher events,
       Clock clock) {
     this.vms = vms;
@@ -41,6 +48,7 @@ public class VmService {
     this.hetzner = hetzner;
     this.hetznerProperties = hetznerProperties;
     this.inventory = inventory;
+    this.secrets = secrets;
     this.events = events;
     this.clock = clock;
   }
@@ -57,14 +65,17 @@ public class VmService {
   /**
    * The workspace's VM: a second request for the same workspace returns the first one's, so a retry
    * never creates a second server. Synchronized so two concurrent first requests cannot both create
-   * one. Nothing is kept when Hetzner refuses the server.
+   * one. The OpenRouter key goes to Vault before the server is asked for, so a VM never runs
+   * without it; nothing is kept when either refuses. A second request's key is ignored.
    *
    * @param userId who owns the workspace
    * @param serverType blank for the default
+   * @param openRouterApiKey kept as the VM's system secret
    * @throws ServerTypeNotOfferedException when the server type is not one offered
    * @throws VmInventoryNotLoadedException before the VMs already at Hetzner are known
    */
-  public synchronized Created create(UUID workspaceId, UUID userId, String serverType) {
+  public synchronized Created create(
+      UUID workspaceId, UUID userId, String serverType, String openRouterApiKey) {
     var type =
         serverType == null || serverType.isBlank()
             ? properties.defaultServerType()
@@ -80,19 +91,26 @@ public class VmService {
       return new Created(existing.getFirst(), false);
     }
     var id = UUID.randomUUID();
-    var server =
-        hetzner.createServer(
-            new ServerSpec(
-                "vm-" + id,
-                type,
-                hetznerProperties.location(),
-                hetznerProperties.image(),
-                hetznerProperties.sshKeys(),
-                Map.of(
-                    HetznerVmInventory.MANAGED_BY, HetznerVmInventory.MANAGER,
-                    HetznerVmInventory.VM_ID, id.toString(),
-                    HetznerVmInventory.WORKSPACE_ID, workspaceId.toString(),
-                    HetznerVmInventory.USER_ID, userId.toString())));
+    secrets.init(id, openRouterApiKey);
+    CreatedServer server;
+    try {
+      server =
+          hetzner.createServer(
+              new ServerSpec(
+                  "vm-" + id,
+                  type,
+                  hetznerProperties.location(),
+                  hetznerProperties.image(),
+                  hetznerProperties.sshKeys(),
+                  Map.of(
+                      HetznerVmInventory.MANAGED_BY, HetznerVmInventory.MANAGER,
+                      HetznerVmInventory.VM_ID, id.toString(),
+                      HetznerVmInventory.WORKSPACE_ID, workspaceId.toString(),
+                      HetznerVmInventory.USER_ID, userId.toString())));
+    } catch (RuntimeException e) {
+      forgetSecrets(id);
+      throw e;
+    }
     var vm =
         vms.save(
             new Vm(
@@ -109,14 +127,27 @@ public class VmService {
     return new Created(vm, true);
   }
 
-  /** The server first: a VM whose server could not be deleted is kept, so the delete can retry. */
+  /**
+   * The server first, then its secrets: a VM either of them could not be deleted for is kept, so
+   * the delete can retry, and a server already gone counts as deleted on the retry.
+   */
   public void delete(UUID id) {
     var vm = get(id);
     hetzner.deleteServer(vm.serverId());
+    secrets.deleteAll(id);
     if (!vms.deleteById(id)) {
       throw new VmNotFoundException(id);
     }
     events.publishEvent(new VmEvent.Deleted(id));
+  }
+
+  // Best effort: the create has already failed, and that failure is the one to report.
+  private void forgetSecrets(UUID id) {
+    try {
+      secrets.deleteAll(id);
+    } catch (RuntimeException e) {
+      log.error("VM {} failed to create and its secrets could not be removed from Vault", id, e);
+    }
   }
 
   public Vm restart(UUID id) {
