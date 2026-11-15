@@ -1,15 +1,22 @@
-import { ArrowLeft, Camera, UserRound, Users } from "lucide-react";
+import { ArrowLeft, Camera, Globe, UserRound, Users } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
+import { useDomains } from "../../hooks/useDomains";
 import { navigate } from "../../hooks/useRoute";
 import { type UserSort, useUsers } from "../../hooks/useUsers";
 import { Avatar, Button, TextField } from "../atoms";
-import { PageHeader, SettingsSection } from "../molecules";
-import { UsersPanel } from "../organisms";
+import { EmptyState, PageHeader, SettingsSection } from "../molecules";
+import { DomainDnsPanel, UsersPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
+const NOTES = {
+  profile: "Your profile is saved to your account.",
+  domains: "DNS for the domains you bought. Simple adds subdomains; advanced edits every record.",
+  users: "Changes apply to everyone who signs in here.",
+};
+
 export function GeneralSettingsPage() {
-  const [section, setSection] = useState<"profile" | "users">("profile");
+  const [section, setSection] = useState<"profile" | "domains" | "users">("profile");
   const { account, saveProfile, changePassword: savePassword } = useAccount();
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "", avatar: account?.avatar ?? "" };
   const [profile, setProfile] = useState(saved);
@@ -84,7 +91,7 @@ export function GeneralSettingsPage() {
           </button>
         </div>
           <nav aria-label="Settings sections" className="flex gap-1 p-3 sm:flex-col">
-            {([{ id: "profile", label: "Profile", Icon: UserRound }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])] as const).map(({ id, label, Icon }) => (
+            {([{ id: "profile", label: "Profile", Icon: UserRound }, { id: "domains", label: "Domains", Icon: Globe }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])] as const).map(({ id, label, Icon }) => (
               <button key={id} type="button" aria-current={section === id ? "page" : undefined}
                 onClick={() => { setSection(id); setNotice(""); }}
                 className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${section === id ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"}`}>
@@ -95,7 +102,7 @@ export function GeneralSettingsPage() {
       </>}>
       <PageHeader title="General settings" />
       <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
-        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">{section === "profile" ? "Your profile is saved to your account." : "Changes apply to everyone who signs in here."}</p>
+        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">{NOTES[section]}</p>
           <div className="min-w-0 flex-1">
             <div hidden={section !== "profile"} className="space-y-6">
               <SettingsSection title="Profile" description="Your photo and name, all in one place.">
@@ -139,12 +146,24 @@ export function GeneralSettingsPage() {
                 </form>}
               </SettingsSection>
             </div>
+            {section === "domains" && <DomainsSection />}
             {section === "users" && isAdmin && <UsersSection currentUserId={account?.id} />}
             <p role="status" className="mt-4 min-h-5 text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>
           </div>
       </div>
     </ContextLayout>
   );
+}
+
+/** Mounted only while its tab is open, so the domains load when someone looks at them. */
+function DomainsSection() {
+  const { owned, status } = useDomains();
+  if (status === "loading") return <EmptyState busy title="Loading domains…" hint="Fetching the domains you own" />;
+  if (status === "failed") return <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">Your domains could not be loaded.</p>;
+  if (owned.length === 0) {
+    return <EmptyState title="No domains yet" hint="Buy one to manage its DNS here." action={{ label: "Find a domain", onClick: () => navigate({ name: "domains" }) }} />;
+  }
+  return <div className="space-y-6">{owned.map((domain) => <DomainDnsPanel key={domain.name} domain={domain.name} />)}</div>;
 }
 
 /** Mounted only while its tab is open, so the user list loads when someone looks at it. */

@@ -8,6 +8,7 @@ describe("routes", () => {
     { name: "home" },
     { name: "general-settings" },
     { name: "billing" },
+    { name: "domains" },
     { name: "workspace", workspaceId: "w1" },
     { name: "settings", workspaceId: "w1" },
     { name: "terminal", workspaceId: "w1" },
