@@ -1,4 +1,4 @@
-import { MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2 } from "lucide-react";
+import { Activity, MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDismiss } from "../../hooks/useDismiss";
@@ -17,6 +17,7 @@ interface Props {
   readonly onRename: (name: string) => void;
   readonly onSettings: () => void;
   readonly onTerminal: () => void;
+  readonly onMonitoring: () => void;
   readonly onRestart: () => void;
   readonly onDelete: () => void;
 }
@@ -29,6 +30,7 @@ export function WorkspaceItem({
   onRename,
   onSettings,
   onTerminal,
+  onMonitoring,
   onRestart,
   onDelete,
 }: Props) {
@@ -109,6 +111,20 @@ export function WorkspaceItem({
             <span className="flex items-center gap-2">
               <SquareTerminal aria-hidden className="size-3.5" />
               Terminal
+            </span>
+          </MenuItem>
+          <MenuItem
+            className="gap-2 px-3 py-2"
+            // A VM that is still starting reports nothing yet.
+            disabled={workspace.status === "INITIALIZING"}
+            onClick={() => {
+              setMenuOpen(false);
+              onMonitoring();
+            }}
+          >
+            <span className="flex items-center gap-2">
+              <Activity aria-hidden className="size-3.5" />
+              Monitoring
             </span>
           </MenuItem>
           <MenuItem

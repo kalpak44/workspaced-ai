@@ -11,6 +11,7 @@ export type Route =
   | { readonly name: "workspace"; readonly workspaceId: string }
   | { readonly name: "settings"; readonly workspaceId: string; readonly section?: string }
   | { readonly name: "terminal"; readonly workspaceId: string; readonly terminalId?: string }
+  | { readonly name: "monitoring"; readonly workspaceId: string }
   | { readonly name: "session"; readonly workspaceId: string; readonly sessionId: string };
 
 // Ids are UUIDs; matching only path-safe characters keeps a crafted URL from reaching an API
@@ -27,6 +28,7 @@ const PATTERNS: ReadonlyArray<[RegExp, (ids: string[]) => Route]> = [
   [new RegExp(`^/workspaces/${ID}/?$`), ([w]) => ({ name: "workspace", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/settings/?$`), ([w]) => ({ name: "settings", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/settings/([a-z-]+)/?$`), ([w, s]) => ({ name: "settings", workspaceId: w, section: s })],
+  [new RegExp(`^/workspaces/${ID}/monitoring/?$`), ([w]) => ({ name: "monitoring", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/terminal/?$`), ([w]) => ({ name: "terminal", workspaceId: w })],
   [new RegExp(`^/workspaces/${ID}/terminal/(pty[A-Za-z0-9_-]+)/?$`), ([w, t]) => ({ name: "terminal", workspaceId: w, terminalId: t })],
   [
@@ -70,6 +72,8 @@ export function routePath(route: Route): string {
       return `/workspaces/${route.workspaceId}/settings${route.section ? `/${route.section}` : ""}`;
     case "terminal":
       return `/workspaces/${route.workspaceId}/terminal${route.terminalId ? `/${route.terminalId}` : ""}`;
+    case "monitoring":
+      return `/workspaces/${route.workspaceId}/monitoring`;
     case "session":
       return `/workspaces/${route.workspaceId}/sessions/${route.sessionId}`;
   }

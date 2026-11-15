@@ -19,3 +19,4 @@ export { AddFundsDialog } from "./AddFundsDialog";
 export { BuyDomainDialog } from "./BuyDomainDialog";
 export { DomainDnsPanel } from "./DomainDnsPanel";
 export { NotificationMenu } from "./NotificationMenu";
+export { formatMetric, MetricChart } from "./MetricChart";

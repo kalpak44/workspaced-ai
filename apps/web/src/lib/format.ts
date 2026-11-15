@@ -27,3 +27,15 @@ const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" 
 export function formatMoney(cents: number): string {
   return USD.format(cents / 100);
 }
+
+/** "0 B/s", "20 KB/s", "1.2 MB/s": a rate in bytes per second, in the largest whole unit. */
+export function formatRate(bytesPerSecond: number): string {
+  const units = ["B/s", "KB/s", "MB/s", "GB/s"];
+  let value = bytesPerSecond;
+  let unit = 0;
+  while (value >= 1000 && unit < units.length - 1) {
+    value /= 1000;
+    unit++;
+  }
+  return `${Number(value.toFixed(value < 10 && unit > 0 ? 1 : 0))} ${units[unit]}`;
+}

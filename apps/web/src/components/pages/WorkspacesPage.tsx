@@ -17,6 +17,7 @@ const BillingPage = lazy(() => import("./BillingPage").then((page) => ({ default
 const DomainsPage = lazy(() => import("./DomainsPage").then((page) => ({ default: page.DomainsPage })));
 const NotificationsPage = lazy(() => import("./NotificationsPage").then((page) => ({ default: page.NotificationsPage })));
 const NotificationPage = lazy(() => import("./NotificationPage").then((page) => ({ default: page.NotificationPage })));
+const MonitoringPage = lazy(() => import("./MonitoringPage").then((page) => ({ default: page.MonitoringPage })));
 const GeneralSettingsPage = lazy(() => import("./GeneralSettingsPage").then((page) => ({ default: page.GeneralSettingsPage })));
 
 /**
@@ -124,6 +125,13 @@ export function WorkspacesPage() {
         onRestart={() => setRestartId(workspace.id)}
       />
     );
+  } else if (route.name === "monitoring") {
+    tabTitle = `Monitoring · ${workspace.name}`;
+    page = (
+      <Suspense fallback={<EmptyState busy title="Loading monitoring…" hint="Fetching the workspace's metrics" />}>
+        <MonitoringPage key={workspace.id} workspace={workspace} deleting={deleting.has(workspace.id)} />
+      </Suspense>
+    );
   } else if (route.name === "terminal") {
     tabTitle = `Terminal · ${workspace.name}`;
     page = <TerminalPage key={workspace.id} workspace={workspace} terminalId={route.terminalId} deleting={deleting.has(workspace.id)} />;
@@ -161,6 +169,7 @@ export function WorkspacesPage() {
           onRename={rename}
           onSettings={(id) => navigate({ name: "settings", workspaceId: id })}
           onTerminal={(id) => navigate({ name: "terminal", workspaceId: id })}
+          onMonitoring={(id) => navigate({ name: "monitoring", workspaceId: id })}
           onRestart={setRestartId}
           onDelete={setDeleteId}
         />

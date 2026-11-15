@@ -378,13 +378,14 @@ describe("App", () => {
     );
   });
 
-  it("offers no restart or terminal while the workspace is starting", async () => {
+  it("offers no restart, terminal or monitoring while the workspace is starting", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     FakeEventSource.emit("starter", "INITIALIZING");
     await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
     expect(screen.getByRole("menuitem", { name: "Restart" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Terminal" })).toBeDisabled();
+    expect(screen.getByRole("menuitem", { name: "Monitoring" })).toBeDisabled();
     expect(screen.getByRole("menuitem", { name: "Delete workspace" })).toBeEnabled();
   });
 
