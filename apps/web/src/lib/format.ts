@@ -20,3 +20,10 @@ export function formatPrice(input: number | null, output: number | null): string
   const dollars = (value: number) => `$${Number(value.toFixed(2))}`;
   return `${dollars(input)} / ${dollars(output)}`;
 }
+
+const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+
+/** "$12.40": an amount kept in cents, so sums never pick up floating-point error. */
+export function formatMoney(cents: number): string {
+  return USD.format(cents / 100);
+}

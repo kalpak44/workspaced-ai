@@ -13,6 +13,7 @@ import { WorkspacePage } from "./WorkspacePage";
 const APP = "workspaced-ai";
 const StorePage = lazy(() => import("./StorePage").then((page) => ({ default: page.StorePage })));
 const RecipePage = lazy(() => import("./RecipePage").then((page) => ({ default: page.RecipePage })));
+const BillingPage = lazy(() => import("./BillingPage").then((page) => ({ default: page.BillingPage })));
 const GeneralSettingsPage = lazy(() => import("./GeneralSettingsPage").then((page) => ({ default: page.GeneralSettingsPage })));
 
 /**
@@ -68,6 +69,9 @@ export function WorkspacesPage() {
   if (route.name === "general-settings") {
     tabTitle = "General settings";
     page = <Suspense fallback={<EmptyState busy title="Loading settings…" hint="Preparing your preferences" />}><GeneralSettingsPage /></Suspense>;
+  } else if (route.name === "billing") {
+    tabTitle = "Billing";
+    page = <Suspense fallback={<EmptyState busy title="Loading billing…" hint="Fetching your balance and invoices" />}><BillingPage /></Suspense>;
   } else if (route.name === "store") {
     tabTitle = "Recipe store";
     page = <Suspense fallback={<EmptyState busy title="Loading the store…" hint="Fetching recipes" />}><StorePage workspaces={workspaces} /></Suspense>;
@@ -136,7 +140,7 @@ export function WorkspacesPage() {
     <AppLayout
       header={<TopBar theme={theme} onThemeChange={setTheme} storeOpen={route.name === "store" || route.name === "recipe"} />}
       sidebar={
-        route.name !== "session" && route.name !== "terminal" && route.name !== "settings" && route.name !== "general-settings" && route.name !== "store" && route.name !== "recipe" && <Sidebar
+        route.name !== "session" && route.name !== "terminal" && route.name !== "settings" && route.name !== "general-settings" && route.name !== "billing" && route.name !== "store" && route.name !== "recipe" && <Sidebar
           workspaces={workspaces}
           selectedId={workspace?.id ?? null}
           deleting={deleting}

@@ -15,3 +15,4 @@ export { ImportDraftDialog } from "./ImportDraftDialog";
 export { NewRecipeMenu } from "./NewRecipeMenu";
 export { EMPTY_RECIPE, RecipeEditorDialog, type RecipeFormValues } from "./RecipeEditorDialog";
 export { WorkspacePickerDialog } from "./WorkspacePickerDialog";
+export { AddFundsDialog } from "./AddFundsDialog";

@@ -3,6 +3,8 @@ import { useCallback, useRef, useState } from "react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useAccount } from "../../hooks/useAccount";
+import { useBilling } from "../../hooks/useBilling";
+import { formatMoney } from "../../lib/format";
 import { navigate } from "../../hooks/useRoute";
 import type { Theme } from "../../hooks/useTheme";
 import { Avatar } from "../atoms";
@@ -18,6 +20,7 @@ interface Props {
 
 export function UserMenu({ theme, onThemeChange }: Props) {
   const { account, signOut } = useAccount();
+  const { billing } = useBilling();
   const name = [account?.firstName, account?.lastName].filter(Boolean).join(" ");
   const [open, setOpen] = useState(false);
   const mobile = useIsMobile();
@@ -37,6 +40,10 @@ export function UserMenu({ theme, onThemeChange }: Props) {
             <span>Version</span>
             <span className="text-emerald-500">{import.meta.env.VITE_APP_VERSION ?? "dev"}</span>
           </div>
+          <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "billing" }); }}>
+            Billing
+            {billing && <span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatMoney(billing.balanceCents)}</span>}
+          </MenuItem>
           <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "general-settings" }); }}>
             Settings
           </MenuItem>
