@@ -1,16 +1,17 @@
-import { Camera, Globe, Search, UserRound, Users } from "lucide-react";
-import { useRef, useState } from "react";
+import { Camera, Clock, Globe, Search, UserRound, Users } from "lucide-react";
+import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
+import { BROWSER_TIME_ZONE, TIME_ZONES, useTimeZone, zoneOffset } from "../../hooks/useTimeZone";
 import { useAccount } from "../../hooks/useAccount";
 import { useDomains } from "../../hooks/useDomains";
 import { navigate } from "../../hooks/useRoute";
 import { type UserSort, useUsers } from "../../hooks/useUsers";
-import { Avatar, Button, TextField } from "../atoms";
-import { EmptyState, PageHeader, SectionNav, SettingsSection, Toast } from "../molecules";
+import { Avatar, Button, Select, TextField } from "../atoms";
+import { EmptyState, PageHeader, SectionNav, Toast } from "../molecules";
 import { DomainDnsPanel, UsersPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
 const NOTES = {
-  profile: "Your profile is saved to your account.",
+  profile: "Your photo, name and preferences.",
   domains: "DNS for the domains you bought. Simple adds subdomains; advanced edits every record.",
   users: "Changes apply to everyone who signs in here.",
 };
@@ -23,9 +24,16 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: Section) => navigate({ name: "general-settings", section: id }, { replace: true });
   const { account, saveProfile, changePassword: savePassword } = useAccount();
-  const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "", avatar: account?.avatar ?? "" };
-  const [profile, setProfile] = useState(saved);
+  const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "" };
+  const [names, setNames] = useState(saved);
+  const [storedZone, setStoredZone] = useTimeZone();
+  // "" follows the browser's zone.
+  const [zone, setZone] = useState(storedZone ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
+  // The photo shown while its save is in flight; null shows the account's own.
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [savingAvatar, setSavingAvatar] = useState(false);
+  const avatar = avatarPreview ?? account?.avatar ?? "";
   const [passwords, setPasswords] = useState({ current: "", next: "", confirm: "" });
   const [passwordError, setPasswordError] = useState("");
   const [savingPassword, setSavingPassword] = useState(false);
@@ -35,19 +43,42 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const fileInput = useRef<HTMLInputElement>(null);
   // Only an admin may manage users; the API refuses anyone else, so the tab is not offered.
   const isAdmin = account?.role === "ADMIN";
-  const profileChanged = profile.firstName !== saved.firstName || profile.lastName !== saved.lastName || profile.avatar !== saved.avatar;
+  const namesChanged = names.firstName !== saved.firstName || names.lastName !== saved.lastName;
+  const zoneChanged = zone !== (storedZone ?? "");
 
+  // The photo saves on its own, sending the name as the account already has it, so an unsaved
+  // edit here never rides along with a new photo, or the other way round.
   async function submitProfile() {
-    const trimmed = { ...profile, firstName: profile.firstName.trim(), lastName: profile.lastName.trim() };
+    const trimmed = { firstName: names.firstName.trim(), lastName: names.lastName.trim() };
     setSavingProfile(true);
     try {
-      await saveProfile({ ...trimmed, avatar: trimmed.avatar || null });
-      setProfile(trimmed);
+      if (namesChanged) {
+        await saveProfile({ ...trimmed, avatar: account?.avatar ?? null });
+        setNames(trimmed);
+      }
+      // Only the browser keeps the zone for now, so it cannot fail once the name is saved.
+      if (zoneChanged) setStoredZone(zone || null);
       setNotice("Profile updated.");
     } catch {
-      setNotice("Could not save the profile. Please try again.");
+      setNotice("Could not save your profile. Please try again.");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function saveAvatar(next: string | null) {
+    setSavingAvatar(true);
+    setAvatarPreview(next ?? "");
+    setAvatarError("");
+    setNotice("");
+    try {
+      await saveProfile({ ...saved, avatar: next });
+      setNotice(next ? "Photo updated." : "Photo removed.");
+    } catch {
+      setAvatarError("Could not save the photo. Please try again.");
+    } finally {
+      setAvatarPreview(null);
+      setSavingAvatar(false);
     }
   }
 
@@ -79,11 +110,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
       return;
     }
     const reader = new FileReader();
-    reader.onload = () => {
-      setProfile((previous) => ({ ...previous, avatar: String(reader.result) }));
-      setAvatarError("");
-      setNotice("");
-    };
+    reader.onload = () => void saveAvatar(String(reader.result));
     reader.onerror = () => setAvatarError("This image could not be read. Please try another.");
     reader.readAsDataURL(file);
   }
@@ -98,46 +125,72 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
       <div className="w-full">
           <div className="min-w-0 flex-1">
             <div hidden={section !== "profile"} className="space-y-6">
-              <SettingsSection title="Profile" description="Your photo and name, all in one place.">
-                <form className="space-y-6" onSubmit={(event) => { event.preventDefault(); void submitProfile(); }}>
-                  <div className="flex flex-wrap items-center gap-4">
-                    <Avatar src={profile.avatar || undefined} large />
-                    <div className="space-y-2">
+              <section aria-label="Profile" className="card overflow-hidden">
+                <CardHeader title="Profile" description="How you appear to other people on this installation." />
+                <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                  <SettingRow title="Photo" hint="JPG, PNG, WebP or GIF, up to 2 MB. Saved as soon as you pick it.">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <button type="button" aria-label={avatar ? "Change photo" : "Upload photo"} tabIndex={-1} onClick={() => fileInput.current?.click()}
+                        className={`group relative flex shrink-0 rounded-full ring-4 ring-zinc-100 transition-opacity dark:ring-zinc-800 ${savingAvatar ? "opacity-60" : ""}`}>
+                        <Avatar src={avatar || undefined} large />
+                        <span aria-hidden className="absolute inset-0 flex items-center justify-center rounded-full bg-zinc-950/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
+                          <Camera className="size-5" />
+                        </span>
+                      </button>
                       <div className="flex flex-wrap gap-2">
-                        <Button label="Change avatar" icon={Camera} variant="secondary" onClick={() => fileInput.current?.click()} />
-                        {profile.avatar && <Button label="Remove" variant="secondary" onClick={() => { setProfile((previous) => ({ ...previous, avatar: "" })); setNotice(""); }} />}
+                        <Button label={avatar ? "Change photo" : "Upload photo"} icon={Camera} variant="secondary" busy={savingAvatar} onClick={() => fileInput.current?.click()} />
+                        {avatar && !savingAvatar && <Button label="Remove" variant="secondary" onClick={() => void saveAvatar(null)} />}
                       </div>
-                      <p className="text-xs text-zinc-500 dark:text-zinc-400">JPG, PNG, WebP or GIF. Up to 2 MB.</p>
                       <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Upload avatar" className="hidden" onChange={(event) => { void changeAvatar(event.target.files?.[0]); event.target.value = ""; }} />
                     </div>
-                  </div>
-                  {avatarError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{avatarError}</p>}
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <TextField id="first-name" label="First name" autoComplete="given-name" maxLength={100} value={profile.firstName} onChange={(event) => { setProfile({ ...profile, firstName: event.target.value }); setNotice(""); }} />
-                    <TextField id="last-name" label="Last name" autoComplete="family-name" maxLength={100} value={profile.lastName} onChange={(event) => { setProfile({ ...profile, lastName: event.target.value }); setNotice(""); }} />
-                  </div>
-                  <div className="flex justify-end border-t border-zinc-200 pt-4 dark:border-zinc-800">
-                    <Button label="Update profile" type="submit" disabled={!profileChanged} busy={savingProfile} />
-                  </div>
-                </form>
-              </SettingsSection>
-              <SettingsSection title="Password" description="Manage the password you use to sign in.">
-                <div className="flex items-center justify-between gap-4">
-                  <span id="change-password-label" className="text-sm font-medium">Change password</span>
-                  <button type="button" role="switch" aria-checked={changePassword} aria-labelledby="change-password-label" onClick={() => setChangePassword(!changePassword)} className={`inline-flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors ${changePassword ? "bg-zinc-900 dark:bg-white" : "bg-zinc-200 dark:bg-zinc-700"}`}>
-                    <span className={`size-5 rounded-full shadow-sm transition-transform ${changePassword ? "translate-x-4 bg-white dark:bg-zinc-900" : "bg-white dark:bg-zinc-300"}`} />
-                  </button>
+                    {avatarError && <p role="alert" className="mt-3 text-sm text-rose-600 dark:text-rose-400">{avatarError}</p>}
+                  </SettingRow>
+                  <form aria-label="Details" className="divide-y divide-zinc-200 dark:divide-zinc-800" onSubmit={(event) => { event.preventDefault(); void submitProfile(); }}>
+                    <SettingRow title="Name" hint="Shown in the account menu and on recipes you share.">
+                      <div className="grid gap-4 sm:grid-cols-2">
+                        <TextField id="first-name" label="First name" autoComplete="given-name" maxLength={100} value={names.firstName} onChange={(event) => { setNames({ ...names, firstName: event.target.value }); setNotice(""); }} />
+                        <TextField id="last-name" label="Last name" autoComplete="family-name" maxLength={100} value={names.lastName} onChange={(event) => { setNames({ ...names, lastName: event.target.value }); setNotice(""); }} />
+                      </div>
+                    </SettingRow>
+                    <SettingRow title={<label htmlFor="time-zone">Time zone</label>} hint="New scheduled tasks start in this zone. Kept in this browser for now.">
+                      <TimeZoneField value={zone} onChange={(next) => { setZone(next); setNotice(""); }} />
+                    </SettingRow>
+                    <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-50/80 px-5 py-3 sm:px-6 dark:bg-zinc-950/40">
+                      <p className="text-xs text-zinc-500 dark:text-zinc-400">
+                        {namesChanged || zoneChanged ? <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden className="size-1.5 rounded-full bg-amber-500" />Unsaved changes</span> : "Your photo saves on its own; the rest saves here."}
+                      </p>
+                      <div className="flex items-center gap-2">
+                        {(namesChanged || zoneChanged) && !savingProfile && (
+                          <Button label="Cancel" variant="secondary" onClick={() => { setNames(saved); setZone(storedZone ?? ""); }} />
+                        )}
+                        <Button label="Save changes" type="submit" disabled={!namesChanged && !zoneChanged} busy={savingProfile} />
+                      </div>
+                    </div>
+                  </form>
                 </div>
-                {changePassword && <form className="space-y-4" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
-                  <TextField id="current-password" label="Current password" type="password" autoComplete="current-password" required value={passwords.current} onChange={(event) => setPasswords({ ...passwords, current: event.target.value })} />
-                  <TextField id="new-password" label="New password" type="password" autoComplete="new-password" required hint="8 to 72 characters." value={passwords.next} onChange={(event) => setPasswords({ ...passwords, next: event.target.value })} />
-                  <TextField id="confirm-password" label="Confirm new password" type="password" autoComplete="new-password" required value={passwords.confirm} onChange={(event) => setPasswords({ ...passwords, confirm: event.target.value })} />
-                  {passwordError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{passwordError}</p>}
-                  <div className="flex justify-end border-t border-zinc-200 pt-4 dark:border-zinc-800">
+              </section>
+              <section aria-label="Password" className="card overflow-hidden">
+                <CardHeader title="Password" description="Change the password you use to sign in."
+                  action={<label className="flex items-center gap-3">
+                    <span id="change-password-label" className="text-sm font-medium max-sm:sr-only">Change password</span>
+                    <button type="button" role="switch" aria-checked={changePassword} aria-labelledby="change-password-label" onClick={() => setChangePassword(!changePassword)} className={`inline-flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors ${changePassword ? "bg-zinc-900 dark:bg-white" : "bg-zinc-200 dark:bg-zinc-700"}`}>
+                      <span className={`size-5 rounded-full shadow-sm transition-transform ${changePassword ? "translate-x-4 bg-white dark:bg-zinc-900" : "bg-white dark:bg-zinc-300"}`} />
+                    </button>
+                  </label>} />
+                {changePassword && <form className="animate-fade-in" onSubmit={(event) => { event.preventDefault(); void submitPassword(); }}>
+                  <div className="grid gap-4 px-5 py-5 sm:px-6 md:grid-cols-2">
+                    <div className="md:col-span-2 md:max-w-[calc(50%-0.5rem)]">
+                      <TextField id="current-password" label="Current password" type="password" autoComplete="current-password" required value={passwords.current} onChange={(event) => setPasswords({ ...passwords, current: event.target.value })} />
+                    </div>
+                    <TextField id="new-password" label="New password" type="password" autoComplete="new-password" required hint="8 to 72 characters." value={passwords.next} onChange={(event) => setPasswords({ ...passwords, next: event.target.value })} />
+                    <TextField id="confirm-password" label="Confirm new password" type="password" autoComplete="new-password" required value={passwords.confirm} onChange={(event) => setPasswords({ ...passwords, confirm: event.target.value })} />
+                    {passwordError && <p role="alert" className="text-sm text-rose-600 md:col-span-2 dark:text-rose-400">{passwordError}</p>}
+                  </div>
+                  <div className="flex justify-end gap-2 border-t border-zinc-200 bg-zinc-50/80 px-5 py-3 sm:px-6 dark:border-zinc-800 dark:bg-zinc-950/40">
                     <Button label="Change password" type="submit" busy={savingPassword} disabled={!passwords.current || !passwords.next || !passwords.confirm} />
                   </div>
                 </form>}
-              </SettingsSection>
+              </section>
             </div>
             {section === "domains" && <DomainsSection />}
             {section === "users" && isAdmin && <UsersSection currentUserId={account?.id} />}
@@ -175,5 +228,60 @@ function UsersSection({ currentUserId }: { readonly currentUserId: string | unde
     <UsersPanel users={users} total={total} currentUserId={currentUserId} sort={sort} onSortChange={setSort}
       loading={loading} loadingMore={loadingMore} hasMore={hasMore} onLoadMore={loadMore} removing={removing}
       error={error} onDismissError={dismissError} onCreate={create} onRemove={remove} onChangeRole={changeRole} />
+  );
+}
+
+/** A card's title row, with an optional control on its right. */
+function CardHeader({ title, description, action }: { readonly title: string; readonly description: string; readonly action?: ReactNode }) {
+  return (
+    <div className="flex items-start justify-between gap-4 border-b border-zinc-200 px-5 py-4 sm:px-6 dark:border-zinc-800">
+      <div className="min-w-0">
+        <h2 className="font-semibold tracking-tight">{title}</h2>
+        <p className="mt-0.5 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+      </div>
+      {action}
+    </div>
+  );
+}
+
+/** One setting: what it is on the left, the control on the right; stacked on a phone. */
+function SettingRow({ title, hint, children }: { readonly title: ReactNode; readonly hint: string; readonly children: ReactNode }) {
+  return (
+    <div className="grid gap-3 px-5 py-5 sm:px-6 md:grid-cols-[minmax(0,12rem)_minmax(0,1fr)] md:gap-8">
+      <div>
+        <p className="text-sm font-medium">{title}</p>
+        <p className="mt-1 text-xs text-pretty text-zinc-500 dark:text-zinc-400">{hint}</p>
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+/** The zone picker, with a clock showing the time there so the choice can be checked. */
+function TimeZoneField({ value, onChange }: { readonly value: string; readonly onChange: (zone: string) => void }) {
+  const shown = value || BROWSER_TIME_ZONE;
+  const [now, setNow] = useState(() => new Date());
+  // The preview is a clock, so it keeps time while the page is open.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(new Date()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
+  // Offsets are worked out once per visit; recomputing hundreds on every tick is wasted work.
+  const options = useMemo(() => TIME_ZONES.map((name) => ({ name, offset: zoneOffset(name) })), []);
+  const preview = new Intl.DateTimeFormat("en-GB", { timeZone: shown, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(now);
+
+  return (
+    <div className="flex flex-col gap-1.5 text-sm">
+      <Select id="time-zone" aria-describedby="time-zone-note" value={value} className="w-full" onChange={(event) => onChange(event.target.value)}>
+        <option value="">Automatic — {BROWSER_TIME_ZONE} ({zoneOffset(BROWSER_TIME_ZONE)})</option>
+        {options.map(({ name, offset }) => <option key={name} value={name}>{name.replaceAll("_", " ")} ({offset})</option>)}
+      </Select>
+      <p id="time-zone-note" className="flex items-start gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
+        <Clock aria-hidden className="mt-px size-3.5 shrink-0" />
+        <span>
+          It is now <time aria-label="Current time in the chosen zone" className="font-medium text-zinc-900 tabular-nums dark:text-zinc-100">{preview}</time> there.
+        </span>
+      </p>
+    </div>
   );
 }

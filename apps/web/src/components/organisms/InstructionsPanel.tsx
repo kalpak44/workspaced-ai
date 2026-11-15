@@ -1,9 +1,9 @@
-import { FileText, Plus } from "lucide-react";
+import { FileText, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { INSTRUCTION_NAME, useInstructions } from "../../hooks/useInstructions";
 import { INSTRUCTIONS_EXAMPLE } from "../../lib/instructionExamples";
-import { Button, Spinner, TextField } from "../atoms";
-import { SettingsSection } from "../molecules";
+import { Button, IconButton, Spinner, TextField } from "../atoms";
+import { ConfirmDeleteDialog, SettingsSection } from "../molecules";
 // Imported directly, not through the index: the editor is large and only loaded with this panel.
 import { InstructionsEditor } from "../molecules/InstructionsEditor";
 
@@ -21,7 +21,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
   const [selected, setSelected] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [newName, setNewName] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -84,16 +84,15 @@ export function InstructionsPanel({ workspaceId }: Props) {
     setBusy(false);
   }
 
-  async function deleteSelected() {
-    if (!file) return;
+  async function deleteItem(name: string) {
     setBusy(true);
-    if (await remove(file.name)) {
-      setDrafts(({ [file.name]: _, ...rest }) => rest);
-      setNotice(`Deleted ${file.name}.`);
+    if (await remove(name)) {
+      setDrafts(({ [name]: _, ...rest }) => rest);
+      setNotice(`Deleted ${name}.`);
     } else {
       setNotice("Could not delete the instructions. Please try again.");
     }
-    setConfirmDelete(false);
+    setDeleteTarget(null);
     setBusy(false);
   }
 
@@ -105,13 +104,17 @@ export function InstructionsPanel({ workspaceId }: Props) {
       <div className="flex flex-col gap-4 md:flex-row">
         <nav aria-label="Instruction files" className="flex shrink-0 flex-col gap-1 md:w-56">
           {files.map(({ name }) => (
-            <button key={name} type="button" aria-current={name === selected ? "page" : undefined}
-              onClick={() => { setSelected(name); setConfirmDelete(false); setNotice(""); }}
-              className={`flex min-w-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${name === selected ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"}`}>
-              <FileText aria-hidden className="size-4 shrink-0" />
-              <span className="truncate">{name}</span>
-              {drafts[name] !== undefined && <span className="ml-auto text-xs text-zinc-400" aria-label="Unsaved changes">•</span>}
-            </button>
+            <div key={name} className={`group relative flex min-w-0 items-center rounded-md ${name === selected ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-100/70 dark:text-zinc-400 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-current={name === selected ? "page" : undefined}
+                onClick={() => { setSelected(name); setNotice(""); }}
+                className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm font-medium">
+                <FileText aria-hidden className="size-4 shrink-0" />
+                <span className="truncate">{name}</span>
+                {drafts[name] !== undefined && <span className="ml-auto text-xs text-zinc-400" aria-label="Unsaved changes">•</span>}
+              </button>
+              <IconButton label={`Delete instructions: ${name}`} title="Delete instructions" icon={Trash2} disabled={busy} onClick={() => { setDeleteTarget(name); setNotice(""); }}
+                className="mr-1 shrink-0 p-1 opacity-100 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:text-rose-400" />
+            </div>
           ))}
           {newName === null ? (
             <button type="button" onClick={() => { setNewName(""); setNotice(""); }}
@@ -138,15 +141,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{file.name}.md · {draft.length.toLocaleString()} characters</p>
                 <div className="flex gap-2">
-                  {confirmDelete ? (
-                    <>
-                      <Button label={`Delete ${file.name}`} variant="danger" busy={busy} onClick={() => void deleteSelected()} />
-                      <Button label="Keep" variant="secondary" onClick={() => setConfirmDelete(false)} />
-                    </>
-                  ) : (
-                    <Button label="Delete" variant="secondary" disabled={busy} onClick={() => { setConfirmDelete(true); setNotice(""); }} />
-                  )}
-                  <Button label="Save" busy={busy && !confirmDelete} disabled={draft === file.content} onClick={() => void submit()} />
+                  <Button label="Save" busy={busy && deleteTarget === null} disabled={draft === file.content} onClick={() => void submit()} />
                 </div>
               </div>
             </>
@@ -156,6 +151,12 @@ export function InstructionsPanel({ workspaceId }: Props) {
           <p role="status" className="min-h-5 text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>
         </div>
       </div>
+      {deleteTarget !== null && (
+        <ConfirmDeleteDialog title="Delete instructions?" description="The agent is no longer given this file." confirmLabel="Delete instructions" busy={busy}
+          onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteItem(deleteTarget)}>
+          Delete <strong>{deleteTarget}</strong>? Chats already open keep what they were told.
+        </ConfirmDeleteDialog>
+      )}
     </SettingsSection>
   );
 }

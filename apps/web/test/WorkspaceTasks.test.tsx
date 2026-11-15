@@ -36,7 +36,7 @@ describe("workspace tasks", () => {
     api.tasks.set("starter", new Map([["pr-summary", PR_SUMMARY]]));
     const user = userEvent.setup();
     const list = await openTasks(user);
-    await waitFor(() => expect(within(list).getByRole("button", { name: /pr-summary/ })).toHaveAttribute("aria-current", "page"));
+    await waitFor(() => expect(within(list).getByRole("button", { name: /^pr-summary/ })).toHaveAttribute("aria-current", "page"));
     expect(screen.getByLabelText("Cron expression")).toHaveValue("0 9 * * 1-5");
 
     fireEvent.change(screen.getByLabelText("Cron expression"), { target: { value: "30 17 * * FRI" } });
@@ -76,7 +76,7 @@ describe("workspace tasks", () => {
     await user.type(within(form).getByLabelText("Name"), "pr-summary");
     await user.click(screen.getByRole("button", { name: "Create" }));
     const list = screen.getByRole("navigation", { name: "Tasks" });
-    expect(await within(list).findByRole("button", { name: /pr-summary/ })).toHaveAttribute("aria-current", "page");
+    expect(await within(list).findByRole("button", { name: /^pr-summary/ })).toHaveAttribute("aria-current", "page");
     expect(api.tasks.get("starter")?.get("pr-summary")?.cron).toBe("0 9 * * 1-5");
   });
 
@@ -84,12 +84,13 @@ describe("workspace tasks", () => {
     api.tasks.set("starter", new Map([["pr-summary", PR_SUMMARY]]));
     const user = userEvent.setup();
     await openTasks(user);
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
-    await user.click(screen.getByRole("button", { name: "Keep" }));
+    await user.click(await screen.findByRole("button", { name: "Delete task: pr-summary" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Delete task?" })).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.tasks.get("starter")?.has("pr-summary")).toBe(true);
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await user.click(screen.getByRole("button", { name: "Delete pr-summary" }));
+    await user.click(screen.getByRole("button", { name: "Delete task: pr-summary" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Delete task?" })).getByRole("button", { name: "Delete task" }));
     expect(await screen.findByText("No tasks yet. Add one with New task.")).toBeInTheDocument();
     expect(api.tasks.get("starter")?.size).toBe(0);
   });

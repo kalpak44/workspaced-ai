@@ -1,9 +1,10 @@
-import { CalendarClock, Plus } from "lucide-react";
+import { CalendarClock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TASK_NAME, type TaskContent, useTasks } from "../../hooks/useTasks";
+import { BROWSER_TIME_ZONE, TIME_ZONES, useTimeZone } from "../../hooks/useTimeZone";
 import { cronError, validTimeZone } from "../../lib/cron";
-import { Button, Spinner, TextField } from "../atoms";
-import { SettingsSection } from "../molecules";
+import { Button, IconButton, Spinner, TextField } from "../atoms";
+import { ConfirmDeleteDialog, SettingsSection } from "../molecules";
 // Imported directly, not through the index: the editor is large and only loaded with this panel.
 import { InstructionsEditor } from "../molecules/InstructionsEditor";
 
@@ -18,19 +19,18 @@ const PROMPT_EXAMPLE = `For example:
 
 Check the open pull requests in ~/project and summarise what each one changes.`;
 
-const BROWSER_TIME_ZONE = Intl.DateTimeFormat().resolvedOptions().timeZone;
-const TIME_ZONES = typeof Intl.supportedValuesOf === "function" ? Intl.supportedValuesOf("timeZone") : [];
 
 /**
  * The workspace's scheduled tasks: a cron expression, its time zone and the prompt to run. Edits
  * are kept per task until saved, so switching between tasks loses nothing.
  */
 export function TasksPanel({ workspaceId }: Props) {
+  const [preferredZone] = useTimeZone();
   const { tasks, stopped, error, loading, retry, save, remove } = useTasks(workspaceId);
   const [selected, setSelected] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, TaskContent>>({});
   const [newName, setNewName] = useState<string | null>(null);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
@@ -79,7 +79,7 @@ export function TasksPanel({ workspaceId }: Props) {
   async function create() {
     if (!newName || nameError) return;
     setBusy(true);
-    if (await save(newName, { cron: "0 9 * * 1-5", timeZone: BROWSER_TIME_ZONE, prompt: "" })) {
+    if (await save(newName, { cron: "0 9 * * 1-5", timeZone: preferredZone ?? BROWSER_TIME_ZONE, prompt: "" })) {
       setSelected(newName);
       setNewName(null);
       setNotice("Created. Write what the agent should do, set when, and save.");
@@ -101,16 +101,15 @@ export function TasksPanel({ workspaceId }: Props) {
     setBusy(false);
   }
 
-  async function deleteSelected() {
-    if (!task) return;
+  async function deleteItem(name: string) {
     setBusy(true);
-    if (await remove(task.name)) {
-      setDrafts(({ [task.name]: _, ...rest }) => rest);
-      setNotice(`Deleted ${task.name}.`);
+    if (await remove(name)) {
+      setDrafts(({ [name]: _, ...rest }) => rest);
+      setNotice(`Deleted ${name}.`);
     } else {
       setNotice("Could not delete the task. Please try again.");
     }
-    setConfirmDelete(false);
+    setDeleteTarget(null);
     setBusy(false);
   }
 
@@ -119,13 +118,17 @@ export function TasksPanel({ workspaceId }: Props) {
       <div className="flex flex-col gap-4 md:flex-row">
         <nav aria-label="Tasks" className="flex shrink-0 flex-col gap-1 md:w-56">
           {tasks.map(({ name }) => (
-            <button key={name} type="button" aria-current={name === selected ? "page" : undefined}
-              onClick={() => { setSelected(name); setConfirmDelete(false); setNotice(""); }}
-              className={`flex min-w-0 items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${name === selected ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"}`}>
-              <CalendarClock aria-hidden className="size-4 shrink-0" />
-              <span className="truncate">{name}</span>
-              {drafts[name] !== undefined && <span className="ml-auto text-xs text-zinc-400" aria-label="Unsaved changes">•</span>}
-            </button>
+            <div key={name} className={`group relative flex min-w-0 items-center rounded-md ${name === selected ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-100/70 dark:text-zinc-400 dark:hover:bg-zinc-800/50"}`}>
+              <button type="button" aria-current={name === selected ? "page" : undefined}
+                onClick={() => { setSelected(name); setNotice(""); }}
+                className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm font-medium">
+                <CalendarClock aria-hidden className="size-4 shrink-0" />
+                <span className="truncate">{name}</span>
+                {drafts[name] !== undefined && <span className="ml-auto text-xs text-zinc-400" aria-label="Unsaved changes">•</span>}
+              </button>
+              <IconButton label={`Delete task: ${name}`} title="Delete task" icon={Trash2} disabled={busy} onClick={() => { setDeleteTarget(name); setNotice(""); }}
+                className="mr-1 shrink-0 p-1 opacity-100 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100 dark:hover:text-rose-400" />
+            </div>
           ))}
           {newName === null ? (
             <button type="button" onClick={() => { setNewName(""); setNotice(""); }}
@@ -163,15 +166,7 @@ export function TasksPanel({ workspaceId }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{task.name}.md · {draft.prompt.length.toLocaleString()} characters</p>
                 <div className="flex gap-2">
-                  {confirmDelete ? (
-                    <>
-                      <Button label={`Delete ${task.name}`} variant="danger" busy={busy} onClick={() => void deleteSelected()} />
-                      <Button label="Keep" variant="secondary" onClick={() => setConfirmDelete(false)} />
-                    </>
-                  ) : (
-                    <Button label="Delete" variant="secondary" disabled={busy} onClick={() => { setConfirmDelete(true); setNotice(""); }} />
-                  )}
-                  <Button label="Save" busy={busy && !confirmDelete} disabled={!changed || scheduleError !== null || zoneError !== null}
+                  <Button label="Save" busy={busy && deleteTarget === null} disabled={!changed || scheduleError !== null || zoneError !== null}
                     onClick={() => void submit()} />
                 </div>
               </div>
@@ -182,6 +177,12 @@ export function TasksPanel({ workspaceId }: Props) {
           <p role="status" className="min-h-5 text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>
         </div>
       </div>
+      {deleteTarget !== null && (
+        <ConfirmDeleteDialog title="Delete task?" description="It stops running on its schedule." confirmLabel="Delete task" busy={busy}
+          onClose={() => setDeleteTarget(null)} onConfirm={() => void deleteItem(deleteTarget)}>
+          Delete <strong>{deleteTarget}</strong>? Sessions it already started are kept.
+        </ConfirmDeleteDialog>
+      )}
     </SettingsSection>
   );
 }

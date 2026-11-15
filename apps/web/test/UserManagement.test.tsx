@@ -165,7 +165,7 @@ describe("user management", () => {
     const dialog = screen.getByRole("dialog", { name: "New user" });
     await user.type(within(dialog).getByLabelText("Username"), "ada");
     await user.type(within(dialog).getByLabelText("Password"), "password1");
-    await user.click(within(dialog).getByLabelText("Admin, who also manages users"));
+    await user.click(within(dialog).getByLabelText("Admin"));
     await user.click(within(dialog).getByRole("button", { name: "Create user" }));
     const ada = (await within(list).findByText("ada")).closest("li") as HTMLElement;
     expect(within(ada).getByText("Admin")).toBeInTheDocument();

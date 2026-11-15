@@ -24,6 +24,30 @@ describe("general settings", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
+  it("saves the chosen time zone with the profile and previews the time there", async () => {
+    installFakeApi();
+    const user = userEvent.setup();
+    await renderSettings();
+    const zone = screen.getByRole("combobox", { name: "Time zone" });
+    expect(zone).toHaveValue("");
+
+    await user.selectOptions(zone, "Asia/Tokyo");
+    // Picked but not yet saved: the clock follows, the browser does not.
+    expect(localStorage.getItem("workspaced.timeZone")).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(localStorage.getItem("workspaced.timeZone")).toBe("Asia/Tokyo");
+    expect(screen.getByRole("status")).toHaveTextContent("Profile updated.");
+    // Either side of a minute boundary the clock may have ticked between render and assertion.
+    const tokyo = (at: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }).format(at);
+    const shown = screen.getByLabelText("Current time in the chosen zone").textContent;
+    expect([tokyo(Date.now()), tokyo(Date.now() - 60_000)].some((time) => shown?.includes(time))).toBe(true);
+
+    await user.selectOptions(zone, "");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(localStorage.getItem("workspaced.timeZone")).toBe("");
+    expect(zone).toHaveValue("");
+  });
+
   it("saves names to the account when updated", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
@@ -31,7 +55,7 @@ describe("general settings", () => {
     await user.type(screen.getByLabelText("First name"), "Ada");
     await user.type(screen.getByLabelText("Last name"), "Lovelace");
     expect(api.auth.account.firstName).toBe("");
-    await user.click(screen.getByRole("button", { name: "Update profile" }));
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
     expect(api.auth.account).toMatchObject({ firstName: "Ada", lastName: "Lovelace" });
     expect(localStorage.getItem("workspaced:general-settings")).toBeNull();
@@ -39,22 +63,38 @@ describe("general settings", () => {
     resetAccount();
     await renderSettings();
     expect(screen.getByLabelText("Last name")).toHaveValue("Lovelace");
-    expect(screen.getByRole("button", { name: "Update profile" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
   });
 
-  it("previews and saves an avatar in the account menu, then restores the default", async () => {
+  it("cancels an unsaved name edit", async () => {
+    installFakeApi();
+    const user = userEvent.setup();
+    await renderSettings();
+    await user.type(screen.getByLabelText("First name"), "Ada");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(screen.getByLabelText("First name")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("saves a photo as soon as it is picked, apart from an unsaved name, then removes it", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     await renderSettings();
+    await user.type(screen.getByLabelText("First name"), "Draft");
     const file = new File(["image"], "avatar.png", { type: "image/png" });
     await user.upload(screen.getByLabelText("Upload avatar"), file);
-    await waitFor(() => expect(screen.getAllByAltText("Your avatar")).toHaveLength(1));
-    await user.click(screen.getByRole("button", { name: "Update profile" }));
+    expect(await screen.findByText("Photo updated.")).toBeInTheDocument();
+    // In the page and in the account menu.
     await waitFor(() => expect(screen.getAllByAltText("Your avatar")).toHaveLength(2));
     expect(api.auth.account.avatar).toMatch(/^data:image\/png;base64,/);
+    expect(api.auth.account.firstName).toBe("");
+    expect(screen.getByLabelText("First name")).toHaveValue("Draft");
+
     await user.click(screen.getByRole("button", { name: "Remove" }));
-    await user.click(screen.getByRole("button", { name: "Update profile" }));
-    await waitFor(() => expect(screen.queryByAltText("Your avatar")).not.toBeInTheDocument());
+    expect(await screen.findByText("Photo removed.")).toBeInTheDocument();
+    expect(screen.queryByAltText("Your avatar")).not.toBeInTheDocument();
     expect(api.auth.account.avatar).toBeNull();
   });
 
@@ -66,8 +106,8 @@ describe("general settings", () => {
     expect(screen.getByRole("alert")).toHaveTextContent("smaller than 2 MB");
     await user.type(screen.getByLabelText("First name"), "Ada");
     api.auth.failProfile = true;
-    await user.click(screen.getByRole("button", { name: "Update profile" }));
-    expect(await screen.findByText(/Could not save the profile/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText(/Could not save your profile/)).toBeInTheDocument();
     expect(screen.getByLabelText("First name")).toHaveValue("Ada");
   });
 

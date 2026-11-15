@@ -32,7 +32,7 @@ describe("workspace instructions", () => {
   it("opens with the workspace's files and saves an edited one", async () => {
     const user = userEvent.setup();
     const files = await openInstructions(user);
-    await waitFor(() => expect(within(files).getByRole("button", { name: /working-style/ })).toHaveAttribute("aria-current", "page"));
+    await waitFor(() => expect(within(files).getByRole("button", { name: /^working-style/ })).toHaveAttribute("aria-current", "page"));
 
     await typeRaw(user, "- Keep answers very short.");
     expect(within(files).getByLabelText("Unsaved changes")).toBeInTheDocument();
@@ -56,7 +56,7 @@ describe("workspace instructions", () => {
     await user.type(within(form).getByLabelText("Name"), "code-review");
     await user.click(screen.getByRole("button", { name: "Create" }));
     const files = screen.getByRole("navigation", { name: "Instruction files" });
-    expect(await within(files).findByRole("button", { name: /code-review/ })).toHaveAttribute("aria-current", "page");
+    expect(await within(files).findByRole("button", { name: /^code-review/ })).toHaveAttribute("aria-current", "page");
 
     await typeRaw(user, "- Point out missing tests.");
     await user.click(screen.getByRole("button", { name: "Save" }));
@@ -68,23 +68,24 @@ describe("workspace instructions", () => {
     api.instructions.set("starter", new Map([["a-file", "A"], ["b-file", "B"]]));
     const user = userEvent.setup();
     const files = await openInstructions(user);
-    await waitFor(() => expect(within(files).getByRole("button", { name: /a-file/ })).toHaveAttribute("aria-current", "page"));
+    await waitFor(() => expect(within(files).getByRole("button", { name: /^a-file/ })).toHaveAttribute("aria-current", "page"));
     await typeRaw(user, "A changed");
-    await user.click(within(files).getByRole("button", { name: /b-file/ }));
+    await user.click(within(files).getByRole("button", { name: /^b-file/ }));
     expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("B");
-    await user.click(within(files).getByRole("button", { name: /a-file/ }));
+    await user.click(within(files).getByRole("button", { name: /^a-file/ }));
     expect(screen.getByRole("textbox", { name: "AI instructions Markdown" })).toHaveValue("A changed");
   });
 
   it("deletes a file only once confirmed", async () => {
     const user = userEvent.setup();
     await openInstructions(user);
-    await user.click(await screen.findByRole("button", { name: "Delete" }));
-    await user.click(screen.getByRole("button", { name: "Keep" }));
+    await user.click(await screen.findByRole("button", { name: "Delete instructions: working-style" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Delete instructions?" })).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.instructions.get("starter")?.has("working-style")).toBe(true);
 
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await user.click(screen.getByRole("button", { name: "Delete working-style" }));
+    await user.click(screen.getByRole("button", { name: "Delete instructions: working-style" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Delete instructions?" })).getByRole("button", { name: "Delete instructions" }));
     expect(await screen.findByText("No instructions yet. Add some with New instructions.")).toBeInTheDocument();
     expect(api.instructions.get("starter")?.size).toBe(0);
   });

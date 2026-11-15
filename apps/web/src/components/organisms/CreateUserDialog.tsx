@@ -66,9 +66,10 @@ export function CreateUserDialog({ onCreate, onClose }: Props) {
           </div>
           <TextField id="new-user-username" label="Username" autoComplete="off" spellCheck={false} maxLength={MAX_NAME} disabled={pending} error={usernameError} value={draft.username} onChange={(e) => edit("username", e.currentTarget.value)} />
           <TextField id="new-user-password" label="Password" type="password" autoComplete="new-password" hint="8 to 72 characters." disabled={pending} error={passwordError} value={draft.password} onChange={(e) => edit("password", e.currentTarget.value)} />
-          <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" disabled={pending} checked={draft.role === "ADMIN"} onChange={(e) => { const role = e.currentTarget.checked ? "ADMIN" : "USER"; setDraft((current) => ({ ...current, role })); }} />
-            Admin, who also manages users
+          <label className="flex w-fit items-center gap-2 text-sm font-medium text-zinc-700 dark:text-zinc-300">
+            <input type="checkbox" disabled={pending} checked={draft.role === "ADMIN"} className="size-4 accent-zinc-900 dark:accent-zinc-100"
+              onChange={(e) => { const role = e.currentTarget.checked ? "ADMIN" : "USER"; setDraft((current) => ({ ...current, role })); }} />
+            Admin
           </label>
         </ModalBody>
         <ModalFooter>
