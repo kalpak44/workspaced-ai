@@ -1,7 +1,8 @@
-import { Bell, Store } from "lucide-react";
+import { Store } from "lucide-react";
 import { navigate } from "../../hooks/useRoute";
 import type { Theme } from "../../hooks/useTheme";
-import { Divider, IconButton, Logo } from "../atoms";
+import { Divider, Logo } from "../atoms";
+import { NotificationMenu } from "./NotificationMenu";
 import { UserMenu } from "./UserMenu";
 
 interface Props {
@@ -30,7 +31,7 @@ export function TopBar({ theme, onThemeChange, storeOpen = false }: Props) {
           <Store aria-hidden className="size-4" />
           <span className="max-sm:sr-only">Store</span>
         </a>
-        <IconButton label="Notifications" icon={Bell} />
+        <NotificationMenu />
         <Divider />
         <UserMenu theme={theme} onThemeChange={onThemeChange} />
       </div>

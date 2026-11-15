@@ -16,3 +16,4 @@ export { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";
 export { RatingInput } from "./RatingInput";
 export { RecipeCard } from "./RecipeCard";
 export { Tabs } from "./Tabs";
+export { NOTIFICATION_ICONS, NOTIFICATION_TONES, NotificationItem } from "./NotificationItem";

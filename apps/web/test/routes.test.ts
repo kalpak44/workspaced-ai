@@ -9,6 +9,8 @@ describe("routes", () => {
     { name: "general-settings" },
     { name: "billing" },
     { name: "domains" },
+    { name: "notifications" },
+    { name: "notification", notificationId: "n1" },
     { name: "workspace", workspaceId: "w1" },
     { name: "settings", workspaceId: "w1" },
     { name: "terminal", workspaceId: "w1" },

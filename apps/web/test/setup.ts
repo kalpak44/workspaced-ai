@@ -3,10 +3,12 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, vi } from "vitest";
 import { resetCsrfToken } from "../src/api/http";
 import { resetAccount } from "../src/hooks/useAccount";
+import { resetNotifications } from "../src/hooks/useNotifications";
 
 afterEach(() => {
   cleanup();
   resetAccount();
+  resetNotifications();
   resetCsrfToken();
   localStorage.clear();
   document.documentElement.className = "";
