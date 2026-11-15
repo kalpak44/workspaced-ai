@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/http";
 import * as api from "../api/recipesApi";
 import { createSession } from "../api/sessionsApi";
+import { parseDraft } from "../lib/recipes";
 import { queuePrompt } from "./useChat";
 import { navigate } from "./useRoute";
 
@@ -149,41 +150,23 @@ export async function saveRecipe(id: string | null, input: api.RecipeInput): Pro
   }
 }
 
-/** The drafts the agent left in a workspace; pass null while no workspace is chosen. */
-export function useRecipeDrafts(workspaceId: string | null) {
-  const [drafts, setDrafts] = useState<api.RecipeDraft[] | null>(null);
-  const [stopped, setStopped] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let active = true;
-    setDrafts(null);
-    setStopped(false);
-    setError(null);
-    if (workspaceId === null) return undefined;
-    api.listDrafts(workspaceId).then(
-      (list) => active && setDrafts(list),
-      (failure: unknown) => {
-        if (!active) return;
-        if (failure instanceof ApiError && failure.status === 503) setStopped(true);
-        else setError("Could not read the drafts.");
-      },
-    );
-    return () => {
-      active = false;
-    };
-  }, [workspaceId]);
-
-  return { drafts, stopped, error, loading: workspaceId !== null && drafts === null && !stopped && error === null };
-}
-
-/** Removes a draft once it is published, so it is not offered for import again. */
-export async function removeDraft(workspaceId: string, name: string): Promise<void> {
-  try {
-    await api.deleteDraft(workspaceId, name);
-  } catch {
-    // Only tidiness is lost: the recipe is already saved, and the draft can be imported again.
-  }
+/**
+ * Publishes a recipe from a Markdown file in the recipe format: front matter, then the steps. A
+ * `recipe:` id in it updates that recipe instead. Resolves the saved recipe, or why it was refused.
+ */
+export async function importRecipe(text: string): Promise<api.Recipe | string> {
+  const { fields, body } = parseDraft(text);
+  if (!fields.title) return "The file has no title in its front matter.";
+  if (body === "") return "The file has no steps after its front matter.";
+  const category = api.RECIPE_CATEGORIES.find((value) => value === fields.category) ?? "other";
+  return saveRecipe(fields.recipe ?? null, {
+    title: fields.title,
+    summary: fields.summary ?? "",
+    category,
+    tags: fields.tags,
+    visibility: fields.visibility ?? "PRIVATE",
+    content: body,
+  });
 }
 
 /**

@@ -55,8 +55,8 @@ already answers every path with `index.html`, which is what makes a deep link lo
 The **Store** link in the top bar opens the recipe store. A recipe is Markdown the agent follows to set something up;
 public ones are everyone's to apply and rate (one to five stars, never your own), private ones only their author's.
 Apply picks a running workspace and starts a session there with the recipe as its first message. A recipe is written
-in the editor, or with an agent: **Draft with the agent** starts a session that saves a draft in the workspace's
-`~/.config/workspaced/recipes/`, and **Import a draft** opens one in the editor to review and save, removing the draft.
+in the editor, or imported: **Import a file** takes a Markdown file in the format of `docs/recipes/` (front matter, then
+the steps) and publishes it at once, updating the recipe its `recipe:` id names when it has one.
 **Edit with the agent** copies the author's recipe into that folder with its id, so importing it updates the recipe.
 
 A link to a session or workspace that no longer exists falls back to its workspace or home, replacing the history

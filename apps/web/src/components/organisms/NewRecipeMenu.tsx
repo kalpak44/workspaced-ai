@@ -1,26 +1,22 @@
-import { Bot, ChevronDown, FileInput, PencilLine, Plus } from "lucide-react";
+import { ChevronDown, FileInput, PencilLine, Plus } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
 import { useDismiss } from "../../hooks/useDismiss";
 import { Menu, MenuItem } from "../molecules";
 
 interface Props {
   readonly onWrite: () => void;
-  readonly onDraftWithAgent: () => void;
-  readonly onImport: () => void;
+  readonly onImport: (file: File) => void;
 }
 
 const ROW = "gap-3 px-3 py-2.5";
 
-/** The three ways to make a recipe: by hand, with a workspace's agent, or from its draft. */
-export function NewRecipeMenu({ onWrite, onDraftWithAgent, onImport }: Props) {
+/** The two ways to make a recipe: by hand in the editor, or from a Markdown file. */
+export function NewRecipeMenu({ onWrite, onImport }: Props) {
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
+  const picker = useRef<HTMLInputElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(root, open, close);
-  const pick = (action: () => void) => () => {
-    close();
-    action();
-  };
 
   return (
     <div ref={root} className="relative">
@@ -35,16 +31,20 @@ export function NewRecipeMenu({ onWrite, onDraftWithAgent, onImport }: Props) {
         New recipe
         <ChevronDown aria-hidden className="size-3.5 opacity-70" />
       </button>
+      {/* Outside the menu, so closing the menu does not unmount the picker before a file is chosen. */}
+      <input ref={picker} type="file" accept=".md,.markdown,text/markdown" aria-label="Recipe file to import" className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) onImport(file);
+        }} />
       {open && (
         <Menu className="mt-2 w-72 rounded-lg shadow-xl">
-          <MenuItem className={ROW} onClick={pick(onWrite)}>
+          <MenuItem className={ROW} onClick={() => { close(); onWrite(); }}>
             <MenuRow icon={PencilLine} title="Write it yourself" detail="Fill in the steps in an editor" />
           </MenuItem>
-          <MenuItem className={ROW} onClick={pick(onDraftWithAgent)}>
-            <MenuRow icon={Bot} title="Draft with the agent" detail="A workspace's agent writes it with you" />
-          </MenuItem>
-          <MenuItem className={ROW} onClick={pick(onImport)}>
-            <MenuRow icon={FileInput} title="Import a draft" detail="Publish what the agent saved" />
+          <MenuItem className={ROW} onClick={() => { close(); picker.current?.click(); }}>
+            <MenuRow icon={FileInput} title="Import a file" detail="Publish a recipe from a Markdown file" />
           </MenuItem>
         </Menu>
       )}

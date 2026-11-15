@@ -1,32 +1,16 @@
-import { Bot, Globe, Lock, SearchX, Store } from "lucide-react";
+import { Globe, Lock, SearchX, Store } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-  type RecipeCategory,
-  type RecipeDraft,
-  type RecipeScope,
-  type RecipeSort,
-  removeDraft,
-  saveRecipe,
-  startRecipeSession,
-  useRecipes,
-} from "../../hooks/useRecipes";
+import { importRecipe, type RecipeCategory, type RecipeScope, type RecipeSort, saveRecipe, useRecipes } from "../../hooks/useRecipes";
 import { navigate } from "../../hooks/useRoute";
-import type { Workspace } from "../../hooks/useWorkspaces";
-import { draftPrompt, parseDraft } from "../../lib/recipes";
 import { Button, CATEGORIES, Select, Skeleton } from "../atoms";
 import { EmptyState, FilterChips, PageHeader, Pagination, RecipeCard, SearchField, Tabs } from "../molecules";
-import { ImportDraftDialog, NewRecipeMenu, WorkspacePickerDialog } from "../organisms";
+import { NewRecipeMenu } from "../organisms";
 import { EMPTY_RECIPE, RecipeEditorDialog, type RecipeFormValues } from "../organisms/RecipeEditorDialog";
 
-interface Props {
-  readonly workspaces: readonly Workspace[];
-}
-
-/** An open editor: what it starts from, the recipe it replaces, and the draft it came from. */
+/** An open editor: what it starts from, and the recipe it replaces. */
 interface Editing {
   readonly initial: RecipeFormValues;
   readonly recipeId: string | null;
-  readonly draft?: { readonly workspaceId: string; readonly name: string };
 }
 
 const SORTS: ReadonlyArray<{ readonly value: RecipeSort; readonly label: string }> = [
@@ -54,7 +38,7 @@ function RecipePlaceholder() {
  * The recipe store: instructions people share for the agent to set something up in a workspace.
  * Public recipes are everyone's to apply and rate; private ones are the author's alone.
  */
-export function StorePage({ workspaces }: Props) {
+export function StorePage() {
   const [scope, setScope] = useState<RecipeScope>("public");
   const [query, setQuery] = useState("");
   const [q, setQ] = useState("");
@@ -63,8 +47,7 @@ export function StorePage({ workspaces }: Props) {
   const { recipes, total, loading, error, page, pageCount, pageSize, goTo, retry } = useRecipes({ scope, q, category, sort });
   const top = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
-  const [drafting, setDrafting] = useState(false);
-  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
 
   // Searching waits for a pause in typing, so each keystroke is not a request.
   useEffect(() => {
@@ -72,21 +55,11 @@ export function StorePage({ workspaces }: Props) {
     return () => clearTimeout(timer);
   }, [query]);
 
-  const importDraft = (workspaceId: string, draft: RecipeDraft) => {
-    const { fields, body } = parseDraft(draft.content);
-    setImporting(false);
-    setEditing({
-      recipeId: fields.recipe ?? null,
-      draft: { workspaceId, name: draft.name },
-      initial: {
-        title: fields.title ?? "",
-        summary: fields.summary ?? "",
-        category: fields.category ?? EMPTY_RECIPE.category,
-        tags: fields.tags,
-        visibility: fields.visibility ?? "PRIVATE",
-        content: body,
-      },
-    });
+  const importFile = async (file: File) => {
+    setImportError(null);
+    const saved = await importRecipe(await file.text());
+    if (typeof saved === "string") setImportError(`Could not import ${file.name}: ${saved}`);
+    else navigate({ name: "recipe", recipeId: saved.id });
   };
 
   const filtered = q.trim() !== "" || category !== null;
@@ -102,7 +75,7 @@ export function StorePage({ workspaces }: Props) {
       <PageHeader
         title="Recipe store"
         description="Step-by-step instructions the agent follows to set something up in your workspace. Apply one, or share your own."
-        actions={<NewRecipeMenu onWrite={() => setEditing({ initial: EMPTY_RECIPE, recipeId: null })} onDraftWithAgent={() => setDrafting(true)} onImport={() => setImporting(true)} />}
+        actions={<NewRecipeMenu onWrite={() => setEditing({ initial: EMPTY_RECIPE, recipeId: null })} onImport={(file) => void importFile(file)} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div ref={top} className="mx-auto flex w-full max-w-5xl scroll-mt-4 flex-col gap-5 px-4 pt-6 pb-10 sm:px-6">
@@ -128,6 +101,13 @@ export function StorePage({ workspaces }: Props) {
           <FilterChips label="Category" allLabel="All" value={category} onChange={(value) => setCategory(value as RecipeCategory | null)}
             options={CATEGORIES.map(({ value, label }) => ({ value, label }))} />
 
+          {importError && (
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-900/70 dark:bg-rose-950/40">
+              <p role="alert" className="min-w-0 flex-1 text-sm text-rose-700 dark:text-rose-300">{importError}</p>
+              <Button label="Dismiss" variant="secondary" onClick={() => setImportError(null)} />
+            </div>
+          )}
+
           {error && (
             <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-900/70 dark:bg-rose-950/40">
               <p role="alert" className="min-w-0 flex-1 text-sm text-rose-700 dark:text-rose-300">{error}</p>
@@ -140,7 +120,7 @@ export function StorePage({ workspaces }: Props) {
               {filtered ? (
                 <EmptyState icon={SearchX} title="Nothing matches" hint="Try another search or category." secondaryAction={{ label: "Clear filters", onClick: clearFilters }} />
               ) : scope === "public" ? (
-                <EmptyState icon={Store} title="No public recipes yet" hint="Be the first: write one, or let a workspace's agent draft it with you." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: { ...EMPTY_RECIPE, visibility: "PUBLIC" }, recipeId: null }) }} />
+                <EmptyState icon={Store} title="No public recipes yet" hint="Be the first: write one, or import it from a Markdown file." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: { ...EMPTY_RECIPE, visibility: "PUBLIC" }, recipeId: null }) }} />
               ) : (
                 <EmptyState icon={Lock} title="No private recipes" hint="Private recipes are yours alone: keep your own setups here and apply them to any workspace." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: EMPTY_RECIPE, recipeId: null }) }} />
               )}
@@ -175,32 +155,18 @@ export function StorePage({ workspaces }: Props) {
       {editing && (
         <RecipeEditorDialog
           title={editing.recipeId ? "Update recipe" : "New recipe"}
-          description={editing.draft ? "Review the agent's draft before it is saved. Saving removes the draft from the workspace." : "Recipes are instructions the agent follows step by step."}
+          description="Recipes are instructions the agent follows step by step."
           initial={editing.initial}
           onClose={() => setEditing(null)}
           onSave={async (input) => {
             const saved = await saveRecipe(editing.recipeId, input);
             if (typeof saved === "string") return saved;
-            if (editing.draft) void removeDraft(editing.draft.workspaceId, editing.draft.name);
             setEditing(null);
             navigate({ name: "recipe", recipeId: saved.id });
             return true;
           }}
         />
       )}
-      {drafting && (
-        <WorkspacePickerDialog
-          title="Draft with the agent"
-          description="The agent writes the recipe with you in a new session, and saves it as a draft to import here."
-          workspaces={workspaces}
-          actionLabel="Start session"
-          actionIcon={Bot}
-          note={{ label: "What should it set up?", placeholder: "WordPress with MariaDB, on a public address, with daily backups", required: true }}
-          onClose={() => setDrafting(false)}
-          onConfirm={(workspaceId, idea) => startRecipeSession(workspaceId, draftPrompt(idea))}
-        />
-      )}
-      {importing && <ImportDraftDialog workspaces={workspaces} onPick={importDraft} onClose={() => setImporting(false)} />}
     </>
   );
 }

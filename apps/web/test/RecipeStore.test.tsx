@@ -148,22 +148,28 @@ describe("recipe store", () => {
     await waitFor(() => expect(api.prompts.at(-1)?.text).toContain("Use PostgreSQL"));
   });
 
-  it("imports the agent's draft, publishes it and removes the draft", async () => {
-    api.recipes.drafts.set("starter", new Map([["kuma", "---\ntitle: Uptime Kuma\ncategory: devops\ntags: [monitoring]\nvisibility: public\n---\n\n1. Install it."]]));
+  it("publishes a recipe straight from an imported Markdown file", async () => {
     const user = userEvent.setup();
     open("/store");
     await user.click(await screen.findByRole("button", { name: /New recipe/ }));
-    await user.click(screen.getByRole("menuitem", { name: /Import a draft/ }));
-    await user.click(await screen.findByRole("button", { name: /Uptime Kuma/ }));
-
-    const form = screen.getByRole("form", { name: "New recipe" });
-    expect(within(form).getByLabelText("Title")).toHaveValue("Uptime Kuma");
-    expect(within(form).getByLabelText("Category")).toHaveValue("devops");
-    await user.click(within(form).getByRole("button", { name: "Publish" }));
+    expect(screen.queryByRole("menuitem", { name: /Draft with the agent/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("menuitem", { name: /Import a file/ }));
+    const file = new File(["---\ntitle: Uptime Kuma\ncategory: devops\ntags: [monitoring]\nvisibility: public\nrecipe: # keep this id\n---\n\n1. Install it."], "kuma.md", { type: "text/markdown" });
+    await user.upload(screen.getByLabelText("Recipe file to import"), file);
 
     expect(await screen.findByRole("heading", { name: "Uptime Kuma", level: 2 })).toBeInTheDocument();
-    expect(api.recipes.rows[0]).toMatchObject({ visibility: "PUBLIC", category: "devops", content: "1. Install it." });
-    await waitFor(() => expect(api.recipes.drafts.get("starter")?.size).toBe(0));
+    expect(api.recipes.rows[0]).toMatchObject({ title: "Uptime Kuma", visibility: "PUBLIC", category: "devops", tags: ["monitoring"], content: "1. Install it." });
+  });
+
+  it("refuses a file with no title and says why", async () => {
+    const user = userEvent.setup();
+    open("/store");
+    await user.click(await screen.findByRole("button", { name: /New recipe/ }));
+    await user.click(screen.getByRole("menuitem", { name: /Import a file/ }));
+    await user.upload(screen.getByLabelText("Recipe file to import"), new File(["1. Install it."], "steps.md", { type: "text/markdown" }));
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not import steps.md: The file has no title");
+    expect(api.recipes.rows).toHaveLength(0);
   });
 
   it("shows a private recipe of someone else as not found", async () => {

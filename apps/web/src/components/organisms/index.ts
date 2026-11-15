@@ -10,7 +10,6 @@ export { SessionList } from "./SessionList";
 export { TopBar } from "./TopBar";
 export { UserMenu } from "./UserMenu";
 export { UsersPanel } from "./UsersPanel";
-export { ImportDraftDialog } from "./ImportDraftDialog";
 export { NewRecipeMenu } from "./NewRecipeMenu";
 export { EMPTY_RECIPE, RecipeEditorDialog, type RecipeFormValues } from "./RecipeEditorDialog";
 export { WorkspacePickerDialog } from "./WorkspacePickerDialog";

@@ -83,7 +83,7 @@ export function WorkspacesPage() {
     page = <Suspense fallback={<EmptyState busy title="Loading notification…" hint="Fetching it" />}><NotificationPage key={route.notificationId} notificationId={route.notificationId} /></Suspense>;
   } else if (route.name === "store") {
     tabTitle = "Recipe store";
-    page = <Suspense fallback={<EmptyState busy title="Loading the store…" hint="Fetching recipes" />}><StorePage workspaces={workspaces} /></Suspense>;
+    page = <Suspense fallback={<EmptyState busy title="Loading the store…" hint="Fetching recipes" />}><StorePage /></Suspense>;
   } else if (route.name === "recipe") {
     tabTitle = `${pageTitle ?? "Recipe"} · Recipe store`;
     page = (

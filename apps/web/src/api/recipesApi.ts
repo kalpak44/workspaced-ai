@@ -135,14 +135,6 @@ export async function unrateRecipe(id: string): Promise<void> {
   await send(`${recipeUrl(id)}/rating`, { method: "DELETE" });
 }
 
-export async function listDrafts(workspaceId: string): Promise<RecipeDraft[]> {
-  return (await send(`${workspaceUrl(workspaceId)}/recipe-drafts`)).json();
-}
-
 export async function saveDraft(workspaceId: string, name: string, content: string): Promise<RecipeDraft> {
   return (await send(draftUrl(workspaceId, name), { method: "PUT", body: JSON.stringify({ content }) })).json();
-}
-
-export async function deleteDraft(workspaceId: string, name: string): Promise<void> {
-  await send(draftUrl(workspaceId, name), { method: "DELETE" });
 }

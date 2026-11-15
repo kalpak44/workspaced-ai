@@ -34,7 +34,7 @@ function unquote(value: string): string {
 // A trailing "# comment" ends the value, unless the value is quoted: then the quotes end it.
 function withoutComment(value: string): string {
   const quoted = /^("(?:[^"\\]|\\.)*"|'[^']*')/.exec(value);
-  return quoted ? quoted[1] : value.replace(/\s+#.*$/, "").trim();
+  return quoted ? quoted[1] : value.replace(/(?:^|\s+)#.*$/, "").trim();
 }
 
 /** "a, b" and "[a, b]" both mean two tags; tags are lowercase words joined by hyphens. */
@@ -113,15 +113,6 @@ export function applyPrompt(title: string, author: string, content: string): str
     "---",
     "",
     content.trim(),
-  ].join("\n");
-}
-
-/** Starts a session in which the agent writes a new recipe draft with the user. */
-export function draftPrompt(idea: string): string {
-  return [
-    `Write a recipe for the store with me: ${idea.trim()}`,
-    "",
-    `Save it as a draft in ${DRAFTS_DIRECTORY}/<a short name>.md, in the recipe format from your guide. Ask me whatever you need to make it complete, and tell me when it is ready to import from the store.`,
   ].join("\n");
 }
 
