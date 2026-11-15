@@ -1,31 +1,57 @@
-/** What the account has to spend, and every charge or top-up that changed it. */
+import { send } from "./http";
+
+/** What the account has to spend, and every top-up that paid into it. */
 export interface Billing {
-  /** In cents; workspaces and model usage draw it down. */
+  /** In cents, rounded down. */
   readonly balanceCents: number;
-  readonly invoices: readonly Invoice[];
+  readonly currency: string;
+  /** Newest first; checkouts abandoned at Stripe are left out. */
+  readonly topUps: readonly TopUp[];
 }
 
-export interface Invoice {
+export interface TopUp {
   readonly id: string;
-  /** What the customer quotes to support, e.g. "INV-2026-0042". */
-  readonly number: string;
-  readonly issuedAt: string;
-  readonly description: string;
   readonly amountCents: number;
-  readonly status: "PAID" | "PENDING" | "FAILED";
+  readonly status: "PENDING" | "PAID" | "FAILED" | "EXPIRED";
+  readonly createdAt: string;
+  readonly paidAt: string | null;
+  /** The number Stripe gave the invoice; null until it is issued. */
+  readonly invoiceNumber: string | null;
+  readonly invoiceAvailable: boolean;
 }
 
-// The API has no billing routes yet; this sample lets the page be built and reviewed first.
-// Swap it for a send() to the real route once one exists, and the hook and page stay as they are.
-const SAMPLE: Billing = {
-  balanceCents: 1240,
-  invoices: [
-    { id: "inv3", number: "INV-2026-0003", issuedAt: "2026-11-01T09:12:00Z", description: "Balance top-up", amountCents: 2500, status: "PAID" },
-    { id: "inv2", number: "INV-2026-0002", issuedAt: "2026-10-14T17:40:00Z", description: "Balance top-up", amountCents: 1000, status: "FAILED" },
-    { id: "inv1", number: "INV-2026-0001", issuedAt: "2026-10-02T08:05:00Z", description: "Balance top-up", amountCents: 1000, status: "PAID" },
-  ],
-};
+export interface Checkout {
+  readonly id: string;
+  /** Stripe's payment page, which sends the browser back to /billing?top_up=<id>&outcome=… */
+  readonly checkoutUrl: string;
+}
+
+export const BILLING_URL = "/api/v1/billing";
 
 export async function fetchBilling(): Promise<Billing> {
-  return SAMPLE;
+  return (await send(BILLING_URL)).json();
 }
+
+export async function startTopUp(amountCents: number): Promise<Checkout> {
+  return (await send(`${BILLING_URL}/top-ups`, { method: "POST", body: JSON.stringify({ amountCents }) })).json();
+}
+
+/** Has the API read the payment back from Stripe, so a return from checkout sees it credited. */
+export async function refreshTopUp(id: string): Promise<TopUp> {
+  return (await send(`${BILLING_URL}/top-ups/${encodeURIComponent(id)}/refresh`, { method: "POST" })).json();
+}
+
+/** Redirects to Stripe's PDF, so a plain link downloads it with the sign-in cookie. */
+export function invoiceUrl(id: string): string {
+  return `${BILLING_URL}/top-ups/${encodeURIComponent(id)}/invoice`;
+}
+
+/** Leaves the app for Stripe; an object so tests can stub it, since jsdom cannot navigate. */
+export const browser = {
+  open(url: string): void {
+    globalThis.location.assign(url);
+  },
+  openTab(url: string): void {
+    globalThis.open(url, "_blank", "noopener");
+  },
+};

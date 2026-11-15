@@ -61,6 +61,13 @@ workspaced:
   # is locally, there is no web server to turn on and the setting answers 501.
   web-server:
     domain: ${WORKSPACED_WEB_SERVER_DOMAIN:}
+  # Top-ups through Stripe Checkout. Left unset, as it is locally, the balance and its history
+  # still answer and starting a top-up answers 503.
+  billing:
+    return-url: ${WORKSPACED_BILLING_RETURN_URL:http://localhost:5173/billing}
+    stripe:
+      secret-key: ${WORKSPACED_STRIPE_SECRET_KEY:}
+      webhook-secret: ${WORKSPACED_STRIPE_WEBHOOK_SECRET:}
 
 management:
   endpoints:

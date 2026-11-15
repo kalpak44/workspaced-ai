@@ -40,6 +40,8 @@ class OpenApiTest {
             "\"operationId\":\"listUsers\"",
             "\"operationId\":\"createUser\"",
             "\"operationId\":\"deleteUser\"",
+            "\"operationId\":\"getBilling\"",
+            "\"operationId\":\"startTopUp\"",
             "application/problem+json");
   }
 

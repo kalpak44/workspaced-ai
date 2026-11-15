@@ -67,7 +67,7 @@ describe("domains", () => {
     await renderDomains();
     const user = await searchFor("pavel-labs");
     await user.click(await screen.findByRole("button", { name: "Buy pavel-labs.com" }));
-    expect(within(screen.getByRole("dialog")).getByText("$12.99 / year")).toBeInTheDocument();
+    expect(within(screen.getByRole("dialog")).getByText("€12.99 / year")).toBeInTheDocument();
     expect(await screen.findByRole("alert")).toHaveTextContent("does not cover");
     await user.click(screen.getByRole("button", { name: "Add funds" }));
     expect(location.pathname).toBe("/billing");
@@ -77,7 +77,7 @@ describe("domains", () => {
     await renderDomains();
     const user = await searchFor("studio");
     await user.click(await screen.findByRole("button", { name: "Buy studio.online" }));
-    await user.click(await screen.findByRole("button", { name: "Buy for $3.99" }));
+    await user.click(await screen.findByRole("button", { name: "Buy for €3.99" }));
     expect(await screen.findByText(/studio\.online was not registered/)).toBeInTheDocument();
     expect(screen.getByRole("list", { name: "Your domains" })).not.toHaveTextContent("studio.online");
   });

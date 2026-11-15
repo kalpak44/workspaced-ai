@@ -106,6 +106,8 @@ public class SecurityConfiguration {
     "/swagger-ui.html",
     // A download link carries its own signed token, and is opened outside the app.
     "/files/*",
+    // Stripe signs each event; that signature is checked instead of a sign-in.
+    "/billing/stripe/webhook",
     "/error"
   };
 
@@ -116,7 +118,11 @@ public class SecurityConfiguration {
       throws Exception {
     var publicPaths = publicPaths();
     var adminOnly = matcher(ADMIN_ONLY);
-    http.csrf(csrf -> csrf.csrfTokenRepository(csrfCookie()))
+    http.csrf(
+            csrf ->
+                csrf.csrfTokenRepository(csrfCookie())
+                    // Stripe sends no cookie, so there is no ambient credential to forge.
+                    .ignoringRequestMatchers("/billing/stripe/webhook"))
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)

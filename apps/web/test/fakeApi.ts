@@ -1,6 +1,7 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
+import type { TopUp } from "../src/api/billingApi";
 import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
@@ -168,6 +169,46 @@ export function installFakeApi(
     nextId: 1,
     listed: [] as string[],
   };
+
+  // The account's balance and top-ups; `nextStatus` is what Stripe reports on the next refresh.
+  const billing = {
+    balanceCents: 1240,
+    topUps: [
+      { id: "t2", amountCents: 1000, status: "FAILED", createdAt: "2026-10-14T17:40:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false },
+      { id: "t1", amountCents: 2500, status: "PAID", createdAt: "2026-10-02T08:05:00Z", paidAt: "2026-10-02T08:06:00Z", invoiceNumber: "WSAI-0001", invoiceAvailable: true },
+    ] as TopUp[],
+    started: [] as number[],
+    refreshed: [] as string[],
+    nextStatus: "PAID" as TopUp["status"],
+    failStart: 0,
+  };
+
+  function billingResponse(url: string, init?: RequestInit): Response | null {
+    if (url.endsWith("/api/v1/billing")) {
+      return json({ balanceCents: billing.balanceCents, currency: "eur", topUps: billing.topUps });
+    }
+    if (url.endsWith("/api/v1/billing/top-ups") && init?.method === "POST") {
+      if (billing.failStart) return json({}, billing.failStart);
+      const amountCents = JSON.parse(String(init.body)).amountCents as number;
+      billing.started.push(amountCents);
+      const id = `t${billing.topUps.length + 1}`;
+      billing.topUps.unshift({ id, amountCents, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false });
+      return json({ id, checkoutUrl: `https://checkout.stripe.test/${id}` }, 201);
+    }
+    const refresh = /\/api\/v1\/billing\/top-ups\/([^/]+)\/refresh$/.exec(url);
+    if (refresh) {
+      billing.refreshed.push(refresh[1]);
+      const index = billing.topUps.findIndex((t) => t.id === refresh[1]);
+      if (index < 0) return json({}, 404);
+      const before = billing.topUps[index];
+      if (before.status === "PENDING" && billing.nextStatus === "PAID") {
+        billing.balanceCents += before.amountCents;
+        billing.topUps[index] = { ...before, status: "PAID", paidAt: "2026-11-15T10:01:00Z", invoiceNumber: "WSAI-0002", invoiceAvailable: true };
+      }
+      return json(billing.topUps[index]);
+    }
+    return null;
+  }
 
   function recipesResponse(url: string, init?: RequestInit): Response | null {
     const drafts = /\/api\/v1\/workspaces\/([^/]+)\/recipe-drafts(?:\/([^/]+))?$/.exec(url);
@@ -351,6 +392,10 @@ export function installFakeApi(
     const recipesAnswer = recipesResponse(url, init);
     if (recipesAnswer) {
       return recipesAnswer;
+    }
+    const billingAnswer = billingResponse(url, init);
+    if (billingAnswer) {
+      return billingAnswer;
     }
     if (state.fail) {
       return new Response(null, { status: state.fail });
@@ -699,5 +744,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { recipes, webServers, webServerAgents, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { billing, recipes, webServers, webServerAgents, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

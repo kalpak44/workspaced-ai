@@ -21,11 +21,12 @@ export function formatPrice(input: number | null, output: number | null): string
   return `${dollars(input)} / ${dollars(output)}`;
 }
 
-const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+// Balances are billed in euros, the currency payments settle in.
+const EUR = new Intl.NumberFormat("en-US", { style: "currency", currency: "EUR" });
 
-/** "$12.40": an amount kept in cents, so sums never pick up floating-point error. */
+/** "€12.40": an amount kept in cents, so sums never pick up floating-point error. */
 export function formatMoney(cents: number): string {
-  return USD.format(cents / 100);
+  return EUR.format(cents / 100);
 }
 
 /** "0 B/s", "20 KB/s", "1.2 MB/s": a rate in bytes per second, in the largest whole unit. */

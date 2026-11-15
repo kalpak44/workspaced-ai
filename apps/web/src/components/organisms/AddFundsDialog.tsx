@@ -10,12 +10,14 @@ const MAX_CENTS = 100000;
 
 interface Props {
   readonly balanceCents: number;
+  /** Set while the payment page is being opened, so a second click cannot start another. */
+  readonly busy?: boolean;
   readonly onConfirm: (amountCents: number) => void;
   readonly onClose: () => void;
 }
 
 /** Picks how much to add to the balance before handing over to payment. */
-export function AddFundsDialog({ balanceCents, onConfirm, onClose }: Props) {
+export function AddFundsDialog({ balanceCents, busy = false, onConfirm, onClose }: Props) {
   const [preset, setPreset] = useState<number | null>(2500);
   const [custom, setCustom] = useState("");
   const amount = preset ?? Math.round(Number(custom) * 100);
@@ -26,7 +28,7 @@ export function AddFundsDialog({ balanceCents, onConfirm, onClose }: Props) {
 
   return (
     <Modal title="Add funds" description={`Your balance is ${formatMoney(balanceCents)}.`} onClose={onClose}>
-      <form onSubmit={(event) => { event.preventDefault(); if (valid) onConfirm(amount); }} className="flex min-h-0 flex-col">
+      <form onSubmit={(event) => { event.preventDefault(); if (valid && !busy) onConfirm(amount); }} className="flex min-h-0 flex-col">
         <ModalBody>
           <div role="radiogroup" aria-label="Amount" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {PRESETS.map((cents) => (
@@ -37,7 +39,7 @@ export function AddFundsDialog({ balanceCents, onConfirm, onClose }: Props) {
               </button>
             ))}
           </div>
-          <TextField id="custom-amount" label="Or another amount (USD)" type="number" inputMode="decimal"
+          <TextField id="custom-amount" label="Or another amount (EUR)" type="number" inputMode="decimal"
             min={MIN_CENTS / 100} max={MAX_CENTS / 100} step="0.01" placeholder="e.g. 15"
             value={custom} error={error} onChange={(event) => { setCustom(event.target.value); setPreset(null); }} />
           <div className="flex justify-between border-t border-zinc-200 pt-4 text-sm dark:border-zinc-800">
@@ -47,7 +49,7 @@ export function AddFundsDialog({ balanceCents, onConfirm, onClose }: Props) {
         </ModalBody>
         <ModalFooter>
           <Button label="Cancel" variant="secondary" onClick={onClose} />
-          <Button label={valid ? `Pay ${formatMoney(amount)}` : "Pay"} icon={CreditCard} type="submit" disabled={!valid} />
+          <Button label={valid ? `Pay ${formatMoney(amount)}` : "Pay"} icon={CreditCard} type="submit" disabled={!valid} busy={busy} />
         </ModalFooter>
       </form>
     </Modal>
