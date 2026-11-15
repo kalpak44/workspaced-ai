@@ -31,12 +31,15 @@ export function useDnsRecords(domain: string) {
 
   useEffect(() => {
     let active = true;
-    listRecords(domain).then((list) => {
-      if (active) {
-        setRecords(list);
-        setLoading(false);
-      }
-    });
+    listRecords(domain).then(
+      (list) => {
+        if (active) {
+          setRecords(list);
+          setLoading(false);
+        }
+      },
+      () => active && setLoading(false),
+    );
     return () => {
       active = false;
     };
