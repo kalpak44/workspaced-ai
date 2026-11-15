@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -153,11 +154,11 @@ class HttpVmManagerTest {
 
   @Test
   void watchesNothingWhenUnconfigured() {
-    client(null)
-        .watch(
-            _ -> {
-              throw new AssertionError("heard a VM with no VM manager");
-            });
+    var heard = new ArrayList<ProvisionedVm>();
+
+    client(null).watch(heard::add);
+
+    assertThat(heard).isEmpty();
   }
 
   @Test

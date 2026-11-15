@@ -25,6 +25,14 @@ ARG PIP_SHA256=931c303696af6fa3417112103b1cad26890e5a07eccb5b99783700e33f2b8aad
 # fixed modules, so pin its static binary and verify it rather than the package.
 ARG YQ_VERSION=4.54.2
 ARG YQ_SHA256=44c7759059b4910827a0059a2757b22001e59360cdecdb2ef8dedc4b6c7e9f32
+# Alpine 3.24's docker-cli-buildx 0.38.1 and docker-cli-compose 5.6.1 embed
+# golang.org/x/net and github.com/klauspost/compress versions with published Critical
+# and High findings. Upstream 0.39.0 and 5.7.1 carry the fixed modules, so pin their
+# static plugins and verify them rather than waiting for a rebuilt package.
+ARG BUILDX_VERSION=0.39.0
+ARG BUILDX_SHA256=5fb31a097304fbf6dd4038649a0decf32c2b9510e4047acd7d68b9d700c46194
+ARG COMPOSE_VERSION=5.7.1
+ARG COMPOSE_SHA256=af426722a8af5de812fcee30cc1c39f0639f5f723cbadefb25e5d4db054064cf
 
 FROM alpine:3.24 AS fetch
 ARG OPENCODE_VERSION
@@ -50,11 +58,17 @@ ARG PIP_VERSION
 ARG PIP_SHA256
 ARG YQ_VERSION
 ARG YQ_SHA256
+ARG BUILDX_VERSION
+ARG BUILDX_SHA256
+ARG COMPOSE_VERSION
+ARG COMPOSE_SHA256
 LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai" \
       io.workspaced.opencode.version="${OPENCODE_VERSION}" \
       io.workspaced.npm.version="${NPM_VERSION}" \
       io.workspaced.pip.version="${PIP_VERSION}" \
-      io.workspaced.yq.version="${YQ_VERSION}"
+      io.workspaced.yq.version="${YQ_VERSION}" \
+      io.workspaced.buildx.version="${BUILDX_VERSION}" \
+      io.workspaced.compose.version="${COMPOSE_VERSION}"
 
 # The agent's own tools: git and ripgrep, which opencode would otherwise download at run
 # time into a home that does not survive the pod, curl, and a shell for its bash tool.
@@ -70,14 +84,24 @@ LABEL org.opencontainers.image.source="https://github.com/kalpak44/workspaced-ai
 # tzdata lets every tool convert between the UTC clock and the user's time zone; without it
 # a zone name silently reads as UTC, and Python cannot load one at all.
 # The Docker CLI, buildx and compose talk to the VM's rootless Docker through DOCKER_HOST, so
-# the agent builds and runs containers without ever reaching the system daemon.
+# the agent builds and runs containers without ever reaching the system daemon. The plugins
+# are installed from their upstream releases below, because Alpine 3.24 ships older builds.
 RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libstdc++ nodejs-current ripgrep tini \
       file jq make nano nginx openssh-client py3-pip python3 sqlite tree tzdata uv zip \
-      docker-cli docker-cli-buildx docker-cli-compose \
+      docker-cli \
  && curl -fsSL -o /tmp/yq \
       "https://github.com/mikefarah/yq/releases/download/v${YQ_VERSION}/yq_linux_amd64" \
  && echo "${YQ_SHA256}  /tmp/yq" | sha256sum -c - \
  && install -m 0755 /tmp/yq /usr/local/bin/yq \
+ && curl -fsSL -o /tmp/docker-buildx \
+      "https://github.com/docker/buildx/releases/download/v${BUILDX_VERSION}/buildx-v${BUILDX_VERSION}.linux-amd64" \
+ && echo "${BUILDX_SHA256}  /tmp/docker-buildx" | sha256sum -c - \
+ && mkdir -p /usr/libexec/docker/cli-plugins \
+ && install -m 0755 /tmp/docker-buildx /usr/libexec/docker/cli-plugins/docker-buildx \
+ && curl -fsSL -o /tmp/docker-compose \
+      "https://github.com/docker/compose/releases/download/v${COMPOSE_VERSION}/docker-compose-linux-x86_64" \
+ && echo "${COMPOSE_SHA256}  /tmp/docker-compose" | sha256sum -c - \
+ && install -m 0755 /tmp/docker-compose /usr/libexec/docker/cli-plugins/docker-compose \
  && curl -fsSL -o /tmp/npm.tgz \
       "https://registry.npmjs.org/npm/-/npm-${NPM_VERSION}.tgz" \
  && echo "${NPM_SHA512}  /tmp/npm.tgz" | sha512sum -c - \
@@ -90,7 +114,7 @@ RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libst
  && echo "${PIP_SHA256}  /tmp/pip-${PIP_VERSION}-py3-none-any.whl" | sha256sum -c - \
  && python3 -m pip install --no-cache-dir --no-deps --break-system-packages --root-user-action=ignore --upgrade "/tmp/pip-${PIP_VERSION}-py3-none-any.whl" \
  && python3 -m pip --version | grep -q "pip ${PIP_VERSION}" \
- && rm -r /tmp/npm.tgz "/tmp/pip-${PIP_VERSION}-py3-none-any.whl" /tmp/yq /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
+ && rm -r /tmp/npm.tgz "/tmp/pip-${PIP_VERSION}-py3-none-any.whl" /tmp/yq /tmp/docker-buildx /tmp/docker-compose /usr/local/lib/node_modules/npm/docs /usr/local/lib/node_modules/npm/man \
  && adduser -D -u 1000 -h /home/workspace workspace \
  && rm /var/log/apk.log
 
