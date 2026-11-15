@@ -23,6 +23,7 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.core.convert.ConversionException;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.converter.Converter;
@@ -36,6 +37,7 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
+import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
@@ -106,23 +108,33 @@ public class SecurityConfiguration {
     "/swagger-ui.html",
     // A download link carries its own signed token, and is opened outside the app.
     "/files/*",
-    // Stripe signs each event; that signature is checked instead of a sign-in.
-    "/billing/stripe/webhook",
     "/error"
   };
 
   private static final String[] ADMIN_ONLY = {"/users", "/users/**"};
+
+  /**
+   * Stripe's webhook is not a browser route: it carries no cookie, and the signature on each event
+   * is its credential. Keeping it in a stateless chain of its own leaves the browser chain below
+   * with no CSRF exemption at all.
+   */
+  @Bean
+  @Order(1)
+  SecurityFilterChain stripeWebhook(HttpSecurity http) throws Exception {
+    http.securityMatcher("/billing/stripe/webhook")
+        .csrf(AbstractHttpConfigurer::disable)
+        .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
+        .authorizeHttpRequests(requests -> requests.anyRequest().permitAll())
+        .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));
+    return http.build();
+  }
 
   @Bean
   SecurityFilterChain api(HttpSecurity http, WorkspaceRepository workspaces, UserRepository users)
       throws Exception {
     var publicPaths = publicPaths();
     var adminOnly = matcher(ADMIN_ONLY);
-    http.csrf(
-            csrf ->
-                csrf.csrfTokenRepository(csrfCookie())
-                    // Stripe sends no cookie, so there is no ambient credential to forge.
-                    .ignoringRequestMatchers("/billing/stripe/webhook"))
+    http.csrf(csrf -> csrf.csrfTokenRepository(csrfCookie()))
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
