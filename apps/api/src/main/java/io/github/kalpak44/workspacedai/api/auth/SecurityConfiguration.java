@@ -23,7 +23,6 @@ import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.core.annotation.Order;
 import org.springframework.core.convert.ConversionException;
 import org.springframework.core.convert.ConversionService;
 import org.springframework.core.convert.converter.Converter;
@@ -37,8 +36,8 @@ import org.springframework.security.authentication.ProviderManager;
 import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
+import org.springframework.security.config.annotation.web.configuration.WebSecurityCustomizer;
 import org.springframework.security.config.annotation.web.configurers.AbstractHttpConfigurer;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
@@ -115,18 +114,12 @@ public class SecurityConfiguration {
 
   /**
    * Stripe's webhook is not a browser route: it carries no cookie, and the signature on each event
-   * is its credential. Keeping it in a stateless chain of its own leaves the browser chain below
-   * with no CSRF exemption at all.
+   * is its credential. It runs outside the security chain so the browser routes keep CSRF
+   * protection with no exception; the webhook verifies the signature before acting.
    */
   @Bean
-  @Order(1)
-  SecurityFilterChain stripeWebhook(HttpSecurity http) throws Exception {
-    http.securityMatcher("/billing/stripe/webhook")
-        .csrf(AbstractHttpConfigurer::disable)
-        .sessionManagement(s -> s.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
-        .authorizeHttpRequests(requests -> requests.anyRequest().permitAll())
-        .oauth2ResourceServer(server -> server.jwt(Customizer.withDefaults()));
-    return http.build();
+  WebSecurityCustomizer stripeWebhook() {
+    return web -> web.ignoring().requestMatchers("/billing/stripe/webhook");
   }
 
   @Bean

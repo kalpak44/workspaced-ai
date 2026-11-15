@@ -68,6 +68,18 @@ class AuthTest {
   }
 
   @Test
+  void refusesSigningInWithoutTheCsrfToken() throws Exception {
+    var request =
+        HttpRequest.newBuilder(url("/auth/login"))
+            .header("Content-Type", "application/json")
+            .POST(BodyPublishers.ofString("{\"username\":\"admin\",\"password\":\"admin\"}"))
+            .build();
+    var refused = http.send(request, BodyHandlers.ofString());
+    assertThat(refused.statusCode()).isEqualTo(403);
+    assertThat(JSON.readTree(refused.body()).get("detail").asString()).contains("CSRF");
+  }
+
+  @Test
   void refusesAWrongPasswordAndAnUnknownUserAlike() throws Exception {
     var wrong = send("POST", "/auth/login", null, "{\"username\":\"admin\",\"password\":\"nope\"}");
     var unknown = send("POST", "/auth/login", null, "{\"username\":\"nobody\",\"password\":\"x\"}");
