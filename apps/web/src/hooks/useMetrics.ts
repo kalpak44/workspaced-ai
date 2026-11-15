@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { fetchMetrics, type Metrics, type MetricsRange } from "../api/metricsApi";
 
+export { RANGE_SPAN_MS } from "../api/metricsApi";
 export type { Memory, Metric, MetricId, Metrics, MetricSeries, MetricsRange, MetricUnit } from "../api/metricsApi";
 
 /** How often Live asks again; the server reuses Hetzner's answer for as long, so asking sooner adds nothing. */

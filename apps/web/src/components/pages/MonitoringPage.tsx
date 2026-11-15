@@ -1,6 +1,6 @@
 import { Activity, Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { useState } from "react";
-import { type Memory, type Metric, type MetricId, type MetricsRange, useMetrics } from "../../hooks/useMetrics";
+import { type Memory, type Metric, type MetricId, type MetricsRange, RANGE_SPAN_MS, useMetrics } from "../../hooks/useMetrics";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { Select } from "../atoms";
 import { EmptyState } from "../molecules";
@@ -11,12 +11,11 @@ const RANGE_OPTIONS: ReadonlyArray<readonly [MetricsRange, string]> = [
   ["live", "Live"], ["1h", "Last hour"], ["24h", "Last 24 hours"], ["7d", "Last 7 days"], ["30d", "Last 30 days"],
 ];
 
-const CLOCK = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 const MINUTES = new Intl.DateTimeFormat("en-GB", { hour: "2-digit", minute: "2-digit" });
 const DAY = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric" });
 
 const TIME_FORMAT: Record<MetricsRange, (at: number) => string> = {
-  live: (at) => CLOCK.format(at),
+  live: (at) => MINUTES.format(at),
   "1h": (at) => MINUTES.format(at),
   "24h": (at) => MINUTES.format(at),
   "7d": (at) => DAY.format(at),
@@ -55,6 +54,10 @@ export function MonitoringPage({ workspace, deleting }: Props) {
   const [range, setRange] = useState<MetricsRange>("live");
   const { metrics, status } = useMetrics(ready ? workspace.id : null, range);
   const format = TIME_FORMAT[range];
+  // The axis ends at the newest sample and reaches back the whole range, so a new VM's few
+  // samples sit at the right edge instead of being stretched across the chart.
+  const end = metrics?.timestamps.at(-1) ?? 0;
+  const domain = [end - RANGE_SPAN_MS[range], end] as const;
 
   const tiles = metrics && [
     { label: "CPU", icon: Cpu, ...latest(metrics.metrics, "cpu"), detail: `${metrics.cores} vCPU` },
@@ -100,7 +103,7 @@ export function MonitoringPage({ workspace, deleting }: Props) {
             </ul>
             <div className="grid gap-4 xl:grid-cols-2">
               {metrics.metrics.map((metric) => (
-                <MetricChart key={metric.id} metric={metric} timestamps={metrics.timestamps} formatTime={format}
+                <MetricChart key={metric.id} metric={metric} timestamps={metrics.timestamps} domain={domain} formatTime={format}
                   note={metric.id === "cpu" ? `100% = all ${metrics.cores} vCPU` : undefined} />
               ))}
             </div>

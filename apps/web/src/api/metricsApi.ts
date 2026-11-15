@@ -5,6 +5,15 @@ export type MetricsRange = "live" | "1h" | "24h" | "7d" | "30d";
 export type MetricUnit = "percent" | "bytes" | "iops" | "pps";
 export type MetricId = "cpu" | "disk-throughput" | "disk-iops" | "network-traffic" | "network-pps";
 
+/** How far back each range reaches, as the API serves it. */
+export const RANGE_SPAN_MS: Record<MetricsRange, number> = {
+  live: 15 * 60_000,
+  "1h": 3_600_000,
+  "24h": 86_400_000,
+  "7d": 7 * 86_400_000,
+  "30d": 30 * 86_400_000,
+};
+
 export interface MetricSeries {
   readonly key: string;
   readonly label: string;

@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "../src/App";
 import { type MetricsResponse, toMetrics } from "../src/api/metricsApi";
-import { formatMetric } from "../src/components/organisms/MetricChart";
+import { formatMetric, MetricChart } from "../src/components/organisms/MetricChart";
 import { formatRate } from "../src/lib/format";
 import { FakeEventSource, installFakeApi } from "./fakeApi";
 
@@ -44,7 +44,7 @@ describe("monitoring", () => {
     const readout = within(chart).getByRole("status");
     expect(readout).toHaveTextContent("In");
     expect(readout).toHaveTextContent("Out");
-    expect(readout.textContent).toMatch(/\d{2}:\d{2}:\d{2}/);
+    expect(readout.textContent).toMatch(/\d{2}:\d{2}/);
     await user.keyboard("{Escape}");
     expect(within(chart).queryByRole("status")).not.toBeInTheDocument();
   });
@@ -70,6 +70,24 @@ describe("monitoring", () => {
     expect(metrics.metrics[0].series[0].values).toEqual([10, 10, 30]);
     expect(metrics.metrics.find((m) => m.id === "disk-iops")?.series[0].values).toEqual([0, 0, 0]);
     expect(metrics.memory).toBeNull();
+  });
+
+  it("places a new VM's few samples at the right edge with distinct axis labels", () => {
+    const end = Date.parse("2026-11-15T10:15:00Z");
+    const { container } = render(
+      <MetricChart
+        metric={{ id: "cpu", title: "CPU", unit: "percent", series: [{ key: "cpu", label: "CPU", values: [1, 2] }] }}
+        timestamps={[end - 60_000, end]}
+        domain={[end - 15 * 60_000, end]}
+        formatTime={(at) => new Date(at).toISOString().slice(11, 16)}
+      />,
+    );
+    const labels = [...container.querySelectorAll("text")].map((t) => t.textContent).filter((t) => /^\d{2}:\d{2}$/.test(t ?? ""));
+    expect(new Set(labels).size).toBe(labels.length);
+    expect(labels[0]).toBe("10:00");
+    expect(labels.at(-1)).toBe("10:15");
+    const firstPoint = Number(/^M([\d.]+)/.exec(container.querySelectorAll("path")[1].getAttribute("d") ?? "")?.[1]);
+    expect(firstPoint).toBeGreaterThan(500);
   });
 
   it("prints values in the unit a reader expects", () => {
