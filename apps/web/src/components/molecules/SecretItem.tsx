@@ -24,7 +24,7 @@ export function SecretItem({ secret, removing, onRemove }: Props) {
     action = <IconButton label={`Remove ${secret.name}`} icon={Trash2} onClick={onRemove} />;
   }
   return (
-    <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2">
+    <li className="flex min-w-0 flex-wrap items-center justify-between gap-2 px-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
       <span className="min-w-0 truncate font-mono text-sm">{secret.name}</span>
       {action}
     </li>

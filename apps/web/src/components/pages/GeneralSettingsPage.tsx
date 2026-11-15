@@ -1,11 +1,11 @@
-import { ArrowLeft, Camera, Globe, UserRound, Users } from "lucide-react";
+import { Camera, Globe, Search, UserRound, Users } from "lucide-react";
 import { useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { useDomains } from "../../hooks/useDomains";
 import { navigate } from "../../hooks/useRoute";
 import { type UserSort, useUsers } from "../../hooks/useUsers";
 import { Avatar, Button, TextField } from "../atoms";
-import { EmptyState, PageHeader, SettingsSection } from "../molecules";
+import { EmptyState, PageHeader, SectionNav, SettingsSection, Toast } from "../molecules";
 import { DomainDnsPanel, UsersPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
@@ -15,8 +15,13 @@ const NOTES = {
   users: "Changes apply to everyone who signs in here.",
 };
 
-export function GeneralSettingsPage() {
-  const [section, setSection] = useState<"profile" | "domains" | "users">("profile");
+type Section = "profile" | "domains" | "users";
+
+/** Account settings; the open section is in the URL, so a link can open Domains directly. */
+export function GeneralSettingsPage({ section: requested }: { readonly section?: string }) {
+  const section: Section = requested === "domains" || requested === "users" ? requested : "profile";
+  // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
+  const setSection = (id: Section) => navigate({ name: "general-settings", section: id }, { replace: true });
   const { account, saveProfile, changePassword: savePassword } = useAccount();
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "", avatar: account?.avatar ?? "" };
   const [profile, setProfile] = useState(saved);
@@ -84,25 +89,13 @@ export function GeneralSettingsPage() {
   }
 
   return (
-    <ContextLayout sidebar={<>
-        <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
-          <button type="button" onClick={() => navigate({ name: "home" })} className="flex items-center gap-2 rounded-md text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white">
-            <ArrowLeft aria-hidden className="size-4" />Workspaces
-          </button>
-        </div>
-          <nav aria-label="Settings sections" className="flex gap-1 p-3 sm:flex-col">
-            {([{ id: "profile", label: "Profile", Icon: UserRound }, { id: "domains", label: "Domains", Icon: Globe }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])] as const).map(({ id, label, Icon }) => (
-              <button key={id} type="button" aria-current={section === id ? "page" : undefined}
-                onClick={() => { setSection(id); setNotice(""); }}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${section === id ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"}`}>
-                <Icon aria-hidden className="size-4" />{label}
-              </button>
-            ))}
-          </nav>
-      </>}>
-      <PageHeader title="General settings" />
-      <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
-        <p className="mb-6 text-xs text-zinc-500 dark:text-zinc-400">{NOTES[section]}</p>
+    <>
+    <PageHeader title="General settings" description={NOTES[section]} />
+    <ContextLayout contained sidebar={
+      <SectionNav label="Settings sections" current={section} onSelect={(id) => { setSection(id); setNotice(""); }}
+        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, { id: "domains", label: "Domains", Icon: Globe }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])]} />
+    }>
+      <div className="w-full">
           <div className="min-w-0 flex-1">
             <div hidden={section !== "profile"} className="space-y-6">
               <SettingsSection title="Profile" description="Your photo and name, all in one place.">
@@ -148,10 +141,11 @@ export function GeneralSettingsPage() {
             </div>
             {section === "domains" && <DomainsSection />}
             {section === "users" && isAdmin && <UsersSection currentUserId={account?.id} />}
-            <p role="status" className="mt-4 min-h-5 text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>
+            <Toast message={notice} />
           </div>
       </div>
     </ContextLayout>
+    </>
   );
 }
 
@@ -161,9 +155,16 @@ function DomainsSection() {
   if (status === "loading") return <EmptyState busy title="Loading domains…" hint="Fetching the domains you own" />;
   if (status === "failed") return <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">Your domains could not be loaded.</p>;
   if (owned.length === 0) {
-    return <EmptyState title="No domains yet" hint="Buy one to manage its DNS here." action={{ label: "Find a domain", onClick: () => navigate({ name: "domains" }) }} />;
+    return <EmptyState icon={Globe} title="No domains yet" hint="Buy one to manage its DNS here." action={{ label: "Find a domain", icon: Globe, onClick: () => navigate({ name: "domains" }) }} />;
   }
-  return <div className="space-y-6">{owned.map((domain) => <DomainDnsPanel key={domain.name} domain={domain.name} />)}</div>;
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-end">
+        <Button label="Find another domain" icon={Search} variant="secondary" onClick={() => navigate({ name: "domains" })} />
+      </div>
+      {owned.map((domain) => <DomainDnsPanel key={domain.name} domain={domain.name} />)}
+    </div>
+  );
 }
 
 /** Mounted only while its tab is open, so the user list loads when someone looks at it. */

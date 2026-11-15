@@ -1,9 +1,9 @@
 import { Activity, Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { useState } from "react";
 import { type Metric, type MetricId, type MetricsRange, useMetrics } from "../../hooks/useMetrics";
-import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { EmptyState, PageHeader } from "../molecules";
+import { Select } from "../atoms";
+import { EmptyState } from "../molecules";
 import { formatMetric, MetricChart } from "../organisms";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
@@ -53,28 +53,35 @@ export function MonitoringPage({ workspace, deleting }: Props) {
 
   return (
     <>
-      <PageHeader title="Monitoring" crumbs={[{ label: workspace.name, onClick: () => navigate({ name: "workspace", workspaceId: workspace.id }) }]}
-        actions={ready && <>
-          {range === "live" && (
-            <span className="flex items-center gap-1.5 text-xs text-zinc-500 max-sm:sr-only dark:text-zinc-400">
-              <span aria-hidden className="size-2 animate-pulse rounded-full bg-emerald-500" />Updating live
-            </span>
-          )}
-          <select aria-label="Time range" value={range} onChange={(event) => setRange(event.target.value as MetricsRange)}
-            className="min-h-9 rounded-md border border-zinc-300 bg-transparent px-2 text-sm outline-none dark:border-zinc-700 dark:bg-zinc-950">
-            {RANGE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
-          </select>
-        </>} />
+      {/* The tab above already says Monitoring; the title stays for readers and the outline. */}
+      <div className="mx-auto flex w-full max-w-5xl items-center justify-between gap-3 px-4 pt-6 sm:px-6">
+        <h1 className="sr-only">Monitoring</h1>
+        <p className="min-w-0 text-sm text-zinc-500 dark:text-zinc-400">How hard this workspace’s machine is working.</p>
+        {ready && (
+          <div className="flex shrink-0 items-center gap-3">
+            {range === "live" && (
+              <span className="flex items-center gap-1.5 text-xs text-zinc-500 max-sm:sr-only dark:text-zinc-400">
+                <span aria-hidden className="size-2 animate-pulse rounded-full bg-emerald-500" />Updating live
+              </span>
+            )}
+            <Select aria-label="Time range" value={range} onChange={(event) => setRange(event.target.value as MetricsRange)}>
+              {RANGE_OPTIONS.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </Select>
+          </div>
+        )}
+      </div>
       {!ready ? <WorkspaceStatusView workspace={workspace} deleting={deleting} />
         : status === "failed" ? <EmptyState title="Metrics are unavailable" hint="The workspace's metrics could not be loaded. Please try again later." />
         : !metrics ? <EmptyState busy title="Loading metrics…" hint="Fetching the workspace's metrics" />
         : (
-          <div className="mx-auto flex w-full max-w-7xl flex-col gap-4 px-4 py-6 sm:px-6">
+          <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pt-4 pb-10 sm:px-6">
             <ul aria-label="Now" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {tiles?.map(({ label, icon: Icon, value, detail }) => (
-                <li key={label} className="flex flex-col gap-1 rounded-xl border border-zinc-200 p-4 dark:border-zinc-800">
-                  <span className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><Icon aria-hidden className="size-3.5" />{label}</span>
-                  <span className="text-2xl font-semibold tabular-nums">{value}</span>
+                <li key={label} className="card flex min-w-0 flex-col gap-1 p-4">
+                  <span className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
+                    <span className="flex size-6 items-center justify-center rounded-md bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"><Icon aria-hidden className="size-3.5" /></span>{label}
+                  </span>
+                  <span className="mt-1 truncate text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{value}</span>
                   {detail && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{detail}</span>}
                 </li>
               ))}

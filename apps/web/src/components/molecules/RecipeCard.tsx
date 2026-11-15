@@ -19,7 +19,7 @@ export function RecipeCard({ recipe, onOpen }: Props) {
       <button
         type="button"
         onClick={onOpen}
-        className="group flex h-full w-full flex-col gap-3 rounded-xl border border-zinc-200 p-4 text-left transition-colors hover:border-zinc-400 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:border-zinc-800 dark:hover:border-zinc-600 dark:hover:bg-zinc-900/50"
+        className="card group flex h-full w-full flex-col gap-3 p-4 text-left transition-all hover:-translate-y-px hover:border-zinc-300 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:hover:border-zinc-700"
       >
         <span className="flex items-start gap-3">
           <CategoryTile category={recipe.category} />

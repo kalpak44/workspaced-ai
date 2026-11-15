@@ -1,5 +1,5 @@
-import { Bot, Globe, Lock, Search } from "lucide-react";
-import { useEffect, useState } from "react";
+import { Bot, Globe, Lock, SearchX, Store } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
 import {
   type RecipeCategory,
   type RecipeDraft,
@@ -13,8 +13,8 @@ import {
 import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { draftPrompt, parseDraft } from "../../lib/recipes";
-import { Button, CATEGORIES, Spinner } from "../atoms";
-import { EmptyState, PageHeader, RecipeCard, Tabs } from "../molecules";
+import { Button, CATEGORIES, Select, Skeleton } from "../atoms";
+import { EmptyState, FilterChips, PageHeader, Pagination, RecipeCard, SearchField, Tabs } from "../molecules";
 import { ImportDraftDialog, NewRecipeMenu, WorkspacePickerDialog } from "../organisms";
 import { EMPTY_RECIPE, RecipeEditorDialog, type RecipeFormValues } from "../organisms/RecipeEditorDialog";
 
@@ -35,9 +35,20 @@ const SORTS: ReadonlyArray<{ readonly value: RecipeSort; readonly label: string 
   { value: "updated", label: "Recently updated" },
 ];
 
-const CHIP = "shrink-0 rounded-full border px-3 py-1 text-xs font-medium transition-colors";
-const CHIP_ON = "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900";
-const CHIP_OFF = "border-zinc-200 text-zinc-600 hover:border-zinc-400 dark:border-zinc-700 dark:text-zinc-300 dark:hover:border-zinc-500";
+/** A card's outline while its page loads, so the grid keeps its shape. */
+function RecipePlaceholder() {
+  return (
+    <li aria-hidden className="card flex flex-col gap-3 p-4">
+      <span className="flex items-center gap-3">
+        <Skeleton className="size-9 shrink-0 rounded-lg" />
+        <span className="flex flex-1 flex-col gap-2"><Skeleton className="h-3 w-2/3" /><Skeleton className="h-2.5 w-1/3" /></span>
+      </span>
+      <Skeleton className="h-3 w-full" />
+      <Skeleton className="h-3 w-4/5" />
+      <Skeleton className="mt-3 h-2.5 w-1/2" />
+    </li>
+  );
+}
 
 /**
  * The recipe store: instructions people share for the agent to set something up in a workspace.
@@ -49,7 +60,8 @@ export function StorePage({ workspaces }: Props) {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState<RecipeCategory | null>(null);
   const [sort, setSort] = useState<RecipeSort>("top");
-  const { recipes, total, loading, error, hasMore, more, retry } = useRecipes({ scope, q, category, sort });
+  const { recipes, total, loading, error, page, pageCount, pageSize, goTo, retry } = useRecipes({ scope, q, category, sort });
+  const top = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<Editing | null>(null);
   const [drafting, setDrafting] = useState(false);
   const [importing, setImporting] = useState(false);
@@ -78,21 +90,22 @@ export function StorePage({ workspaces }: Props) {
   };
 
   const filtered = q.trim() !== "" || category !== null;
+  const clearFilters = () => { setQuery(""); setQ(""); setCategory(null); };
+  // A new page starts at the top of the grid rather than wherever the controls left the scroll.
+  const turnPage = (next: number) => {
+    goTo(next - 1);
+    top.current?.scrollIntoView?.({ block: "start", behavior: "smooth" });
+  };
 
   return (
     <>
       <PageHeader
         title="Recipe store"
+        description="Step-by-step instructions the agent follows to set something up in your workspace. Apply one, or share your own."
         actions={<NewRecipeMenu onWrite={() => setEditing({ initial: EMPTY_RECIPE, recipeId: null })} onDraftWithAgent={() => setDrafting(true)} onImport={() => setImporting(true)} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-5 px-4 py-6 sm:px-6">
-          <div>
-            <h2 className="text-2xl font-semibold">Recipes</h2>
-            <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">
-              Step-by-step instructions the agent follows to set something up in your workspace. Apply one, or share your own.
-            </p>
-          </div>
+        <div ref={top} className="mx-auto flex w-full max-w-5xl scroll-mt-4 flex-col gap-5 px-4 pt-6 pb-10 sm:px-6">
 
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <Tabs
@@ -105,70 +118,56 @@ export function StorePage({ workspaces }: Props) {
               ]}
             />
             <div className="flex min-w-0 gap-2">
-              <label className="flex min-w-0 flex-1 items-center gap-2 rounded-md border border-zinc-300 px-3 sm:w-64 sm:flex-none dark:border-zinc-700">
-                <Search aria-hidden className="size-4 shrink-0 text-zinc-400" />
-                <input type="search" aria-label="Search recipes" placeholder="Search recipes…" value={query} onChange={(event) => setQuery(event.target.value)} className="min-h-9 w-full min-w-0 bg-transparent text-sm outline-none" />
-              </label>
-              <select aria-label="Sort by" value={sort} onChange={(event) => setSort(event.target.value as RecipeSort)} className="rounded-md border border-zinc-300 bg-transparent px-2 text-sm outline-none dark:border-zinc-700 dark:bg-zinc-950">
+              <SearchField label="Search recipes" placeholder="Search recipes…" value={query} onChange={setQuery} className="flex-1 sm:w-64 sm:flex-none" />
+              <Select aria-label="Sort by" value={sort} onChange={(event) => setSort(event.target.value as RecipeSort)} className="shrink-0">
                 {SORTS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-              </select>
+              </Select>
             </div>
           </div>
 
-          <div role="group" aria-label="Category" className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
-            <button type="button" aria-pressed={category === null} onClick={() => setCategory(null)} className={`${CHIP} ${category === null ? CHIP_ON : CHIP_OFF}`}>All</button>
-            {CATEGORIES.map((option) => (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={category === option.value}
-                onClick={() => setCategory(category === option.value ? null : (option.value as RecipeCategory))}
-                className={`${CHIP} ${category === option.value ? CHIP_ON : CHIP_OFF}`}
-              >
-                {option.label}
-              </button>
-            ))}
-          </div>
+          <FilterChips label="Category" allLabel="All" value={category} onChange={(value) => setCategory(value as RecipeCategory | null)}
+            options={CATEGORIES.map(({ value, label }) => ({ value, label }))} />
 
           {error && (
-            <div className="flex items-center gap-3">
-              <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>
+            <div className="flex flex-wrap items-center gap-3 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 dark:border-rose-900/70 dark:bg-rose-950/40">
+              <p role="alert" className="min-w-0 flex-1 text-sm text-rose-700 dark:text-rose-300">{error}</p>
               <Button label="Retry" variant="secondary" onClick={retry} />
             </div>
           )}
 
           {!error && !loading && recipes.length === 0 && (
-            <div className="flex min-h-72 flex-col">
+            <div className="card flex min-h-72 flex-col">
               {filtered ? (
-                <EmptyState title="Nothing matches" hint="Try another search or category." />
+                <EmptyState icon={SearchX} title="Nothing matches" hint="Try another search or category." secondaryAction={{ label: "Clear filters", onClick: clearFilters }} />
               ) : scope === "public" ? (
-                <EmptyState title="No public recipes yet" hint="Be the first: write one, or let a workspace's agent draft it with you." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: { ...EMPTY_RECIPE, visibility: "PUBLIC" }, recipeId: null }) }} />
+                <EmptyState icon={Store} title="No public recipes yet" hint="Be the first: write one, or let a workspace's agent draft it with you." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: { ...EMPTY_RECIPE, visibility: "PUBLIC" }, recipeId: null }) }} />
               ) : (
-                <EmptyState title="No private recipes" hint="Private recipes are yours alone: keep your own setups here and apply them to any workspace." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: EMPTY_RECIPE, recipeId: null }) }} />
+                <EmptyState icon={Lock} title="No private recipes" hint="Private recipes are yours alone: keep your own setups here and apply them to any workspace." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: EMPTY_RECIPE, recipeId: null }) }} />
               )}
             </div>
           )}
 
+          {loading && recipes.length === 0 && (
+            <ul aria-hidden className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 6 }, (_, index) => <RecipePlaceholder key={index} />)}
+            </ul>
+          )}
+
           {recipes.length > 0 && (
             <>
-              <p className="text-xs text-zinc-500 dark:text-zinc-400">{total === 1 ? "1 recipe" : `${total} recipes`}</p>
-              <ul aria-label={scope === "public" ? "Public recipes" : "Private recipes"} className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              <p className="text-xs text-zinc-500 tabular-nums dark:text-zinc-400" aria-live="polite">
+                {total === 1 ? "1 recipe" : `${total} recipes`}
+                {filtered && <> · <button type="button" onClick={clearFilters} className="font-medium text-zinc-700 underline-offset-2 hover:underline dark:text-zinc-300">Clear filters</button></>}
+              </p>
+              <ul aria-label={scope === "public" ? "Public recipes" : "Private recipes"} aria-busy={loading}
+                className={`grid gap-3 transition-opacity sm:grid-cols-2 xl:grid-cols-3 ${loading ? "opacity-60" : ""}`}>
                 {recipes.map((recipe) => (
                   <RecipeCard key={recipe.id} recipe={recipe} onOpen={() => navigate({ name: "recipe", recipeId: recipe.id })} />
                 ))}
               </ul>
+              <Pagination label="Recipe pages" noun="recipe" page={page + 1} pageCount={pageCount} onChange={turnPage} disabled={loading}
+                range={{ first: page * pageSize + 1, last: page * pageSize + recipes.length, total }} />
             </>
-          )}
-
-          {loading && (
-            <div className="flex justify-center py-6">
-              <Spinner label="Loading recipes" className="size-5 text-zinc-400" />
-            </div>
-          )}
-          {!loading && hasMore && (
-            <div className="flex justify-center">
-              <Button label="Show more" variant="secondary" onClick={more} />
-            </div>
           )}
         </div>
       </div>

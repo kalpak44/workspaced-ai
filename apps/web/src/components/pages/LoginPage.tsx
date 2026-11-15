@@ -28,21 +28,25 @@ export function LoginPage({ unreachable = false }: { readonly unreachable?: bool
   }
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-white px-4 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+    <main className="relative flex min-h-dvh items-center justify-center overflow-hidden bg-zinc-50 px-4 py-10 text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100">
+      <span aria-hidden className="pointer-events-none absolute -top-40 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-linear-to-br from-sky-300/30 via-fuchsia-300/20 to-orange-200/20 blur-3xl dark:from-sky-500/10 dark:via-fuchsia-500/10 dark:to-orange-400/5" />
       <form
         aria-label="Sign in"
-        className="flex w-full max-w-sm flex-col gap-5 rounded-xl border border-zinc-200 p-6 dark:border-zinc-800"
+        className="card relative flex w-full max-w-sm animate-pop-in flex-col gap-5 p-6 shadow-xl sm:p-8"
         onSubmit={(event) => { event.preventDefault(); void submit(); }}
       >
         <div className="flex items-center gap-2">
           <Logo />
-          <span className="font-medium">workspaced-ai</span>
+          <span className="font-semibold tracking-tight">workspaced<span className="text-zinc-400">-ai</span></span>
         </div>
-        <h1 className="text-lg font-semibold">Sign in</h1>
+        <div>
+          <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
+          <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Welcome back. Pick up where your agents left off.</p>
+        </div>
         <TextField id="username" label="Username" autoComplete="username" autoFocus required maxLength={100} value={username} onChange={(event) => setUsername(event.target.value)} />
         <TextField id="password" label="Password" type="password" autoComplete="current-password" required maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} />
-        {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
-        <div className="flex justify-end">
+        {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
+        <div className="flex flex-col [&>button]:w-full">
           <Button label="Sign in" type="submit" icon={LogIn} busy={busy} disabled={!username.trim() || !password} />
         </div>
       </form>

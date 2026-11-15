@@ -26,7 +26,7 @@ export interface RecipeFilter {
   readonly sort: api.RecipeSort;
 }
 
-/** One tab of the store, a page at a time; a new filter starts again from the first page. */
+/** One tab of the store, one page at a time; a new filter starts again from the first page. */
 export function useRecipes({ scope, q, category, sort }: RecipeFilter) {
   const [recipes, setRecipes] = useState<api.RecipeSummary[]>([]);
   const [total, setTotal] = useState(0);
@@ -44,7 +44,7 @@ export function useRecipes({ scope, q, category, sort }: RecipeFilter) {
       api.listRecipes({ scope, q, category, sort, page: next, size: PAGE_SIZE }).then(
         (result) => {
           if (current !== generation.current) return;
-          setRecipes((shown) => (next === 0 ? result.content : [...shown, ...result.content]));
+          setRecipes(result.content);
           setTotal(result.page.totalElements);
           setPage(next);
           setLoading(false);
@@ -72,9 +72,12 @@ export function useRecipes({ scope, q, category, sort }: RecipeFilter) {
     total,
     loading,
     error,
-    hasMore: recipes.length < total,
-    more: () => load(page + 1),
-    retry: () => load(0),
+    /** Zero-based, as the API counts them. */
+    page,
+    pageCount: Math.max(1, Math.ceil(total / PAGE_SIZE)),
+    pageSize: PAGE_SIZE,
+    goTo: (next: number) => load(next),
+    retry: () => load(page),
   };
 }
 

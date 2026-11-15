@@ -4,6 +4,10 @@ import { useDictation } from "../../hooks/useDictation";
 import type { Attachment } from "../../hooks/useSessionFiles";
 import { IconButton, Spinner } from "../atoms";
 
+// The one action the composer exists for, so it is filled rather than a quiet icon.
+const SEND =
+  "inline-flex size-9 shrink-0 items-center justify-center rounded-xl bg-zinc-900 text-white shadow-sm transition-colors hover:bg-zinc-700 disabled:cursor-not-allowed disabled:bg-zinc-200 disabled:text-zinc-400 disabled:shadow-none dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200 dark:disabled:bg-zinc-800 dark:disabled:text-zinc-500";
+
 // The API refuses anything longer.
 const MAX_TEXT = 100000;
 
@@ -99,7 +103,7 @@ export function ChatComposer({
         onAttach([...event.dataTransfer.files]);
       } : undefined}
       data-dragging={dragging || undefined}
-      className="data-[dragging]:border-dashed data-[dragging]:border-zinc-500 data-[dragging]:bg-zinc-50 dark:data-[dragging]:bg-zinc-800/60 flex flex-col gap-2 rounded-2xl border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
+      className="data-[dragging]:border-dashed data-[dragging]:border-zinc-500 data-[dragging]:bg-zinc-50 dark:data-[dragging]:bg-zinc-800/60 flex flex-col gap-2 rounded-2xl focus-within:ring-4 focus-within:ring-zinc-900/5 dark:focus-within:ring-white/5 border border-zinc-300 bg-white p-2 shadow-[0_10px_35px_-18px_rgba(0,0,0,0.35)] transition focus-within:border-zinc-500 focus-within:shadow-[0_14px_40px_-18px_rgba(0,0,0,0.4)] dark:border-zinc-700 dark:bg-zinc-900 dark:focus-within:border-zinc-500"
     >
       {dictation.listening && (
         <div role="status" className="flex items-start gap-2 rounded-xl bg-rose-50 px-3 py-2 text-sm dark:bg-rose-950/40">
@@ -141,7 +145,7 @@ export function ChatComposer({
         placeholder={placeholder}
         onChange={(e) => setText(e.currentTarget.value)}
         onKeyDown={onKeyDown}
-        className="max-h-48 w-full resize-none bg-transparent px-2 py-1 text-sm outline-none disabled:cursor-not-allowed"
+        className="max-h-48 min-h-12 w-full resize-none bg-transparent px-2 py-1 text-sm leading-6 outline-none [field-sizing:content] placeholder:text-zinc-400 disabled:cursor-not-allowed"
       />
       <div className="flex min-w-0 flex-wrap items-center justify-end gap-1">
       {onAttach && <>
@@ -159,14 +163,14 @@ export function ChatComposer({
         className={dictation.listening ? "bg-rose-100 text-rose-600 dark:bg-rose-950" : ""}
       />}
       {busy ? (
-        <IconButton label="Stop" icon={Square} onClick={onStop} />
+        <button type="button" aria-label="Stop" title="Stop the agent" onClick={onStop} className={SEND}>
+          <Square aria-hidden className="size-3.5 fill-current" />
+        </button>
       ) : (
-        <IconButton
-          label="Send"
-          icon={SendHorizontal}
-          submit
-          disabled={disabled || pending || uploading || dictation.listening || (!text.trim() && !attached)}
-        />
+        <button type="submit" aria-label="Send" title="Send (Enter)" className={SEND}
+          disabled={disabled || pending || uploading || dictation.listening || (!text.trim() && !attached)}>
+          <SendHorizontal aria-hidden className="size-4" />
+        </button>
       )}
       </div>
     </form>

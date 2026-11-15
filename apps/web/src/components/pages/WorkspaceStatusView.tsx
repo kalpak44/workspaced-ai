@@ -1,4 +1,5 @@
 import type { Workspace } from "../../hooks/useWorkspaces";
+import { ServerCrash } from "lucide-react";
 import { EmptyState } from "../molecules";
 
 /**
@@ -28,6 +29,7 @@ export function WorkspaceStatusView({
   if (workspace.status === "FAILED") {
     return (
       <EmptyState
+        icon={ServerCrash}
         title="Workspace unavailable"
         hint="Its environment stopped or could not start. Delete it and create a new one."
       />

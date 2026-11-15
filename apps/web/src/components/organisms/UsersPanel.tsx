@@ -1,7 +1,7 @@
 import { UserPlus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { type CreateResult, type NewUser, type Role, type User, USER_SORTS, type UserSort } from "../../hooks/useUsers";
-import { Button, Spinner } from "../atoms";
+import { Button, Select, Spinner } from "../atoms";
 import { ErrorBanner, SettingsSection, UserItem } from "../molecules";
 import { CreateUserDialog } from "./CreateUserDialog";
 import { DeleteUserDialog } from "./DeleteUserDialog";
@@ -69,10 +69,9 @@ export function UsersPanel({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-1.5 text-sm">
           <label htmlFor="users-sort" className="font-medium text-zinc-700 dark:text-zinc-300">Sort by</label>
-          <select id="users-sort" value={sort} onChange={(event) => onSortChange(event.target.value as UserSort)}
-            className="min-w-0 rounded-md border border-zinc-300 bg-white px-3 py-2 outline-none focus:border-zinc-500 focus:ring-2 focus:ring-zinc-900/10 dark:border-zinc-700 dark:bg-zinc-900 dark:focus:border-zinc-400 dark:focus:ring-white/10">
+          <Select id="users-sort" value={sort} onChange={(event) => onSortChange(event.target.value as UserSort)}>
             {Object.entries(USER_SORTS).map(([id, option]) => <option key={id} value={id}>{option.label}</option>)}
-          </select>
+          </Select>
         </div>
         <Button label="Add user" icon={UserPlus} onClick={() => setCreating(true)} />
       </div>
@@ -80,7 +79,7 @@ export function UsersPanel({
         <Spinner label="Loading users" className="size-5 text-zinc-400" />
       ) : (
         <div className="flex flex-col gap-2">
-          <ul aria-label="Users" className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+          <ul aria-label="Users" className="divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
             {users.map((user) => (
               <UserItem
                 key={user.id}

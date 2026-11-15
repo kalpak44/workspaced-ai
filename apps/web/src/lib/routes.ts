@@ -1,7 +1,7 @@
 /** Every page the app has; the URL is the only place the current one is kept. */
 export type Route =
   | { readonly name: "home" }
-  | { readonly name: "general-settings" }
+  | { readonly name: "general-settings"; readonly section?: string }
   | { readonly name: "billing" }
   | { readonly name: "domains" }
   | { readonly name: "notifications" }
@@ -19,6 +19,7 @@ export type Route =
 const ID = "([A-Za-z0-9_-]+)";
 const PATTERNS: ReadonlyArray<[RegExp, (ids: string[]) => Route]> = [
   [/^\/settings\/?$/, () => ({ name: "general-settings" })],
+  [/^\/settings\/([a-z-]+)\/?$/, ([s]) => ({ name: "general-settings", section: s })],
   [/^\/billing\/?$/, () => ({ name: "billing" })],
   [/^\/domains\/?$/, () => ({ name: "domains" })],
   [/^\/notifications\/?$/, () => ({ name: "notifications" })],
@@ -53,7 +54,7 @@ export function routePath(route: Route): string {
     case "home":
       return "/";
     case "general-settings":
-      return "/settings";
+      return `/settings${route.section ? `/${route.section}` : ""}`;
     case "billing":
       return "/billing";
     case "domains":

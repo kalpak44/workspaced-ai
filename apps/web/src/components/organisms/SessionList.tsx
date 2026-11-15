@@ -1,18 +1,15 @@
-import { CalendarClock, ChevronLeft, ChevronRight, MessageSquare, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { usePagination } from "../../hooks/usePagination";
 import type { Attachment } from "../../hooks/useSessionFiles";
 import type { Session } from "../../hooks/useSessions";
-import { Button, IconButton, Spinner } from "../atoms";
-import { ChatComposer, ErrorBanner, SessionCard, Tabs } from "../molecules";
+import { Button, Select, Skeleton, Spinner } from "../atoms";
+import { ChatComposer, ErrorBanner, Pagination, SearchField, SessionCard } from "../molecules";
 
 const PAGE_SIZE = 10;
 
 type Tab = "user" | "scheduled";
 
-const TABS = [
-  { value: "user", label: "Your sessions", icon: MessageSquare },
-  { value: "scheduled", label: "Scheduled", icon: CalendarClock },
-] as const;
 
 interface Props {
   readonly modelControl?: ReactNode;
@@ -36,11 +33,11 @@ interface Props {
 /** A session row's outline, shaped like SessionCard, while the list loads. */
 function Placeholder({ width }: { readonly width: string }) {
   return (
-    <li aria-hidden className="flex animate-pulse items-center gap-3 px-4 py-3">
-      <span className="size-4 shrink-0 rounded bg-zinc-200 dark:bg-zinc-800" />
+    <li aria-hidden className="flex items-center gap-3 px-4 py-3.5">
+      <Skeleton className="size-8 shrink-0 rounded-lg" />
       <span className="flex min-w-0 flex-1 flex-col gap-2 py-0.5">
-        <span className={`h-3 rounded bg-zinc-200 dark:bg-zinc-800 ${width}`} />
-        <span className="h-2.5 w-16 rounded bg-zinc-100 dark:bg-zinc-800/60" />
+        <Skeleton className={`h-3 ${width}`} />
+        <Skeleton className="h-2.5 w-16" />
       </span>
     </li>
   );
@@ -52,18 +49,15 @@ export function SessionList(props: Props) {
   // Task runs are kept apart, so the ones a schedule keeps starting never bury the user's own.
   const [tab, setTab] = useState<Tab>("user");
   const scheduled = props.sessions.filter((session) => session.task);
-  const sessions = tab === "scheduled" ? scheduled : props.sessions.filter((session) => !session.task);
-  const [page, setPage] = useState(1);
+  const [query, setQuery] = useState("");
+  const needle = query.trim().toLowerCase();
+  const sessions = (tab === "scheduled" ? scheduled : props.sessions.filter((session) => !session.task))
+    .filter((session) => needle === "" || (session.title ?? "New session").toLowerCase().includes(needle));
   // Null outside selection mode; the ids chosen for deletion inside it.
   const [selected, setSelected] = useState<ReadonlySet<string> | null>(null);
   // Newest first: the session most likely to be wanted is the one last worked on.
   const newestFirst = [...sessions].reverse();
-  const pageCount = Math.max(1, Math.ceil(newestFirst.length / PAGE_SIZE));
-  const visibleSessions = newestFirst.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
-  useEffect(() => {
-    setPage((current) => Math.min(current, pageCount));
-  }, [pageCount]);
+  const pages = usePagination(newestFirst, PAGE_SIZE, `${tab}:${needle}`);
 
   // A session deleted meanwhile, here or elsewhere, is no longer chosen; once every chosen one is
   // gone, the deletion is done, and so is selecting.
@@ -86,16 +80,15 @@ export function SessionList(props: Props) {
   const allSelected = selected !== null && sessions.length > 0 && selected.size === sessions.length;
   const switchTab = (next: Tab) => {
     setTab(next);
-    setPage(1);
     setSelected(null);
   };
 
   return (
-    <section aria-label="Sessions" className="mx-auto flex w-full max-w-3xl flex-col gap-8 px-4 py-8 sm:px-6 sm:py-10">
+    <section aria-label="Sessions" className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 pt-6 pb-10 sm:px-6 sm:pt-8">
       {props.error && <ErrorBanner message={props.error} onDismiss={props.onDismissError} />}
       <div>
-        <h2 className="mb-2 text-xl font-semibold tracking-tight">Start a session</h2>
-        <p className="mb-5 text-sm text-zinc-500 dark:text-zinc-400">Start a new task or continue a recent conversation.</p>
+        <h2 className="mb-1 text-xl font-semibold tracking-tight sm:text-2xl">Start a session</h2>
+        <p className="mb-5 text-sm text-zinc-500 dark:text-zinc-400">Describe a task and the agent starts working on it, or pick up a recent conversation below.</p>
         <ChatComposer
           busy={false}
           modelControl={props.modelControl}
@@ -109,30 +102,36 @@ export function SessionList(props: Props) {
         />
       </div>
       <div>
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <h2 className="sr-only">Recent sessions</h2>
-            <Tabs label="Sessions shown" tabs={TABS} value={tab} onChange={switchTab} />
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
+            <h2 className="text-sm font-semibold">{tab === "scheduled" ? "Scheduled runs" : "Recent sessions"}</h2>
             {loading ? (
               <Spinner label="Loading sessions" className="size-3.5 text-zinc-400" />
             ) : (
-              <span className="text-xs text-zinc-400">{sessions.length}</span>
+              <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium tabular-nums text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">{sessions.length}</span>
             )}
           </div>
-          <div className="flex items-center gap-3">
-            {!loading && pageCount > 1 && (
-              <span className="text-xs text-zinc-400">Page {page} of {pageCount}</span>
+          <div className="flex min-w-0 flex-wrap items-center gap-2 max-sm:w-full sm:flex-nowrap">
+            {/* A filter, not navigation: the runs a schedule keeps starting are kept apart from the user's own. */}
+            {(scheduled.length > 0 || tab === "scheduled") && (
+              <Select aria-label="Sessions shown" value={tab} onChange={(event) => switchTab(event.target.value as Tab)} className="max-sm:flex-1 sm:shrink-0">
+                <option value="user">Your sessions</option>
+                <option value="scheduled">Scheduled runs</option>
+              </Select>
+            )}
+            {!loading && (sessions.length > 0 || needle !== "") && (
+              <SearchField label="Search sessions" placeholder="Search sessions…" value={query} onChange={setQuery} className="order-last basis-full sm:order-none sm:basis-auto sm:w-52" />
             )}
             {!loading && sessions.length > 0 && selected === null && (
               <button type="button" onClick={() => setSelected(new Set())}
-                className="text-xs font-medium text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">
+                className="ml-auto shrink-0 rounded-md px-2 py-1 sm:ml-0 text-xs font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
                 Select
               </button>
             )}
           </div>
         </div>
         {selected !== null && (
-          <div role="toolbar" aria-label="Selected sessions" className="mb-3 flex flex-wrap items-center gap-3 rounded-lg bg-zinc-50 px-4 py-2 text-sm dark:bg-zinc-900/60">
+          <div role="toolbar" aria-label="Selected sessions" className="sticky top-16 z-[5] mb-3 flex animate-fade-in flex-wrap items-center gap-3 rounded-xl border border-zinc-200 bg-white/95 px-4 py-2 text-sm shadow-sm backdrop-blur dark:border-zinc-800 dark:bg-zinc-900/95">
             <label className="flex items-center gap-2 text-zinc-600 dark:text-zinc-300">
               <input type="checkbox" checked={allSelected} className="size-4 accent-zinc-900 dark:accent-zinc-100"
                 onChange={() => setSelected(allSelected ? new Set() : new Set(sessions.map((session) => session.id)))} />
@@ -147,13 +146,15 @@ export function SessionList(props: Props) {
           </div>
         )}
         {!loading && sessions.length === 0 ? (
-          <p className="rounded-lg border border-dashed border-zinc-300 px-4 py-8 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-            {tab === "scheduled"
+          <p className="rounded-xl border border-dashed border-zinc-300 px-4 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+            {needle !== ""
+              ? `No sessions match “${query.trim()}”.`
+              : tab === "scheduled"
               ? "No scheduled runs yet. Each run of a scheduled task opens a session here."
               : "No sessions yet. Start a task to work with your workspace’s files."}
           </p>
         ) : (
-          <ul className="flex flex-col divide-y divide-zinc-200 overflow-hidden rounded-xl border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800" aria-busy={loading}>
+          <ul className="card flex flex-col divide-y divide-zinc-200 overflow-hidden dark:divide-zinc-800" aria-busy={loading}>
             {loading ? (
               <>
                 <Placeholder width="w-2/5" />
@@ -161,7 +162,7 @@ export function SessionList(props: Props) {
                 <Placeholder width="w-1/3" />
               </>
             ) : (
-              visibleSessions.map((session) => (
+              pages.items.map((session) => (
                 <SessionCard
                   key={session.id}
                   session={session}
@@ -175,33 +176,11 @@ export function SessionList(props: Props) {
             )}
           </ul>
         )}
-        {!loading && pageCount > 1 && (
-          <nav aria-label="Session pages" className="mt-5 flex flex-wrap items-center justify-end gap-1">
-            <IconButton
-              label="Previous session page"
-              icon={ChevronLeft}
-              disabled={page === 1}
-              onClick={() => setPage((current) => Math.max(1, current - 1))}
-            />
-            {Array.from({ length: pageCount }, (_, index) => index + 1).map((number) => (
-              <button
-                key={number}
-                type="button"
-                aria-label={`Session page ${number}`}
-                aria-current={page === number ? "page" : undefined}
-                onClick={() => setPage(number)}
-                className="size-8 rounded-md text-xs font-medium text-zinc-500 hover:bg-zinc-100 hover:text-zinc-950 aria-current:bg-zinc-900 aria-current:text-white dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-white dark:aria-current:bg-zinc-100 dark:aria-current:text-zinc-950"
-              >
-                {number}
-              </button>
-            ))}
-            <IconButton
-              label="Next session page"
-              icon={ChevronRight}
-              disabled={page === pageCount}
-              onClick={() => setPage((current) => Math.min(pageCount, current + 1))}
-            />
-          </nav>
+        {!loading && (
+          <div className="mt-4">
+            <Pagination label="Session pages" noun="session" page={pages.page} pageCount={pages.pageCount} onChange={pages.setPage}
+              range={{ first: pages.first, last: pages.last, total: pages.total }} />
+          </div>
         )}
       </div>
     </section>

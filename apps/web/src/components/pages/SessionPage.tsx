@@ -49,6 +49,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   return (
     <ContextLayout compactSidebar sidebar={<SessionSidebar workspaceName={workspace.name} sessions={sessions.sessions} selectedId={sessionId} loading={sessions.loading} deleting={sessions.deleting} onBack={back} onSettings={() => navigate({ name: "settings", workspaceId: workspace.id })} onDelete={setDeleteId} onOpen={(id) => navigate({ name: "session", workspaceId: workspace.id, sessionId: id })} />}>
       <PageHeader
+        variant="bar"
         title={title}
         crumbs={[{ label: workspace.name, onClick: back }]}
       />

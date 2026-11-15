@@ -10,7 +10,7 @@ import { FakeEventSource, installFakeApi } from "./fakeApi";
 async function openMonitoring() {
   installFakeApi();
   render(<App />);
-  await screen.findAllByRole("button", { name: "Starter" });
+  await userEvent.setup().click(await screen.findByRole("button", { name: "Starter" }));
   await waitFor(() => expect(() => FakeEventSource.latest()).not.toThrow());
   const user = userEvent.setup();
   await user.click(screen.getByRole("button", { name: "Actions for Starter" }));

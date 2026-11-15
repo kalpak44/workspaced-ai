@@ -31,7 +31,7 @@ export function NotificationPage({ notificationId }: { readonly notificationId: 
   if (!notification) {
     return (
       <>
-        <PageHeader title="Notification" crumbs={crumbs} />
+        <PageHeader variant="bar" title="Notification" crumbs={crumbs} />
         {status === "loading"
           ? <EmptyState busy title="Loading notification…" hint="Fetching it" />
           : <EmptyState title="Notification not found" hint="It may have been removed." />}
@@ -42,12 +42,12 @@ export function NotificationPage({ notificationId }: { readonly notificationId: 
   const Icon = NOTIFICATION_ICONS[notification.kind];
   return (
     <>
-      <PageHeader title={notification.title} crumbs={crumbs} actions={<>
+      <PageHeader variant="bar" title={notification.title} crumbs={crumbs} actions={<>
         {notification.read && <Button label="Mark as unread" icon={MailOpen} variant="secondary" onClick={() => void markUnread(notification.id)} />}
         <IconButton label="Newer notification" icon={ChevronLeft} disabled={!newer} onClick={() => newer && navigate({ name: "notification", notificationId: newer.id })} />
         <IconButton label="Older notification" icon={ChevronRight} disabled={!older} onClick={() => older && navigate({ name: "notification", notificationId: older.id })} />
       </>} />
-      <article className="mx-auto flex w-full max-w-3xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8">
+      <article className="mx-auto flex w-full max-w-5xl flex-col gap-5 px-4 py-6 sm:px-6 sm:py-8">
         <div className="flex items-center gap-3">
           <span className={`flex size-10 shrink-0 items-center justify-center rounded-full ${NOTIFICATION_TONES[notification.tone]}`}>
             <Icon aria-hidden className="size-5" />

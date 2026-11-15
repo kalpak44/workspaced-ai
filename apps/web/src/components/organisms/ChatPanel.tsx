@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { ArrowDown, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { ChatMessage } from "../../hooks/useChat";
 import type { AgentForm, FormAnswer } from "../../hooks/useChat";
@@ -33,14 +33,33 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
   const displayed = editing && !messages.some((m) => m.id === editing.id)
     ? [...messages, editing] : messages;
   const transcript = useRef<HTMLDivElement>(null);
+  // Whether the reader is at the end; scrolling up to reread pauses following the reply.
+  const following = useRef(true);
+  const [behind, setBehind] = useState(false);
 
-  // Follows the reply as it streams in.
+  // Follows the reply as it streams in, unless the reader scrolled away from the end.
   useEffect(() => {
     const element = transcript.current;
-    if (element) {
+    if (element && following.current) {
       element.scrollTop = element.scrollHeight;
+    } else if (element) {
+      setBehind(true);
     }
   }, [messages, busy, forms]);
+
+  const onScroll = () => {
+    const element = transcript.current;
+    if (!element) return;
+    following.current = element.scrollHeight - element.scrollTop - element.clientHeight < 80;
+    if (following.current) setBehind(false);
+  };
+
+  const jumpToLatest = () => {
+    const element = transcript.current;
+    following.current = true;
+    setBehind(false);
+    element?.scrollTo?.({ top: element.scrollHeight, behavior: "smooth" });
+  };
 
   let body;
   if (loading) {
@@ -52,8 +71,10 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
   } else if (displayed.length === 0 && !busy) {
     body = (
       <div className="flex flex-1 flex-col items-center justify-center gap-2 px-6 text-center">
-        <Sparkles aria-hidden className="mb-2 size-8 text-zinc-400" />
-        <h2 className="text-xl font-semibold">What should the agent do?</h2>
+        <span className="mb-2 flex size-12 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 ring-8 ring-zinc-100/40 dark:bg-zinc-800 dark:text-zinc-400 dark:ring-zinc-800/30">
+          <Sparkles aria-hidden className="size-5" />
+        </span>
+        <h2 className="text-xl font-semibold tracking-tight">What should the agent do?</h2>
         <p className="max-w-sm text-sm text-zinc-500 dark:text-zinc-400">
           It works in this session's own folder inside the workspace, and you can watch it as
           it goes.
@@ -81,7 +102,7 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
         ))}
         {forms.map((form) => <li key={form.id}><AgentQuestion form={form} onAnswer={onAnswer} /></li>)}
         {busy && forms.length === 0 && (
-          <li className="flex items-center gap-2 text-xs text-zinc-500">
+          <li className="flex w-fit items-center gap-2 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs text-zinc-500 shadow-xs dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
             <Spinner label="Agent is working" className="size-3.5" />
             Working…
           </li>
@@ -93,13 +114,19 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
   return (
     <section aria-label="Chat" className="flex min-h-0 flex-1 flex-col">
       {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
-      <div ref={transcript} className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div ref={transcript} onScroll={onScroll} className="flex min-h-0 flex-1 flex-col overflow-y-auto overscroll-contain">
         {body}
       </div>
-      <div className="mx-auto w-full max-w-3xl shrink-0 px-4 pb-4 sm:px-6 sm:pb-6">
+      <div className="relative mx-auto w-full max-w-3xl shrink-0 px-4 pb-[max(1rem,env(safe-area-inset-bottom))] sm:px-6 sm:pb-6">
+        {behind && (
+          <button type="button" onClick={jumpToLatest}
+            className="absolute -top-12 left-1/2 flex -translate-x-1/2 animate-pop-in items-center gap-1.5 rounded-full border border-zinc-200 bg-white px-3 py-1.5 text-xs font-medium text-zinc-700 shadow-md hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-200 dark:hover:bg-zinc-800">
+            <ArrowDown aria-hidden className="size-3.5" />Jump to latest
+          </button>
+        )}
         <ChatComposer busy={busy} disabled={disabled || editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop}
           attachments={attachments} onAttach={onAttach} onDetach={onDetach} />
-        <p className="mt-2 text-center text-xs text-zinc-400">
+        <p className="mt-2 text-center text-xs text-zinc-400 pointer-coarse:hidden">
           Enter to send · Shift+Enter for a new line
         </p>
       </div>

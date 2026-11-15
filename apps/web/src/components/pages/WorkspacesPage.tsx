@@ -1,9 +1,10 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
-import { DEFAULT_NAME, useWorkspaces } from "../../hooks/useWorkspaces";
+import { useWorkspaces } from "../../hooks/useWorkspaces";
 import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
-import { CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, Sidebar, TopBar } from "../organisms";
+import { WorkspacesOverview } from "./WorkspacesOverview";
+import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -45,6 +46,7 @@ export function WorkspacesPage() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [restartId, setRestartId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
+  const [paletteOpen, setPaletteOpen] = useState(false);
   const openNew = () => setNewName(suggestName());
 
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
@@ -52,19 +54,13 @@ export function WorkspacesPage() {
   const deleteTarget = workspaces.find((w) => w.id === deleteId) ?? null;
   const restartTarget = workspaces.find((w) => w.id === restartId) ?? null;
 
-  // Home is the first workspace, and a workspace that is gone — deleted here or in another
-  // tab, or a stale link — falls back to home. Both replace the entry, so Back skips them.
+  // A workspace that is gone — deleted here or in another tab, or a stale link — falls back to
+  // the overview, replacing the entry so Back skips it.
   useEffect(() => {
-    if (loading) {
-      return;
-    }
-    const first = workspaces.at(0);
-    if (route.name === "home" && first) {
-      navigate({ name: "workspace", workspaceId: first.id }, { replace: true });
-    } else if (workspaceId !== null && !workspace) {
+    if (!loading && workspaceId !== null && !workspace) {
       navigate({ name: "home" }, { replace: true });
     }
-  }, [loading, route.name, workspaces, workspaceId, workspace]);
+  }, [loading, workspaceId, workspace]);
 
   const onSessionTitle = useCallback((title: string) => setPageTitle(title), []);
 
@@ -72,7 +68,7 @@ export function WorkspacesPage() {
   let tabTitle: string;
   if (route.name === "general-settings") {
     tabTitle = "General settings";
-    page = <Suspense fallback={<EmptyState busy title="Loading settings…" hint="Preparing your preferences" />}><GeneralSettingsPage /></Suspense>;
+    page = <Suspense fallback={<EmptyState busy title="Loading settings…" hint="Preparing your preferences" />}><GeneralSettingsPage section={route.section} /></Suspense>;
   } else if (route.name === "billing") {
     tabTitle = "Billing";
     page = <Suspense fallback={<EmptyState busy title="Loading billing…" hint="Fetching your balance and invoices" />}><BillingPage /></Suspense>;
@@ -95,24 +91,18 @@ export function WorkspacesPage() {
         <RecipePage key={route.recipeId} recipeId={route.recipeId} workspaces={workspaces} onTitle={onSessionTitle} />
       </Suspense>
     );
-  } else if (loading || (workspaceId !== null && !workspace)) {
+  } else if (route.name === "home" || (!loading && !workspace)) {
     tabTitle = "Workspaces";
     page = (
-      <>
-        <PageHeader title="Workspaces" />
-        <EmptyState busy title="Loading workspaces…" hint="Fetching them from the API" />
-      </>
+      <WorkspacesOverview workspaces={workspaces} loading={loading} deleting={deleting} onNew={openNew}
+        onRename={rename} onRestart={setRestartId} onDelete={setDeleteId} />
     );
   } else if (!workspace) {
     tabTitle = "Workspaces";
     page = (
       <>
         <PageHeader title="Workspaces" />
-        <EmptyState
-          title="No workspaces"
-          hint="A workspace is a sandbox with its own agent. Create one to get started."
-          action={{ label: DEFAULT_NAME, onClick: openNew }}
-        />
+        <EmptyState busy title="Loading workspaces…" hint="Fetching them from the API" />
       </>
     );
   } else if (route.name === "settings") {
@@ -156,27 +146,29 @@ export function WorkspacesPage() {
     document.title = `${tabTitle} — ${APP}`;
   }, [tabTitle]);
 
+  // A workspace's own views share one header with its tabs; a session is a chat, kept full height.
+  const VIEWS: Partial<Record<typeof route.name, WorkspaceView>> = { workspace: "sessions", terminal: "terminal", monitoring: "monitoring", settings: "settings" };
+  const view = VIEWS[route.name];
+  if (workspace && view && !loading) {
+    page = (
+      <>
+        <WorkspaceHeader workspace={workspace} workspaces={workspaces} current={view} deleting={deleting.has(workspace.id)}
+          onRestart={() => setRestartId(workspace.id)} onRename={(name) => rename(workspace.id, name)}
+          onDelete={() => setDeleteId(workspace.id)} onNew={openNew} />
+        {page}
+      </>
+    );
+  }
+
   return (
     <AppLayout
-      header={<TopBar theme={theme} onThemeChange={setTheme} storeOpen={route.name === "store" || route.name === "recipe"} />}
-      sidebar={
-        route.name !== "session" && route.name !== "terminal" && route.name !== "settings" && route.name !== "general-settings" && route.name !== "billing" && route.name !== "domains" && route.name !== "notifications" && route.name !== "notification" && route.name !== "store" && route.name !== "recipe" && <Sidebar
-          workspaces={workspaces}
-          selectedId={workspace?.id ?? null}
-          deleting={deleting}
-          onSelect={(id) => navigate({ name: "workspace", workspaceId: id })}
-          onNew={openNew}
-          onRename={rename}
-          onSettings={(id) => navigate({ name: "settings", workspaceId: id })}
-          onTerminal={(id) => navigate({ name: "terminal", workspaceId: id })}
-          onMonitoring={(id) => navigate({ name: "monitoring", workspaceId: id })}
-          onRestart={setRestartId}
-          onDelete={setDeleteId}
-        />
-      }
+      header={<TopBar theme={theme} onThemeChange={setTheme} storeOpen={route.name === "store" || route.name === "recipe"} onSearch={() => setPaletteOpen(true)}
+        workspacesOpen={route.name === "home"} onNewWorkspace={openNew} />}
       notice={error && <ErrorBanner message={error} onDismiss={dismissError} />}
     >
       {page}
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} workspaces={workspaces} current={workspace}
+        theme={theme} onThemeChange={setTheme} onNewWorkspace={openNew} />
       {newName !== null && (
         <CreateWorkspaceDialog
           initialName={newName}

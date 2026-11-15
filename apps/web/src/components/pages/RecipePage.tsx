@@ -36,7 +36,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
   if (loading || missing || error || !recipe) {
     return (
       <>
-        <PageHeader title="Recipe" crumbs={[{ label: "Recipe store", onClick: back }]} />
+        <PageHeader variant="bar" title="Recipe" crumbs={[{ label: "Recipe store", onClick: back }]} />
         {loading ? (
           <EmptyState busy title="Loading recipe…" hint="Fetching it from the store" />
         ) : (
@@ -52,12 +52,13 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
   return (
     <>
       <PageHeader
+        variant="bar"
         title={recipe.title}
         crumbs={[{ label: "Recipe store", onClick: back }]}
         actions={<Button label="Apply" icon={Play} onClick={() => setDialog("apply")} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <article className="mx-auto flex w-full max-w-3xl flex-col gap-6 px-4 py-6 sm:px-6">
+        <article className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
           <header className="flex flex-col gap-4">
             <div className="flex items-start gap-4">
               <CategoryTile category={recipe.category} large />

@@ -11,11 +11,11 @@ export function SettingsSection({ title, description, children }: Props) {
   return (
     <section
       aria-label={title}
-      className="flex min-w-0 flex-col gap-4 rounded-xl border border-zinc-200 p-4 sm:p-6 dark:border-zinc-800"
+      className="card flex min-w-0 flex-col gap-4 p-4 sm:p-6"
     >
       <div>
-        <h2 className="font-medium">{title}</h2>
-        <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">{description}</p>
+        <h2 className="font-semibold tracking-tight [overflow-wrap:anywhere]">{title}</h2>
+        <p className="mt-1 text-sm text-pretty text-zinc-500 dark:text-zinc-400">{description}</p>
       </div>
       {children}
     </section>

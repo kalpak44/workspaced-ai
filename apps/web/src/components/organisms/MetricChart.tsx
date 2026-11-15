@@ -95,7 +95,7 @@ export function MetricChart({ metric, timestamps, formatTime, note }: Props) {
   const tooltipLeft = hover === null ? 0 : x(hover);
 
   return (
-    <section aria-labelledby={titleId} className="flex min-w-0 flex-col gap-3 rounded-xl border border-zinc-200 p-4 sm:p-5 dark:border-zinc-800">
+    <section aria-labelledby={titleId} className="card flex min-w-0 flex-col gap-3 p-4 sm:p-5">
       <header className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
         <h2 id={titleId} className="text-sm font-medium">{metric.title}</h2>
         <div className="flex items-center gap-3 text-xs text-zinc-500 dark:text-zinc-400">

@@ -1,7 +1,7 @@
-import { ArrowLeft, CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Variable } from "lucide-react";
+import { CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Variable } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
-import { goBack, navigate } from "../../hooks/useRoute";
+import { navigate } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { McpPanel, SecretsPanel } from "../organisms";
@@ -9,6 +9,7 @@ import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { VariablesPanel } from "../organisms/VariablesPanel";
 import { WebServerPanel } from "../organisms/WebServerPanel";
 import { Spinner } from "../atoms";
+import { SectionNav } from "../molecules";
 import { ContextLayout } from "../templates/ContextLayout";
 
 interface Props {
@@ -45,44 +46,15 @@ export function SettingsPage({ workspace, section: requested, onSecretsChanged, 
   const setSection = (id: SectionId) => navigate({ name: "settings", workspaceId: workspace.id, section: id }, { replace: true });
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id, onSecretsChanged);
-  const back = () => goBack({ name: "workspace", workspaceId: workspace.id });
 
   return (
     <ContextLayout
+      contained
       sidebar={
-        <>
-          <div className="flex h-14 shrink-0 items-center border-b border-zinc-200 px-4 dark:border-zinc-800">
-            <button
-              type="button"
-              onClick={back}
-              className="flex min-w-0 items-center gap-2 rounded-md text-sm text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-white"
-            >
-              <ArrowLeft aria-hidden className="size-4 shrink-0" />
-              Back
-            </button>
-          </div>
-          <nav aria-label="Workspace settings sections" className="flex flex-wrap gap-1 p-3 sm:flex-col">
-            {SECTIONS.map(({ id, label, Icon }) => (
-              <button
-                key={id}
-                type="button"
-                aria-current={section === id ? "page" : undefined}
-                onClick={() => setSection(id)}
-                className={`flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium ${
-                  section === id
-                    ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
-                    : "text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900"
-                }`}
-              >
-                <Icon aria-hidden className="size-4" />
-                {label}
-              </button>
-            ))}
-          </nav>
-        </>
+        <SectionNav label="Workspace settings sections" sections={SECTIONS} current={section} onSelect={setSection} />
       }
     >
-      <div className="w-full px-4 py-6 sm:px-6 sm:py-8">
+      <div className="w-full">
         {section === "instructions" && (
           <Suspense fallback={<Spinner label="Loading instructions" className="size-5 text-zinc-400" />}>
             <InstructionsPanel key={workspace.id} workspaceId={workspace.id} />

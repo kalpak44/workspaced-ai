@@ -1,20 +1,24 @@
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { Sidebar } from "../src/components/organisms/Sidebar";
+import { App } from "../src/App";
 import { UserMenu } from "../src/components/organisms/UserMenu";
+import { installFakeApi } from "./fakeApi";
 
 beforeEach(() => {
   vi.stubGlobal("matchMedia", () => ({ matches: true, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
 });
 
-function setup() {
-  const handlers = { onSelect: vi.fn(), onNew: vi.fn(), onRename: vi.fn(), onSettings: vi.fn(), onTerminal: vi.fn(), onMonitoring: vi.fn(), onRestart: vi.fn(), onDelete: vi.fn() };
-  render(<Sidebar workspaces={[
+/** Opens the app on a phone inside Alpha, with Beta beside it. */
+async function setup() {
+  const api = installFakeApi([
     { id: "alpha", name: "Alpha", status: "READY", modelProvider: "demo", model: null, restartRequired: false },
     { id: "beta", name: "Beta", status: "READY", modelProvider: "demo", model: null, restartRequired: false },
-  ]} selectedId="alpha" deleting={new Set()} {...handlers} />);
-  return { ...handlers, user: userEvent.setup(), trigger: screen.getByRole("button", { name: "Choose workspace" }) };
+  ]);
+  globalThis.history.replaceState(null, "", "/workspaces/alpha");
+  render(<App />);
+  await screen.findByRole("region", { name: "Workspace details" });
+  return { api, user: userEvent.setup(), trigger: screen.getByRole("button", { name: "Switch workspace" }) };
 }
 
 describe("mobile workspace navigation", () => {
@@ -35,26 +39,27 @@ describe("mobile workspace navigation", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 
-  it("shows the current workspace, searches, switches, and keeps creation separate", async () => {
-    const { user, trigger, onSelect, onNew } = setup();
+  it("shows the current workspace and switches, keeping creation separate", async () => {
+    const { user, trigger } = await setup();
     expect(trigger).toHaveTextContent("Alpha");
     await user.click(trigger);
-    await user.type(screen.getByRole("searchbox", { name: "Search workspaces" }), "BETA");
-    expect(screen.queryByRole("button", { name: "Alpha" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Beta" }));
-    expect(onSelect).toHaveBeenCalledWith("beta");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
-    expect(onNew).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("menuitem", { name: "Beta" }));
+    expect(location.pathname).toBe("/workspaces/beta");
+    expect(screen.getByRole("button", { name: "Switch workspace" })).toHaveAttribute("aria-expanded", "false");
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Switch workspace" }));
+    await user.click(screen.getByRole("menuitem", { name: "All workspaces" }));
+    expect(location.pathname).toBe("/");
     await user.click(screen.getByRole("button", { name: "New workspace" }));
-    expect(onNew).toHaveBeenCalledOnce();
+    expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
   });
 
-  it("opens workspace actions in a modal and keeps rename usable inside the dropdown", async () => {
-    const { user, trigger, onRename } = setup();
-    await user.click(trigger);
+  it("opens workspace actions in a sheet and renames from it", async () => {
+    const { user, api } = await setup();
     await user.click(screen.getByRole("button", { name: "Actions for Alpha" }));
     const dialog = screen.getByRole("dialog", { name: "Alpha" });
-    for (const name of ["Rename", "Settings", "Terminal", "Delete workspace"]) {
+    for (const name of ["Rename", "Settings", "Terminal", "Monitoring", "Restart", "Delete workspace"]) {
       expect(within(dialog).getByRole("menuitem", { name })).toBeInTheDocument();
     }
     await user.click(within(dialog).getByRole("button", { name: "Close" }));
@@ -65,16 +70,14 @@ describe("mobile workspace navigation", () => {
     expect(name).toHaveFocus();
     await user.clear(name);
     await user.type(name, "Renamed{Enter}");
-    expect(onRename).toHaveBeenCalledWith("alpha", "Renamed");
+    await waitFor(() => expect(api.rows[0].name).toBe("Renamed"));
   });
 
-  it("dispatches an action from the modal before dismissing the dropdown", async () => {
-    const { user, trigger, onSettings } = setup();
-    await user.click(trigger);
+  it("dispatches an action from the sheet and closes it", async () => {
+    const { user } = await setup();
     await user.click(screen.getByRole("button", { name: "Actions for Alpha" }));
     await user.click(within(screen.getByRole("dialog")).getByRole("menuitem", { name: "Settings" }));
-    expect(onSettings).toHaveBeenCalledWith("alpha");
-    expect(trigger).toHaveAttribute("aria-expanded", "false");
+    expect(location.pathname).toBe("/workspaces/alpha/settings");
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   });
 });

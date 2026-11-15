@@ -36,6 +36,16 @@ describe("domains", () => {
     expect(within(owned).getByText("Auto-renew")).toBeInTheDocument();
   });
 
+  it("links each owned domain to its DNS settings", async () => {
+    await renderDomains();
+    const user = userEvent.setup();
+    const [first] = within(screen.getByRole("list", { name: "Your domains" })).getAllByRole("link", { name: /^Manage DNS for / });
+    await user.click(first);
+    expect(location.pathname).toBe("/settings/domains");
+    expect(await screen.findByRole("navigation", { name: "Settings sections" })).toBeInTheDocument();
+    expect(within(screen.getByRole("navigation", { name: "Settings sections" })).getByRole("button", { name: "Domains" })).toHaveAttribute("aria-current", "page");
+  });
+
   it("refuses a name a registry would not accept", async () => {
     await renderDomains();
     await searchFor("-bad-");

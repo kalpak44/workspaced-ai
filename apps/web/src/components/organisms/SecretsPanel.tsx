@@ -105,7 +105,7 @@ export function SecretsPanel({
         </p>
       )}
       {!loading && (
-        <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
           {secrets.map((secret) => (
             <SecretItem
               key={secret.name}

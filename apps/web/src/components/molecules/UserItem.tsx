@@ -30,7 +30,7 @@ export function UserItem({ user, self, removing, onRemove, onToggleAdmin }: Prop
     );
   }
   return (
-    <li className="flex min-w-0 items-center justify-between gap-3 px-3 py-2">
+    <li className="flex min-w-0 items-center justify-between gap-3 px-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
       <div className="flex min-w-0 items-center gap-3">
         {user.avatar ? (
           <img src={user.avatar} alt="" className="size-8 shrink-0 rounded-full object-cover" />

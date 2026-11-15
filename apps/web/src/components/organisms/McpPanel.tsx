@@ -187,7 +187,7 @@ export function McpPanel({ servers, loading, removing, error, onDismissError, on
       {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
       {loading && <Spinner label="Loading MCP servers" className="size-5 text-zinc-400" />}
       {!loading && servers.length > 0 && (
-        <ul className="divide-y divide-zinc-200 rounded-md border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+        <ul className="divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
           {servers.map((server) => (
             <li key={server.name} className="flex items-center gap-3 px-3 py-2.5">
               <span className="min-w-0 flex-1">
