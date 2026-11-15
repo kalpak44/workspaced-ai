@@ -41,8 +41,15 @@ class HttpVmManagerClientTest {
     var client = client(URI.create(fake.url() + "/"));
     client.ready(vm);
     fake.vmStatus = "RESTARTING";
-    assertThat(client.heartbeat(vm)).isEqualTo("RESTARTING");
+    assertThat(client.heartbeat(vm, null)).isEqualTo("RESTARTING");
     assertThat(fake.reports).containsExactly("ready " + vm, "heartbeat " + vm);
+  }
+
+  @Test
+  void sendsTheMemoryReadingAsJson() {
+    client(fake.url()).heartbeat(vm, new VmMemory(4096, 1024));
+    assertThat(fake.bodies)
+        .containsExactly("{\"memory\":{\"totalBytes\":4096,\"availableBytes\":1024}}");
   }
 
   @Test
@@ -56,11 +63,11 @@ class HttpVmManagerClientTest {
   void refusesAHeartbeatAnswerWithoutAStatus() {
     var client = client(fake.url());
     fake.body = "{\"id\":\"x\"}";
-    assertThatThrownBy(() -> client.heartbeat(vm))
+    assertThatThrownBy(() -> client.heartbeat(vm, null))
         .isInstanceOf(VmManagerException.class)
         .hasMessageContaining("without a status");
     fake.body = "not json";
-    assertThatThrownBy(() -> client.heartbeat(vm))
+    assertThatThrownBy(() -> client.heartbeat(vm, null))
         .isInstanceOf(VmManagerException.class)
         .hasMessageContaining("not JSON");
   }
@@ -69,7 +76,7 @@ class HttpVmManagerClientTest {
   void tellsAVmItNoLongerHasFromAFailure() {
     var client = client(fake.url());
     fake.gone.add(vm);
-    assertThatThrownBy(() -> client.heartbeat(vm)).isInstanceOf(VmNotFoundException.class);
+    assertThatThrownBy(() -> client.heartbeat(vm, null)).isInstanceOf(VmNotFoundException.class);
     assertThatThrownBy(() -> client.harness(vm)).isInstanceOf(VmNotFoundException.class);
     fake.status = 500;
     assertThatThrownBy(() -> client.ready(vm))

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "../src/App";
-import { fetchMetrics } from "../src/api/metricsApi";
+import { type MetricsResponse, toMetrics } from "../src/api/metricsApi";
 import { formatMetric } from "../src/components/organisms/MetricChart";
 import { formatRate } from "../src/lib/format";
 import { FakeEventSource, installFakeApi } from "./fakeApi";
@@ -26,9 +26,12 @@ describe("monitoring", () => {
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Monitoring");
     const tiles = within(screen.getByRole("list", { name: "Now" })).getAllByRole("listitem");
     expect(tiles.map((tile) => tile.querySelector("span")?.textContent)).toEqual(["CPU", "Memory", "Disk", "Network"]);
-    for (const title of ["CPU", "Memory", "Disk throughput", "Disk IOPS", "Network traffic", "Network PPS"]) {
+    for (const title of ["CPU", "Disk throughput", "Disk IOPS", "Network traffic", "Network PPS"]) {
       expect(screen.getByRole("region", { name: title })).toBeInTheDocument();
     }
+    expect(screen.queryByRole("region", { name: "Memory" })).not.toBeInTheDocument();
+    expect(tiles[1]).toHaveTextContent("25%");
+    expect(tiles[1]).toHaveTextContent("1.0 of 4 GB");
     expect(within(screen.getByRole("region", { name: "Disk IOPS" })).getByText("Write")).toBeInTheDocument();
     expect(screen.getByText("Updating live")).toBeInTheDocument();
   });
@@ -54,14 +57,19 @@ describe("monitoring", () => {
     expect(within(screen.getByRole("region", { name: "CPU" })).getAllByText(/^[A-Z][a-z]{2} \d{1,2}$/).length).toBeGreaterThan(1);
   });
 
-  it("moves the live window forward rather than redrawing a different history", async () => {
-    const now = Date.parse("2026-11-15T10:00:00Z");
-    const first = await fetchMetrics("w1", "live", now);
-    const next = await fetchMetrics("w1", "live", now + 5_000);
-    expect(first.timestamps).toHaveLength(60);
-    expect(next.timestamps[0]).toBe(first.timestamps[1]);
-    expect(next.metrics[0].series[0].values.slice(0, -1)).toEqual(first.metrics[0].series[0].values.slice(1));
-    expect(Math.max(...first.metrics[0].series[0].values)).toBeLessThanOrEqual(100);
+  it("drops a trailing sample Hetzner has not filled and holds the value across a gap", () => {
+    const response: MetricsResponse = {
+      cores: 2,
+      memoryGb: 4,
+      timestamps: ["2026-11-15T10:00:00Z", "2026-11-15T10:01:00Z", "2026-11-15T10:02:00Z", "2026-11-15T10:03:00Z"],
+      series: { cpu: [10, null, 30, null], networkInBytes: [5, 6, 7, null] },
+      memory: null,
+    };
+    const metrics = toMetrics(response);
+    expect(metrics.timestamps).toEqual([Date.parse("2026-11-15T10:00:00Z"), Date.parse("2026-11-15T10:01:00Z"), Date.parse("2026-11-15T10:02:00Z")]);
+    expect(metrics.metrics[0].series[0].values).toEqual([10, 10, 30]);
+    expect(metrics.metrics.find((m) => m.id === "disk-iops")?.series[0].values).toEqual([0, 0, 0]);
+    expect(metrics.memory).toBeNull();
   });
 
   it("prints values in the unit a reader expects", () => {

@@ -22,8 +22,9 @@ A VM is one Hetzner Cloud server running one workspace. It has an `id` (UUID, as
 | `DELETE` | `/api/v1/vms/{id}`            |                                                          | `204`, or `404`                                 |
 | `POST`   | `/api/v1/vms/{id}/restart`    |                                                          | `202` and the VM, or `404`                      |
 | `POST`   | `/api/v1/vms/{id}/ready`      |                                                          | `200` and the VM, or `404`                      |
-| `POST`   | `/api/v1/vms/{id}/heartbeat`  |                                                          | `200` and the VM, or `404`                      |
+| `POST`   | `/api/v1/vms/{id}/heartbeat`  | optional `{"memory": {"totalBytes": …, "availableBytes": …}}` | `200` and the VM, `400`, or `404`               |
 | `GET`    | `/api/v1/vms/{id}/harness`    |                                                          | `200` and the harness, `404`, or `503`          |
+| `GET`    | `/api/v1/vms/{id}/metrics`    |                                                          | `200` and the metrics, `400`, `404`, or `502`   |
 
 Creating a VM stores `openRouterApiKey` in Vault as its system secret and `environment` (optional) as its harness
 environment, then creates its server at Hetzner
@@ -49,6 +50,14 @@ token and hands the VM a cloud-config writing `/etc/workspaced/agent.env` (root-
 public address (`WORKSPACED_AGENT_HUB_PUBLIC_URL`) and the token. The supervisor enrolls with it on first boot and
 reports ready and heartbeats through the agent hub, which relays them to `/vms/{id}/ready` and `/heartbeat` here; a
 heartbeat answers the VM, so its supervisor learns it is `RESTARTING` and recreates the harness.
+
+### Metrics
+
+`/vms/{id}/metrics?range=` (`live`, `1h`, `24h`, `7d`, `30d`) answers Hetzner's CPU, disk and network series for the
+server, CPU as a percentage of all its cores, and the memory reading the VM's last heartbeat carried. Hetzner has no
+memory series, so memory is a current value only, kept in memory and answered as `null` once two heartbeats are
+missed. Hetzner allows 3600 requests an hour per project, so its answer is reused per VM and range for a while (30 s
+for `live`, longer for wider ranges) rather than fetched per viewer.
 Deleting a VM revokes its agent. Without `WORKSPACED_AGENT_HUB_URL` a VM boots with no agent identity, which is only
 useful locally.
 

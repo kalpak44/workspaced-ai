@@ -51,6 +51,16 @@ public class FakeHetzner implements AutoCloseable {
       ],"meta":{"pagination":{"page":2,"next_page":null}}}
       """;
 
+  // Two samples a minute apart; the disk read series misses the second, as Hetzner sends gaps.
+  static final String METRICS =
+      """
+      {"metrics":{"start":"2026-11-14T10:00:00Z","end":"2026-11-14T10:01:00Z","step":60,
+       "time_series":{
+         "cpu":{"values":[[1794650400.123,"150"],[1794650460,"NaN"]]},
+         "disk.0.bandwidth.read":{"values":[[1794650400,"4096"]]},
+         "network.0.pps.in":{"values":[[1794650400,"1.5"],[1794650460,"2"]]}}}}
+      """;
+
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
   private final HttpServer server;
@@ -60,6 +70,7 @@ public class FakeHetzner implements AutoCloseable {
   public final Map<Long, ObjectNode> servers = new ConcurrentHashMap<>();
   public final Map<Long, ObjectNode> firewalls = new ConcurrentHashMap<>();
   public final Map<Long, ObjectNode> images = new ConcurrentHashMap<>();
+  public final List<String> metricsQueries = new CopyOnWriteArrayList<>();
   public volatile int status = 200;
   private final AtomicLong ids = new AtomicLong(5000);
 
@@ -85,6 +96,12 @@ public class FakeHetzner implements AutoCloseable {
   private void servers(HttpExchange exchange) throws IOException {
     record(exchange);
     var path = exchange.getRequestURI().getPath();
+    if (path.endsWith("/metrics")) {
+      metricsQueries.add(
+          URLDecoder.decode(exchange.getRequestURI().getRawQuery(), StandardCharsets.UTF_8));
+      answer(exchange, 200, METRICS);
+      return;
+    }
     switch (exchange.getRequestMethod()) {
       case "GET" -> {
         var list = JSON.createArrayNode();

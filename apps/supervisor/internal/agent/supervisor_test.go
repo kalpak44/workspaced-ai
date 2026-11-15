@@ -41,9 +41,11 @@ type hub struct {
 	// heartbeats are the statuses reported in order; READY once they run out, and
 	// "" answers 204 as an older hub does.
 	heartbeats []string
-	pub        ed25519.PublicKey
-	counts     map[string]int
-	bad        []string
+	// heartbeatBody is the body of the latest heartbeat, signature verified.
+	heartbeatBody []byte
+	pub           ed25519.PublicKey
+	counts        map[string]int
+	bad           []string
 }
 
 func newHub(t *testing.T, enrollStatus ...int) (*hub, *httptest.Server) {
@@ -106,6 +108,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		h.heartbeatBody = body
 		status := "READY"
 		if len(h.heartbeats) > 0 {
 			status, h.heartbeats = h.heartbeats[0], h.heartbeats[1:]
@@ -340,6 +343,28 @@ func TestFreshEnrollThenReadyThenHeartbeat(t *testing.T) {
 		t.Errorf("ready calls = %d, want 1", n)
 	}
 	assertEnrolledState(t, f)
+}
+
+func TestHeartbeatCarriesTheVmMemory(t *testing.T) {
+	h, srv := newHub(t, http.StatusNoContent)
+	f := newFixture(t, srv.URL, true)
+	meminfo := filepath.Join(t.TempDir(), "meminfo")
+	if err := os.WriteFile(meminfo, []byte("MemTotal: 4096 kB\nMemAvailable: 1024 kB\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	stop := f.startWith(t, newFakeDocker(t), func(s *Supervisor) { s.MemInfo = meminfo })
+	waitFor(t, "heartbeat", func() bool { return h.count("heartbeat") >= 1 })
+	stop()
+	h.check()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	var got struct{ Memory Memory }
+	if err := json.Unmarshal(h.heartbeatBody, &got); err != nil {
+		t.Fatalf("heartbeat body %q: %v", h.heartbeatBody, err)
+	}
+	if got.Memory.TotalBytes != 4096*1024 || got.Memory.AvailableBytes != 1024*1024 {
+		t.Errorf("memory = %+v", got.Memory)
+	}
 }
 
 func TestRestartWithMarkerSkipsEnroll(t *testing.T) {

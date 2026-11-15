@@ -1,5 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.hetzner;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 
 /**
@@ -27,4 +29,11 @@ public interface HetznerClient {
 
   /** A server already gone counts as deleted, so a retried delete succeeds. */
   void deleteServer(long id);
+
+  /**
+   * The server's CPU, disk and network series over the period. Hetzner keeps 30 days of them.
+   *
+   * @param step how far apart the samples are; Hetzner widens it to keep under 500 samples
+   */
+  ServerMetrics metrics(long id, Instant start, Instant end, Duration step);
 }

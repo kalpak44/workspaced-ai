@@ -35,6 +35,13 @@ class FakeVmManager implements AutoCloseable {
         "monthlyNet":8.49,"monthlyGross":10.19}]
       """;
 
+  static final String METRICS =
+      """
+      {"cores":2,"memoryGb":4.0,"timestamps":["2026-11-14T10:00:00Z","2026-11-14T10:01:00Z"],
+       "series":{"cpu":[12.5,null],"networkInBytes":[100.0,200.0]},
+       "memory":{"totalBytes":4096,"availableBytes":1024,"reportedAt":"2026-11-14T10:01:10Z"}}
+      """;
+
   private final HttpServer server;
   final Map<UUID, ObjectNode> vms = new ConcurrentHashMap<>();
   final List<JsonNode> creates = new CopyOnWriteArrayList<>();
@@ -64,6 +71,14 @@ class FakeVmManager implements AutoCloseable {
         }
         if (path.endsWith("/events")) {
           events(exchange);
+          return;
+        }
+        if (path.endsWith("/metrics")) {
+          var known = exchange.getRequestURI().getQuery().matches("range=(live|1h|24h|7d|30d)");
+          answer(
+              exchange,
+              known ? 200 : 400,
+              known ? METRICS : "{\"detail\":\"range is not offered\"}");
           return;
         }
         var query = exchange.getRequestURI().getQuery();

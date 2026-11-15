@@ -2,7 +2,9 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HeartbeatDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmMetricsDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.ArraySchema;
@@ -209,8 +211,9 @@ public interface VmApi {
       operationId = "reportVmHeartbeat",
       summary = "Report a VM alive",
       description =
-          "Periodically while the VM runs, relayed by the agent hub; refreshes lastSeenAt only. "
-              + "Answers the VM so the VM learns its status, RESTARTING among them.")
+          "Periodically while the VM runs, relayed by the agent hub; refreshes lastSeenAt and "
+              + "keeps the memory reading it carries for the metrics. Answers the VM so the VM "
+              + "learns its status, RESTARTING among them.")
   @ApiResponse(
       responseCode = "200",
       description = "Recorded.",
@@ -226,8 +229,57 @@ public interface VmApi {
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "The memory reading is not a plausible one.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/{id}/heartbeat", produces = JSON)
-  ResponseEntity<VmDto> heartbeat(@PathVariable UUID id);
+  ResponseEntity<VmDto> heartbeat(
+      @PathVariable UUID id, @Valid @RequestBody(required = false) HeartbeatDto body);
+
+  @Operation(
+      operationId = "getVmMetrics",
+      summary = "Get a VM's metrics",
+      description =
+          "CPU, disk and network over the range as Hetzner reports them, and the memory reading "
+              + "of the VM's last heartbeat. Hetzner's answer is reused for a while per range, so "
+              + "viewers refreshing a chart do not spend the project's request limit.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "OK.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = VmMetricsDto.class)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "The range is not one offered.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "There is no such VM.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description = "Hetzner failed.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @GetMapping(path = "/{id}/metrics", produces = JSON)
+  ResponseEntity<VmMetricsDto> metrics(
+      @PathVariable UUID id,
+      @Parameter(
+              description = "How far back: live (15 minutes), 1h, 24h, 7d or 30d",
+              example = "live")
+          @RequestParam(defaultValue = "live")
+          String range);
 
   @Operation(
       operationId = "getVmHarness",

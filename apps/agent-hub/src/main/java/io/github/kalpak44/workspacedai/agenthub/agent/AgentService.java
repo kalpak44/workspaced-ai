@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.agenthub.agent;
 
 import io.github.kalpak44.workspacedai.agenthub.AgentHubProperties;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmManagerClient;
+import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmMemory;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Duration;
@@ -10,6 +11,9 @@ import java.util.Base64;
 import java.util.HexFormat;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Checks what an enrolled agent signs, then passes its report on to the VM manager. */
 @Service
@@ -19,13 +23,19 @@ public class AgentService {
   private final VmManagerClient vmManager;
   private final AgentHubProperties properties;
   private final Clock clock;
+  private final JsonMapper json;
 
   public AgentService(
-      AgentStore store, VmManagerClient vmManager, AgentHubProperties properties, Clock clock) {
+      AgentStore store,
+      VmManagerClient vmManager,
+      AgentHubProperties properties,
+      Clock clock,
+      JsonMapper json) {
     this.store = store;
     this.vmManager = vmManager;
     this.properties = properties;
     this.clock = clock;
+    this.json = json;
   }
 
   /**
@@ -40,14 +50,39 @@ public class AgentService {
   }
 
   /**
-   * As {@link #ready}, for the report sent every 30 seconds after it.
+   * As {@link #ready}, for the report sent every 30 seconds after it. The VM's memory reading is
+   * passed on when the body carries a plausible one; any other body still counts as a heartbeat.
    *
    * @return the VM's status at the VM manager, so the VM learns when to restart its harness
    */
   public String heartbeat(SignedRequest request) {
     var vmId = authenticate(request);
     store.touch(vmId, clock.instant());
-    return vmManager.heartbeat(vmId);
+    return vmManager.heartbeat(vmId, memory(request.body()));
+  }
+
+  // A malformed reading must not fail the heartbeat, or the VM would read it as the hub being
+  // down and stop learning its status.
+  private VmMemory memory(byte[] body) {
+    if (body.length == 0) {
+      return null;
+    }
+    try {
+      var memory = json.readTree(body).path("memory");
+      var total = memory.path("totalBytes");
+      var available = memory.path("availableBytes");
+      if (!whole(total) || !whole(available)) {
+        return null;
+      }
+      var reading = new VmMemory(total.asLong(), available.asLong());
+      var plausible =
+          reading.totalBytes() > 0
+              && reading.availableBytes() >= 0
+              && reading.availableBytes() <= reading.totalBytes();
+      return plausible ? reading : null;
+    } catch (JacksonException e) {
+      return null;
+    }
   }
 
   /**
@@ -102,6 +137,10 @@ public class AgentService {
       throw new SignatureRefusedException("the signature does not verify");
     }
     return vmId;
+  }
+
+  private static boolean whole(JsonNode value) {
+    return value.isIntegralNumber() && value.canConvertToLong();
   }
 
   private static UUID parseVmId(String vmId) {

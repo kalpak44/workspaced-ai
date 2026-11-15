@@ -70,6 +70,23 @@ class HttpVmManagerTest {
   }
 
   @Test
+  void readsTheWorkspaceVmsMetrics() {
+    assertThatThrownBy(() -> vmManager.metricsFor(workspace, "1h"))
+        .isInstanceOf(IllegalStateException.class);
+    vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+
+    var metrics = vmManager.metricsFor(workspace, "1h");
+
+    assertThat(metrics.cores()).isEqualTo(2);
+    assertThat(metrics.timestamps()).hasSize(2);
+    assertThat(metrics.series().get("cpu")).containsExactly(12.5, null);
+    assertThat(metrics.memory().availableBytes()).isEqualTo(1024);
+    assertThatThrownBy(() -> vmManager.metricsFor(workspace, "1y"))
+        .isInstanceOf(MetricsRangeRejectedException.class)
+        .hasMessageContaining("not offered");
+  }
+
+  @Test
   void addsAndRemovesSecretsOnTheWorkspacesVm() {
     var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
 

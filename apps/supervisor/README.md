@@ -3,7 +3,8 @@
 Runs on every workspace VM. It enrolls the VM with agent-hub once, using the single-use token
 from cloud-init, then fetches the harness image and environment (`/agent/harness`), runs it as
 the `workspaced-harness` container through the system Docker socket, reports `ready` once
-`127.0.0.1:4096` answers, and sends a signed `heartbeat` every 30 s. A heartbeat answering
+`127.0.0.1:4096` answers, and sends a signed `heartbeat` every 30 s carrying the VM's memory from
+`/proc/meminfo`, which Hetzner's metrics lack. A heartbeat answering
 `RESTARTING` recreates the harness with fresh values; `PROVISIONING` reports `ready` again. A
 container whose image and environment hash matches its `io.workspaced.config` label is kept, and
 one that exited is started again. Requests are signed with an Ed25519 key that never leaves the

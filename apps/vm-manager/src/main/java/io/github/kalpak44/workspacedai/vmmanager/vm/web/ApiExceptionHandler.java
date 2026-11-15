@@ -4,6 +4,7 @@ import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHubException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.vault.VaultException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessNotConfiguredException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.MetricsRangeNotOfferedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.SecretNotFoundException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.SecretRefusedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.ServerTypeNotOfferedException;
@@ -42,6 +43,11 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(ServerTypeNotOfferedException.class)
   ProblemDetail notOffered(ServerTypeNotOfferedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(MetricsRangeNotOfferedException.class)
+  ProblemDetail rangeNotOffered(MetricsRangeNotOfferedException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 

@@ -39,6 +39,7 @@ func main() {
 		BackoffMax:    60 * time.Second,
 		OperatorRetry: 60 * time.Second,
 		Heartbeat:     30 * time.Second,
+		MemInfo:       "/proc/meminfo",
 		Docker:        docker.New(socket),
 		HealthURL:     strings.TrimRight(harness, "/") + "/api/info",
 		HealthPoll:    2 * time.Second,

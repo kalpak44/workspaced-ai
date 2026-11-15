@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.hetzner;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -19,6 +20,8 @@ public class FakeHetznerClient implements HetznerClient {
   public final List<Long> deleted = new ArrayList<>();
   public volatile List<ServerType> types = List.of();
   public volatile HetznerException failure;
+  public volatile ServerMetrics metrics = new ServerMetrics(List.of(), Map.of());
+  public final List<String> metricsCalls = new ArrayList<>();
   public int typeCalls;
   private final AtomicLong ids = new AtomicLong(1000);
 
@@ -60,6 +63,13 @@ public class FakeHetznerClient implements HetznerClient {
     fail();
     deleted.add(id);
     servers.remove(id);
+  }
+
+  @Override
+  public ServerMetrics metrics(long id, Instant start, Instant end, Duration step) {
+    fail();
+    metricsCalls.add(id + " " + start + " " + end + " " + step);
+    return metrics;
   }
 
   private void fail() {

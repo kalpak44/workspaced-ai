@@ -125,6 +125,30 @@ public class HttpVmManager implements VmManager {
   }
 
   @Override
+  public WorkspaceMetrics metricsFor(UUID workspaceId, String range) {
+    var vm =
+        vmIdOf(workspaceId)
+            .orElseThrow(
+                () -> new IllegalStateException("workspace " + workspaceId + " has no VM"));
+    var response =
+        send(
+            get(
+                "/vms/"
+                    + vm
+                    + "/metrics?range="
+                    + URLEncoder.encode(range, StandardCharsets.UTF_8)));
+    if (response.statusCode() == 400) {
+      throw new MetricsRangeRejectedException(detail(response));
+    }
+    expect(response, 200);
+    try {
+      return json.readValue(response.body(), WorkspaceMetrics.class);
+    } catch (JacksonException e) {
+      throw new VmManagerFailedException("sent metrics that do not read as metrics");
+    }
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     var vm =
         vmIdOf(workspaceId)

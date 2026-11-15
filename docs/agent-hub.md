@@ -38,7 +38,9 @@ From the API:
 
 `ready`, `heartbeat` and `harness` record when the VM was last seen and call the VM manager's `POST /vms/{id}/ready`,
 `/heartbeat` or `GET /vms/{id}/harness`. A heartbeat answers the VM's status there (`READY`, `RESTARTING`,
-`PROVISIONING`), which is how the supervisor learns to recreate its harness. `harness` passes the VM manager's body
+`PROVISIONING`), which is how the supervisor learns to recreate its harness. A heartbeat body carrying the VM's
+memory (`{"memory": {"totalBytes", "availableBytes"}}`) is passed on when the numbers are plausible; any other body is
+dropped without failing the heartbeat. `harness` passes the VM manager's body
 through unread and unlogged, since it holds the VM's secret values, with `Cache-Control: no-store`. The VM manager
 answering `404` (the VM was deleted) answers `404`, `503` (no harness image or no Vault) answers `503`; anything else
 it fails with, or not answering within 10 s, answers `502`.

@@ -58,12 +58,20 @@ func (c *Client) Signed(ctx context.Context, subpath string) (int, error) {
 
 // Call is Signed that also returns the response body, which may hold secret values.
 func (c *Client) Call(ctx context.Context, subpath string) (int, []byte, error) {
-	req, err := c.newRequest(ctx, subpath, nil)
+	return c.Post(ctx, subpath, nil)
+}
+
+// Post is Call with a JSON body, which the signature covers.
+func (c *Client) Post(ctx context.Context, subpath string, body []byte) (int, []byte, error) {
+	req, err := c.newRequest(ctx, subpath, body)
 	if err != nil {
 		return 0, nil, err
 	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
 	// Sign the path as it goes on the wire, so the /api/v1 prefix comes from the URL.
-	for k, v := range c.SignHeaders(req.Method, req.URL.EscapedPath()) {
+	for k, v := range c.sign(req.Method, req.URL.EscapedPath(), body) {
 		req.Header[k] = v
 	}
 	return c.doBody(req)
@@ -71,8 +79,12 @@ func (c *Client) Call(ctx context.Context, subpath string) (int, []byte, error) 
 
 // SignHeaders signs a request with no body, such as the tunnel's WebSocket handshake.
 func (c *Client) SignHeaders(method, path string) http.Header {
+	return c.sign(method, path, nil)
+}
+
+func (c *Client) sign(method, path string, body []byte) http.Header {
 	ts := c.Now().Unix()
-	msg := SignMessage(method, path, ts, nil)
+	msg := SignMessage(method, path, ts, body)
 	h := http.Header{}
 	h.Set("X-Agent-Vm", c.VMID)
 	h.Set("X-Agent-Timestamp", strconv.FormatInt(ts, 10))

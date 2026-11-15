@@ -117,6 +117,32 @@ class VmControllerTest {
   }
 
   @Test
+  void answersHetznersMetricsWithTheMemoryTheHeartbeatCarried() throws Exception {
+    var vm = create();
+    var beat =
+        send(
+            "POST",
+            "/" + vm.id() + "/heartbeat",
+            "{\"memory\":{\"totalBytes\":4096,\"availableBytes\":1024}}");
+    assertThat(beat.statusCode()).isEqualTo(200);
+
+    var response = send("GET", "/" + vm.id() + "/metrics?range=1h", null);
+    assertThat(response.statusCode()).isEqualTo(200);
+    var metrics = JSON.readTree(response.body());
+    assertThat(metrics.path("cores").asInt()).isEqualTo(2);
+    assertThat(metrics.path("timestamps")).hasSize(2);
+    assertThat(metrics.path("series").path("cpu").get(0).asDouble()).isEqualTo(75.0);
+    assertThat(metrics.path("memory").path("availableBytes").asLong()).isEqualTo(1024);
+
+    assertThat(send("GET", "/" + vm.id() + "/metrics?range=1y", null).statusCode()).isEqualTo(400);
+    assertThat(
+            send("POST", "/" + vm.id() + "/heartbeat", "{\"memory\":{\"totalBytes\":0}}")
+                .statusCode())
+        .isEqualTo(400);
+    assertThat(send("GET", "/" + UUID.randomUUID() + "/metrics", null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
   void deletesAndThenNoLongerFindsIt() throws Exception {
     var vm = create();
     assertThat(send("DELETE", "/" + vm.id(), null).statusCode()).isEqualTo(204);

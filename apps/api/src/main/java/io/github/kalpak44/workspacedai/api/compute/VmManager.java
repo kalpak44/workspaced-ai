@@ -40,6 +40,15 @@ public interface VmManager {
   /** The id of the workspace's VM; empty when it has none. */
   Optional<UUID> vmIdFor(UUID workspaceId);
 
+  /**
+   * One range of the workspace VM's metrics.
+   *
+   * @param range live, 1h, 24h, 7d or 30d
+   * @throws IllegalStateException when the workspace has no VM
+   * @throws MetricsRangeRejectedException when the range is not one offered
+   */
+  WorkspaceMetrics metricsFor(UUID workspaceId, String range);
+
   /** Deletes every VM of the workspace; none at all counts as deleted. */
   void deleteFor(UUID workspaceId);
 

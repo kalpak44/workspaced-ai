@@ -370,6 +370,17 @@ A name must be a valid environment variable name (`[A-Za-z_][A-Za-z0-9_]*`, at m
 remove. A pod reads its environment once, when it starts,
 so a running workspace sees a change only after it restarts.
 
+## Workspace metrics
+
+| Method | Path                              | Answers                                                       |
+|--------|-----------------------------------|---------------------------------------------------------------|
+| `GET`  | `/api/v1/workspaces/{id}/metrics` | `200` and the metrics, `400`, `404`, `409`, `502`, or `503`   |
+
+`?range=` is `live` (the last 15 minutes, the default), `1h`, `24h`, `7d` or `30d`; anything else answers `400`. CPU,
+disk and network come from the VM manager, which reads them from Hetzner; memory is the VM's current reading only,
+`null` once it has not reported for a while, since Hetzner keeps no memory series. `409` means the workspace has no VM
+yet.
+
 The schema is created by Flyway from `apps/api/src/main/resources/db/migration` when the API starts.
 
 ## Running locally

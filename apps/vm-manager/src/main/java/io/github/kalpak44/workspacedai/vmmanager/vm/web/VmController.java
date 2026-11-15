@@ -1,11 +1,15 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessService;
+import io.github.kalpak44.workspacedai.vmmanager.vm.MetricsRange;
+import io.github.kalpak44.workspacedai.vmmanager.vm.VmMetricsService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HeartbeatDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDtoMapper;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmMetricsDto;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -23,13 +27,19 @@ public class VmController implements VmApi {
 
   private final VmService service;
   private final HarnessService harnesses;
+  private final VmMetricsService metrics;
   private final VmEventStream events;
   private final VmDtoMapper mapper;
 
   public VmController(
-      VmService service, HarnessService harnesses, VmEventStream events, VmDtoMapper mapper) {
+      VmService service,
+      HarnessService harnesses,
+      VmMetricsService metrics,
+      VmEventStream events,
+      VmDtoMapper mapper) {
     this.service = service;
     this.harnesses = harnesses;
+    this.metrics = metrics;
     this.events = events;
     this.mapper = mapper;
   }
@@ -84,8 +94,17 @@ public class VmController implements VmApi {
   }
 
   @Override
-  public ResponseEntity<VmDto> heartbeat(UUID id) {
-    return ResponseEntity.ok(mapper.toDto(service.heartbeat(id)));
+  public ResponseEntity<VmDto> heartbeat(UUID id, HeartbeatDto body) {
+    var vm = service.heartbeat(id);
+    if (body != null && body.memory() != null) {
+      metrics.report(id, body.memory().totalBytes(), body.memory().availableBytes());
+    }
+    return ResponseEntity.ok(mapper.toDto(vm));
+  }
+
+  @Override
+  public ResponseEntity<VmMetricsDto> metrics(UUID id, String range) {
+    return ResponseEntity.ok(mapper.toDto(metrics.metrics(id, MetricsRange.of(range))));
   }
 
   @Override

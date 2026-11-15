@@ -26,6 +26,7 @@ public class FakeVmManager implements AutoCloseable {
 
   private final HttpServer server;
   public final List<String> reports = new CopyOnWriteArrayList<>();
+  public final List<String> bodies = new CopyOnWriteArrayList<>();
   public final Set<UUID> gone = ConcurrentHashMap.newKeySet();
   public volatile int status = 0;
   public volatile String vmStatus = "READY";
@@ -56,6 +57,10 @@ public class FakeVmManager implements AutoCloseable {
       code = 404;
     } else {
       reports.add(route + " " + id);
+      var sent = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+      if (!sent.isEmpty()) {
+        bodies.add(sent);
+      }
       code = 200;
     }
     var answer =

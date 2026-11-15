@@ -7,6 +7,7 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
@@ -28,12 +29,13 @@ public class HttpVmManagerClient implements VmManagerClient {
 
   @Override
   public void ready(UUID vmId) {
-    send(vmId, "POST", "ready");
+    send(vmId, "POST", "ready", null);
   }
 
   @Override
-  public String heartbeat(UUID vmId) {
-    var body = send(vmId, "POST", "heartbeat");
+  public String heartbeat(UUID vmId, VmMemory memory) {
+    var report = memory == null ? null : json.writeValueAsString(Map.of("memory", memory));
+    var body = send(vmId, "POST", "heartbeat", report);
     try {
       var status = json.readTree(body).path("status");
       if (status.isString()) {
@@ -47,21 +49,26 @@ public class HttpVmManagerClient implements VmManagerClient {
 
   @Override
   public byte[] harness(UUID vmId) {
-    return send(vmId, "GET", "harness");
+    return send(vmId, "GET", "harness", null);
   }
 
   // Only the status goes into a failure: the harness body carries the VM's secret values.
-  private byte[] send(UUID vmId, String method, String route) {
+  private byte[] send(UUID vmId, String method, String route, String body) {
     var base = properties.vmManagerUrl().toString().replaceAll("/+$", "");
     var request =
         HttpRequest.newBuilder(URI.create(base + "/vms/" + vmId + "/" + route))
             .timeout(properties.vmManagerTimeout())
-            .header("Accept", "application/json")
-            .method(method, HttpRequest.BodyPublishers.noBody())
-            .build();
+            .header("Accept", "application/json");
+    if (body == null) {
+      request.method(method, HttpRequest.BodyPublishers.noBody());
+    } else {
+      request
+          .header("Content-Type", "application/json")
+          .method(method, HttpRequest.BodyPublishers.ofString(body));
+    }
     HttpResponse<byte[]> response;
     try {
-      response = http.send(request, BodyHandlers.ofByteArray());
+      response = http.send(request.build(), BodyHandlers.ofByteArray());
     } catch (IOException e) {
       throw new VmManagerException("VM manager unreachable: " + e.getMessage(), e);
     } catch (InterruptedException e) {

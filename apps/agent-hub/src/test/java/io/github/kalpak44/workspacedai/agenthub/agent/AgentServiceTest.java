@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.kalpak44.workspacedai.agenthub.AgentHubProperties;
 import io.github.kalpak44.workspacedai.agenthub.MutableClock;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmManagerClient;
+import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmMemory;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmNotFoundException;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -15,6 +16,7 @@ import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.CopyOnWriteArrayList;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 class AgentServiceTest {
 
@@ -27,6 +29,7 @@ class AgentServiceTest {
   final InMemoryAgentStore store = new InMemoryAgentStore();
   final List<String> reports = new CopyOnWriteArrayList<>();
   final List<UUID> gone = new CopyOnWriteArrayList<>();
+  final List<String> memories = new CopyOnWriteArrayList<>();
   final VmManagerClient vmManager =
       new VmManagerClient() {
         @Override
@@ -35,8 +38,9 @@ class AgentServiceTest {
         }
 
         @Override
-        public String heartbeat(UUID vmId) {
+        public String heartbeat(UUID vmId, VmMemory memory) {
           report("heartbeat", vmId);
+          memories.add(memory == null ? "none" : memory.toString());
           return "RESTARTING";
         }
 
@@ -61,7 +65,8 @@ class AgentServiceTest {
           Duration.ofSeconds(10),
           Duration.ofSeconds(10),
           64);
-  final AgentService service = new AgentService(store, vmManager, properties, clock);
+  final AgentService service =
+      new AgentService(store, vmManager, properties, clock, JsonMapper.builder().build());
   final TestAgent agent = new TestAgent();
   final UUID vm = UUID.randomUUID();
 
@@ -70,13 +75,18 @@ class AgentServiceTest {
   }
 
   SignedRequest signed(String path, long timestamp) {
+    return signed(path, timestamp, "");
+  }
+
+  SignedRequest signed(String path, long timestamp, String body) {
+    var bytes = body.getBytes(StandardCharsets.UTF_8);
     return new SignedRequest(
         vm.toString(),
         Long.toString(timestamp),
-        agent.sign("POST", path, timestamp, new byte[0]),
+        agent.sign("POST", path, timestamp, bytes),
         "POST",
         path,
-        new byte[0]);
+        bytes);
   }
 
   long now() {
@@ -90,6 +100,20 @@ class AgentServiceTest {
     service.heartbeat(signed(HEARTBEAT, now()));
     assertThat(reports).containsExactly("ready " + vm, "heartbeat " + vm);
     assertThat(store.lastSeen.get(vm)).isEqualTo(clock.instant());
+  }
+
+  @Test
+  void passesOnAPlausibleMemoryReadingOnly() {
+    service.heartbeat(
+        signed(HEARTBEAT, now(), "{\"memory\":{\"totalBytes\":4096,\"availableBytes\":1024}}"));
+    service.heartbeat(signed(HEARTBEAT, now()));
+    service.heartbeat(signed(HEARTBEAT, now(), "not json"));
+    service.heartbeat(
+        signed(HEARTBEAT, now(), "{\"memory\":{\"totalBytes\":1024,\"availableBytes\":4096}}"));
+    service.heartbeat(
+        signed(HEARTBEAT, now(), "{\"memory\":{\"totalBytes\":\"4096\",\"availableBytes\":1}}"));
+    assertThat(memories)
+        .containsExactly(new VmMemory(4096, 1024).toString(), "none", "none", "none", "none");
   }
 
   @Test

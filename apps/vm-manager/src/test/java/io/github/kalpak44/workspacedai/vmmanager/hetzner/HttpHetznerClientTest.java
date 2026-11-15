@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import java.math.BigDecimal;
 import java.net.http.HttpClient;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterEach;
@@ -44,6 +45,25 @@ class HttpHetznerClientTest {
         .hasValueSatisfying(
             price -> assertThat(price.monthlyGross()).isEqualTo(new BigDecimal("6.59")));
     assertThat(cx23.priceIn("ash")).isEmpty();
+  }
+
+  @Test
+  void alignsEveryMetricsSeriesToTheSameTimestamps() {
+    var metrics =
+        client("t0ken")
+            .metrics(
+                42,
+                Instant.parse("2026-11-14T10:00:00Z"),
+                Instant.parse("2026-11-14T10:01:00Z"),
+                Duration.ofMinutes(1));
+    assertThat(hetzner.metricsQueries)
+        .containsExactly(
+            "type=cpu,disk,network&start=2026-11-14T10:00:00Z&end=2026-11-14T10:01:00Z&step=60");
+    assertThat(metrics.timestamps())
+        .containsExactly(Instant.ofEpochSecond(1794650400), Instant.ofEpochSecond(1794650460));
+    assertThat(metrics.series().get("cpu")).containsExactly(150.0, null);
+    assertThat(metrics.series().get("disk.0.bandwidth.read")).containsExactly(4096.0, null);
+    assertThat(metrics.series().get("network.0.pps.in")).containsExactly(1.5, 2.0);
   }
 
   @Test

@@ -1,11 +1,10 @@
 import { useEffect, useState } from "react";
 import { fetchMetrics, type Metrics, type MetricsRange } from "../api/metricsApi";
 
-export { RANGES } from "../api/metricsApi";
-export type { Metric, MetricId, Metrics, MetricSeries, MetricsRange, MetricUnit } from "../api/metricsApi";
+export type { Memory, Metric, MetricId, Metrics, MetricSeries, MetricsRange, MetricUnit } from "../api/metricsApi";
 
-/** How often Live asks again; one sample step, so each refresh adds one point. */
-export const LIVE_REFRESH_MS = 5_000;
+/** How often Live asks again; the server reuses Hetzner's answer for as long, so asking sooner adds nothing. */
+export const LIVE_REFRESH_MS = 30_000;
 
 /** One range of a workspace's metrics; Live refreshes itself, the fixed ranges load once. */
 export function useMetrics(workspaceId: string | null, range: MetricsRange) {

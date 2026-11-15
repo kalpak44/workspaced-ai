@@ -37,6 +37,8 @@ type Supervisor struct {
 	BackoffMax    time.Duration
 	OperatorRetry time.Duration
 	Heartbeat     time.Duration
+	// MemInfo is read into every heartbeat; empty sends none.
+	MemInfo string
 
 	Docker        Docker
 	HealthURL     string
@@ -228,7 +230,7 @@ func (s *Supervisor) heartbeat(ctx context.Context, c *Client, log *slog.Logger)
 		case <-t.C:
 		}
 		s.keepRunning(ctx, c, log)
-		status, body, err := c.Call(ctx, "/agent/heartbeat")
+		status, body, err := c.Post(ctx, "/agent/heartbeat", s.report(log))
 		if ctx.Err() != nil {
 			continue
 		}
@@ -254,6 +256,20 @@ func (s *Supervisor) heartbeat(ctx context.Context, c *Client, log *slog.Logger)
 			}
 		}
 	}
+}
+
+// report is the heartbeat's body; nil sends none, which costs only the memory reading.
+func (s *Supervisor) report(log *slog.Logger) []byte {
+	if s.MemInfo == "" {
+		return nil
+	}
+	m, err := ReadMemory(s.MemInfo)
+	if err != nil {
+		log.Warn("memory unreadable, heartbeat carries none", "error", err.Error())
+		return nil
+	}
+	body, _ := json.Marshal(map[string]Memory{"memory": m})
+	return body
 }
 
 func (s *Supervisor) next(d time.Duration) time.Duration {

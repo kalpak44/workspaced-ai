@@ -460,6 +460,11 @@ export function installFakeApi(
       }
       return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init);
     }
+    const metricsRoute = /\/api\/v1\/workspaces\/([^/]+)\/metrics\?range=([\w]+)$/.exec(url);
+    if (metricsRoute) {
+      if (!rows.some((workspace) => workspace.id === metricsRoute[1])) return json({}, 404);
+      return json(metricsResponse(metricsRoute[2]));
+    }
     const secretsRoute = /\/api\/v1\/workspaces\/([^/]+)\/secrets(?:\/(.+))?$/.exec(url);
     if (secretsRoute) {
       return secretsResponse(secretsRoute[1], secretsRoute[2], init);
@@ -638,6 +643,25 @@ export function installFakeApi(
   function markRestartRequired(workspaceId: string, restartRequired: boolean) {
     const index = rows.findIndex((w) => w.id === workspaceId);
     rows[index] = { ...rows[index], restartRequired };
+  }
+
+  // As the API answers: span and step per range, every series filled, and a memory reading.
+  function metricsResponse(range: string) {
+    const [span, step] = ({ live: [900, 60], "1h": [3600, 60], "24h": [86_400, 900], "7d": [604_800, 7200], "30d": [2_592_000, 21_600] } as Record<string, [number, number]>)[range];
+    const count = span / step;
+    const end = Date.parse("2026-11-15T10:00:00Z");
+    const timestamps = Array.from({ length: count }, (_, i) => new Date(end - (count - 1 - i) * step * 1000).toISOString());
+    const wave = (scale: number) => timestamps.map((_, i) => scale * (1 + (i % 5)));
+    return {
+      cores: 2,
+      memoryGb: 4,
+      timestamps,
+      series: {
+        cpu: wave(2), diskReadBytes: wave(1000), diskWriteBytes: wave(4000), diskReadIops: wave(0.5), diskWriteIops: wave(1),
+        networkInBytes: wave(300), networkOutBytes: wave(900), networkInPackets: wave(2), networkOutPackets: wave(3),
+      },
+      memory: { totalBytes: 4 * 1024 ** 3, availableBytes: 3 * 1024 ** 3, reportedAt: "2026-11-15T09:59:50Z" },
+    };
   }
 
   async function secretsResponse(workspaceId: string, name: string | undefined, init?: RequestInit) {

@@ -12,12 +12,13 @@ public interface VmManagerClient {
   void ready(UUID vmId);
 
   /**
+   * @param memory what the VM reported; null when it reported none
    * @return the VM's status as the VM manager now has it, e.g. RESTARTING, which is how the VM
    *     learns its workspace was restarted
    * @throws VmNotFoundException the VM manager has no such VM
    * @throws VmManagerException it could not be asked, or did not answer as expected
    */
-  String heartbeat(UUID vmId);
+  String heartbeat(UUID vmId, VmMemory memory);
 
   /**
    * @return the VM manager's JSON body as it came, image and environment; it holds secret values,

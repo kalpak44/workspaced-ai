@@ -1,6 +1,6 @@
 import { Activity, Cpu, HardDrive, MemoryStick, Network } from "lucide-react";
 import { useState } from "react";
-import { type Metric, type MetricId, type MetricsRange, useMetrics } from "../../hooks/useMetrics";
+import { type Memory, type Metric, type MetricId, type MetricsRange, useMetrics } from "../../hooks/useMetrics";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { Select } from "../atoms";
 import { EmptyState } from "../molecules";
@@ -32,6 +32,18 @@ function latest(metrics: readonly Metric[], id: MetricId) {
   return { value: formatMetric(total, metric.unit), detail: metric.series.length > 1 ? parts.join(" · ") : null };
 }
 
+const GB = 1024 ** 3;
+
+/** The memory tile: in use now, as the VM last reported it, since Hetzner keeps no memory series. */
+function memoryNow(memory: Memory | null, memoryGb: number) {
+  if (!memory) return { value: "—", detail: "Not reported yet" };
+  const used = memory.totalBytes - memory.availableBytes;
+  return {
+    value: formatMetric((used / memory.totalBytes) * 100, "percent"),
+    detail: `${(used / GB).toFixed(1)} of ${memoryGb} GB`,
+  };
+}
+
 interface Props {
   readonly workspace: Workspace;
   readonly deleting: boolean;
@@ -46,7 +58,7 @@ export function MonitoringPage({ workspace, deleting }: Props) {
 
   const tiles = metrics && [
     { label: "CPU", icon: Cpu, ...latest(metrics.metrics, "cpu"), detail: `${metrics.cores} vCPU` },
-    { label: "Memory", icon: MemoryStick, ...latest(metrics.metrics, "memory"), detail: `of ${metrics.memoryGb} GB` },
+    { label: "Memory", icon: MemoryStick, ...memoryNow(metrics.memory, metrics.memoryGb) },
     { label: "Disk", icon: HardDrive, ...latest(metrics.metrics, "disk-throughput") },
     { label: "Network", icon: Network, ...latest(metrics.metrics, "network-traffic") },
   ];
@@ -89,12 +101,12 @@ export function MonitoringPage({ workspace, deleting }: Props) {
             <div className="grid gap-4 xl:grid-cols-2">
               {metrics.metrics.map((metric) => (
                 <MetricChart key={metric.id} metric={metric} timestamps={metrics.timestamps} formatTime={format}
-                  note={metric.id === "cpu" ? `100% = all ${metrics.cores} vCPU` : metric.id === "memory" ? `100% = ${metrics.memoryGb} GB` : undefined} />
+                  note={metric.id === "cpu" ? `100% = all ${metrics.cores} vCPU` : undefined} />
               ))}
             </div>
             <p className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
               <Activity aria-hidden className="size-3.5" />
-              {range === "live" ? "Sampled every 5 seconds." : `Showing ${RANGE_OPTIONS.find(([value]) => value === range)?.[1].toLowerCase()}.`} Times are in your time zone.
+              {range === "live" ? "Showing the last 15 minutes, refreshed every 30 seconds." : `Showing ${RANGE_OPTIONS.find(([value]) => value === range)?.[1].toLowerCase()}.`} Times are in your time zone.
             </p>
           </div>
         )}

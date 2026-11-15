@@ -9,11 +9,15 @@ import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.TreeSet;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -98,6 +102,51 @@ public class HttpHetznerClient implements HetznerClient {
       send("/servers/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 200);
     } catch (Gone _) {
       // Already deleted, by an earlier attempt or by hand.
+    }
+  }
+
+  @Override
+  public ServerMetrics metrics(long id, Instant start, Instant end, Duration step) {
+    var query =
+        "type=cpu,disk,network&start="
+            + URLEncoder.encode(start.toString(), StandardCharsets.UTF_8)
+            + "&end="
+            + URLEncoder.encode(end.toString(), StandardCharsets.UTF_8)
+            + "&step="
+            + step.toSeconds();
+    var series = get("/servers/" + id + "/metrics?" + query).path("metrics").path("time_series");
+    var stamps = new TreeSet<Instant>();
+    var points = new LinkedHashMap<String, Map<Instant, Double>>();
+    series
+        .properties()
+        .forEach(
+            entry -> {
+              var values = new HashMap<Instant, Double>();
+              entry
+                  .getValue()
+                  .path("values")
+                  .forEach(
+                      point -> {
+                        var at = Instant.ofEpochSecond(Math.round(point.path(0).asDouble()));
+                        stamps.add(at);
+                        values.put(at, sample(point.path(1)));
+                      });
+              points.put(entry.getKey(), values);
+            });
+    var timestamps = List.copyOf(stamps);
+    var aligned = new LinkedHashMap<String, List<Double>>();
+    points.forEach(
+        (name, values) -> aligned.put(name, timestamps.stream().map(values::get).toList()));
+    return new ServerMetrics(timestamps, Collections.unmodifiableMap(aligned));
+  }
+
+  // Hetzner sends each value as a string, and "NaN" where it has no sample.
+  private static Double sample(JsonNode value) {
+    try {
+      var parsed = Double.parseDouble(value.asString());
+      return Double.isFinite(parsed) ? parsed : null;
+    } catch (NumberFormatException e) {
+      return null;
     }
   }
 
