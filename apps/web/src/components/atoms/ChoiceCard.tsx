@@ -8,6 +8,8 @@ interface Props {
   readonly label: string;
   /** A muted second line, e.g. where the choice points. */
   readonly detail?: string;
+  /** Wrap the detail instead of cutting it off, for one that must be read whole. */
+  readonly wrapDetail?: boolean;
   /** Shown on the right, before the radio, e.g. a price that must not be cut off with the detail. */
   readonly aside?: ReactNode;
   readonly icon: LucideIcon;
@@ -25,6 +27,7 @@ export function ChoiceCard({
   value,
   label,
   detail,
+  wrapDetail = false,
   aside,
   icon: Icon,
   checked,
@@ -48,7 +51,7 @@ export function ChoiceCard({
       <span className="flex min-w-0 flex-1 flex-col">
         <span className="text-sm font-medium">{label}</span>
         {detail && (
-          <span className="truncate font-mono text-xs text-zinc-500 dark:text-zinc-400">
+          <span className={`${wrapDetail ? "" : "truncate "}font-mono text-xs text-zinc-500 dark:text-zinc-400`}>
             {detail}
           </span>
         )}

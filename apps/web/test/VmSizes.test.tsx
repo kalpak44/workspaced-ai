@@ -44,7 +44,7 @@ describe("VM sizes", () => {
     expect(warning()).toHaveTextContent("The low-cost sizes are unavailable right now.");
     expect(warning()).not.toHaveTextContent(/hetzner/i);
     expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled();
-    expect(screen.getByText(/Unavailable · 2 vCPU/)).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cx23 · unavailable/ })).toBeInTheDocument();
     expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 

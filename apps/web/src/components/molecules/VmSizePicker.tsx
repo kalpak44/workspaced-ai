@@ -6,8 +6,7 @@ const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "E
 
 /** What the VM is: cores, memory and disk. */
 function detailOf(size: VmSize): string {
-  const specs = `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk`;
-  return size.available ? specs : `Unavailable · ${specs}`;
+  return `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk`;
 }
 
 /** The monthly price with VAT, set apart so it is never cut off with the specs. */
@@ -87,8 +86,9 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
           key={size.serverType}
           name="workspace-vm-type"
           value={size.serverType}
-          label={size.serverType}
+          label={size.available ? size.serverType : `${size.serverType} · unavailable`}
           detail={detailOf(size)}
+          wrapDetail
           aside={<PriceTag size={size} />}
           icon={Server}
           checked={size.serverType === value}
