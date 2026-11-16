@@ -97,30 +97,6 @@ class TunnelRoutesTest {
   }
 
   @Test
-  void webTrafficUsesADistinctExchangeAndRetainsVisitorAuthorization() throws Exception {
-    var vm = UUID.randomUUID();
-    var worker = worker(vm, enrolled(vm));
-    var answer =
-        http.sendAsync(
-            gateway(uri("http", "/internal/vms/" + vm + "/web/app?q=%2F"))
-                .header("Authorization", "Bearer visitor")
-                .GET()
-                .build(),
-            BodyHandlers.ofString());
-    var head = worker.nextJson();
-    assertThat(head.path("type").asString()).isEqualTo("web-http");
-    assertThat(head.path("path").asString()).isEqualTo("/app?q=%2F");
-    assertThat(head.path("headers").path("Authorization").get(0).asString())
-        .isEqualTo("Bearer visitor");
-    assertThat(head.path("headers").path("Host").get(0).asString()).startsWith("localhost:");
-    worker.nextJson();
-    worker.send("{\"type\":\"response\",\"status\":200,\"headers\":{}}");
-    worker.send("site".getBytes(StandardCharsets.UTF_8));
-    worker.send("{\"type\":\"end\"}");
-    assertThat(answer.get(5, TimeUnit.SECONDS).body()).isEqualTo("site");
-  }
-
-  @Test
   void carriesAnHttpCallWithItsHeadersAndBodiesBothWays() throws Exception {
     var vm = UUID.randomUUID();
     var worker = worker(vm, enrolled(vm));
@@ -370,19 +346,16 @@ class TunnelRoutesTest {
     var vm = UUID.randomUUID();
     worker(vm, enrolled(vm));
     var info = harness(vm, "/api/info");
-    var site = uri("http", "/internal/vms/" + vm + "/web/");
 
     assertThat(send(HttpRequest.newBuilder(info).GET()).statusCode()).isEqualTo(401);
     assertThat(send(token(info, "forged").GET()).statusCode()).isEqualTo(401);
-    assertThat(send(token(info, TestCallers.GATEWAY).GET()).statusCode()).isEqualTo(403);
     assertThat(send(token(info, TestCallers.VM_MANAGER).GET()).statusCode()).isEqualTo(403);
-    assertThat(send(token(site, TestCallers.API).GET()).statusCode()).isEqualTo(403);
     assertThat(
             handshakeStatus(
                 TestSocket.connect(
                     http,
                     socket(vm, "/api/pty"),
-                    Map.of(InternalRoutesFilter.TOKEN_HEADER, TestCallers.GATEWAY))))
+                    Map.of(InternalRoutesFilter.TOKEN_HEADER, TestCallers.VM_MANAGER))))
         .isEqualTo(403);
     assertThat(handshakeStatus(TestSocket.connect(http, socket(vm, "/api/pty"), Map.of())))
         .isEqualTo(401);
@@ -396,13 +369,13 @@ class TunnelRoutesTest {
     worker(vm, enrolled(vm));
     for (var path :
         new String[] {
-          "/web/..;/harness/api/info",
-          "/web/;x/api",
-          "/web/%2e%2e/harness/api/info",
-          "/harness/.%2E/web/x",
-          "/web//x"
+          "/harness/..;/harness/api/info",
+          "/harness/;x/api",
+          "/harness/%2e%2e/harness/api/info",
+          "/harness/.%2E/x",
+          "/harness//x"
         }) {
-      var response = send(gateway(uri("http", "/internal/vms/" + vm + path)).GET());
+      var response = send(api(uri("http", "/internal/vms/" + vm + path)).GET());
       assertThat(response.statusCode()).as(path).isIn(400, 404);
     }
     assertThat(registry.idle(vm)).isEqualTo(1);
@@ -489,11 +462,6 @@ class TunnelRoutesTest {
 
   private static HttpRequest.Builder token(URI uri, String token) {
     return HttpRequest.newBuilder(uri).header(InternalRoutesFilter.TOKEN_HEADER, token);
-  }
-
-  private static HttpRequest.Builder gateway(URI uri) {
-    return HttpRequest.newBuilder(uri)
-        .header(InternalRoutesFilter.TOKEN_HEADER, TestCallers.GATEWAY);
   }
 
   private HttpResponse<String> send(HttpRequest.Builder request) throws Exception {

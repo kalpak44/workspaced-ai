@@ -101,7 +101,7 @@ system secret and the rest of the harness environment (base URL, harness passwor
 the VM's supervisor starts the harness with; restarting marks the VM `RESTARTING`, and its supervisor recreates the
 harness with fresh values. Every call to the harness goes through the agent hub's tunnel to the VM, at
 `WORKSPACED_AGENT_HUB_URL` + `/internal/vms/<vm id>/harness`; the VM's supervisor sets the harness password, so the
-API holds none. The web server does not reach a VM yet. There is no other runtime: a local run without
+API holds none. There is no other runtime: a local run without
 `WORKSPACED_VM_MANAGER_URL` cannot create a workspace (`503`).
 
 ### Workspace terminals

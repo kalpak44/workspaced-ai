@@ -49,14 +49,6 @@ public class WorkspaceEntity {
   @Column(name = "secrets_pending_restart", nullable = false)
   private boolean secretsPendingRestart;
 
-  // The public name of its web server; null while the web server is off.
-  @Column(name = "web_server_agent_allowed", nullable = false)
-  private boolean webServerAgentAllowed;
-
-  public boolean isWebServerAgentAllowed() {
-    return webServerAgentAllowed;
-  }
-
   public boolean isSecretsPendingRestart() {
     return secretsPendingRestart;
   }

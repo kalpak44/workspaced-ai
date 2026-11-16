@@ -44,7 +44,6 @@ var wsHandshake = []string{"Sec-Websocket-Key", "Sec-Websocket-Version", "Sec-We
 // control is every JSON text frame of the protocol; each type uses a subset of the fields.
 type control struct {
 	Type    string      `json:"type"`
-	Web     bool        `json:"web,omitempty"`
 	Method  string      `json:"method,omitempty"`
 	Path    string      `json:"path,omitempty"`
 	Headers http.Header `json:"headers,omitempty"`
@@ -55,8 +54,6 @@ type control struct {
 // Proxy runs the exchange a worker was given against the harness.
 type Proxy struct {
 	base *url.URL
-	// WebBase is the fixed VM loopback binding to the harness nginx on port 80.
-	WebBase *url.URL
 	// Password returns the harness password the container runs with now.
 	Password func() string
 	Log      *slog.Logger
@@ -85,12 +82,10 @@ func NewProxy(harness string, password func() string, log *slog.Logger) (*Proxy,
 // Serve runs one exchange and closes the worker. head is the hub's first message.
 func (p *Proxy) Serve(ctx context.Context, conn *websocket.Conn, head control) {
 	defer conn.CloseNow()
-	// Distinct types make an old supervisor reject web traffic instead of exposing its harness.
-	head.Web = head.Type == "web-http" || head.Type == "web-ws"
 	switch head.Type {
-	case "http", "web-http":
+	case "http":
 		p.serveHTTP(ctx, conn, head)
-	case "ws", "web-ws":
+	case "ws":
 		p.serveWS(ctx, conn, head)
 	default:
 		p.Log.Warn("tunnel exchange of unknown type", "type", head.Type)
@@ -115,26 +110,13 @@ func (p *Proxy) target(path, scheme string) (*url.URL, error) {
 	return u, nil
 }
 
-// exchangeTarget selects only one of two operator-configured destinations.
-func (p *Proxy) exchangeTarget(head control, scheme string) (*url.URL, error) {
-	if !head.Web {
-		return p.target(head.Path, scheme)
-	}
-	if p.WebBase == nil {
-		return nil, errors.New("web proxy unavailable; restart the workspace")
-	}
-	web := *p
-	web.base = p.WebBase
-	return web.target(head.Path, scheme)
-}
-
 func (p *Proxy) serveHTTP(ctx context.Context, conn *websocket.Conn, head control) {
 	start := time.Now()
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	log := p.Log.With("method", head.Method, "path", pathOnly(head.Path))
 
-	target, err := p.exchangeTarget(head, "")
+	target, err := p.target(head.Path, "")
 	if err == nil && !validMethod(head.Method) {
 		err = errors.New("invalid method")
 	}
@@ -162,17 +144,13 @@ func (p *Proxy) serveHTTP(ctx context.Context, conn *websocket.Conn, head contro
 		return
 	}
 	req.Header = forward(head.Headers, "Authorization")
-	if head.Web {
-		req.Header = forward(head.Headers)
-		req.Host = head.Headers.Get("Host")
-	}
 	req.ContentLength = -1
 	if body == http.NoBody {
 		req.ContentLength = 0
 	} else if n, err := strconv.ParseInt(req.Header.Get("Content-Length"), 10, 64); err == nil && n >= 0 {
 		req.ContentLength = n
 	}
-	if pw := p.password(); !head.Web && pw != "" {
+	if pw := p.password(); pw != "" {
 		req.SetBasicAuth(harnessUser, pw)
 	}
 
@@ -278,22 +256,11 @@ func (p *Proxy) requestBody(ctx context.Context, conn *websocket.Conn, cancel co
 	return pr, done, nil
 }
 
-type hostTransport struct {
-	base http.RoundTripper
-	host string
-}
-
-func (t hostTransport) RoundTrip(req *http.Request) (*http.Response, error) {
-	copy := req.Clone(req.Context())
-	copy.Host = t.host
-	return t.base.RoundTrip(copy)
-}
-
 func (p *Proxy) serveWS(ctx context.Context, conn *websocket.Conn, head control) {
 	start := time.Now()
 	log := p.Log.With("method", "WS", "path", pathOnly(head.Path))
 
-	target, err := p.exchangeTarget(head, wsScheme(p.base.Scheme))
+	target, err := p.target(head.Path, wsScheme(p.base.Scheme))
 	if err != nil {
 		log.Warn("tunnel socket refused", "error", err.Error())
 		p.fail(ctx, conn, http.StatusBadRequest, err.Error())
@@ -301,9 +268,6 @@ func (p *Proxy) serveWS(ctx context.Context, conn *websocket.Conn, head control)
 	}
 	// The hub's header names need not be canonical, so read the protocols from the copy.
 	hdr := forward(head.Headers, "Authorization")
-	if head.Web {
-		hdr = forward(head.Headers)
-	}
 	var protocols []string
 	for _, v := range hdr.Values("Sec-WebSocket-Protocol") {
 		for _, s := range strings.Split(v, ",") {
@@ -315,19 +279,12 @@ func (p *Proxy) serveWS(ctx context.Context, conn *websocket.Conn, head control)
 	for _, k := range wsHandshake {
 		hdr.Del(k)
 	}
-	if pw := p.password(); !head.Web && pw != "" {
+	if pw := p.password(); pw != "" {
 		hdr.Set("Authorization", "Basic "+base64.StdEncoding.EncodeToString([]byte(harnessUser+":"+pw)))
-	}
-	client := p.http
-	if head.Web {
-		// websocket.Dial builds Host from its URL; override it at the final transport hop.
-		copy := *p.http
-		copy.Transport = hostTransport{base: p.http.Transport, host: head.Headers.Get("Host")}
-		client = &copy
 	}
 	dctx, cancelDial := context.WithTimeout(ctx, dialHarness)
 	hc, resp, err := websocket.Dial(dctx, target.String(), &websocket.DialOptions{
-		HTTPClient: client, HTTPHeader: hdr, Subprotocols: protocols,
+		HTTPClient: p.http, HTTPHeader: hdr, Subprotocols: protocols,
 	})
 	cancelDial()
 	if err != nil {

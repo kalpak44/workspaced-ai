@@ -3,7 +3,6 @@ package io.github.kalpak44.workspacedai.api.harness;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.InputStream;
 import java.io.OutputStream;
-import java.net.URI;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -54,12 +53,6 @@ public interface Harness {
    * edits them in the app; the agent can edit them too.
    */
   String VARIABLES_FILE = HOME + "/.config/workspaced/.env";
-
-  /**
-   * The web server's state in the home. The agent's `web-server publish` writes a request here, the
-   * API answers it beside it, and the address it is public at is kept here while it is on.
-   */
-  String WEB_DIRECTORY = HOME + "/.config/workspaced/web";
 
   /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
@@ -184,23 +177,6 @@ public interface Harness {
   void writeRecipeDraft(HarnessEndpoint endpoint, String name, String content);
 
   void deleteRecipeDraft(HarnessEndpoint endpoint, String name);
-
-  /**
-   * Starts the workspace's web server, which answers at that address, and keeps it running across
-   * restarts. Its config and site, once there, are the user's and are left alone.
-   *
-   * @return false when the harness image predates the web server, so nothing was started
-   */
-  boolean enableWebServer(HarnessEndpoint endpoint, URI url);
-
-  /** Stops the web server and keeps it from starting again; its config and site are kept. */
-  void disableWebServer(HarnessEndpoint endpoint);
-
-  /** What the agent asked of the web server, a name or "off"; empty when it asked nothing. */
-  Optional<String> webServerRequest(HarnessEndpoint endpoint);
-
-  /** Leaves the outcome where the agent's tool waits for it, then removes the request. */
-  void answerWebServerRequest(HarnessEndpoint endpoint, String result);
 
   /**
    * Writes the stream to that absolute path, creating its folder, without holding it in memory.

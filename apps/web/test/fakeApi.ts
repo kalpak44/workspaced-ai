@@ -106,11 +106,6 @@ export function installFakeApi(
   const tasks = new Map<string, Map<string, TaskContent>>();
   const variables = new Map<string, Variable[]>();
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
-  // Each workspace's web server name; a name in `takenNames` belongs to some other workspace.
-  const webServers = new Map<string, string>();
-  const webDomains = new Map<string, Map<string, boolean>>();
-  const webServerAgents = new Set<string>();
-  const takenNames = new Set<string>(["taken"]);
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
   const sessionAgents = new Map<string, string>();
@@ -133,7 +128,6 @@ export function installFakeApi(
   };
   const state = {
     fail: 0,
-    olderHarness: false,
     nextId: 1,
     createStatus: "READY" as WorkspaceStatus,
     // When set, POST or DELETE waits on it, so a test can look at the UI mid-request.
@@ -449,7 +443,7 @@ export function installFakeApi(
       }
       return json([...files].sort(([a], [b]) => a.localeCompare(b)).map(([n, task]) => ({ name: n, ...task })));
     }
-    const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers|session-ttl|web-server)(?:\/(.+))?$/.exec(url);
+    const settingsRoute = /\/api\/v1\/workspaces\/([^/]+)\/(models|model|mcp-servers|session-ttl)(?:\/(.+))?$/.exec(url);
     const terminalRoute = /\/api\/v1\/workspaces\/([^/]+)\/terminals(?:\/([^/]+))?$/.exec(url);
     if (terminalRoute) {
       const [, workspaceId, terminalId] = terminalRoute;
@@ -561,38 +555,6 @@ export function installFakeApi(
     const index = rows.findIndex((w) => w.id === workspaceId);
     if (index < 0) return json({}, 404);
     const method = init?.method ?? "GET";
-    if (kind === "web-server") {
-      if (name === "domains" || name?.startsWith("domains/")) {
-        const all = webDomains.get(workspaceId) ?? new Map<string, boolean>();
-        webDomains.set(workspaceId, all);
-        const domainName = name.slice("domains/".length);
-        if (method === "PUT") {
-          if (state.harnessDown) return json({}, 503);
-          if (domainName === "taken") return json({ detail: "name taken" }, 409);
-          all.set(domainName, Boolean(JSON.parse(String(init?.body)).enabled));
-        }
-        if (method === "DELETE") all.delete(domainName);
-        return json([...all].map(([name, enabled]) => ({ name, enabled, url: `https://box-${name}.workspaced.test/` })));
-      }
-
-      if (name === "agent") {
-        const { allowed } = JSON.parse(String(init?.body)) as { allowed: boolean };
-        if (allowed) webServerAgents.add(workspaceId);
-        else webServerAgents.delete(workspaceId);
-      } else if (method !== "GET" && state.harnessDown) return json({}, 503);
-      else if (method === "PUT") {
-        const { name: wanted } = JSON.parse(String(init?.body)) as { name: string };
-        if (takenNames.has(wanted)) return json({ detail: `the name ${wanted} is taken` }, 409);
-        if (state.olderHarness) return json({ detail: "the workspace runs an older harness; restart it to update, then try again" }, 409);
-        webServers.set(workspaceId, wanted);
-      }
-      if (method === "DELETE") {
-        webServers.delete(workspaceId);
-        return new Response(null, { status: 204 });
-      }
-      const current = webServers.get(workspaceId) ?? null;
-      return json({ domain: "workspaced.test", name: current, url: current && `https://box-${current}.workspaced.test/`, agentAllowed: webServerAgents.has(workspaceId) });
-    }
     if (kind === "session-ttl") {
       if (method === "PUT") sessionTtl.set(workspaceId, JSON.parse(String(init?.body)));
       return json(sessionTtl.get(workspaceId) ?? { sessionTtlEnabled: false, sessionTtlHours: 168 });
@@ -744,5 +706,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { billing, recipes, webServers, webServerAgents, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { billing, recipes, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

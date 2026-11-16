@@ -46,22 +46,8 @@ public class HarnessSocketHandler extends AbstractWebSocketHandler implements Ha
     var servlet = Handshakes.servlet(request);
     try {
       var target = HarnessTarget.of(servlet);
-      var head =
-          json.createObjectNode()
-              .put("type", target.web() ? "web-ws" : "ws")
-              .put("path", target.path())
-              .put("web", target.web());
+      var head = json.createObjectNode().put("type", "ws").put("path", target.path());
       head.set("headers", json.valueToTree(ProxyHeaders.ofHandshake(servlet)));
-      if (target.web()) {
-        ((tools.jackson.databind.node.ObjectNode) head.get("headers"))
-            .putArray("Host")
-            .add(servlet.getHeader("Host"));
-        if (servlet.getHeader("Authorization") != null) {
-          ((tools.jackson.databind.node.ObjectNode) head.get("headers"))
-              .putArray("Authorization")
-              .add(servlet.getHeader("Authorization"));
-        }
-      }
       var relay = new SocketRelay(json);
       relay.attach(workers.start(target.vmId(), relay, head));
       String protocol;

@@ -56,11 +56,6 @@ workspaced:
     # is a 401 at the next.
     jwt-secret: ${WORKSPACED_JWT_SECRET}
     token-ttl: ${WORKSPACED_TOKEN_TTL:12h}
-  # Each workspace's nginx, public at https://box-<name>.<domain> through a Service named
-  # box-<name>; routing the domain to those Services is the cluster's job. Left unset, as it
-  # is locally, there is no web server to turn on and the setting answers 501.
-  web-server:
-    domain: ${WORKSPACED_WEB_SERVER_DOMAIN:}
   # Top-ups through Stripe Checkout. Left unset, as it is locally, the balance and its history
   # still answer and starting a top-up answers 503.
   billing:

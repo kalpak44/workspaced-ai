@@ -33,16 +33,6 @@ public interface WorkspaceRuntime {
   void restart(UUID workspaceId);
 
   /**
-   * Makes the workspace's web server reachable as that label, the first one of its public host,
-   * replacing any it had. It outlives restarts; only {@link #unpublish} or stopping the workspace
-   * takes it away.
-   */
-  void publish(UUID workspaceId, String label);
-
-  /** Takes its web server's name away; one that has none is not an error. */
-  void unpublish(UUID workspaceId);
-
-  /**
    * Adds one secret; a VM refuses one it already has rather than replacing it. A running workspace
    * sees it only once it restarts.
    */

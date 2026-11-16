@@ -55,7 +55,6 @@ const SETTINGS_SECTIONS: ReadonlyArray<readonly [string, string, LucideIcon, str
   ["secrets", "Secrets", KeyRound, "tokens keys env"],
   ["variables", "Variables", Variable, "environment env"],
   ["sessions", "Session cleanup", Clock, "ttl delete inactivity"],
-  ["web-server", "Web server", Globe, "publish website domain"],
   ["instructions", "Instructions", FileText, "agents prompt rules"],
   ["tasks", "Scheduled tasks", CalendarClock, "cron schedule"],
 ];

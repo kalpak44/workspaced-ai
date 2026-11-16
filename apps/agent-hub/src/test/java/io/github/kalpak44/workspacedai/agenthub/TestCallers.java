@@ -13,7 +13,6 @@ import org.springframework.context.annotation.Primary;
 public class TestCallers {
 
   public static final String API = "api-token";
-  public static final String GATEWAY = "gateway-token";
   public static final String VM_MANAGER = "vm-manager-token";
 
   @Bean
@@ -22,7 +21,6 @@ public class TestCallers {
     var accounts =
         Map.of(
             API, properties.api(),
-            GATEWAY, properties.gateway(),
             VM_MANAGER, properties.vmManager());
     return token -> Optional.ofNullable(accounts.get(token));
   }

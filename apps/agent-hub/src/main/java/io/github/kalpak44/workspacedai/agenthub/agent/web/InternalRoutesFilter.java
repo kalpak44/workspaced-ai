@@ -21,9 +21,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Guards every internal route. Each caller proves which service account it is with a projected
- * token in {@link #TOKEN_HEADER}, and reaches only its own routes: the API a VM's harness, the
- * gateway a VM's public web server, the VM manager enrollments. A route reached through the ingress
- * is refused before any of that.
+ * token in {@link #TOKEN_HEADER}, and reaches only its own routes: the API a VM's harness, the VM
+ * manager enrollments. A route reached through the ingress is refused before any of that.
  */
 @Component
 public class InternalRoutesFilter extends OncePerRequestFilter {
@@ -36,7 +35,6 @@ public class InternalRoutesFilter extends OncePerRequestFilter {
       List.of("X-Forwarded-For", "X-Forwarded-Host", "X-Real-Ip");
 
   private static final Pattern HARNESS = Pattern.compile("^/internal/vms/[^/]+/harness(/.*)?$");
-  private static final Pattern WEB = Pattern.compile("^/internal/vms/[^/]+/web(/.*)?$");
   private static final Pattern ENROLLMENTS =
       Pattern.compile("^/internal/(enrollments|agents/[^/]+)$");
 
@@ -94,9 +92,6 @@ public class InternalRoutesFilter extends OncePerRequestFilter {
     if (HARNESS.matcher(raw).matches()) {
       return Optional.of(properties.api());
     }
-    if (WEB.matcher(raw).matches()) {
-      return Optional.of(properties.gateway());
-    }
     if (ENROLLMENTS.matcher(raw).matches()) {
       return Optional.of(properties.vmManager());
     }
@@ -105,8 +100,8 @@ public class InternalRoutesFilter extends OncePerRequestFilter {
 
   /**
    * Refuses anything the servlet container would normalise differently from the raw URI: path
-   * parameters, dot segments, empty segments and encoded dots or slashes. Otherwise a web route
-   * could be authorized while a harness route is served, or the other way round.
+   * parameters, dot segments, empty segments and encoded dots or slashes. Otherwise one route
+   * could be authorized while another is served.
    */
   private static boolean canonical(String raw) {
     var lower = raw.toLowerCase(Locale.ROOT);

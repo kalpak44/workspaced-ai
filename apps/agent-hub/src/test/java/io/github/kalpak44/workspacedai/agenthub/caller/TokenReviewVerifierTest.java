@@ -71,7 +71,7 @@ class TokenReviewVerifierTest {
 
   private CallerProperties properties() {
     return new CallerProperties(
-        "workspaced-ai-agent-hub", API, "gateway", "vm-manager", Duration.ofSeconds(60), dir);
+        "workspaced-ai-agent-hub", API, "vm-manager", Duration.ofSeconds(60), dir);
   }
 
   private TokenReviewVerifier verifier() {

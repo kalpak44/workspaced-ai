@@ -219,7 +219,7 @@ class AgentHubRoutesTest {
     var none =
         send("POST", "/internal/enrollments", body, Map.of(InternalRoutesFilter.TOKEN_HEADER, ""));
     assertThat(none.statusCode()).isEqualTo(401);
-    for (var other : new String[] {TestCallers.API, TestCallers.GATEWAY}) {
+    for (var other : new String[] {TestCallers.API}) {
       var token = Map.of(InternalRoutesFilter.TOKEN_HEADER, other);
       assertThat(send("POST", "/internal/enrollments", body, token).statusCode()).isEqualTo(403);
       assertThat(send("DELETE", "/internal/agents/" + vm, null, token).statusCode()).isEqualTo(403);

@@ -66,16 +66,6 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
-  public void publish(UUID workspaceId, String label) {
-    // Public names live in WebDomainStore; the gateway resolves them to the VM tunnel.
-  }
-
-  @Override
-  public void unpublish(UUID workspaceId) {
-    // Domain removal is persisted by WebServerService; no runtime route is needed.
-  }
-
-  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     vmManager.putSecret(workspaceId, name, value);
   }

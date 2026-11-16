@@ -42,21 +42,19 @@ flowchart TB
     subgraph VM["One Hetzner VM per workspace"]
         AGENT["NEW: workspace supervisor"]
         HARNESS["workspaced-ai-harness<br/>OpenCode and MCP tools"]
-        NGINX["nginx"]
         APPS["Docker Compose<br/>WordPress · MariaDB · other apps"]
         DISK["Included VM disk"]
 
         AGENT -->|"Manage"| HARNESS
         HARNESS -->|"Request deployment"| AGENT
         AGENT -->|"Deploy and restart"| APPS
-        NGINX --> APPS
         APPS --> DISK
         HARNESS --> DISK
     end
 
     USER --> CF
     CF -->|"ai.workspaced.online"| TUNNEL
-    CF -->|"Workspace website — direct HTTPS"| NGINX
+    USER -->|"Published ports, through the VM's firewall"| APPS
     VMM -->|"Create and delete VM"| HC
     HC --> VM
     AGENT -->|"Outbound authenticated connection · ready and heartbeat"| API
