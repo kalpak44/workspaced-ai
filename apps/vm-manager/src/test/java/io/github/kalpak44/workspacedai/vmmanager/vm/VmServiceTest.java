@@ -155,7 +155,7 @@ class VmServiceTest {
   void refusesATypeSoldOutBeforeAskingHetzner() {
     assertThatThrownBy(() -> service.create(workspace, user, "cpx22", KEY, ENV))
         .isInstanceOf(ServerTypeSoldOutException.class)
-        .hasMessage("server type cpx22 is sold out at Hetzner right now");
+        .hasMessage("server type cpx22 is unavailable right now");
     assertThat(hetzner.created).isEmpty();
   }
 

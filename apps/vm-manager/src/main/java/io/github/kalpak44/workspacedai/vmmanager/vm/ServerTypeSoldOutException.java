@@ -4,6 +4,6 @@ package io.github.kalpak44.workspacedai.vmmanager.vm;
 public class ServerTypeSoldOutException extends RuntimeException {
 
   public ServerTypeSoldOutException(String serverType) {
-    super("server type " + serverType + " is sold out at Hetzner right now");
+    super("server type " + serverType + " is unavailable right now");
   }
 }

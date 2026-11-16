@@ -4,10 +4,20 @@ import { Button, ChoiceCard, Spinner } from "../atoms";
 
 const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
 
-/** What the VM is and costs: cores, memory, disk and the monthly price with VAT. */
+/** What the VM is: cores, memory and disk. */
 function detailOf(size: VmSize): string {
-  const specs = `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk · ${PRICE.format(size.monthlyGross)}/mo`;
-  return size.available ? specs : `Sold out · ${specs}`;
+  const specs = `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk`;
+  return size.available ? specs : `Unavailable · ${specs}`;
+}
+
+/** The monthly price with VAT, set apart so it is never cut off with the specs. */
+function PriceTag({ size }: { readonly size: VmSize }) {
+  return (
+    <span className="flex shrink-0 flex-col items-end leading-tight">
+      <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{PRICE.format(size.monthlyGross)}</span>
+      <span className="text-xs text-zinc-500 dark:text-zinc-400">per month</span>
+    </span>
+  );
 }
 
 /** The size to start on: the default while it can be had, otherwise none, so a pricier one is never picked silently. */
@@ -27,8 +37,9 @@ interface Props {
 }
 
 /**
- * The VM sizes Hetzner sells, cheapest first, each with its price. A sold-out size shows but cannot
- * be chosen; while every low-cost one is sold out, a warning says so and offers to wait.
+ * The VM sizes on offer, cheapest first, each with its price. A low-cost size that is unavailable
+ * shows but cannot be chosen, and a pricier one only shows while it can be had; while every
+ * low-cost one is unavailable, a warning says so and offers to wait.
  */
 export function VmSizePicker({ sizes, status, value, disabled = false, soldOut = null, onChange, onReload }: Props) {
   if (status === "loading") {
@@ -48,20 +59,21 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
     );
   }
   const cheapSoldOut = sizes.some((size) => size.recommended) && !sizes.some((size) => size.recommended && size.available);
+  const shown = sizes.filter((size) => size.recommended || size.available);
   return (
     <>
       {(cheapSoldOut || soldOut) && (
         <div
           role="status"
-          aria-label="Sizes sold out"
+          aria-label="Sizes unavailable"
           className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 dark:border-amber-950 dark:bg-amber-950/30"
         >
           <div className="flex gap-3">
             <TriangleAlert aria-hidden className="mt-0.5 size-4.5 shrink-0 text-amber-600 dark:text-amber-400" />
             <p className="text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-              {soldOut ? `${soldOut} sold out just now. ` : ""}
+              {soldOut ? `${soldOut} is no longer available. ` : ""}
               {cheapSoldOut
-                ? "The low-cost sizes are sold out at Hetzner right now. They usually come back within a few hours, so you can wait and check again, or pick an available size below, which costs more."
+                ? "The low-cost sizes are unavailable right now. They usually come back within a few hours, so you can wait and check again, or pick one of the larger sizes below, which cost more."
                 : "Pick another size, or check again in a while."}
             </p>
           </div>
@@ -70,13 +82,14 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
           </div>
         </div>
       )}
-      {sizes.map((size) => (
+      {shown.map((size) => (
         <ChoiceCard
           key={size.serverType}
           name="workspace-vm-type"
           value={size.serverType}
-          label={size.recommended ? size.serverType : `${size.serverType} (costs more)`}
+          label={size.serverType}
           detail={detailOf(size)}
+          aside={<PriceTag size={size} />}
           icon={Server}
           checked={size.serverType === value}
           disabled={disabled || !size.available}

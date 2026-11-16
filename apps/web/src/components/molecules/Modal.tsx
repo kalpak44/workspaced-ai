@@ -88,7 +88,8 @@ export function Modal({ title, description, onClose, children, portal = true, wi
       >
         {/* The grab handle tells a phone user the sheet can be dismissed; it is not interactive. */}
         <span aria-hidden className="mx-auto mt-2 h-1 w-10 shrink-0 rounded-full bg-zinc-300 sm:hidden dark:bg-zinc-700" />
-        <header className="flex shrink-0 items-start justify-between gap-3 px-4 pt-3 sm:px-6 sm:pt-6">
+        {/* The rule matches the footer's, so content scrolled under the description has an edge. */}
+        <header className="flex shrink-0 items-start justify-between gap-3 border-b border-zinc-200 px-4 pt-3 pb-4 sm:px-6 sm:pt-6 dark:border-zinc-800">
           <div className="min-w-0">
             <h2 className="text-lg font-semibold tracking-tight [overflow-wrap:anywhere]">{title}</h2>
             {description && (

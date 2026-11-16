@@ -114,6 +114,8 @@ public class WorkspaceService {
               });
       return Workspace.of(entity, statusOf(id));
     } catch (RuntimeException e) {
+      // The user sees only that it failed; this is where the reason is kept.
+      log.warn("workspace {} failed to create", id, e);
       release(id);
       transactions.executeWithoutResult(_ -> repository.deleteById(id));
       throw e;

@@ -166,7 +166,7 @@ class HttpVmManagerTest {
   void passesOnASizeHetznerHasSoldOut() {
     assertThatThrownBy(() -> vmManager.create(workspace, user, "cpx22", "sk-or-v1-test", Map.of()))
         .isInstanceOf(ServerTypeSoldOutException.class)
-        .hasMessageContaining("sold out");
+        .hasMessageContaining("unavailable right now");
   }
 
   @Test

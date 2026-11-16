@@ -19,7 +19,7 @@ async function openSizes(user: User) {
   await screen.findByRole("radio", { name: /cx23/ });
 }
 
-const warning = () => screen.queryByRole("status", { name: "Sizes sold out" });
+const warning = () => screen.queryByRole("status", { name: "Sizes unavailable" });
 
 describe("VM sizes", () => {
   it("shows each size with its price, cheapest first, and starts on the default", async () => {
@@ -30,8 +30,8 @@ describe("VM sizes", () => {
     const radios = screen.getAllByRole("radio");
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cpx22"]);
     expect(screen.getByRole("radio", { name: /cx23/ })).toBeChecked();
-    expect(screen.getByText(/2 vCPU · 4 GB RAM · 40 GB disk · €6\.59\/mo/)).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /cpx22 \(costs more\)/ })).toBeEnabled();
+    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€6\.59.*per month/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cpx22/ })).toBeEnabled();
     expect(warning()).not.toBeInTheDocument();
   });
 
@@ -41,9 +41,10 @@ describe("VM sizes", () => {
     const user = userEvent.setup();
     await openSizes(user);
 
-    expect(warning()).toHaveTextContent("The low-cost sizes are sold out at Hetzner right now.");
+    expect(warning()).toHaveTextContent("The low-cost sizes are unavailable right now.");
+    expect(warning()).not.toHaveTextContent(/hetzner/i);
     expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled();
-    expect(screen.getByText(/Sold out · 2 vCPU/)).toBeInTheDocument();
+    expect(screen.getByText(/Unavailable · 2 vCPU/)).toBeInTheDocument();
     expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
@@ -56,6 +57,15 @@ describe("VM sizes", () => {
     expect(screen.getByRole("radio", { name: /cpx22/ })).toBeChecked();
   });
 
+  it("leaves out a pricier size while it is unavailable", async () => {
+    const api = installFakeApi();
+    api.state.vmSizes[2].available = false;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33"]);
+  });
+
   it("comes back to the sizes when the one chosen sells out during the create", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
@@ -66,7 +76,7 @@ describe("VM sizes", () => {
 
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
-    expect(await screen.findByRole("status", { name: "Sizes sold out" })).toHaveTextContent("cx23 sold out just now.");
+    expect(await screen.findByRole("status", { name: "Sizes unavailable" })).toHaveTextContent("cx23 is no longer available.");
     await waitFor(() => expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled());
     expect(api.rows.map((w) => w.name)).not.toContain("Research");
   });

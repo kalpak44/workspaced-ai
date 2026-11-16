@@ -38,8 +38,9 @@ and delete them. They live in the workspace, so it must be running.
 
 Creating a workspace is a wizard: the name, then the VM type, picked from cards (radios underneath) that show each
 `/vm-sizes` entry's cores, memory, disk and monthly price, cheapest first, with the default chosen while Hetzner has it.
-A sold-out size shows but cannot be picked; while every low-cost one is sold out a warning offers to check again, and
-nothing pricier is chosen for the user. A size that sells out during the create (`409`) brings the wizard back to the
+The price sits apart on the right so it is never cut off. An unavailable low-cost size shows but cannot be picked, and
+a pricier one shows only while it is available; while every low-cost one is unavailable a warning offers to check again,
+and nothing pricier is chosen for the user. No text names the provider. A size that sells out during the create (`409`) brings the wizard back to the
 sizes. It always uses OpenRouter
 and asks for no key for now. A failed create keeps the dialog and what was chosen, and goes to the page's error
 banner. Every page has its own address, so a link, a reload or the browser's Back button lands where it should. `nginx.conf`

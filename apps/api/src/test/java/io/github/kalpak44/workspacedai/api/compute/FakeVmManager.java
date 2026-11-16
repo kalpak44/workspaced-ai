@@ -122,8 +122,7 @@ class FakeVmManager implements AutoCloseable {
         creates.add(request);
         var type = request.path("serverType").asString("cx23");
         if (type.equals("cpx22")) {
-          answer(
-              exchange, 409, "{\"detail\":\"server type cpx22 is sold out at Hetzner right now\"}");
+          answer(exchange, 409, "{\"detail\":\"server type cpx22 is unavailable right now\"}");
           return;
         }
         if (!type.equals("cx23") && !type.equals("cx33")) {

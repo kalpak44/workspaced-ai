@@ -1,4 +1,5 @@
 import { Check, type LucideIcon } from "lucide-react";
+import type { ReactNode } from "react";
 
 interface Props {
   /** Shared by every card in the group, which is what makes them one radio group. */
@@ -7,6 +8,8 @@ interface Props {
   readonly label: string;
   /** A muted second line, e.g. where the choice points. */
   readonly detail?: string;
+  /** Shown on the right, before the radio, e.g. a price that must not be cut off with the detail. */
+  readonly aside?: ReactNode;
   readonly icon: LucideIcon;
   readonly checked: boolean;
   readonly disabled?: boolean;
@@ -22,6 +25,7 @@ export function ChoiceCard({
   value,
   label,
   detail,
+  aside,
   icon: Icon,
   checked,
   disabled = false,
@@ -49,6 +53,7 @@ export function ChoiceCard({
           </span>
         )}
       </span>
+      {aside}
       <span
         aria-hidden
         className={`flex size-5 shrink-0 items-center justify-center rounded-full border ${
