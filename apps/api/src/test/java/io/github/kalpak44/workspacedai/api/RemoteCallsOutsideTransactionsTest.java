@@ -104,7 +104,8 @@ class RemoteCallsOutsideTransactionsTest {
   @Test
   void holdsNoTransactionWhileAHarnessProviderOrPodIsWorking() {
     var workspace =
-        workspaces.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null);
+        workspaces.create(
+            TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC");
     var session = sessions.create(workspace.id());
     sessions.list(workspace.id());
     sessions.messages(workspace.id(), session.id());

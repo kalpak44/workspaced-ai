@@ -35,6 +35,30 @@ class VmSecretServiceTest {
   }
 
   @Test
+  void setsAndRemovesASystemVariableOverASecretOfTheSameName() {
+    service.add(vm, "USER_TIMEZONE", "Mars/Olympus");
+
+    service.setSystemVariable(vm, "USER_TIMEZONE", "Europe/Sofia");
+    assertThat(service.environment(vm))
+        .containsEntry("USER_TIMEZONE", "Europe/Sofia")
+        .containsEntry("OPENROUTER_BASE_URL", "https://or");
+
+    service.setSystemVariable(vm, "USER_TIMEZONE", null);
+    assertThat(service.environment(vm)).containsEntry("USER_TIMEZONE", "Mars/Olympus");
+  }
+
+  @Test
+  void refusesToSetTheKeyOrTheHarnessSettings() {
+    assertThatThrownBy(() -> service.setSystemVariable(vm, "OPENROUTER_API_KEY", "sk"))
+        .isInstanceOf(SecretRefusedException.class);
+    assertThatThrownBy(() -> service.setSystemVariable(vm, "OPENCODE_PASSWORD", "pw"))
+        .isInstanceOf(SecretRefusedException.class);
+    var unknown = UUID.randomUUID();
+    assertThatThrownBy(() -> service.setSystemVariable(unknown, "USER_TIMEZONE", "UTC"))
+        .isInstanceOf(VmNotFoundException.class);
+  }
+
+  @Test
   void listsTheSystemSecretFirstThenTheRestByName() {
     service.add(vm, "ZED", "z");
     service.add(vm, "ALPHA", "a");

@@ -1,8 +1,8 @@
-import { Plus, RotateCw, TriangleAlert } from "lucide-react";
+import { Plus } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { type AddResult, MAX_SECRETS, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
 import { Button, Spinner, TextField } from "../atoms";
-import { ErrorBanner, SecretItem, SettingsSection } from "../molecules";
+import { ErrorBanner, RestartRequiredBanner, SecretItem, SettingsSection } from "../molecules";
 
 const MAX_NAME = 100;
 const MAX_VALUE = 65536;
@@ -72,27 +72,7 @@ export function SecretsPanel({
       description="Passed to the workspace as environment variables when it starts. A value cannot be read back once saved."
     >
       {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
-      {restartRequired && (
-        <div
-          role="status"
-          aria-label="Restart required"
-          className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 sm:flex-row sm:items-center dark:border-amber-950 dark:bg-amber-950/30"
-        >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-600 dark:bg-amber-950 dark:text-amber-400">
-            <TriangleAlert aria-hidden className="size-4.5" />
-          </span>
-          <p className="min-w-0 flex-1 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
-            Secrets changed. The workspace picks them up only after it restarts.
-          </p>
-          <Button
-            label="Restart workspace"
-            variant="secondary"
-            icon={RotateCw}
-            disabled={restartDisabled}
-            onClick={onRestart}
-          />
-        </div>
-      )}
+      {restartRequired && <RestartRequiredBanner restartDisabled={restartDisabled} onRestart={onRestart} />}
       {loading ? (
         <Spinner label="Loading secrets" className="size-5 text-zinc-400" />
       ) : (

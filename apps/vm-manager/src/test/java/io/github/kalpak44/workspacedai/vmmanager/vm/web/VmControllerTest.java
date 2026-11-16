@@ -371,6 +371,26 @@ class VmControllerTest {
   }
 
   @Test
+  void setsAndRemovesASystemVariable() throws Exception {
+    var vm = create();
+    var path = "/" + vm.id() + "/environment/USER_TIMEZONE";
+
+    assertThat(send("PUT", path, "{\"value\":\"Europe/Sofia\"}").statusCode()).isEqualTo(204);
+    assertThat(send("DELETE", path, null).statusCode()).isEqualTo(204);
+    assertThat(send("PUT", path, "{}").statusCode()).isEqualTo(400);
+    assertThat(send("PUT", "/" + vm.id() + "/environment/1BAD", "{\"value\":\"x\"}").statusCode())
+        .isEqualTo(400);
+    assertThat(
+            send("PUT", "/" + vm.id() + "/environment/OPENCODE_X", "{\"value\":\"x\"}")
+                .statusCode())
+        .isEqualTo(409);
+    assertThat(
+            send("PUT", "/" + UUID.randomUUID() + "/environment/A", "{\"value\":\"x\"}")
+                .statusCode())
+        .isEqualTo(404);
+  }
+
+  @Test
   void givesEachVmItsOwnFirewallThatStartsClosed() throws Exception {
     var vm = create();
     var body =

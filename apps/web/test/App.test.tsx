@@ -149,6 +149,8 @@ describe("App", () => {
       serverType: "cx33",
       modelProvider: "openrouter",
       apiKey: "sk-or-v1-test",
+      // The browser's zone, so the agent starts on the clock of whoever made it.
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
   });
 
@@ -298,7 +300,7 @@ describe("App", () => {
     await user.type(input, "Research{Enter}");
     await waitFor(() => expect(heading()).toHaveTextContent("Research"));
     expect(api.rows).toEqual([
-      { id: "starter", name: "Research", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
+      { id: "starter", name: "Research", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false },
     ]);
 
     await user.click(screen.getByRole("button", { name: "Actions for Research" }));
@@ -732,7 +734,7 @@ describe("App", () => {
   });
 
   it("leaves settings when another workspace is selected", async () => {
-    api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false });
+    api.rows.push({ id: "other", name: "Other", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false });
     const user = userEvent.setup();
     await renderLoaded();
     await openSettings(user);

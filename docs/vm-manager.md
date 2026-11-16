@@ -111,6 +111,11 @@ shadowed), or the VM already holds 50; adding never replaces. A change is a chec
 of the whole entry, so two concurrent adds cannot both pass the limit, and the entry keeps one version, so a removed
 value is not left in its history. Without `WORKSPACED_VAULT_URL` these routes and creating a VM answer `503`.
 
+`PUT /api/v1/vms/{id}/environment/{name}` with `{"value": "…"}` sets one variable of the harness environment, and
+`DELETE` on the same path removes it; both answer `204`. The API uses it for the workspace's `USER_TIMEZONE`. The value
+wins over a secret of the same name, and the harness sees it from its next start. The key and `OPENCODE_` names are
+refused with `409`, since they are set only when the VM is created.
+
 ### Harness
 
 `GET /api/v1/vms/{id}/harness` answers `{"image": "…", "environment": {…}}`: the image from `WORKSPACED_HARNESS_IMAGE`

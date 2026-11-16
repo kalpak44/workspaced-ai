@@ -17,7 +17,8 @@ interface Props {
   /** The open section's id, from the URL; the first section when unset or unknown. */
   readonly section?: string;
   /** A secret was added or removed; the running workspace sees it only after a restart. */
-  readonly onSecretsChanged: () => void;
+  /** Hears what a change made to the workspace, such as that it now needs a restart. */
+  readonly onChanged: (changes: Partial<Workspace>) => void;
   readonly onRestart: () => void;
 }
 
@@ -40,12 +41,12 @@ const InstructionsPanel = lazy(() =>
 const TasksPanel = lazy(() => import("../organisms/TasksPanel").then((panel) => ({ default: panel.TasksPanel })));
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
-export function SettingsPage({ workspace, section: requested, onSecretsChanged, onRestart }: Props) {
+export function SettingsPage({ workspace, section: requested, onChanged, onRestart }: Props) {
   const section: SectionId = SECTIONS.find((s) => s.id === requested)?.id ?? "mcp";
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: SectionId) => navigate({ name: "settings", workspaceId: workspace.id, section: id }, { replace: true });
   const mcp = useMcpServers(workspace.id);
-  const secrets = useSecrets(workspace.id, onSecretsChanged);
+  const secrets = useSecrets(workspace.id, () => onChanged({ restartRequired: true }));
 
   return (
     <ContextLayout
@@ -61,12 +62,12 @@ export function SettingsPage({ workspace, section: requested, onSecretsChanged, 
           </Suspense>
         )}
         {section === "variables" && (
-          <VariablesPanel key={workspace.id} workspaceId={workspace.id}
-            restartDisabled={workspace.status === "INITIALIZING"} onRestart={onRestart} />
+          <VariablesPanel key={workspace.id} workspace={workspace}
+            restartDisabled={workspace.status === "INITIALIZING"} onRestart={onRestart} onChanged={onChanged} />
         )}
         {section === "tasks" && (
           <Suspense fallback={<Spinner label="Loading tasks" className="size-5 text-zinc-400" />}>
-            <TasksPanel key={workspace.id} workspaceId={workspace.id} />
+            <TasksPanel key={workspace.id} workspaceId={workspace.id} timeZone={workspace.timeZone} />
           </Suspense>
         )}
         {section === "firewall" && <FirewallPanel key={workspace.id} workspaceId={workspace.id} />}

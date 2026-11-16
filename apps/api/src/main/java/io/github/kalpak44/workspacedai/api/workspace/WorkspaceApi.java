@@ -212,6 +212,42 @@ public interface WorkspaceApi {
           UUID id,
       @Valid @RequestBody WorkspaceRequest request);
 
+  @Operation(
+      operationId = "setWorkspaceTimeZone",
+      summary = "Set a workspace's time zone",
+      description =
+          "The harness reads it as USER_TIMEZONE from its next start, so a change sets "
+              + "restartRequired until the workspace restarts.")
+  @ApiResponse(responseCode = "200", description = "Saved.")
+  @ApiResponse(
+      responseCode = "400",
+      description = "Not an IANA time zone such as Europe/Sofia.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No workspace has that id.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class),
+              examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "The workspace has no VM yet.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PutMapping(path = "/{id}/time-zone", consumes = JSON, produces = JSON)
+  ResponseEntity<Workspace> setTimeZone(
+      @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
+          @PathVariable
+          UUID id,
+      @Valid @RequestBody TimeZoneRequest request);
+
   /**
    * Restarts a workspace's runtime.
    *

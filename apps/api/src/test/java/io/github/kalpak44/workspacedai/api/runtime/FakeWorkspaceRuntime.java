@@ -48,6 +48,11 @@ public class FakeWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public void setSystemVariable(UUID workspaceId, String name, String value) {
+    // Nothing runs that could read it, so the value is not kept anywhere.
+  }
+
+  @Override
   public Optional<String> secret(UUID workspaceId, String name) {
     // None was kept.
     return Optional.empty();

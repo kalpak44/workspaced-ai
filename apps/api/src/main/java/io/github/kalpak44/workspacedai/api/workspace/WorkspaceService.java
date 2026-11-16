@@ -8,6 +8,7 @@ import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.OutputStream;
 import java.security.SecureRandom;
+import java.time.ZoneId;
 import java.util.Base64;
 import java.util.List;
 import java.util.Map;
@@ -71,16 +72,25 @@ public class WorkspaceService {
    * The harness gets a password of its own, which only the API and the workspace ever see.
    *
    * @param serverType null for the default size
+   * @param timeZone an IANA zone, which the harness always starts with
    */
   public Workspace create(
-      UUID ownerId, String name, ModelProvider provider, String apiKey, String serverType) {
+      UUID ownerId,
+      String name,
+      ModelProvider provider,
+      String apiKey,
+      String serverType,
+      String timeZone) {
+    validTimeZone(timeZone);
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
     var id =
         transactions
             .execute(
-                _ -> repository.saveAndFlush(new WorkspaceEntity(ownerId, name, provider.id())))
+                _ ->
+                    repository.saveAndFlush(
+                        new WorkspaceEntity(ownerId, name, provider.id(), timeZone)))
             .getId();
     try {
       var startedAs =
@@ -89,7 +99,11 @@ public class WorkspaceService {
               ownerId,
               serverType,
               new WorkspaceEnvironment(
-                  Map.of(provider.baseUrlVariable(), provider.baseUrl()),
+                  Map.of(
+                      provider.baseUrlVariable(),
+                      provider.baseUrl(),
+                      Harness.TIME_ZONE_VARIABLE,
+                      timeZone),
                   secrets(provider, apiKey)));
       var entity =
           transactions.execute(
@@ -135,6 +149,39 @@ public class WorkspaceService {
               entity.setName(name);
               return Workspace.of(entity, statusOf(id));
             });
+  }
+
+  /**
+   * The VM gets the zone before the row does, so a failed call leaves both as they were; the
+   * harness reads it only from its next start, so the workspace is left needing a restart. Empty
+   * when no workspace has that id.
+   */
+  @Transactional
+  public Optional<Workspace> setTimeZone(UUID id, String timeZone) {
+    validTimeZone(timeZone);
+    var entity = repository.findById(id);
+    if (entity.isEmpty()) {
+      return Optional.empty();
+    }
+    var workspace = entity.get();
+    if (!workspace.getTimeZone().equals(timeZone)) {
+      try {
+        runtime.setSystemVariable(id, Harness.TIME_ZONE_VARIABLE, timeZone);
+      } catch (IllegalStateException e) {
+        throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace has no VM yet", e);
+      }
+      workspace.setTimeZone(timeZone);
+      workspace.setSecretsPendingRestart(true);
+    }
+    return Optional.of(Workspace.of(workspace, statusOf(id)));
+  }
+
+  // Only region names: an offset such as +02:00 would freeze daylight saving out.
+  private static void validTimeZone(String timeZone) {
+    if (timeZone == null || !ZoneId.getAvailableZoneIds().contains(timeZone)) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, timeZone + " is not a time zone such as Europe/Sofia");
+    }
   }
 
   /**

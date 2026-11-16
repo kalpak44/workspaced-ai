@@ -34,7 +34,9 @@ class SessionWithoutHarnessTest {
   void setUp() {
     workspaces.deleteAll();
     workspace =
-        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter", "UTC"))
+            .getId();
   }
 
   @Test

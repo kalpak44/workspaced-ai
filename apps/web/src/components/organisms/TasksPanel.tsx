@@ -1,7 +1,7 @@
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TASK_NAME, type TaskContent, useTasks } from "../../hooks/useTasks";
-import { BROWSER_TIME_ZONE, TIME_ZONES, useTimeZone } from "../../hooks/useTimeZone";
+import { TIME_ZONES } from "../../lib/timeZones";
 import { cronError, validTimeZone } from "../../lib/cron";
 import { Button, IconButton, Spinner, TextField } from "../atoms";
 import { ConfirmDeleteDialog, SettingsSection } from "../molecules";
@@ -10,6 +10,8 @@ import { InstructionsEditor } from "../molecules/InstructionsEditor";
 
 interface Props {
   readonly workspaceId: string;
+  /** The workspace's own zone, which a new task starts in. */
+  readonly timeZone: string;
 }
 
 const DESCRIPTION =
@@ -24,8 +26,7 @@ Check the open pull requests in ~/project and summarise what each one changes.`;
  * The workspace's scheduled tasks: a cron expression, its time zone and the prompt to run. Edits
  * are kept per task until saved, so switching between tasks loses nothing.
  */
-export function TasksPanel({ workspaceId }: Props) {
-  const [preferredZone] = useTimeZone();
+export function TasksPanel({ workspaceId, timeZone }: Props) {
   const { tasks, stopped, error, loading, retry, save, remove } = useTasks(workspaceId);
   const [selected, setSelected] = useState<string | null>(null);
   const [drafts, setDrafts] = useState<Record<string, TaskContent>>({});
@@ -79,7 +80,7 @@ export function TasksPanel({ workspaceId }: Props) {
   async function create() {
     if (!newName || nameError) return;
     setBusy(true);
-    if (await save(newName, { cron: "0 9 * * 1-5", timeZone: preferredZone ?? BROWSER_TIME_ZONE, prompt: "" })) {
+    if (await save(newName, { cron: "0 9 * * 1-5", timeZone, prompt: "" })) {
       setSelected(newName);
       setNewName(null);
       setNotice("Created. Write what the agent should do, set when, and save.");

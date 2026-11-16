@@ -24,3 +24,5 @@ export { SearchField } from "./SearchField";
 export { SectionNav } from "./SectionNav";
 export { Toast } from "./Toast";
 export { ConfirmDeleteDialog } from "./ConfirmDeleteDialog";
+export { RestartRequiredBanner } from "./RestartRequiredBanner";
+export { TimeZoneField } from "./TimeZoneField";

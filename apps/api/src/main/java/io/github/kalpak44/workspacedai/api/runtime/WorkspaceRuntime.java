@@ -45,6 +45,14 @@ public interface WorkspaceRuntime {
   void removeSecret(UUID workspaceId, String name);
 
   /**
+   * Sets one variable the workspace always starts with, over any secret of the same name. A running
+   * workspace sees it only once it restarts.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   */
+  void setSystemVariable(UUID workspaceId, String name, String value);
+
+  /**
    * The last lines it printed, oldest first; empty when it has none or the log cannot be read.
    * Before its harness starts, this is the only way to hear from it.
    */

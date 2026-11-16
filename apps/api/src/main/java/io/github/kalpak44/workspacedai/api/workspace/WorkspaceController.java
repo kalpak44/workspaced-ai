@@ -48,7 +48,8 @@ public class WorkspaceController implements WorkspaceApi {
             request.trimmedName(),
             provider,
             request.trimmedApiKey(),
-            request.serverTypeOrNull());
+            request.serverTypeOrNull(),
+            request.timeZoneOrUtc());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
@@ -61,6 +62,14 @@ public class WorkspaceController implements WorkspaceApi {
   public ResponseEntity<Workspace> rename(UUID id, WorkspaceRequest request) {
     return service
         .rename(id, request.trimmedName())
+        .map(ResponseEntity::ok)
+        .orElseThrow(() -> notFound(id));
+  }
+
+  @Override
+  public ResponseEntity<Workspace> setTimeZone(UUID id, TimeZoneRequest request) {
+    return service
+        .setTimeZone(id, request.timeZone().strip())
         .map(ResponseEntity::ok)
         .orElseThrow(() -> notFound(id));
   }

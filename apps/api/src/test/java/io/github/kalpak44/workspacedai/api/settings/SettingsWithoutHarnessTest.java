@@ -33,7 +33,9 @@ class SettingsWithoutHarnessTest {
   void setUp() {
     workspaces.deleteAll();
     workspace =
-        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter", "UTC"))
+            .getId();
   }
 
   @Test
@@ -42,7 +44,7 @@ class SettingsWithoutHarnessTest {
     assertThat(service.setSessionTtl(workspace, new SessionTtlSettings(true, 6)))
         .isEqualTo(new SessionTtlSettings(true, 6));
     var other =
-        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Other", "openrouter")).getId();
+        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Other", "openrouter", "UTC")).getId();
     assertThat(service.sessionTtl(other)).isEqualTo(new SessionTtlSettings(false, 168));
     assertThat(service.sessionTtl(workspace)).isEqualTo(new SessionTtlSettings(true, 6));
   }

@@ -76,7 +76,7 @@ class RecipeDraftsTest {
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace =
         workspaces
-            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
             .id();
   }
 

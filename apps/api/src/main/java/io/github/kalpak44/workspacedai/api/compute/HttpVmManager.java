@@ -182,6 +182,23 @@ public class HttpVmManager implements VmManager {
   }
 
   @Override
+  public void setSystemVariable(UUID workspaceId, String name, String value) {
+    var vm = vmOf(workspaceId);
+    var body = json.createObjectNode();
+    body.put("value", value);
+    var response =
+        send(
+            request(
+                    "/vms/"
+                        + vm.path("id").asString()
+                        + "/environment/"
+                        + URLEncoder.encode(name, StandardCharsets.UTF_8))
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))));
+    expect(response, 204);
+  }
+
+  @Override
   public VmFirewall firewallFor(UUID workspaceId) {
     var vm = vmOf(workspaceId);
     var response = send(get("/vms/" + vm.path("id").asString() + "/firewall"));

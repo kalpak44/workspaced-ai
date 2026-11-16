@@ -89,7 +89,7 @@ export class FakeEventSource {
  */
 export function installFakeApi(
   initial: Workspace[] = [
-    { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
+    { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false },
   ],
 ) {
   const rows = [...initial];
@@ -529,6 +529,15 @@ export function installFakeApi(
     if (secretsRoute) {
       return secretsResponse(secretsRoute[1], secretsRoute[2], init);
     }
+    const timeZoneRoute = /\/api\/v1\/workspaces\/([^/]+)\/time-zone$/.exec(url);
+    if (timeZoneRoute) {
+      const index = rows.findIndex((workspace) => workspace.id === timeZoneRoute[1]);
+      if (index < 0) return json({}, 404);
+      if (state.fail) return json({}, state.fail);
+      const { timeZone } = JSON.parse(String(init?.body)) as { timeZone: string };
+      if (timeZone !== rows[index].timeZone) rows[index] = { ...rows[index], timeZone, restartRequired: true };
+      return json(rows[index]);
+    }
     const restartRoute = /\/api\/v1\/workspaces\/([^/]+)\/restart$/.exec(url);
     if (restartRoute) {
       if (state.holdRestart) await state.holdRestart;
@@ -540,7 +549,7 @@ export function installFakeApi(
     }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
-      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string })
+      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string })
       : undefined;
     const index = rows.findIndex((w) => w.id === id);
     switch (init?.method ?? "GET") {
@@ -552,6 +561,7 @@ export function installFakeApi(
           name: body!.name,
           modelProvider: body!.modelProvider!,
           model: null,
+          timeZone: body!.timeZone ?? "UTC",
           status: state.createStatus,
           restartRequired: false,
         };

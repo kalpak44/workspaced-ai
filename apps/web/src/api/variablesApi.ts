@@ -10,6 +10,8 @@ export interface Variable {
 // The API's rules, checked here too so the form can say what is wrong before saving.
 export const VARIABLE_NAME = /^[A-Za-z_]\w*$/;
 export const MAX_VARIABLE_VALUE = 4096;
+/** Set from the workspace's time zone, so a variable of that name would never be read. */
+export const TIME_ZONE_VARIABLE = "USER_TIMEZONE";
 export const MAX_VARIABLES = 200;
 
 function variablesUrl(workspaceId: string): string {

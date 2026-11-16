@@ -43,7 +43,9 @@ class WorkspaceMetricsTest {
   @BeforeEach
   void setUp() {
     workspace =
-        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Metrics", "openrouter")).getId();
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Metrics", "openrouter", "UTC"))
+            .getId();
   }
 
   @Test

@@ -51,7 +51,7 @@ class SecretControllerTest {
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     id =
         workspaces
-            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
             .id();
   }
 
@@ -123,6 +123,12 @@ class SecretControllerTest {
     assertThat(JSON.readTree(added.body()).get("detail").asString())
         .isEqualTo("OPENCODE_SERVER_PASSWORD is set by the workspace's harness");
     assertThat(send("DELETE", "/OPENCODE_SERVER_USERNAME", null).statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void refusesToShadowTheWorkspacesTimeZone() throws Exception {
+    assertThat(send("POST", "", "{\"name\":\"USER_TIMEZONE\",\"value\":\"x\"}").statusCode())
+        .isEqualTo(409);
   }
 
   @Test

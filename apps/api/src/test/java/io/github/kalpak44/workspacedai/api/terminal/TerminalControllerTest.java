@@ -62,7 +62,7 @@ class TerminalControllerTest {
     workspaces.deleteAll();
     workspace =
         workspaces
-            .save(new WorkspaceEntity(TestUsers.ADMIN, "Terminal tests", "openrouter"))
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Terminal tests", "openrouter", "UTC"))
             .getId();
     OPENCODE.terminals.clear();
     OPENCODE.requests.clear();

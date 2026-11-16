@@ -3,7 +3,7 @@ import { ApiError } from "../api/http";
 import { listVariables, saveVariables, type Variable } from "../api/variablesApi";
 
 export type { Variable } from "../api/variablesApi";
-export { MAX_VARIABLE_VALUE, MAX_VARIABLES, VARIABLE_NAME } from "../api/variablesApi";
+export { MAX_VARIABLE_VALUE, MAX_VARIABLES, TIME_ZONE_VARIABLE, VARIABLE_NAME } from "../api/variablesApi";
 
 /**
  * A workspace's variables, read from its .env file, where the agent may change them too; so they

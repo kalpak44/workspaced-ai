@@ -13,6 +13,7 @@ import {
   type Workspace,
   type WorkspaceStatus,
 } from "../api/workspacesApi";
+import { BROWSER_TIME_ZONE } from "../lib/timeZones";
 
 export type { NewWorkspace, Workspace, WorkspaceStatus } from "../api/workspacesApi";
 
@@ -90,7 +91,7 @@ export function useWorkspaces() {
     request: NewWorkspace,
     onCreated?: (workspace: Workspace) => void,
   ): Promise<CreateResult> =>
-    createWorkspace({ ...request, name: request.name.trim(), apiKey: request.apiKey.trim() }).then(
+    createWorkspace({ timeZone: BROWSER_TIME_ZONE, ...request, name: request.name.trim(), apiKey: request.apiKey.trim() }).then(
       (created): CreateResult => {
         const workspace = { ...created, status: latest.current.get(created.id) ?? created.status };
         setWorkspaces((current) => [...current, workspace]);

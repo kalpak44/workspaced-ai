@@ -245,7 +245,7 @@ class FirewallTest {
 
   private UUID create() {
     return workspaces
-        .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+        .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
         .id();
   }
 

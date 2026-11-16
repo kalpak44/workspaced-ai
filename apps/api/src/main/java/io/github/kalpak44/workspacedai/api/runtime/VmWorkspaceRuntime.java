@@ -70,6 +70,11 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
     vmManager.putSecret(workspaceId, name, value);
   }
 
+  @Override
+  public void setSystemVariable(UUID workspaceId, String name, String value) {
+    vmManager.setSystemVariable(workspaceId, name, value);
+  }
+
   /** The VM manager never hands a value back, so none can be reused. */
   @Override
   public Optional<String> secret(UUID workspaceId, String name) {

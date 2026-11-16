@@ -85,7 +85,7 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - The clock here is UTC: `date`, logs, file times and the task scheduler all run on it. Do not set `TZ`.
 - The user's time zone is in `USER_TIMEZONE`, an IANA name such as `Europe/Sofia`. Times the user says ("at 7", "tomorrow morning") are on their clock, and so is every time you tell them, unless they ask for UTC.
 - Run `now` to see both clocks at once. Never work out an offset in your head: daylight saving moves it twice a year.
-- If `USER_TIMEZONE` is empty, ask the user for their time zone once, add `USER_TIMEZONE=<zone>` to `~/.config/workspaced/.env`, and tell them it applies after the workspace restarts. Until then, name the zone explicitly wherever a tool asks for one.
+- The user sets it in the workspace's settings, under Variables, and it applies after the workspace restarts. Neither a secret nor `~/.config/workspaced/.env` can change it, so never try. When the user says they are somewhere else, ask them to change it there and restart, and name their zone explicitly wherever a tool asks for one until then.
 
 ## Scheduled tasks
 

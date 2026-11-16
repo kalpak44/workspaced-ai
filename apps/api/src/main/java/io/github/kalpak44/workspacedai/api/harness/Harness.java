@@ -54,6 +54,9 @@ public interface Harness {
    */
   String VARIABLES_FILE = HOME + "/.config/workspaced/.env";
 
+  /** The workspace's time zone, an IANA name, which the harness always starts with. */
+  String TIME_ZONE_VARIABLE = "USER_TIMEZONE";
+
   /**
    * Where the agent's `firewall` tool writes a request, and waits for the API's answer beside it.
    */

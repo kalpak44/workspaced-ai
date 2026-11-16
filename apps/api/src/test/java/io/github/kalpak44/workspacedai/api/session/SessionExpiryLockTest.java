@@ -38,7 +38,9 @@ class SessionExpiryLockTest {
     // Expired rather than deleted: ShedLock remembers a lock's row exists and only updates it.
     jdbc.update("update shedlock set lock_until = timezone('utc', now()) - interval '1 second'");
     var workspace =
-        workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter", "UTC"))
+            .getId();
     settings.setSessionTtl(workspace, new SessionTtlSettings(true, 1));
     when(expiry.candidates(any())).thenReturn(List.of());
   }

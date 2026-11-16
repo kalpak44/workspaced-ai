@@ -34,7 +34,10 @@ class SecretRollbackTest {
   @BeforeEach
   void setUp() {
     workspaces.deleteAll();
-    id = workspaces.save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter")).getId();
+    id =
+        workspaces
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter", "UTC"))
+            .getId();
   }
 
   @Test

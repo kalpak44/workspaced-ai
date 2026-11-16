@@ -135,6 +135,32 @@ public class VmSecretService {
   }
 
   /**
+   * Sets one variable of the harness's system environment, which the harness sees from its next
+   * start; a null value removes it. The key and the harness's own settings are not this route's to
+   * change, so a VM cannot be locked out of its harness or its model provider through it.
+   *
+   * @throws SecretRefusedException when it is the system secret or an OPENCODE_ name
+   */
+  public void setSystemVariable(UUID vmId, String name, String value) {
+    requireVm(vmId);
+    if (name.equals(SYSTEM_SECRET) || name.startsWith(RESERVED_PREFIX)) {
+      throw new SecretRefusedException(name + " is set when the VM is created");
+    }
+    store.update(
+        vmId,
+        Entry.SYSTEM,
+        current -> {
+          var next = new HashMap<>(current);
+          if (value == null) {
+            next.remove(name);
+          } else {
+            next.put(name, value);
+          }
+          return next;
+        });
+  }
+
+  /**
    * Called by {@link VmService} for a VM it is about to create, so before it exists. The key field
    * is the only source of the key, so an environment entry of that name is dropped.
    */

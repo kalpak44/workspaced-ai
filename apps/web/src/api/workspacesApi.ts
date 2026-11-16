@@ -10,8 +10,10 @@ export interface Workspace {
   readonly modelProvider: string;
   /** The model its agent replies with; null for the harness's default. */
   readonly model: string | null;
+  /** The IANA zone its agent reads times in, as USER_TIMEZONE. */
+  readonly timeZone: string;
   readonly status: WorkspaceStatus;
-  /** Secrets changed since its runtime started; they apply only once it restarts. */
+  /** Settings changed since its runtime started; they apply only once it restarts. */
   readonly restartRequired: boolean;
 }
 
@@ -23,6 +25,8 @@ export interface NewWorkspace {
   /** One of /model-providers. */
   readonly modelProvider: string;
   readonly apiKey: string;
+  /** The IANA zone its agent reads times in; the API uses UTC when it is missing. */
+  readonly timeZone?: string;
 }
 
 /** Sent once a workspace's deletion has committed, to every open stream. */
@@ -61,6 +65,11 @@ export async function createWorkspace(workspace: NewWorkspace): Promise<Workspac
 
 export async function renameWorkspace(id: string, name: string): Promise<Workspace> {
   return (await send(workspaceUrl(id), { method: "PUT", body: JSON.stringify({ name }) })).json();
+}
+
+/** The harness reads it from its next start, so the workspace comes back needing a restart. */
+export async function setWorkspaceTimeZone(id: string, timeZone: string): Promise<Workspace> {
+  return (await send(`${workspaceUrl(id)}/time-zone`, { method: "PUT", body: JSON.stringify({ timeZone }) })).json();
 }
 
 /** Answers once the VM is rebooting; the event stream reports it starting again. */

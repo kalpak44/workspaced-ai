@@ -14,9 +14,9 @@ import org.springframework.web.server.ResponseStatusException;
 
 /**
  * A workspace's variables: its .env file, which the harness reads when it starts, so a change
- * applies from the next start. They exist only as that file, so the user edits here exactly what
- * the agent can edit too. Unlike secrets, their values can be read back. Each call needs the
- * workspace running.
+ * applies from the next start and leaves the workspace needing a restart. They exist only as that
+ * file, so the user edits here exactly what the agent can edit too. Unlike secrets, their values
+ * can be read back. Each call needs the workspace running.
  */
 @Service
 public class VariableService {
@@ -47,6 +47,8 @@ public class VariableService {
   public List<Variable> save(UUID workspaceId, List<Variable> variables) {
     validate(variables);
     harness.writeVariables(endpoint(workspaceId), EnvFile.format(variables));
+    // The harness reads the file only when it starts, as it does its secrets.
+    workspaces.markRestartRequired(workspaceId);
     return List.copyOf(variables);
   }
 
@@ -56,7 +58,8 @@ public class VariableService {
     }
     var names = new HashSet<String>();
     for (var variable : variables) {
-      if (variable.name().startsWith("OPENCODE_")) {
+      if (variable.name().startsWith("OPENCODE_")
+          || variable.name().equals(Harness.TIME_ZONE_VARIABLE)) {
         throw badRequest(variable.name() + " is set by the workspace itself");
       }
       if (variable.value().contains("\n") || variable.value().contains("\r")) {

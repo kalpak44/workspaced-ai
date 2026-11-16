@@ -39,6 +39,10 @@ public class WorkspaceEntity {
   @Column(length = 200)
   private String model;
 
+  // An IANA zone; the harness reads it as USER_TIMEZONE from its next start.
+  @Column(name = "time_zone", nullable = false, length = 64)
+  private String timeZone = "UTC";
+
   @Column(name = "session_ttl_enabled", nullable = false)
   private boolean sessionTtlEnabled;
 
@@ -86,10 +90,19 @@ public class WorkspaceEntity {
     // For JPA.
   }
 
-  public WorkspaceEntity(UUID ownerId, String name, String modelProvider) {
+  public WorkspaceEntity(UUID ownerId, String name, String modelProvider, String timeZone) {
     this.ownerId = ownerId;
     this.name = name;
     this.modelProvider = modelProvider;
+    this.timeZone = timeZone;
+  }
+
+  public String getTimeZone() {
+    return timeZone;
+  }
+
+  public void setTimeZone(String timeZone) {
+    this.timeZone = timeZone;
   }
 
   public String getServerType() {

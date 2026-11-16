@@ -12,8 +12,8 @@ beforeEach(() => {
 /** Opens the app on a phone inside Alpha, with Beta beside it. */
 async function setup() {
   const api = installFakeApi([
-    { id: "alpha", name: "Alpha", status: "READY", modelProvider: "demo", model: null, restartRequired: false },
-    { id: "beta", name: "Beta", status: "READY", modelProvider: "demo", model: null, restartRequired: false },
+    { id: "alpha", name: "Alpha", status: "READY", modelProvider: "demo", model: null, timeZone: "UTC", restartRequired: false },
+    { id: "beta", name: "Beta", status: "READY", modelProvider: "demo", model: null, timeZone: "UTC", restartRequired: false },
   ]);
   globalThis.history.replaceState(null, "", "/workspaces/alpha");
   render(<App />);

@@ -35,6 +35,12 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Query("update WorkspaceEntity w set w.model = :model where w.id = :id")
   int updateModel(@Param("id") UUID id, @Param("model") String model);
 
+  /** Its own transaction, for a caller that has just changed what the harness reads at start. */
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.secretsPendingRestart = true where w.id = :id")
+  int markRestartRequired(@Param("id") UUID id);
+
   @Transactional
   @Modifying
   @Query("update WorkspaceEntity w set w.firewallAgentAllowed = :allowed where w.id = :id")

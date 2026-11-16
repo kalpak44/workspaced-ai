@@ -17,7 +17,7 @@ describe("workspacesApi", () => {
       modelProvider: "openrouter",
       apiKey: "sk-or-v1-test",
     });
-    const notes = { id: created.id, name: "Notes", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false };
+    const notes = { id: created.id, name: "Notes", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false };
     expect(await renameWorkspace(created.id, "Notes")).toEqual(notes);
     expect(await listWorkspaces()).toEqual([notes]);
     await deleteWorkspace(created.id);

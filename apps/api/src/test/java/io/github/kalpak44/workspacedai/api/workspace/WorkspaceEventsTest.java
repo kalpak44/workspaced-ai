@@ -48,7 +48,8 @@ class WorkspaceEventsTest {
   @Timeout(10)
   void sendsASnapshotOnConnectThenEachChange() throws Exception {
     var workspace =
-        service.create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-test", null);
+        service.create(
+            TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-test", null, "UTC");
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
             .header("Authorization", TestUsers.bearer(port))
@@ -85,7 +86,8 @@ class WorkspaceEventsTest {
   @Timeout(10)
   void relaysADeletionAnotherInstanceAnnounced() throws Exception {
     // A workspace of its own, so the stream opens with a snapshot rather than on a heartbeat.
-    var mine = service.create(TestUsers.ADMIN, "Mine", ModelProvider.OPENROUTER, "sk-test", null);
+    var mine =
+        service.create(TestUsers.ADMIN, "Mine", ModelProvider.OPENROUTER, "sk-test", null, "UTC");
     var request =
         HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces/events"))
             .header("Authorization", TestUsers.bearer(port))

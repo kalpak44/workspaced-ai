@@ -1,14 +1,18 @@
-import { Plus, RotateCw, Trash2 } from "lucide-react";
+import { Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { MAX_VARIABLE_VALUE, MAX_VARIABLES, VARIABLE_NAME, type Variable, useVariables } from "../../hooks/useVariables";
+import { MAX_VARIABLE_VALUE, MAX_VARIABLES, TIME_ZONE_VARIABLE, VARIABLE_NAME, type Variable, useVariables } from "../../hooks/useVariables";
+import { useWorkspaceTimeZone } from "../../hooks/useWorkspaceTimeZone";
+import type { Workspace } from "../../hooks/useWorkspaces";
 import { Button, IconButton, Spinner } from "../atoms";
-import { SettingsSection } from "../molecules";
+import { RestartRequiredBanner, SettingsSection, TimeZoneField } from "../molecules";
 
 interface Props {
-  readonly workspaceId: string;
+  readonly workspace: Workspace;
   /** While the workspace is already starting, there is nothing to restart. */
   readonly restartDisabled: boolean;
   readonly onRestart: () => void;
+  /** Hears what a save changed about the workspace, such as that it now needs a restart. */
+  readonly onChanged: (changes: Partial<Workspace>) => void;
 }
 
 const DESCRIPTION =
@@ -26,18 +30,51 @@ const rowsOf = (variables: readonly Variable[]): Row[] => variables.map((variabl
 function rowError(row: Row, rows: readonly Row[]): string | null {
   if (!VARIABLE_NAME.test(row.name)) return "Use letters, digits and underscores, not starting with a digit.";
   if (row.name.startsWith("OPENCODE_")) return "Set by the workspace itself.";
+  if (row.name === TIME_ZONE_VARIABLE) return "Set by the time zone above.";
   if (rows.some((other) => other.id !== row.id && other.name === row.name)) return "Given twice.";
   if (row.value.length > MAX_VARIABLE_VALUE) return `Up to ${MAX_VARIABLE_VALUE.toLocaleString()} characters.`;
   return null;
 }
 
-/** The workspace's .env file as a list of names and values, saved all at once. */
-export function VariablesPanel({ workspaceId, restartDisabled, onRestart }: Props) {
+/**
+ * The workspace's system variables, locked to their own controls, then its .env file as a list of
+ * names and values, saved all at once. Either change applies from the next start, so the restart
+ * warning stays until the workspace restarts.
+ */
+export function VariablesPanel({ workspace, restartDisabled, onRestart, onChanged }: Props) {
+  return (
+    <div className="space-y-6">
+      {workspace.restartRequired && <RestartRequiredBanner restartDisabled={restartDisabled} onRestart={onRestart} />}
+      <SystemVariables workspace={workspace} onChanged={onChanged} />
+      <FileVariables workspaceId={workspace.id} onSaved={() => onChanged({ restartRequired: true })} />
+    </div>
+  );
+}
+
+function SystemVariables({ workspace, onChanged }: Pick<Props, "workspace" | "onChanged">) {
+  const { zone, setZone, changed, saving, notice, save } = useWorkspaceTimeZone(workspace, onChanged);
+  return (
+    <SettingsSection title="System variables" description="Set by the workspace for its agent; a secret or variable cannot override them.">
+      <form aria-label="Time zone" className="space-y-3" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+        <label htmlFor="workspace-time-zone" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
+          Time zone <code className="ml-1 font-mono text-xs text-zinc-500">{TIME_ZONE_VARIABLE}</code>
+        </label>
+        <TimeZoneField id="workspace-time-zone" value={zone} disabled={saving} onChange={setZone} />
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">The agent reads and tells times in this zone, and new scheduled tasks start in it.</p>
+        <div className="flex items-center justify-end gap-3">
+          {notice && <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>}
+          <Button label="Save time zone" type="submit" busy={saving} disabled={!changed} />
+        </div>
+      </form>
+    </SettingsSection>
+  );
+}
+
+function FileVariables({ workspaceId, onSaved }: { readonly workspaceId: string; readonly onSaved: () => void }) {
   const { variables, stopped, error, loading, retry, save } = useVariables(workspaceId);
   const [rows, setRows] = useState<Row[]>([]);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
-  const [saved, setSaved] = useState(false);
 
   useEffect(() => {
     if (variables) setRows(rowsOf(variables));
@@ -74,7 +111,7 @@ export function VariablesPanel({ workspaceId, restartDisabled, onRestart }: Prop
   async function submit() {
     setBusy(true);
     if (await save(rows.map(({ name, value }) => ({ name, value })))) {
-      setSaved(true);
+      onSaved();
       setNotice("Saved. The workspace starts with them from its next restart.");
     } else {
       setNotice("Could not save the variables. Please try again.");
@@ -115,7 +152,6 @@ export function VariablesPanel({ workspaceId, restartDisabled, onRestart }: Prop
         <Button label="Add variable" variant="secondary" icon={Plus} disabled={rows.length >= MAX_VARIABLES}
           onClick={() => { setRows((current) => [...current, ...rowsOf([{ name: "", value: "" }])]); setNotice(""); }} />
         <div className="flex gap-2">
-          {saved && <Button label="Restart workspace" variant="secondary" icon={RotateCw} disabled={restartDisabled} onClick={onRestart} />}
           <Button label="Save" busy={busy} disabled={!changed || invalid} onClick={() => void submit()} />
         </div>
       </div>

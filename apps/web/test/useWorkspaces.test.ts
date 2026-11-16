@@ -49,8 +49,8 @@ describe("useWorkspaces", () => {
 
   it("loads from the API and selects the first", async () => {
     installFakeApi([
-      { id: "a", name: "A", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
-      { id: "b", name: "B", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
+      { id: "a", name: "A", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false },
+      { id: "b", name: "B", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false },
     ]);
     const result = await loaded();
     expect(result.current.workspaces.map((w) => w.name)).toEqual(["A", "B"]);
@@ -86,7 +86,7 @@ describe("useWorkspaces", () => {
     await waitFor(() => expect(result.current.error).toBe("Could not delete the workspace"));
 
     expect(result.current.workspaces).toEqual([
-      { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, status: "READY", restartRequired: false },
+      { id: "starter", name: "Starter", modelProvider: "openrouter", model: null, timeZone: "UTC", status: "READY", restartRequired: false },
     ]);
   });
 

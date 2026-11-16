@@ -72,6 +72,14 @@ public interface VmManager {
   void removeSecret(UUID workspaceId, String name);
 
   /**
+   * Sets one variable of the workspace VM's system environment, which the user can neither list nor
+   * override.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   */
+  void setSystemVariable(UUID workspaceId, String name, String value);
+
+  /**
    * The workspace VM's address and firewall rules.
    *
    * @throws IllegalStateException when the workspace has no VM

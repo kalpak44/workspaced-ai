@@ -21,11 +21,22 @@ public record CreateWorkspaceRequest(
         String apiKey,
     @Schema(description = "One of /vm-sizes; the default size when omitted", example = "cx23")
         @Size(max = 20)
-        String serverType) {
+        String serverType,
+    @Schema(
+            description =
+                "An IANA time zone for its agent, usually the browser's; UTC when omitted",
+            example = "Europe/Sofia")
+        @Size(max = 64)
+        String timeZone) {
 
   /** Blank means the default size. */
   String serverTypeOrNull() {
     return serverType == null || serverType.isBlank() ? null : serverType.strip();
+  }
+
+  /** Blank means UTC. */
+  String timeZoneOrUtc() {
+    return timeZone == null || timeZone.isBlank() ? "UTC" : timeZone.strip();
   }
 
   /** Surrounding whitespace is never part of a name, so "Docs" and " Docs " are one. */

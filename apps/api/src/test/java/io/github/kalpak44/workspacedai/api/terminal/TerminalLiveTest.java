@@ -55,7 +55,7 @@ class TerminalLiveTest {
   void createsSwitchesReconnectsAndDeletesThroughThePublicApi() throws Exception {
     workspace =
         workspaces
-            .save(new WorkspaceEntity(TestUsers.ADMIN, "Live terminal test", "openrouter"))
+            .save(new WorkspaceEntity(TestUsers.ADMIN, "Live terminal test", "openrouter", "UTC"))
             .getId();
     String first = null;
     String second = null;

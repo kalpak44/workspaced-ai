@@ -370,6 +370,16 @@ A name must be a valid environment variable name (`[A-Za-z_][A-Za-z0-9_]*`, at m
 remove. A pod reads its environment once, when it starts,
 so a running workspace sees a change only after it restarts.
 
+## Workspace time zone
+
+Every workspace has an IANA time zone, which its harness always starts with as `USER_TIMEZONE`. It is set when the
+workspace is created (`timeZone` in the create request, the browser's zone from the web app, UTC when omitted) and
+changed with `PUT /api/v1/workspaces/{id}/time-zone` and `{"timeZone": "Europe/Sofia"}`, which answers the workspace.
+Only region names are accepted, never an offset, so daylight saving keeps working. The VM manager keeps it in the VM's
+system environment, so neither a secret nor a variable of that name can override it; both are refused. Because the
+harness reads it only at start, a change sets `restartRequired`, as a secret or variable change does, until the
+workspace restarts.
+
 ## Workspace firewall
 
 What the internet may reach on a workspace's VM. The rules are kept only by the VM manager, on the VM's own Hetzner

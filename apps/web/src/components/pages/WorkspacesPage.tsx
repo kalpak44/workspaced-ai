@@ -111,7 +111,7 @@ export function WorkspacesPage() {
       <SettingsPage
         workspace={workspace}
         section={route.section}
-        onSecretsChanged={() => patch(workspace.id, { restartRequired: true })}
+        onChanged={(changes) => patch(workspace.id, changes)}
         onRestart={() => setRestartId(workspace.id)}
       />
     );

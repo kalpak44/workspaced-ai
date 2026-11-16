@@ -76,7 +76,7 @@ class VariablesTest {
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     workspace =
         workspaces
-            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null)
+            .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
             .id();
   }
 
@@ -113,6 +113,8 @@ class VariablesTest {
 
     assertThat(send("PUT", "[]").statusCode()).isEqualTo(200);
     assertThat(JSON.readTree(send("GET", null).body())).isEmpty();
+    // The harness reads the file only at start.
+    assertThat(repository.findById(workspace).orElseThrow().isSecretsPendingRestart()).isTrue();
   }
 
   @Test
@@ -122,6 +124,7 @@ class VariablesTest {
             "[{\"name\":\"1BAD\",\"value\":\"x\"}]",
             "[{\"name\":\"A-B\",\"value\":\"x\"}]",
             "[{\"name\":\"OPENCODE_SERVER_USERNAME\",\"value\":\"x\"}]",
+            "[{\"name\":\"USER_TIMEZONE\",\"value\":\"Asia/Tokyo\"}]",
             "[{\"name\":\"A\",\"value\":\"two\\nlines\"}]",
             "[{\"name\":\"A\",\"value\":\"x\"},{\"name\":\"A\",\"value\":\"y\"}]",
             "[{\"name\":\"A\",\"value\":\"" + "x".repeat(4097) + "\"}]",
@@ -129,6 +132,7 @@ class VariablesTest {
       assertThat(send("PUT", body).statusCode()).as(body).isEqualTo(400);
     }
     assertThat(OPENCODE.files).doesNotContainKey(Harness.VARIABLES_FILE);
+    assertThat(repository.findById(workspace).orElseThrow().isSecretsPendingRestart()).isFalse();
   }
 
   @Test

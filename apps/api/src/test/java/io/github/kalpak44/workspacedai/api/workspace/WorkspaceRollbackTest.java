@@ -46,7 +46,7 @@ class WorkspaceRollbackTest {
     assertThatThrownBy(
             () ->
                 service.create(
-                    TestUsers.ADMIN, "Orphan", ModelProvider.OPENROUTER, "sk-or-1", null))
+                    TestUsers.ADMIN, "Orphan", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC"))
         .hasMessage("VM manager down");
     assertThat(repository.findAll()).isEmpty();
     verify(runtime).stop(any());
@@ -56,7 +56,9 @@ class WorkspaceRollbackTest {
   void startsNothingForARejectedKey() {
     when(keyCheck.accepts(ModelProvider.OPENROUTER, "sk-bad")).thenReturn(false);
     assertThatThrownBy(
-            () -> service.create(TestUsers.ADMIN, "Nope", ModelProvider.OPENROUTER, "sk-bad", null))
+            () ->
+                service.create(
+                    TestUsers.ADMIN, "Nope", ModelProvider.OPENROUTER, "sk-bad", null, "UTC"))
         .isInstanceOf(ApiKeyRejectedException.class);
     assertThat(repository.findAll()).isEmpty();
     verify(runtime, never()).start(any(), any(), any(), any());
@@ -64,7 +66,7 @@ class WorkspaceRollbackTest {
 
   @Test
   void keepsTheWorkspaceWhoseVmCouldNotStop() {
-    var kept = repository.save(new WorkspaceEntity(TestUsers.ADMIN, "Kept", "openrouter"));
+    var kept = repository.save(new WorkspaceEntity(TestUsers.ADMIN, "Kept", "openrouter", "UTC"));
     doThrow(new IllegalStateException("VM manager down")).when(runtime).stop(any());
     assertThatThrownBy(() -> service.delete(kept.getId())).hasMessage("VM manager down");
     assertThat(repository.findAll())

@@ -1,11 +1,10 @@
-import { Camera, Clock, Globe, Search, UserRound, Users } from "lucide-react";
-import { type ReactNode, useEffect, useMemo, useRef, useState } from "react";
-import { BROWSER_TIME_ZONE, TIME_ZONES, useTimeZone, zoneOffset } from "../../hooks/useTimeZone";
+import { Camera, Globe, Search, UserRound, Users } from "lucide-react";
+import { type ReactNode, useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { useDomains } from "../../hooks/useDomains";
 import { navigate } from "../../hooks/useRoute";
 import { type UserSort, useUsers } from "../../hooks/useUsers";
-import { Avatar, Button, Select, TextField } from "../atoms";
+import { Avatar, Button, TextField } from "../atoms";
 import { EmptyState, PageHeader, SectionNav, Toast } from "../molecules";
 import { DomainDnsPanel, UsersPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
@@ -26,9 +25,6 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const { account, saveProfile, changePassword: savePassword } = useAccount();
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "" };
   const [names, setNames] = useState(saved);
-  const [storedZone, setStoredZone] = useTimeZone();
-  // "" follows the browser's zone.
-  const [zone, setZone] = useState(storedZone ?? "");
   const [savingProfile, setSavingProfile] = useState(false);
   // The photo shown while its save is in flight; null shows the account's own.
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -44,7 +40,6 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   // Only an admin may manage users; the API refuses anyone else, so the tab is not offered.
   const isAdmin = account?.role === "ADMIN";
   const namesChanged = names.firstName !== saved.firstName || names.lastName !== saved.lastName;
-  const zoneChanged = zone !== (storedZone ?? "");
 
   // The photo saves on its own, sending the name as the account already has it, so an unsaved
   // edit here never rides along with a new photo, or the other way round.
@@ -56,8 +51,6 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
         await saveProfile({ ...trimmed, avatar: account?.avatar ?? null });
         setNames(trimmed);
       }
-      // Only the browser keeps the zone for now, so it cannot fail once the name is saved.
-      if (zoneChanged) setStoredZone(zone || null);
       setNotice("Profile updated.");
     } catch {
       setNotice("Could not save your profile. Please try again.");
@@ -152,18 +145,15 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
                         <TextField id="last-name" label="Last name" autoComplete="family-name" maxLength={100} value={names.lastName} onChange={(event) => { setNames({ ...names, lastName: event.target.value }); setNotice(""); }} />
                       </div>
                     </SettingRow>
-                    <SettingRow title={<label htmlFor="time-zone">Time zone</label>} hint="New scheduled tasks start in this zone. Kept in this browser for now.">
-                      <TimeZoneField value={zone} onChange={(next) => { setZone(next); setNotice(""); }} />
-                    </SettingRow>
                     <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-50/80 px-5 py-3 sm:px-6 dark:bg-zinc-950/40">
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {namesChanged || zoneChanged ? <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden className="size-1.5 rounded-full bg-amber-500" />Unsaved changes</span> : "Your photo saves on its own; the rest saves here."}
+                        {namesChanged ? <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden className="size-1.5 rounded-full bg-amber-500" />Unsaved changes</span> : "Your photo saves on its own; the rest saves here."}
                       </p>
                       <div className="flex items-center gap-2">
-                        {(namesChanged || zoneChanged) && !savingProfile && (
-                          <Button label="Cancel" variant="secondary" onClick={() => { setNames(saved); setZone(storedZone ?? ""); }} />
+                        {namesChanged && !savingProfile && (
+                          <Button label="Cancel" variant="secondary" onClick={() => setNames(saved)} />
                         )}
-                        <Button label="Save changes" type="submit" disabled={!namesChanged && !zoneChanged} busy={savingProfile} />
+                        <Button label="Save changes" type="submit" disabled={!namesChanged} busy={savingProfile} />
                       </div>
                     </div>
                   </form>
@@ -253,35 +243,6 @@ function SettingRow({ title, hint, children }: { readonly title: ReactNode; read
         <p className="mt-1 text-xs text-pretty text-zinc-500 dark:text-zinc-400">{hint}</p>
       </div>
       <div className="min-w-0">{children}</div>
-    </div>
-  );
-}
-
-/** The zone picker, with a clock showing the time there so the choice can be checked. */
-function TimeZoneField({ value, onChange }: { readonly value: string; readonly onChange: (zone: string) => void }) {
-  const shown = value || BROWSER_TIME_ZONE;
-  const [now, setNow] = useState(() => new Date());
-  // The preview is a clock, so it keeps time while the page is open.
-  useEffect(() => {
-    const timer = setInterval(() => setNow(new Date()), 30_000);
-    return () => clearInterval(timer);
-  }, []);
-  // Offsets are worked out once per visit; recomputing hundreds on every tick is wasted work.
-  const options = useMemo(() => TIME_ZONES.map((name) => ({ name, offset: zoneOffset(name) })), []);
-  const preview = new Intl.DateTimeFormat("en-GB", { timeZone: shown, weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(now);
-
-  return (
-    <div className="flex flex-col gap-1.5 text-sm">
-      <Select id="time-zone" aria-describedby="time-zone-note" value={value} className="w-full" onChange={(event) => onChange(event.target.value)}>
-        <option value="">Automatic — {BROWSER_TIME_ZONE} ({zoneOffset(BROWSER_TIME_ZONE)})</option>
-        {options.map(({ name, offset }) => <option key={name} value={name}>{name.replaceAll("_", " ")} ({offset})</option>)}
-      </Select>
-      <p id="time-zone-note" className="flex items-start gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
-        <Clock aria-hidden className="mt-px size-3.5 shrink-0" />
-        <span>
-          It is now <time aria-label="Current time in the chosen zone" className="font-medium text-zinc-900 tabular-nums dark:text-zinc-100">{preview}</time> there.
-        </span>
-      </p>
     </div>
   );
 }

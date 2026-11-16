@@ -13,6 +13,8 @@ import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.provider.ProviderUnreachableException;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceEnvironment;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -23,12 +25,14 @@ import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -42,6 +46,7 @@ class WorkspaceControllerTest {
 
   @Autowired WorkspaceRepository repository;
   @MockitoBean ApiKeyCheck keyCheck;
+  @MockitoSpyBean WorkspaceRuntime runtime;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -128,8 +133,72 @@ class WorkspaceControllerTest {
     assertThat(renamed.statusCode()).isEqualTo(200);
     assertThat(JSON.readValue(renamed.body(), Workspace.class))
         .isEqualTo(
-            new Workspace(id, "New", "openrouter", null, null, WorkspaceStatus.READY, false));
+            new Workspace(
+                id, "New", "openrouter", null, null, "UTC", WorkspaceStatus.READY, false));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
+  }
+
+  @Test
+  void startsTheHarnessInTheZoneItWasCreatedWith() throws Exception {
+    var created =
+        send(
+            "POST",
+            "",
+            "{\"name\":\"Here\",\"modelProvider\":\"openrouter\",\"apiKey\":\"sk-or-1\","
+                + "\"timeZone\":\"Europe/Sofia\"}");
+    var workspace = JSON.readValue(created.body(), Workspace.class);
+
+    assertThat(workspace.timeZone()).isEqualTo("Europe/Sofia");
+    var environment = ArgumentCaptor.forClass(WorkspaceEnvironment.class);
+    verify(runtime).start(eq(workspace.id()), any(), any(), environment.capture());
+    assertThat(environment.getValue().config()).containsEntry("USER_TIMEZONE", "Europe/Sofia");
+    // One with none is in UTC rather than in no zone at all.
+    var elsewhere = create("Elsewhere");
+    assertThat(list())
+        .filteredOn(w -> w.id().equals(elsewhere))
+        .extracting(Workspace::timeZone)
+        .containsExactly("UTC");
+  }
+
+  @Test
+  void changesTheZoneAndAsksForARestartOnlyWhenItMoves() throws Exception {
+    var id = create("Research");
+
+    var same = send("PUT", "/" + id + "/time-zone", "{\"timeZone\":\"UTC\"}");
+    assertThat(JSON.readValue(same.body(), Workspace.class).restartRequired()).isFalse();
+    verify(runtime, never()).setSystemVariable(any(), any(), any());
+
+    var moved = send("PUT", "/" + id + "/time-zone", "{\"timeZone\":\"America/New_York\"}");
+    assertThat(moved.statusCode()).isEqualTo(200);
+    var workspace = JSON.readValue(moved.body(), Workspace.class);
+    assertThat(workspace.timeZone()).isEqualTo("America/New_York");
+    assertThat(workspace.restartRequired()).isTrue();
+    verify(runtime).setSystemVariable(id, "USER_TIMEZONE", "America/New_York");
+
+    send("POST", "/" + id + "/restart", null);
+    assertThat(list().getFirst().restartRequired()).isFalse();
+  }
+
+  @Test
+  void refusesWhatIsNotARegionZone() throws Exception {
+    var id = create("Research");
+    for (var zone : List.of("Mars/Olympus", "+02:00", "", "CET1")) {
+      assertThat(
+              send("PUT", "/" + id + "/time-zone", "{\"timeZone\":\"" + zone + "\"}").statusCode())
+          .as(zone)
+          .isEqualTo(400);
+    }
+    assertThat(
+            send(
+                    "POST",
+                    "",
+                    "{\"name\":\"X\",\"modelProvider\":\"openrouter\",\"apiKey\":\"k\",\"timeZone\":\"Nowhere\"}")
+                .statusCode())
+        .isEqualTo(400);
+    assertThat(
+            send("PUT", "/" + UUID.randomUUID() + "/time-zone", "{\"timeZone\":\"UTC\"}")
+                .statusCode())
+        .isEqualTo(404);
   }
 
   @Test

@@ -18,6 +18,10 @@ public record Workspace(
             description = "The model its agent replies with; null for the harness's default",
             example = "anthropic/claude-sonnet-5.5")
         String model,
+    @Schema(
+            description = "The IANA time zone its agent reads times in, as USER_TIMEZONE",
+            example = "Europe/Sofia")
+        String timeZone,
     @Schema(description = "Whether its runtime can be used yet", example = "INITIALIZING")
         WorkspaceStatus status,
     @Schema(
@@ -33,6 +37,7 @@ public record Workspace(
         entity.getModelProvider(),
         entity.getServerType(),
         entity.getModel(),
+        entity.getTimeZone(),
         status,
         entity.isSecretsPendingRestart());
   }

@@ -24,28 +24,10 @@ describe("general settings", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("saves the chosen time zone with the profile and previews the time there", async () => {
+  it("has no time zone of its own, as each workspace keeps one", async () => {
     installFakeApi();
-    const user = userEvent.setup();
     await renderSettings();
-    const zone = screen.getByRole("combobox", { name: "Time zone" });
-    expect(zone).toHaveValue("");
-
-    await user.selectOptions(zone, "Asia/Tokyo");
-    // Picked but not yet saved: the clock follows, the browser does not.
-    expect(localStorage.getItem("workspaced.timeZone")).toBeNull();
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(localStorage.getItem("workspaced.timeZone")).toBe("Asia/Tokyo");
-    expect(screen.getByRole("status")).toHaveTextContent("Profile updated.");
-    // Either side of a minute boundary the clock may have ticked between render and assertion.
-    const tokyo = (at: number) => new Intl.DateTimeFormat("en-GB", { timeZone: "Asia/Tokyo", hour: "2-digit", minute: "2-digit" }).format(at);
-    const shown = screen.getByLabelText("Current time in the chosen zone").textContent;
-    expect([tokyo(Date.now()), tokyo(Date.now() - 60_000)].some((time) => shown?.includes(time))).toBe(true);
-
-    await user.selectOptions(zone, "");
-    await user.click(screen.getByRole("button", { name: "Save changes" }));
-    expect(localStorage.getItem("workspaced.timeZone")).toBe("");
-    expect(zone).toHaveValue("");
+    expect(screen.queryByRole("combobox", { name: /Time zone/ })).not.toBeInTheDocument();
   });
 
   it("saves names to the account when updated", async () => {
