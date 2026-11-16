@@ -609,6 +609,11 @@ public class OpenCodeHarness implements Harness {
     shell(endpoint, "rm -f -- " + quote(FIREWALL_DIRECTORY + "/request"));
   }
 
+  @Override
+  public void writeDomains(HarnessEndpoint endpoint, String content) {
+    writeFile(endpoint, DOMAINS_FILE, content);
+  }
+
   /** The file's text, or empty when it does not exist. */
   private Optional<String> readFile(HarnessEndpoint endpoint, String directory, String name) {
     var response = send(request(endpoint, withLocation("/api/fs/read/" + name, directory)).GET());

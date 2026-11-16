@@ -62,6 +62,11 @@ public interface Harness {
    */
   String FIREWALL_DIRECTORY = HOME + "/.config/workspaced/firewall";
 
+  /**
+   * The user's own domains that reach the workspace, one a line, which the `domains` tool prints.
+   */
+  String DOMAINS_FILE = HOME + "/.config/workspaced/domains";
+
   /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
 
@@ -252,4 +257,7 @@ public interface Harness {
 
   /** Leaves the outcome where the agent's tool waits for it, then removes the request. */
   void answerFirewallRequest(HarnessEndpoint endpoint, String result);
+
+  /** Replaces the list of the user's domains that reach the workspace. */
+  void writeDomains(HarnessEndpoint endpoint, String content);
 }

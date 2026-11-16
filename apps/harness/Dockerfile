@@ -136,6 +136,8 @@ COPY --chmod=0755 now.py /usr/local/bin/now
 COPY --chmod=0755 task.py /usr/local/bin/task
 # Opens and closes ports on the VM's firewall, through the app.
 COPY --chmod=0755 firewall.sh /usr/local/bin/firewall
+# Lists the user's own domains that reach the workspace, from a file the app keeps current.
+COPY --chmod=0755 domains.sh /usr/local/bin/domains
 # The musl loader looks in the image's library folders first, then in the home's package
 # root, so a program installed there finds its libraries and the image's own are never
 # shadowed by them.

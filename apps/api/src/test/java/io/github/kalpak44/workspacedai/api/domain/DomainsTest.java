@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -13,8 +15,11 @@ import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.compute.VmAddress;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
+import io.github.kalpak44.workspacedai.api.harness.Harness;
+import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
 import java.net.URI;
@@ -41,6 +46,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -62,6 +68,8 @@ class DomainsTest {
   @MockitoBean VmManager vmManager;
   @MockitoBean DnsLookup dns;
   @MockitoBean DomainConnect domainConnect;
+  @MockitoBean Harness harness;
+  @MockitoSpyBean WorkspaceRuntime runtime;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private final Map<String, List<String>> resolves = new ConcurrentHashMap<>();
@@ -175,6 +183,24 @@ class DomainsTest {
     resolves.remove("app.example.com");
     service.check();
     assertThat(only().get("status").asString()).isEqualTo("PENDING");
+  }
+
+  @Test
+  void tellsTheAgentWhichNamesReachTheWorkspaceOnlyWhenThatChanges() throws Exception {
+    var endpoint = new HarnessEndpoint(URI.create("http://harness:4096"), "pw");
+    doReturn(Optional.of(endpoint)).when(runtime).harness(workspace);
+    attach("example.com");
+    attach("app.example.com");
+
+    resolves.put("example.com", List.of("203.0.113.10"));
+    service.check();
+    service.check();
+    verify(harness, times(1)).writeDomains(eq(endpoint), anyString());
+    verify(harness).writeDomains(endpoint, "example.com\nwww.example.com\n");
+
+    resolves.clear();
+    service.check();
+    verify(harness).writeDomains(endpoint, "");
   }
 
   @Test

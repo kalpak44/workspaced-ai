@@ -2,15 +2,21 @@ package io.github.kalpak44.workspacedai.api.domain;
 
 import io.github.kalpak44.workspacedai.api.compute.VmAddress;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
+import io.github.kalpak44.workspacedai.api.harness.Harness;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.net.IDN;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
@@ -42,6 +48,10 @@ public class DomainService {
   private final DomainConnect domainConnect;
   private final DomainConnectSigner signer;
   private final DomainProperties properties;
+  private final WorkspaceRuntime runtime;
+  private final Harness harness;
+  // What each workspace's agent was last given, so a harness is written to only when it changes.
+  private final Map<UUID, String> published = new ConcurrentHashMap<>();
 
   public DomainService(
       WorkspaceDomainRepository domains,
@@ -50,7 +60,9 @@ public class DomainService {
       DnsLookup dns,
       DomainConnect domainConnect,
       DomainConnectSigner signer,
-      DomainProperties properties) {
+      DomainProperties properties,
+      WorkspaceRuntime runtime,
+      Harness harness) {
     this.domains = domains;
     this.workspaces = workspaces;
     this.vmManager = vmManager;
@@ -58,6 +70,8 @@ public class DomainService {
     this.domainConnect = domainConnect;
     this.signer = signer;
     this.properties = properties;
+    this.runtime = runtime;
+    this.harness = harness;
   }
 
   /** Oldest first. */
@@ -165,6 +179,54 @@ public class DomainService {
         log.info("{} points here but is still active for another workspace", domain.name());
       }
     }
+    publish();
+  }
+
+  /**
+   * Gives each workspace's agent the names that reach it. A harness that is not running keeps its
+   * old list until a later pass reaches it.
+   */
+  private void publish() {
+    var live = new HashMap<UUID, List<String>>();
+    for (var domain : domains.findAll()) {
+      if (domain.getStatus() == DomainStatus.ACTIVE) {
+        live.computeIfAbsent(domain.getWorkspaceId(), _ -> new ArrayList<>()).addAll(names(domain));
+      }
+    }
+    var changed = new HashSet<>(live.keySet());
+    changed.addAll(published.keySet());
+    for (var workspaceId : changed) {
+      var names = live.getOrDefault(workspaceId, List.of());
+      var content =
+          names.isEmpty() ? "" : String.join("\n", names.stream().sorted().toList()) + "\n";
+      if (content.equals(published.getOrDefault(workspaceId, ""))) {
+        continue;
+      }
+      if (!workspaces.existsById(workspaceId)) {
+        published.remove(workspaceId);
+        continue;
+      }
+      try {
+        var endpoint = runtime.harness(workspaceId);
+        if (endpoint.isPresent()) {
+          harness.writeDomains(endpoint.get(), content);
+          if (content.isEmpty()) {
+            published.remove(workspaceId);
+          } else {
+            published.put(workspaceId, content);
+          }
+        }
+      } catch (RuntimeException e) {
+        log.debug("could not give workspace {} its domains: {}", workspaceId, e.getMessage());
+      }
+    }
+  }
+
+  /** What a site in the workspace answers on: the domain and its www, or the one name. */
+  private static List<String> names(WorkspaceDomainEntity domain) {
+    return "@".equals(domain.getHost())
+        ? List.of(domain.getDomain(), "www." + domain.getDomain())
+        : List.of(domain.name());
   }
 
   private void check(WorkspaceDomainEntity domain) {
