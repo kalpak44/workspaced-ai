@@ -77,6 +77,7 @@ class BillingTest {
     var body = read(get("/billing"));
     assertThat(body.get("balanceCents").asLong()).isZero();
     assertThat(body.get("currency").asString()).isEqualTo("eur");
+    assertThat(body.get("vatPercent").asInt()).isEqualTo(20);
     assertThat(body.get("topUps")).isEmpty();
   }
 
@@ -95,6 +96,7 @@ class BillingTest {
         .containsEntry("line_items[0][price_data][unit_amount]", "2500")
         .containsEntry("line_items[0][price_data][currency]", "eur")
         .containsEntry("invoice_creation[enabled]", "true")
+        .containsKey("line_items[0][tax_rates][0]")
         .containsEntry("client_reference_id", id)
         .containsEntry(
             "success_url", "https://ai.workspaced.test/billing?top_up=" + id + "&outcome=success");
@@ -131,6 +133,30 @@ class BillingTest {
     assertThat(paid.get("invoiceAvailable").asBoolean()).isTrue();
     assertThat(read(get("/billing")).get("balanceCents").asLong()).isEqualTo(2500);
     assertThat(ledger.count()).isEqualTo(1);
+  }
+
+  @Test
+  void chargesVatOnTopFromOneTaxRateAndCreditsTheAmountBeforeIt() throws Exception {
+    var id = read(startTopUp(2500)).get("id").asString();
+    var session = STRIPE.lastSessionId();
+    startTopUp(1000);
+
+    assertThat(STRIPE.taxRates.values())
+        .singleElement()
+        .satisfies(
+            rate -> {
+              assertThat(rate.path("display_name").asString()).isEqualTo("VAT");
+              assertThat(rate.path("percentage").asDouble()).isEqualTo(20.0);
+              assertThat(rate.path("inclusive").asBoolean()).isFalse();
+            });
+    var rate = STRIPE.taxRates.keySet().iterator().next();
+    assertThat(STRIPE.checkouts.getLast()).containsEntry("line_items[0][tax_rates][0]", rate);
+    assertThat(STRIPE.sessions.get(session).path("amount_total").asLong()).isEqualTo(3000);
+
+    STRIPE.pay(session);
+    post("/billing/top-ups/" + id + "/refresh");
+
+    assertThat(read(get("/billing")).get("balanceCents").asLong()).isEqualTo(2500);
   }
 
   @Test

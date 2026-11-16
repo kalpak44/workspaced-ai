@@ -55,14 +55,30 @@ describe("billing", () => {
     const api = await renderBilling();
     await user.click(screen.getByRole("button", { name: "Add funds" }));
     await user.click(screen.getByRole("radio", { name: "€50.00" }));
-    expect(screen.getByText("€62.40")).toBeInTheDocument();
+    const summary = within(screen.getByLabelText("Summary"));
+    expect(summary.getByText("€10.00")).toBeInTheDocument();
+    expect(summary.getByText("€60.00")).toBeInTheDocument();
+    expect(summary.getByText("€62.40")).toBeInTheDocument();
     await user.type(screen.getByLabelText("Or another amount (EUR)"), "2");
     expect(screen.getByText("Enter between €5.00 and €1,000.00.")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Pay" })).toBeDisabled();
     await user.type(screen.getByLabelText("Or another amount (EUR)"), "0");
-    await user.click(screen.getByRole("button", { name: "Pay €20.00" }));
+    await user.click(screen.getByRole("button", { name: "Pay €24.00" }));
     await vi.waitFor(() => expect(open).toHaveBeenCalledWith("https://checkout.stripe.test/t3"));
     expect(api.billing.started).toEqual([2000]);
+  });
+
+  it("takes no payment when the API does not say what VAT to charge", async () => {
+    const api = installFakeApi();
+    api.billing.vatPercent = undefined;
+    globalThis.history.replaceState(null, "", "/billing");
+    render(<App />);
+    await screen.findByText("Current balance");
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add funds" }));
+    expect(await screen.findByText(/VAT cannot be worked out/)).toBeInTheDocument();
+    expect(screen.queryByText(/NaN/)).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Pay" })).toBeDisabled();
   });
 
   it("says so when payments are unavailable", async () => {
@@ -71,7 +87,7 @@ describe("billing", () => {
     const api = await renderBilling();
     api.billing.failStart = 503;
     await user.click(screen.getByRole("button", { name: "Add funds" }));
-    await user.click(screen.getByRole("button", { name: "Pay €25.00" }));
+    await user.click(screen.getByRole("button", { name: "Pay €30.00" }));
     expect(await screen.findByText("Payments are unavailable right now. Please try again later.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(open).not.toHaveBeenCalled();

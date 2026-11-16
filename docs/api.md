@@ -432,9 +432,13 @@ yet.
 A top-up is credited only once Stripe reports its Checkout Session paid; the webhook and the browser returning to
 `/billing?top_up=<id>` both make the API read the session back rather than trust the caller, and a unique ledger entry
 per top-up keeps the two from crediting it twice. Stripe issues the invoice (`invoice_creation`), so the API keeps only
-its id and number. Amounts are €5.00 to €1,000.00, in euros, the currency the Stripe account settles in. The balance lives in `billing_account` in micro-units, so later
+its id and number. VAT is charged on top at `WORKSPACED_BILLING_VAT_PERCENT` (20 by default, returned as `vatPercent`):
+the API finds or creates an exclusive Stripe Tax Rate named `VAT` at that percentage and attaches it to the line item, so
+the invoice shows it as tax. The balance is credited the amount before VAT, and a session whose subtotal or total differs
+from what was asked is not credited.
+Amounts are €5.00 to €1,000.00, in euros, the currency the Stripe account settles in. The balance lives in `billing_account` in micro-units, so later
 usage charges can be fractions of a cent, and every change to it is a row in `billing_ledger_entry`.
-`WORKSPACED_STRIPE_SECRET_KEY` (a restricted key: write on Customers and Checkout Sessions, read on Invoices) and
+`WORKSPACED_STRIPE_SECRET_KEY` (a restricted key: write on Customers, Checkout Sessions and Tax Rates, read on Invoices) and
 `WORKSPACED_STRIPE_WEBHOOK_SECRET` have no default; without the key a top-up answers `503`, and
 `WORKSPACED_BILLING_RETURN_URL` is the page Checkout returns to. The webhook subscribes to
 `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed` and `.expired`.

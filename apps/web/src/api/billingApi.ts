@@ -5,6 +5,8 @@ export interface Billing {
   /** In cents, rounded down. */
   readonly balanceCents: number;
   readonly currency: string;
+  /** Charged on top of a top-up, in percent; the balance gets the amount before it. */
+  readonly vatPercent: number;
   /** Newest first; checkouts abandoned at Stripe are left out. */
   readonly topUps: readonly TopUp[];
 }

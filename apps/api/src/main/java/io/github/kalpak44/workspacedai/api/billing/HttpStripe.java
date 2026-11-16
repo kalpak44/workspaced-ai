@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
 import java.io.IOException;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -27,9 +28,12 @@ public class HttpStripe implements Stripe {
   // Above Stripe's 30-minute floor; an abandoned checkout stops showing as pending within it.
   private static final Duration CHECKOUT_LIFETIME = Duration.ofMinutes(60);
 
+  private static final String VAT = "VAT";
+
   private final BillingProperties properties;
   private final JsonMapper json;
   private final HttpClient http;
+  private volatile String vatRateId;
 
   public HttpStripe(BillingProperties properties, JsonMapper json) {
     this.properties = properties;
@@ -57,6 +61,9 @@ public class HttpStripe implements Stripe {
     form.put("line_items[0][price_data][currency]", properties.currency());
     form.put("line_items[0][price_data][unit_amount]", Long.toString(amountCents));
     form.put("line_items[0][price_data][product_data][name]", "Balance top-up");
+    // The amount is what reaches the balance; VAT is charged on top and shown as tax on the
+    // invoice.
+    form.put("line_items[0][tax_rates][0]", vatRate());
     form.put("invoice_creation[enabled]", "true");
     // The invoice is addressed to whoever pays, so their address is asked for and kept.
     form.put("billing_address_collection", "required");
@@ -66,6 +73,32 @@ public class HttpStripe implements Stripe {
     form.put("cancel_url", cancelUrl.toString());
     form.put("expires_at", Long.toString(Instant.now().plus(CHECKOUT_LIFETIME).getEpochSecond()));
     return session(read(send(post("/v1/checkout/sessions", form, topUpId.toString()))));
+  }
+
+  /**
+   * The account's active, exclusive tax rate named VAT at the configured percentage, created on
+   * first use, so the rate is set in one place rather than in Stripe's dashboard as well.
+   */
+  private String vatRate() {
+    var cached = vatRateId;
+    if (cached != null) {
+      return cached;
+    }
+    var percent = BigDecimal.valueOf(properties.vatPercent());
+    var rates = read(send(get("/v1/tax_rates?active=true&inclusive=false&limit=100"))).path("data");
+    for (var rate : rates) {
+      if (VAT.equals(rate.path("display_name").asString())
+          && rate.path("percentage").decimalValue().compareTo(percent) == 0) {
+        return vatRateId = rate.path("id").asString();
+      }
+    }
+    var form = new LinkedHashMap<String, String>();
+    form.put("display_name", VAT);
+    form.put("percentage", percent.toPlainString());
+    form.put("inclusive", "false");
+    // Two top-ups racing to create the rate get the same one back.
+    var key = "vat-rate-" + percent.toPlainString();
+    return vatRateId = read(send(post("/v1/tax_rates", form, key))).path("id").asString();
   }
 
   @Override
@@ -91,6 +124,7 @@ public class HttpStripe implements Stripe {
         session.path("id").asString(),
         session.path("status").asString(),
         session.path("payment_status").asString(),
+        session.path("amount_subtotal").asLong(),
         session.path("amount_total").asLong(),
         session.path("currency").asString(),
         url.isString() ? URI.create(url.asString()) : null,

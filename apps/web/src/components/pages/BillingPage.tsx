@@ -143,6 +143,7 @@ export function BillingPage() {
       {adding && (
         <AddFundsDialog
           balanceCents={billing.balanceCents}
+          vatPercent={billing.vatPercent}
           busy={paying}
           onClose={() => setAdding(false)}
           onConfirm={pay}

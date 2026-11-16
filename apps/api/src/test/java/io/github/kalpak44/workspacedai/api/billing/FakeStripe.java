@@ -4,6 +4,8 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.io.UncheckedIOException;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URLDecoder;
@@ -33,6 +35,7 @@ class FakeStripe implements AutoCloseable {
   final List<Map<String, String>> customers = new CopyOnWriteArrayList<>();
   final List<Map<String, String>> checkouts = new CopyOnWriteArrayList<>();
   final List<String> idempotencyKeys = new CopyOnWriteArrayList<>();
+  final Map<String, ObjectNode> taxRates = new ConcurrentHashMap<>();
   volatile int status = 0;
   private volatile String lastSession;
 
@@ -45,6 +48,7 @@ class FakeStripe implements AutoCloseable {
     server.createContext("/v1/customers", this::customers);
     server.createContext("/v1/checkout/sessions", this::sessions);
     server.createContext("/v1/invoices", this::invoices);
+    server.createContext("/v1/tax_rates", this::taxRates);
     server.start();
   }
 
@@ -89,8 +93,18 @@ class FakeStripe implements AutoCloseable {
       session.put("id", id);
       session.put("status", "open");
       session.put("payment_status", "unpaid");
-      session.put(
-          "amount_total", Long.parseLong(form.get("line_items[0][price_data][unit_amount]")));
+      var amount = Long.parseLong(form.get("line_items[0][price_data][unit_amount]"));
+      session.put("amount_subtotal", amount);
+      var rate = taxRates.get(form.get("line_items[0][tax_rates][0]"));
+      var tax =
+          rate == null
+              ? 0
+              : rate.path("percentage")
+                  .decimalValue()
+                  .multiply(BigDecimal.valueOf(amount))
+                  .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                  .longValueExact();
+      session.put("amount_total", amount + tax);
       session.put("currency", form.get("line_items[0][price_data][currency]"));
       session.put("url", "https://checkout.stripe.test/" + id);
       session.putNull("invoice");
@@ -113,6 +127,26 @@ class FakeStripe implements AutoCloseable {
       invoice.put("number", "WSAI-" + id);
     }
     answer(exchange, 200, JSON.writeValueAsString(body));
+  }
+
+  private void taxRates(HttpExchange exchange) throws IOException {
+    if (refused(exchange)) {
+      return;
+    }
+    if (exchange.getRequestMethod().equals("POST")) {
+      var form = form(exchange);
+      var rate = JSON.createObjectNode();
+      rate.put("id", "txr_" + ids.incrementAndGet());
+      rate.put("display_name", form.get("display_name"));
+      rate.put("percentage", Double.parseDouble(form.get("percentage")));
+      rate.put("inclusive", Boolean.parseBoolean(form.get("inclusive")));
+      taxRates.put(rate.path("id").asString(), rate);
+      answer(exchange, 200, JSON.writeValueAsString(rate));
+      return;
+    }
+    var list = JSON.createObjectNode();
+    list.putArray("data").addAll(taxRates.values());
+    answer(exchange, 200, JSON.writeValueAsString(list));
   }
 
   private void invoices(HttpExchange exchange) throws IOException {

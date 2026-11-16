@@ -63,6 +63,8 @@ workspaced:
   # still answer and starting a top-up answers 503.
   billing:
     return-url: ${WORKSPACED_BILLING_RETURN_URL:http://localhost:5173/billing}
+    # Charged on top of every top-up; the balance gets the amount before it.
+    vat-percent: ${WORKSPACED_BILLING_VAT_PERCENT:20}
     # How often started hours of workspaces are charged; each is charged once, however late.
     charge-interval: ${WORKSPACED_BILLING_CHARGE_INTERVAL:PT5M}
     stripe:

@@ -7,4 +7,10 @@ import java.util.List;
 public record Billing(
     @Schema(description = "Rounded down to whole cents", example = "1240") long balanceCents,
     @Schema(example = "eur") String currency,
+    @Schema(
+            description =
+                "VAT charged on top of a top-up, in percent; the balance gets the amount"
+                    + " before it",
+            example = "20")
+        int vatPercent,
     @Schema(description = "Newest first; abandoned checkouts are left out") List<TopUp> topUps) {}

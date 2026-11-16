@@ -183,11 +183,12 @@ export function installFakeApi(
     refreshed: [] as string[],
     nextStatus: "PAID" as TopUp["status"],
     failStart: 0,
+    vatPercent: 20 as number | undefined,
   };
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
-      return json({ balanceCents: billing.balanceCents, currency: "eur", topUps: billing.topUps });
+      return json({ balanceCents: billing.balanceCents, currency: "eur", vatPercent: billing.vatPercent, topUps: billing.topUps });
     }
     if (url.endsWith("/api/v1/billing/top-ups") && init?.method === "POST") {
       if (billing.failStart) return json({}, billing.failStart);

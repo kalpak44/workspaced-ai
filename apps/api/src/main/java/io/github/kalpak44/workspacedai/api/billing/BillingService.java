@@ -74,6 +74,7 @@ public class BillingService {
     return new Billing(
         Math.floorDiv(balanceMicros(user), Ledger.MICROS_PER_CENT),
         properties.currency(),
+        properties.vatPercent(),
         topUps.findAllByUserIdAndStatusNotOrderByCreatedAtDesc(user, TopUpStatus.EXPIRED).stream()
             .map(BillingService::view)
             .toList());
@@ -209,12 +210,17 @@ public class BillingService {
       return;
     }
     if (session.paid()) {
-      if (session.amountTotal() != topUp.getAmountCents()
+      // VAT is the tax authority's, so the balance gets the amount before tax.
+      var total = topUp.getAmountCents() + vatCents(topUp.getAmountCents());
+      if (session.amountSubtotal() != topUp.getAmountCents()
+          || session.amountTotal() != total
           || !properties.currency().equalsIgnoreCase(session.currency())) {
         log.error(
-            "top-up {} was for {} cents but Stripe charged {} {}; not credited",
+            "top-up {} was for {} cents, {} with VAT, but Stripe charged {} of {} {}; not credited",
             topUp.getId(),
             topUp.getAmountCents(),
+            total,
+            session.amountSubtotal(),
             session.amountTotal(),
             session.currency());
         return;
@@ -270,6 +276,14 @@ public class BillingService {
           }
           return account.getStripeCustomerId();
         });
+  }
+
+  /** Rounded half up per line item, as Stripe rounds the tax it charges. */
+  long vatCents(long amountCents) {
+    return BigDecimal.valueOf(amountCents)
+        .multiply(BigDecimal.valueOf(properties.vatPercent()))
+        .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+        .longValueExact();
   }
 
   private long balanceMicros(UUID user) {
