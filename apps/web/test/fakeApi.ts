@@ -3,6 +3,7 @@ import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
 import type { TopUp } from "../src/api/billingApi";
 import type { DnsRecord, WorkspaceDomain } from "../src/api/domainsApi";
+import type { ApiNotification } from "../src/api/notificationsApi";
 import type { FirewallRule } from "../src/api/firewallApi";
 import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
@@ -27,6 +28,20 @@ export const VM_SIZES = [
   { serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 5.49, monthlyGross: 6.59, recommended: true, available: true },
   { serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 8.49, monthlyGross: 10.19, recommended: true, available: true },
   { serverType: "cpx22", isDefault: false, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 19.49, monthlyGross: 23.39, recommended: false, available: true },
+];
+
+/** What the fake API has told the user, newest first, three of them unread. */
+export const NOTIFICATIONS: readonly ApiNotification[] = [
+  { id: "n12", tone: "SUCCESS", kind: "WORKSPACE", title: "Workspace created", summary: "demo-box was created and is starting.", body: "Your workspace demo-box was created. Its VM is starting, and the agent is ready for a session in a few minutes.", createdAt: "2026-11-15T08:42:00Z", read: false, action: { label: "Open workspaces", path: "/" } },
+  { id: "n11", tone: "WARNING", kind: "BILLING", title: "demo-box will be deleted in about 5 days", summary: "Your balance runs out in about 5 days. Add funds to keep demo-box.", body: "Your balance pays for your workspaces for about 5 days more. Once it cannot pay the next hour, demo-box is permanently deleted with its files, sessions and secrets.", createdAt: "2026-11-15T07:10:00Z", read: false, action: { label: "Add funds", path: "/billing" } },
+  { id: "n9", tone: "SUCCESS", kind: "RECIPE", title: "New rating on your recipe", summary: "Someone rated “Deploy a Next.js app” 5 stars.", body: "Your recipe “Deploy a Next.js app” received a rating of 5 stars. It now averages 4.6 from 12 ratings.", createdAt: "2026-11-14T11:25:00Z", read: false, action: { label: "Open the store", path: "/store" } },
+  { id: "n8", tone: "INFO", kind: "WORKSPACE", title: "Workspace deleted", summary: "sandbox was deleted.", body: "Your workspace sandbox was deleted with its VM, files, sessions and secrets. It no longer costs anything.", createdAt: "2026-11-13T02:01:00Z", read: true, action: null },
+  { id: "n7", tone: "SUCCESS", kind: "BILLING", title: "Thank you for your payment", summary: "25.00 EUR was added to your balance.", body: "We received your payment and added 25.00 EUR to your balance. Its invoice is on the billing page.", createdAt: "2026-11-01T09:12:00Z", read: true, action: { label: "Go to billing", path: "/billing" } },
+  { id: "n6", tone: "WARNING", kind: "BILLING", title: "Top-up not completed", summary: "A top-up of 10.00 EUR was never paid.", body: "The payment page for your top-up of 10.00 EUR closed before it was paid, so nothing was charged.", createdAt: "2026-10-30T12:00:00Z", read: true, action: { label: "Go to billing", path: "/billing" } },
+  { id: "n4", tone: "WARNING", kind: "BILLING", title: "Payment failed", summary: "A top-up of 10.00 EUR did not go through.", body: "Your top-up of 10.00 EUR was declined and nothing was added to your balance.", createdAt: "2026-10-14T17:40:00Z", read: true, action: { label: "Go to billing", path: "/billing" } },
+  { id: "n3", tone: "ERROR", kind: "WORKSPACE", title: "Workspace deleted", summary: "old-box was deleted: the balance ran out.", body: "Your balance could no longer pay for the next hour of old-box, so it was permanently deleted.", createdAt: "2026-10-09T15:30:00Z", read: true, action: { label: "Add funds", path: "/billing" } },
+  { id: "n2", tone: "SUCCESS", kind: "RECIPE", title: "Recipe published", summary: "“Gmail drafts before sending” is now public.", body: "Your recipe “Gmail drafts before sending” is now public in the store, where anyone can apply and rate it.", createdAt: "2026-10-05T09:00:00Z", read: true, action: { label: "Open the store", path: "/store" } },
+  { id: "n1", tone: "INFO", kind: "SYSTEM", title: "Welcome to workspaced", summary: "Add funds, then create a workspace to get your first agent.", body: "Welcome! A workspace is a sandbox with its own agent.", createdAt: "2026-10-01T08:00:00Z", read: true, action: { label: "Go to billing", path: "/billing" } },
 ];
 
 /** The key the fake provider refuses; every other key is accepted. */
@@ -189,6 +204,21 @@ export function installFakeApi(
     failStart: 0,
     vatPercent: 20 as number | undefined,
   };
+
+  // The user's notifications; marking them read changes this copy only.
+  const notifications = { rows: [...NOTIFICATIONS] };
+
+  function notificationsResponse(url: string, init?: RequestInit): Response | null {
+    if (url.endsWith("/api/v1/notifications")) {
+      return json(notifications.rows);
+    }
+    if (url.endsWith("/api/v1/notifications/read") && init?.method === "PUT") {
+      const { ids, read } = JSON.parse(String(init.body)) as { ids: string[]; read: boolean };
+      notifications.rows = notifications.rows.map((n) => (ids.includes(n.id) ? { ...n, read } : n));
+      return json(notifications.rows);
+    }
+    return null;
+  }
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
@@ -399,6 +429,10 @@ export function installFakeApi(
     const recipesAnswer = recipesResponse(url, init);
     if (recipesAnswer) {
       return recipesAnswer;
+    }
+    const notificationsAnswer = notificationsResponse(url, init);
+    if (notificationsAnswer) {
+      return notificationsAnswer;
     }
     const billingAnswer = billingResponse(url, init);
     if (billingAnswer) {
@@ -786,5 +820,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { billing, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { billing, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

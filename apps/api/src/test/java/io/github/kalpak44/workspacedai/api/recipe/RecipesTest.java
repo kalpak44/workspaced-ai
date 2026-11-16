@@ -1,12 +1,15 @@
 package io.github.kalpak44.workspacedai.api.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.notification.Notification;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -41,6 +44,7 @@ class RecipesTest {
   @Autowired UserRepository users;
   @Autowired PasswordEncoder passwords;
   @Autowired JdbcTemplate jdbc;
+  @Autowired NotificationService notifications;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private String admin;
@@ -190,6 +194,25 @@ class RecipesTest {
     var after = JSON.readTree(send("GET", "/recipes/" + recipe, null, admin).body());
     assertThat(after.get("rating").get("average").asDouble()).isEqualTo(3.0);
     assertThat(after.get("myRating").asInt()).isEqualTo(3);
+  }
+
+  @Test
+  void tellsTheAuthorWhenTheRecipeIsFirstPublishedAndWhenItIsRated() throws Exception {
+    var author = users.findByUsername("ada").orElseThrow().getId();
+    var recipe = id(create("Shared", "PRIVATE", ada));
+    assertThat(notifications.list(author)).isEmpty();
+
+    send("PUT", "/recipes/" + recipe, body("Shared", "PUBLIC", "apps", List.of()), ada);
+    send("PUT", "/recipes/" + recipe, body("Shared", "PRIVATE", "apps", List.of()), ada);
+    send("PUT", "/recipes/" + recipe, body("Shared", "PUBLIC", "apps", List.of()), ada);
+    send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":4}", admin);
+
+    assertThat(notifications.list(author))
+        .extracting(Notification::title, Notification::summary)
+        .containsExactly(
+            tuple("New rating on your recipe", "Someone rated “Shared” 4 stars."),
+            tuple("Recipe published", "“Shared” is now public."));
+    assertThat(notifications.list(author).getFirst().action().path()).isEqualTo("/store/" + recipe);
   }
 
   @Test

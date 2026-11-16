@@ -17,15 +17,34 @@ function set(next: State) {
   listeners.forEach((listener) => listener());
 }
 
+// New ones are sent by the API as things happen; the list is fetched again this often while shown.
+const REFRESH_MS = 60_000;
+let timer: ReturnType<typeof setInterval> | null = null;
+
 function subscribe(listener: () => void) {
   listeners.add(listener);
-  return () => listeners.delete(listener);
+  timer ??= setInterval(refresh, REFRESH_MS);
+  return () => {
+    listeners.delete(listener);
+    if (listeners.size === 0 && timer !== null) {
+      clearInterval(timer);
+      timer = null;
+    }
+  };
 }
 
 function load() {
   loading ??= api.listNotifications().then(
     (list) => set({ status: "ready", notifications: newestFirst(list) }),
     () => set({ status: "failed", notifications: [] }),
+  );
+}
+
+// A failed refresh keeps the list it had; the next one tries again.
+function refresh() {
+  api.listNotifications().then(
+    (list) => set({ status: "ready", notifications: newestFirst(list) }),
+    () => {},
   );
 }
 
@@ -41,7 +60,8 @@ const markUnread = (id: string) => setRead([id], false);
 export function resetNotifications() {
   state = { status: "loading", notifications: [] };
   loading = null;
-  api.resetSample();
+  if (timer !== null) clearInterval(timer);
+  timer = null;
 }
 
 export type DayGroup = "Today" | "Yesterday" | "Earlier";

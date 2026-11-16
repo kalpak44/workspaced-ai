@@ -1,6 +1,9 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
@@ -48,6 +51,7 @@ public class BillingService {
   private final UserRepository users;
   private final BillingProperties properties;
   private final JsonMapper json;
+  private final NotificationService notifications;
 
   BillingService(
       BillingAccountRepository accounts,
@@ -58,7 +62,8 @@ public class BillingService {
       Stripe stripe,
       UserRepository users,
       BillingProperties properties,
-      JsonMapper json) {
+      JsonMapper json,
+      NotificationService notifications) {
     this.accounts = accounts;
     this.topUps = topUps;
     this.usage = usage;
@@ -68,6 +73,7 @@ public class BillingService {
     this.users = users;
     this.properties = properties;
     this.json = json;
+    this.notifications = notifications;
   }
 
   public Billing billing(UUID user) {
@@ -236,8 +242,8 @@ public class BillingService {
   }
 
   /**
-   * Marks the top-up paid and credits it once. The top-up stays locked meanwhile, so the webhook
-   * and the returning browser reporting it at once credit it once.
+   * Marks the top-up paid and credits it once, thanking the user then. The top-up stays locked
+   * meanwhile, so the webhook and the returning browser reporting it at once credit it once.
    */
   boolean credit(UUID topUpId, String invoiceId, String invoiceNumber) {
     return Boolean.TRUE.equals(
@@ -248,22 +254,36 @@ public class BillingService {
                       .findLockedById(topUpId)
                       .orElseThrow(() -> new IllegalStateException("no top-up " + topUpId));
               topUp.markPaid(Instant.now(), invoiceId, invoiceNumber);
-              return ledger.post(
-                  topUp.getUserId(),
-                  topUp.getAmountCents() * Ledger.MICROS_PER_CENT,
-                  Ledger.TOP_UP,
-                  topUpId.toString());
+              var micros = topUp.getAmountCents() * Ledger.MICROS_PER_CENT;
+              var credited =
+                  ledger.post(topUp.getUserId(), micros, Ledger.TOP_UP, topUpId.toString());
+              if (credited) {
+                notifications.send(topUp.getUserId(), Notifications.topUpPaid(amount(micros)));
+              }
+              return credited;
             }));
   }
 
-  // Only a pending top-up can end unpaid; a paid one stays paid whatever arrives late.
+  // Only a pending top-up can end unpaid; a paid one stays paid whatever arrives late. The user is
+  // warned once, when it stops being pending.
   private void markUnpaid(UUID topUpId, TopUpStatus status) {
     transactions.executeWithoutResult(
         _ ->
             topUps
-                .findById(topUpId)
+                .findLockedById(topUpId)
                 .filter(topUp -> topUp.getStatus() == TopUpStatus.PENDING)
-                .ifPresent(topUp -> topUp.setStatus(status)));
+                .ifPresent(
+                    topUp -> {
+                      topUp.setStatus(status);
+                      notifications.send(topUp.getUserId(), unpaid(topUp, status));
+                    }));
+  }
+
+  private NotificationMessage unpaid(TopUpEntity topUp, TopUpStatus status) {
+    var amount = amount(topUp.getAmountCents() * Ledger.MICROS_PER_CENT);
+    return status == TopUpStatus.FAILED
+        ? Notifications.topUpFailed(amount)
+        : Notifications.topUpExpired(amount);
   }
 
   // Keeps the first customer stored, so two racing top-ups still file under one.

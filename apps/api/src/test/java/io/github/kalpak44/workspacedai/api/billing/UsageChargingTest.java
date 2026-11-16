@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
@@ -11,6 +12,9 @@ import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
+import io.github.kalpak44.workspacedai.api.notification.Notification;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.notification.NotificationTone;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.math.BigDecimal;
@@ -20,6 +24,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -73,6 +78,8 @@ class UsageChargingTest {
   @Autowired Ledger ledger;
   @Autowired TransactionTemplate transactions;
   @Autowired UsageCharger charger;
+  @Autowired FundsReminder reminder;
+  @Autowired NotificationService notifications;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
@@ -128,6 +135,35 @@ class UsageChargingTest {
     assertThat(balance()).isEqualTo(HOURLY / 2);
     assertThat(workspaces.findById(workspace)).isEmpty();
     assertThat(usage.findById(workspace)).isEmpty();
+    assertThat(notifications.list(user))
+        .extracting(Notification::title, Notification::tone)
+        .containsExactly(
+            tuple("Workspace deleted", NotificationTone.ERROR),
+            tuple("Workspace created", NotificationTone.SUCCESS));
+    assertThat(notifications.list(user).getFirst().summary()).endsWith("the balance ran out.");
+  }
+
+  @Test
+  void remindsOnceADayOfEachWorkspaceTheBalanceStopsPayingForWithinAWeek() throws Exception {
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    var now = Instant.now();
+    reminder.remind(now);
+    assertThat(reminders()).isEmpty();
+
+    // Leaves three and a half days of the workspace's hours.
+    fund(-(MONTH - HOURLY * 84));
+    reminder.remind(now);
+    reminder.remind(now);
+    assertThat(reminders())
+        .singleElement()
+        .extracting(Notification::title)
+        .asString()
+        .endsWith("will be deleted in about 3 days");
+
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    assertThat(reminders()).hasSize(2);
+    assertThat(workspaces.findById(workspace)).isPresent();
   }
 
   @Test
@@ -135,6 +171,12 @@ class UsageChargingTest {
     var workspace = created(create(TestUsers.bearer(port)));
 
     assertThat(usage.findById(workspace)).isEmpty();
+  }
+
+  private List<Notification> reminders() {
+    return notifications.list(user).stream()
+        .filter(n -> n.title().contains("will be deleted"))
+        .toList();
   }
 
   private void fund(long micros) {

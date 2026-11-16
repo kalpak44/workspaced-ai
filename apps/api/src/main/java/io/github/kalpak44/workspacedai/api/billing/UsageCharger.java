@@ -70,7 +70,7 @@ public class UsageCharger {
     }
     if (charge == Charge.SHORT) {
       log.info("deleting workspace {}: the balance cannot pay its next hour", workspace);
-      workspaces.delete(workspace);
+      workspaces.deleteUnpaid(workspace);
     }
   }
 
