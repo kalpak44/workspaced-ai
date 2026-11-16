@@ -26,7 +26,7 @@ public interface FirewallApi {
 
   String JSON = "application/json";
   String EXAMPLE =
-      "{\"address\":\"203.0.113.10\",\"agentAllowed\":false,\"rules\":[{\"protocol\":\"tcp\","
+      "{\"address\":\"203.0.113.10\",\"agentAllowed\":true,\"rules\":[{\"protocol\":\"tcp\","
           + "\"port\":\"8080\",\"sourceIps\":[\"0.0.0.0/0\",\"::/0\"],\"description\":\"Blog\"}]}";
 
   @Operation(

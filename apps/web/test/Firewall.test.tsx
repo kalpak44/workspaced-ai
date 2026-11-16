@@ -57,7 +57,7 @@ describe("workspace firewall", () => {
     await user.click(save);
 
     expect(await screen.findByRole("status")).toHaveTextContent("Agent permission saved.");
-    expect(api.firewalls.get("starter")?.agentAllowed).toBe(true);
+    expect(api.firewalls.get("starter")?.agentAllowed).toBe(false);
     expect(save).toBeDisabled();
   });
 

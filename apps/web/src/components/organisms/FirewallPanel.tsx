@@ -1,5 +1,5 @@
 import { Copy, Plus, Trash2 } from "lucide-react";
-import { type SubmitEvent, useEffect, useState } from "react";
+import { type SubmitEvent, useState } from "react";
 import { type FirewallProtocol, type FirewallRule, useFirewall } from "../../hooks/useFirewall";
 import { Button, IconButton, Select, Spinner, TextField } from "../atoms";
 import { SettingsSection } from "../molecules";
@@ -23,10 +23,11 @@ export function FirewallPanel({ workspaceId }: Props) {
   const [port, setPort] = useState("");
   const [source, setSource] = useState("");
   const [description, setDescription] = useState("");
-  const [allowed, setAllowed] = useState(false);
+  // null until the user ticks the box, so it shows what is saved without a render in between.
+  const [choice, setAllowed] = useState<boolean | null>(null);
   const [problem, setProblem] = useState("");
   const [notice, setNotice] = useState("");
-  useEffect(() => { if (firewall) setAllowed(firewall.agentAllowed); }, [firewall]);
+  const allowed = choice ?? firewall?.agentAllowed ?? false;
 
   const report = (failure: string | null, done: string) => {
     setProblem(failure ?? "");
@@ -99,15 +100,17 @@ export function FirewallPanel({ workspaceId }: Props) {
 
       <form aria-label="Agent firewall permission" className="space-y-3 rounded-md bg-zinc-50 p-4 dark:bg-zinc-900/60" onSubmit={async (event) => {
         event.preventDefault();
-        report(await saveAgentAllowed(allowed), "Agent permission saved.");
+        const failure = await saveAgentAllowed(allowed);
+        report(failure, "Agent permission saved.");
+        if (!failure) setAllowed(null);
       }}>
         <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
           <input type="checkbox" checked={allowed} disabled={saving} onChange={(event) => { setAllowed(event.target.checked); setNotice(""); setProblem(""); }} className="mt-0.5 size-4 accent-zinc-900 dark:accent-zinc-100" />
-          <span>Let the agent open and close ports<span className="block text-xs text-zinc-500">It can change these rules when you ask it to make something reachable.</span></span>
+          <span>Let the agent open and close ports<span className="block text-xs text-zinc-500">It asks you in the chat before it opens one.</span></span>
         </label>
         <Button label="Save agent permission" type="submit" busy={saving} disabled={allowed === firewall.agentAllowed} />
       </form>
-      <p className="text-xs text-zinc-500">Anyone a rule lets in can reach whatever listens on that port, over plain HTTP unless you set up TLS yourself.</p>
+      <p className="text-xs text-zinc-500">Anyone a rule lets in can reach whatever listens on that port.</p>
     </>}
     {problem && <p role="alert" className="text-sm text-rose-600">{problem}</p>}
     {notice && <p role="status" className="text-sm text-zinc-500">{notice}</p>}

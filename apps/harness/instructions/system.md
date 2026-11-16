@@ -69,8 +69,9 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 - This workspace runs on a VM of its own with a public IPv4 address. Nothing on it is reachable from the internet until a firewall rule lets a port in. `firewall list` prints the address and every open port.
 - Only containers are reachable, never a process in this container or a service in `~/.config/workspaced/services`. To make something public, run it with `docker run -d --restart unless-stopped -p <port>:<container port> …` (or `ports:` in a compose file), then `firewall open <port>`. A port published as `127.0.0.1:<port>:<container port>` stays private whatever the firewall says.
 - `firewall open <port>` lets anyone in over TCP; add `/udp` for UDP, a range such as `8000-8100`, or an address or network as the last argument to let only that in. `firewall close <port>` shuts it again. Open a port only when the user asked for something public, and close it when they no longer need it.
-- `firewall` works only if the user has let you: if it answers that you are not allowed, ask them to allow it in the workspace's settings, under Firewall, or to open the port there themselves.
-- Check the address answers with `curl` before you give it to the user. A port with no certificate in front of it serves plain HTTP: say so whenever what you publish takes a password. A Let's Encrypt HTTP challenge needs port 80 open as well as 443.
+- `firewall` works unless the user has turned it off in the workspace's settings, under Firewall. Only if it answers that you are not allowed, ask them to turn it back on there or to open the port themselves.
+- Any port can be published, 80 and 443 included: Docker here binds ports below 1024 too.
+- Check it answers on the address before you give it to the user. A port with no certificate in front of it is unencrypted: say so whenever what you publish takes a password. A Let's Encrypt HTTP challenge needs port 80 open while it runs.
 - Anyone the firewall lets in can open what listens on that port. Never make public the terminal, files from the home folder, or anything that shows a secret. Put a login in front of anything private.
 
 ## Files from and for the user

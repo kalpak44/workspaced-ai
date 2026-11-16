@@ -117,11 +117,11 @@ class FirewallTest {
   }
 
   @Test
-  void showsTheAddressAndStartsClosed() throws Exception {
+  void showsTheAddressAndStartsClosedWithTheAgentAllowed() throws Exception {
     var body = JSON.readTree(send("GET", workspace, "", null).body());
 
     assertThat(body.get("address").asString()).isEqualTo(ADDRESS);
-    assertThat(body.get("agentAllowed").asBoolean()).isFalse();
+    assertThat(body.get("agentAllowed").asBoolean()).isTrue();
     assertThat(body.get("rules")).isEmpty();
   }
 
@@ -164,7 +164,8 @@ class FirewallTest {
   }
 
   @Test
-  void carriesOutWhatTheAgentAskedOnceTheUserAllowsIt() throws Exception {
+  void carriesOutWhatTheAgentAskedOnlyWhileTheUserAllowsIt() throws Exception {
+    assertThat(send("PUT", workspace, "/agent", "{\"allowed\":false}").statusCode()).isEqualTo(204);
     OPENCODE.files.put(REQUEST, "open 8080\n");
     requests.run();
     // Never read while the user has not allowed it.

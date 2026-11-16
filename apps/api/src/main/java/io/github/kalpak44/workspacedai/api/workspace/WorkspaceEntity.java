@@ -53,9 +53,10 @@ public class WorkspaceEntity {
   @Column(name = "secrets_pending_restart", nullable = false)
   private boolean secretsPendingRestart;
 
-  // Whether its own agent may open and close ports with its `firewall` tool.
+  // Whether its own agent may open and close ports with its `firewall` tool; on until the user
+  // turns it off.
   @Column(name = "firewall_agent_allowed", nullable = false)
-  private boolean firewallAgentAllowed;
+  private boolean firewallAgentAllowed = true;
 
   public boolean isFirewallAgentAllowed() {
     return firewallAgentAllowed;
