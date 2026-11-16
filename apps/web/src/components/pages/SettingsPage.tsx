@@ -1,10 +1,11 @@
-import { CalendarClock, Clock, FileText, KeyRound, Plug, Shield, Variable } from "lucide-react";
+import { CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Shield, Variable } from "lucide-react";
 import { lazy, Suspense } from "react";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { navigate } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { McpPanel, SecretsPanel } from "../organisms";
+import { DomainsPanel } from "../organisms/DomainsPanel";
 import { FirewallPanel } from "../organisms/FirewallPanel";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { VariablesPanel } from "../organisms/VariablesPanel";
@@ -28,6 +29,7 @@ const SECTIONS = [
   { id: "variables", label: "Variables", Icon: Variable },
   { id: "sessions", label: "Sessions", Icon: Clock },
   { id: "firewall", label: "Firewall", Icon: Shield },
+  { id: "domains", label: "Domains", Icon: Globe },
   { id: "instructions", label: "Instructions", Icon: FileText },
   { id: "tasks", label: "Tasks", Icon: CalendarClock },
 ] as const;
@@ -71,6 +73,7 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
           </Suspense>
         )}
         {section === "firewall" && <FirewallPanel key={workspace.id} workspaceId={workspace.id} />}
+        {section === "domains" && <DomainsPanel key={workspace.id} workspaceId={workspace.id} />}
         <div hidden={section !== "sessions"}>
           <SessionTtlPanel key={workspace.id} workspaceId={workspace.id} />
         </div>

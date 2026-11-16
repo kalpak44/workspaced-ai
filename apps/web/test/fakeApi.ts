@@ -2,6 +2,7 @@ import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
 import type { TopUp } from "../src/api/billingApi";
+import type { DnsRecord, WorkspaceDomain } from "../src/api/domainsApi";
 import type { FirewallRule } from "../src/api/firewallApi";
 import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
@@ -110,6 +111,9 @@ export function installFakeApi(
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
   // Each workspace's firewall; a port of "0" is refused the way the VM manager refuses one.
   const firewalls = new Map<string, { address: string | null; agentAllowed: boolean; rules: FirewallRule[] }>();
+  // Each workspace's domains. The zone is the last two labels; connected.example stands in for a
+  // DNS provider that applies the template itself.
+  const domains = new Map<string, WorkspaceDomain[]>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
   const sessionAgents = new Map<string, string>();
@@ -472,6 +476,43 @@ export function installFakeApi(
       }
       return json(list);
     }
+    const domainRoute = /\/api\/v1\/workspaces\/([^/]+)\/domains(?:\/([^/]+))?$/.exec(url);
+    if (domainRoute) {
+      const [, workspaceId, domainId] = domainRoute;
+      if (!rows.some((workspace) => workspace.id === workspaceId)) return json({}, 404);
+      if (state.fail) return json({}, state.fail);
+      const list = domains.get(workspaceId) ?? [];
+      domains.set(workspaceId, list);
+      if (init?.method === "DELETE") {
+        const gone = list.find((d) => d.id === decodeURIComponent(domainId ?? ""));
+        if (!gone) return json({}, 404);
+        domains.set(workspaceId, list.filter((d) => d !== gone));
+        return json(gone.records);
+      }
+      if (init?.method === "POST") {
+        const name = String(JSON.parse(String(init.body)).name).trim().toLowerCase();
+        if (!/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(name)) {
+          return json({ detail: "enter a domain such as example.com, or a name under one such as app.example.com" }, 400);
+        }
+        const labels = name.split(".");
+        const domain = labels.slice(-2).join(".");
+        const host = labels.length > 2 ? labels.slice(0, -2).join(".") : "@";
+        const target = "vm-1.vm.workspaced.online";
+        const records: DnsRecord[] = host === "@"
+          ? [{ type: "A", host: "@", name, value: "203.0.113.10" }, { type: "AAAA", host: "@", name, value: "2001:db8::1" },
+            { type: "CNAME", host: "www", name: `www.${name}`, value: target }]
+          : [{ type: "CNAME", host, name, value: target }];
+        const connect = domain === "connected.example";
+        const added: WorkspaceDomain = {
+          id: `domain-${list.length + 1}-${name}`, name, domain, host, mode: connect ? "DOMAIN_CONNECT" : "MANUAL", status: "PENDING",
+          providerName: connect ? "GoDaddy" : null, connectUrl: connect ? `https://dcc.godaddy.example/apply?domain=${domain}` : null,
+          records, createdAt: "2026-11-16T10:00:00Z", verifiedAt: null,
+        };
+        list.push(added);
+        return json(added, 201);
+      }
+      return json(list);
+    }
     const firewallRoute = /\/api\/v1\/workspaces\/([^/]+)\/firewall(\/agent)?$/.exec(url);
     if (firewallRoute) {
       const [, workspaceId, agent] = firewallRoute;
@@ -745,5 +786,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { billing, recipes, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { billing, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }
