@@ -1,25 +1,23 @@
-import { Camera, Globe, Search, UserRound, Users } from "lucide-react";
+import { Camera, UserRound, Users } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
-import { useDomains } from "../../hooks/useDomains";
 import { navigate } from "../../hooks/useRoute";
 import { type UserSort, useUsers } from "../../hooks/useUsers";
 import { Avatar, Button, TextField } from "../atoms";
-import { EmptyState, PageHeader, SectionNav, Toast } from "../molecules";
-import { DomainDnsPanel, UsersPanel } from "../organisms";
+import { PageHeader, SectionNav, Toast } from "../molecules";
+import { UsersPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
 const NOTES = {
   profile: "Your photo, name and preferences.",
-  domains: "DNS for the domains you bought. Simple adds subdomains; advanced edits every record.",
   users: "Changes apply to everyone who signs in here.",
 };
 
-type Section = "profile" | "domains" | "users";
+type Section = "profile" | "users";
 
-/** Account settings; the open section is in the URL, so a link can open Domains directly. */
+/** Account settings; the open section is in the URL, so a link can open Users directly. */
 export function GeneralSettingsPage({ section: requested }: { readonly section?: string }) {
-  const section: Section = requested === "domains" || requested === "users" ? requested : "profile";
+  const section: Section = requested === "users" ? "users" : "profile";
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: Section) => navigate({ name: "general-settings", section: id }, { replace: true });
   const { account, saveProfile, changePassword: savePassword } = useAccount();
@@ -113,7 +111,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
     <PageHeader title="General settings" description={NOTES[section]} />
     <ContextLayout contained sidebar={
       <SectionNav label="Settings sections" current={section} onSelect={(id) => { setSection(id); setNotice(""); }}
-        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, { id: "domains", label: "Domains", Icon: Globe }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])]} />
+        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])]} />
     }>
       <div className="w-full">
           <div className="min-w-0 flex-1">
@@ -182,31 +180,12 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
                 </form>}
               </section>
             </div>
-            {section === "domains" && <DomainsSection />}
             {section === "users" && isAdmin && <UsersSection currentUserId={account?.id} />}
             <Toast message={notice} />
           </div>
       </div>
     </ContextLayout>
     </>
-  );
-}
-
-/** Mounted only while its tab is open, so the domains load when someone looks at them. */
-function DomainsSection() {
-  const { owned, status } = useDomains();
-  if (status === "loading") return <EmptyState busy title="Loading domains…" hint="Fetching the domains you own" />;
-  if (status === "failed") return <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">Your domains could not be loaded.</p>;
-  if (owned.length === 0) {
-    return <EmptyState icon={Globe} title="No domains yet" hint="Buy one to manage its DNS here." action={{ label: "Find a domain", icon: Globe, onClick: () => navigate({ name: "domains" }) }} />;
-  }
-  return (
-    <div className="space-y-6">
-      <div className="flex justify-end">
-        <Button label="Find another domain" icon={Search} variant="secondary" onClick={() => navigate({ name: "domains" })} />
-      </div>
-      {owned.map((domain) => <DomainDnsPanel key={domain.name} domain={domain.name} />)}
-    </div>
   );
 }
 

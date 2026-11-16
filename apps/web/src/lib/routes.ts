@@ -3,7 +3,6 @@ export type Route =
   | { readonly name: "home" }
   | { readonly name: "general-settings"; readonly section?: string }
   | { readonly name: "billing" }
-  | { readonly name: "domains" }
   | { readonly name: "notifications" }
   | { readonly name: "notification"; readonly notificationId: string }
   | { readonly name: "store" }
@@ -21,7 +20,6 @@ const PATTERNS: ReadonlyArray<[RegExp, (ids: string[]) => Route]> = [
   [/^\/settings\/?$/, () => ({ name: "general-settings" })],
   [/^\/settings\/([a-z-]+)\/?$/, ([s]) => ({ name: "general-settings", section: s })],
   [/^\/billing\/?$/, () => ({ name: "billing" })],
-  [/^\/domains\/?$/, () => ({ name: "domains" })],
   [/^\/notifications\/?$/, () => ({ name: "notifications" })],
   [new RegExp(`^/notifications/${ID}/?$`), ([n]) => ({ name: "notification", notificationId: n })],
   [/^\/store\/?$/, () => ({ name: "store" })],
@@ -57,8 +55,6 @@ export function routePath(route: Route): string {
       return `/settings${route.section ? `/${route.section}` : ""}`;
     case "billing":
       return "/billing";
-    case "domains":
-      return "/domains";
     case "notifications":
       return "/notifications";
     case "notification":

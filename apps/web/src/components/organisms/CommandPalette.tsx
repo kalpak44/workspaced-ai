@@ -5,7 +5,6 @@ import {
   Clock,
   CornerDownLeft,
   FileText,
-  Globe,
   KeyRound,
   Layers,
   MessageSquare,
@@ -138,7 +137,6 @@ export function CommandPalette({ open, onOpenChange, workspaces, current, theme,
       { id: "store", group: "Go to", label: "Recipe store", keywords: "recipes templates", icon: Store, run: go({ name: "store" }) },
       { id: "notifications", group: "Go to", label: "Notifications", keywords: "inbox alerts", icon: Bell, run: go({ name: "notifications" }) },
       { id: "billing", group: "Go to", label: "Billing", keywords: "balance invoices funds payment", icon: Wallet, run: go({ name: "billing" }) },
-      { id: "domains", group: "Go to", label: "Domains", keywords: "buy dns", icon: Globe, run: go({ name: "domains" }) },
       { id: "settings", group: "Go to", label: "Account settings", keywords: "profile password users", icon: Settings, run: go({ name: "general-settings" }) },
     ];
   }, [current, workspaces, theme, onThemeChange, onNewWorkspace]);

@@ -76,7 +76,7 @@ export function BillingPage() {
 
   return (
     <>
-      <PageHeader title="Billing" description="Your balance pays for workspaces and domains. Top it up any time." />
+      <PageHeader title="Billing" description="Your balance pays for workspaces. Top it up any time." />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-6 pb-10 sm:px-6">
         <section aria-label="Balance" className="relative flex flex-col gap-4 overflow-hidden rounded-2xl bg-zinc-900 p-5 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:bg-zinc-900 dark:ring-1 dark:ring-white/10 [&_button]:bg-white [&_button]:text-zinc-900 [&_button:hover]:bg-zinc-200 dark:[&_button]:bg-white dark:[&_button]:text-zinc-900 dark:[&_button:hover]:bg-zinc-200">
           <span aria-hidden className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-linear-to-br from-sky-400/30 via-fuchsia-500/20 to-orange-400/20 blur-2xl" />

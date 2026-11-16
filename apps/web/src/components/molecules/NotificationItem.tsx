@@ -1,11 +1,10 @@
-import { ArrowRight, Circle, CircleCheck, Globe, Info, type LucideIcon, Server, Store, Wallet } from "lucide-react";
+import { ArrowRight, Circle, CircleCheck, Info, type LucideIcon, Server, Store, Wallet } from "lucide-react";
 import type { Notification, NotificationKind, NotificationTone } from "../../hooks/useNotifications";
 import { timeAgo } from "../../lib/time";
 
 export const NOTIFICATION_ICONS: Record<NotificationKind, LucideIcon> = {
   billing: Wallet,
   workspace: Server,
-  domain: Globe,
   recipe: Store,
   system: Info,
 };

@@ -44,9 +44,6 @@ export function UserMenu({ theme, onThemeChange }: Props) {
             Billing
             {billing && <span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatMoney(billing.balanceCents)}</span>}
           </MenuItem>
-          <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "domains" }); }}>
-            Domains
-          </MenuItem>
           <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "general-settings" }); }}>
             Settings
           </MenuItem>

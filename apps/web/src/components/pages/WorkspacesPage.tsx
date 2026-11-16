@@ -15,7 +15,6 @@ const APP = "workspaced-ai";
 const StorePage = lazy(() => import("./StorePage").then((page) => ({ default: page.StorePage })));
 const RecipePage = lazy(() => import("./RecipePage").then((page) => ({ default: page.RecipePage })));
 const BillingPage = lazy(() => import("./BillingPage").then((page) => ({ default: page.BillingPage })));
-const DomainsPage = lazy(() => import("./DomainsPage").then((page) => ({ default: page.DomainsPage })));
 const NotificationsPage = lazy(() => import("./NotificationsPage").then((page) => ({ default: page.NotificationsPage })));
 const NotificationPage = lazy(() => import("./NotificationPage").then((page) => ({ default: page.NotificationPage })));
 const MonitoringPage = lazy(() => import("./MonitoringPage").then((page) => ({ default: page.MonitoringPage })));
@@ -72,9 +71,6 @@ export function WorkspacesPage() {
   } else if (route.name === "billing") {
     tabTitle = "Billing";
     page = <Suspense fallback={<EmptyState busy title="Loading billing…" hint="Fetching your balance and invoices" />}><BillingPage /></Suspense>;
-  } else if (route.name === "domains") {
-    tabTitle = "Domains";
-    page = <Suspense fallback={<EmptyState busy title="Loading domains…" hint="Fetching your domains" />}><DomainsPage /></Suspense>;
   } else if (route.name === "notifications") {
     tabTitle = "Notifications";
     page = <Suspense fallback={<EmptyState busy title="Loading notifications…" hint="Fetching the latest" />}><NotificationsPage /></Suspense>;

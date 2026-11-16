@@ -7,7 +7,7 @@ import { Button } from "../atoms";
 import { EmptyState, FilterChips, NotificationItem, PageHeader, Pagination, Tabs } from "../molecules";
 
 const KINDS: ReadonlyArray<{ readonly value: NotificationKind; readonly label: string }> = [
-  { value: "billing", label: "Billing" }, { value: "workspace", label: "Workspaces" }, { value: "domain", label: "Domains" },
+  { value: "billing", label: "Billing" }, { value: "workspace", label: "Workspaces" },
   { value: "recipe", label: "Recipes" }, { value: "system", label: "System" },
 ];
 

@@ -14,8 +14,6 @@ export { NewRecipeMenu } from "./NewRecipeMenu";
 export { EMPTY_RECIPE, RecipeEditorDialog, type RecipeFormValues } from "./RecipeEditorDialog";
 export { WorkspacePickerDialog } from "./WorkspacePickerDialog";
 export { AddFundsDialog } from "./AddFundsDialog";
-export { BuyDomainDialog } from "./BuyDomainDialog";
-export { DomainDnsPanel } from "./DomainDnsPanel";
 export { NotificationMenu } from "./NotificationMenu";
 export { formatMetric, MetricChart } from "./MetricChart";
 export { WorkspaceHeader, type WorkspaceView } from "./WorkspaceHeader";

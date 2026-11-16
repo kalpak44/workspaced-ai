@@ -9,7 +9,7 @@ import { installFakeApi } from "./fakeApi";
 async function openMenu() {
   const user = userEvent.setup();
   render(<NotificationMenu />);
-  await user.click(await screen.findByRole("button", { name: "Notifications, 4 unread" }));
+  await user.click(await screen.findByRole("button", { name: "Notifications, 3 unread" }));
   return { user, menu: screen.getByRole("menu") };
 }
 
@@ -25,8 +25,8 @@ describe("notifications", () => {
     const items = within(menu).getAllByRole("menuitem").filter((item) => item.getAttribute("aria-label") === null && !/^(Mark all read|View all)/.test(item.textContent ?? ""));
     expect(items).toHaveLength(5);
     expect(items[0]).toHaveTextContent("Workspace is ready");
-    expect(items[4]).toHaveTextContent("Scheduled task failed");
-    await user.click(within(menu).getByRole("menuitem", { name: "View all notifications (7 more)" }));
+    expect(items[4]).toHaveTextContent("Payment received");
+    await user.click(within(menu).getByRole("menuitem", { name: "View all notifications (5 more)" }));
     expect(location.pathname).toBe("/notifications");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
@@ -35,49 +35,49 @@ describe("notifications", () => {
     const { user, menu } = await openMenu();
     await user.click(within(menu).getByRole("menuitem", { name: /^Low balance/ }));
     expect(location.pathname).toBe("/notifications/n11");
-    expect(await screen.findByRole("button", { name: "Notifications, 3 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
   });
 
   it("marks everything read from the menu", async () => {
     const { user, menu } = await openMenu();
     await user.click(within(menu).getByRole("menuitem", { name: "Mark all read" }));
     expect(await screen.findByRole("button", { name: "Notifications" })).toBeInTheDocument();
-    expect(within(menu).queryByText("4 new")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("3 new")).not.toBeInTheDocument();
   });
 
   it("toggles one notification read from its row without opening it", async () => {
     const { user, menu } = await openMenu();
     await user.click(within(menu).getByRole("menuitem", { name: "Mark “Low balance” as read" }));
-    expect(await screen.findByRole("button", { name: "Notifications, 3 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
     await user.click(within(menu).getByRole("menuitem", { name: "Mark “Low balance” as unread" }));
-    expect(await screen.findByRole("button", { name: "Notifications, 4 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 3 unread" })).toBeInTheDocument();
     expect(location.pathname).toBe("/");
   });
 
   it("lists every notification and filters the unread ones", async () => {
     await renderAt("/notifications");
     const user = userEvent.setup();
-    expect(await screen.findAllByRole("listitem")).toHaveLength(12);
-    await user.click(screen.getByRole("tab", { name: "Unread (4)" }));
-    expect(screen.getAllByRole("listitem")).toHaveLength(4);
+    expect(await screen.findAllByRole("listitem")).toHaveLength(10);
+    await user.click(screen.getByRole("tab", { name: "Unread (3)" }));
+    expect(screen.getAllByRole("listitem")).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: "Billing" }));
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     await user.click(screen.getByRole("tab", { name: "All" }));
     expect(screen.getAllByRole("listitem")).toHaveLength(3);
     await user.click(screen.getByRole("button", { name: "Everything" }));
-    await user.click(screen.getByRole("tab", { name: "Unread (4)" }));
+    await user.click(screen.getByRole("tab", { name: "Unread (3)" }));
     await user.click(screen.getByRole("button", { name: "Mark all read" }));
     expect(await screen.findByText("You're all caught up")).toBeInTheDocument();
   });
 
   it("shows a notification in full and follows its action", async () => {
-    await renderAt("/notifications/n10");
+    await renderAt("/notifications/n9");
     const user = userEvent.setup();
-    expect(await screen.findByRole("heading", { name: "Domain renews soon", level: 2 })).toBeInTheDocument();
-    expect(screen.getByText(/anyone may register it/)).toBeInTheDocument();
-    expect(await screen.findByRole("button", { name: "Notifications, 3 unread" })).toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Manage domains" }));
-    expect(location.pathname).toBe("/domains");
+    expect(await screen.findByRole("heading", { name: "New rating on your recipe", level: 2 })).toBeInTheDocument();
+    expect(screen.getByText(/averages 4.6/)).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Open the store" }));
+    expect(location.pathname).toBe("/store");
   });
 
   it("follows a notification's action straight from the list", async () => {
@@ -96,7 +96,7 @@ describe("notifications", () => {
     expect(location.pathname).toBe("/notifications/n11");
     expect(await screen.findByRole("heading", { name: "Low balance", level: 2 })).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Mark as unread" }));
-    expect(await screen.findByRole("button", { name: "Notifications, 3 unread" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark as unread" })).not.toBeInTheDocument();
   });
 
