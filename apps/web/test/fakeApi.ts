@@ -2,6 +2,7 @@ import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
 import type { TopUp } from "../src/api/billingApi";
+import type { FirewallRule } from "../src/api/firewallApi";
 import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
@@ -106,6 +107,8 @@ export function installFakeApi(
   const tasks = new Map<string, Map<string, TaskContent>>();
   const variables = new Map<string, Variable[]>();
   const sessionTtl = new Map<string, { sessionTtlEnabled: boolean; sessionTtlHours: number }>();
+  // Each workspace's firewall; a port of "0" is refused the way the VM manager refuses one.
+  const firewalls = new Map<string, { address: string | null; agentAllowed: boolean; rules: FirewallRule[] }>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
   const sessionAgents = new Map<string, string>();
@@ -463,6 +466,24 @@ export function installFakeApi(
       }
       return json(list);
     }
+    const firewallRoute = /\/api\/v1\/workspaces\/([^/]+)\/firewall(\/agent)?$/.exec(url);
+    if (firewallRoute) {
+      const [, workspaceId, agent] = firewallRoute;
+      if (!rows.some((workspace) => workspace.id === workspaceId)) return json({}, 404);
+      if (state.fail) return json({}, state.fail);
+      const firewall = firewalls.get(workspaceId) ?? { address: "203.0.113.10", agentAllowed: false, rules: [] };
+      firewalls.set(workspaceId, firewall);
+      if (agent) {
+        firewall.agentAllowed = Boolean(JSON.parse(String(init?.body)).allowed);
+        return new Response(null, { status: 204 });
+      }
+      if (init?.method === "PUT") {
+        const { rules } = JSON.parse(String(init.body)) as { rules: FirewallRule[] };
+        if (rules.some((rule) => rule.port === "0")) return json({ detail: "ports run from 1 to 65535" }, 400);
+        firewall.rules = rules;
+      }
+      return json(firewall);
+    }
     if (settingsRoute) {
       return settingsResponse(settingsRoute[1], settingsRoute[2], settingsRoute[3], init);
     }
@@ -706,5 +727,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { billing, recipes, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { billing, recipes, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

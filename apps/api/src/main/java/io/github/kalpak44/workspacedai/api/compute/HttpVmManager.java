@@ -182,6 +182,50 @@ public class HttpVmManager implements VmManager {
   }
 
   @Override
+  public VmFirewall firewallFor(UUID workspaceId) {
+    var vm = vmOf(workspaceId);
+    var response = send(get("/vms/" + vm.path("id").asString() + "/firewall"));
+    expect(response, 200);
+    var address = vm.path("ipv4");
+    return new VmFirewall(address.isString() ? address.asString() : null, rules(response));
+  }
+
+  @Override
+  public List<FirewallRule> setFirewall(UUID workspaceId, List<FirewallRule> rules) {
+    var vm = vmOf(workspaceId);
+    var body = json.createObjectNode();
+    body.set("rules", json.valueToTree(rules));
+    var response =
+        send(
+            request("/vms/" + vm.path("id").asString() + "/firewall")
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))));
+    if (response.statusCode() == 400) {
+      throw new FirewallRuleRejectedException(detail(response));
+    }
+    expect(response, 200);
+    return rules(response);
+  }
+
+  private List<FirewallRule> rules(HttpResponse<String> response) {
+    try {
+      return List.of(json.treeToValue(read(response).path("rules"), FirewallRule[].class));
+    } catch (JacksonException e) {
+      throw new VmManagerFailedException("sent rules that do not read as rules");
+    }
+  }
+
+  private JsonNode vmOf(UUID workspaceId) {
+    var listed = send(get("/vms?workspaceId=" + workspaceId));
+    expect(listed, 200);
+    var vms = read(listed);
+    if (vms.isEmpty()) {
+      throw new IllegalStateException("workspace " + workspaceId + " has no VM");
+    }
+    return vms.get(0);
+  }
+
+  @Override
   public Optional<UUID> vmIdFor(UUID workspaceId) {
     return vmIdOf(workspaceId).map(UUID::fromString);
   }

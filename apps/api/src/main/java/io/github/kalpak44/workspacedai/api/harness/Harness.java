@@ -54,6 +54,11 @@ public interface Harness {
    */
   String VARIABLES_FILE = HOME + "/.config/workspaced/.env";
 
+  /**
+   * Where the agent's `firewall` tool writes a request, and waits for the API's answer beside it.
+   */
+  String FIREWALL_DIRECTORY = HOME + "/.config/workspaced/firewall";
+
   /** An instruction or task file's name, without ".md": a plain file name, never a path. */
   String INSTRUCTION_NAME_PATTERN = "[A-Za-z0-9][A-Za-z0-9_-]{0,62}";
 
@@ -238,4 +243,10 @@ public interface Harness {
    * added before it held them. Missing servers are ignored.
    */
   void removeMcp(HarnessEndpoint endpoint, String name);
+
+  /** What the agent asked of the firewall; empty when it asked nothing. */
+  Optional<String> firewallRequest(HarnessEndpoint endpoint);
+
+  /** Leaves the outcome where the agent's tool waits for it, then removes the request. */
+  void answerFirewallRequest(HarnessEndpoint endpoint, String result);
 }

@@ -16,6 +16,9 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Query("select w.id from WorkspaceEntity w")
   List<UUID> findAllIds();
 
+  @Query("select w.id from WorkspaceEntity w where w.firewallAgentAllowed = true")
+  List<UUID> findFirewallAgentAllowedIds();
+
   @Query("select w.id from WorkspaceEntity w where w.sessionTtlEnabled = true")
   List<UUID> findTtlEnabledIds();
 
@@ -31,6 +34,11 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Modifying
   @Query("update WorkspaceEntity w set w.model = :model where w.id = :id")
   int updateModel(@Param("id") UUID id, @Param("model") String model);
+
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.firewallAgentAllowed = :allowed where w.id = :id")
+  int updateFirewallAgentAllowed(@Param("id") UUID id, @Param("allowed") boolean allowed);
 
   @Query("select w.id from WorkspaceEntity w where w.ownerId = :ownerId")
   List<UUID> findIdsByOwnerId(UUID ownerId);

@@ -598,6 +598,17 @@ public class OpenCodeHarness implements Harness {
     return name + MARKDOWN;
   }
 
+  @Override
+  public Optional<String> firewallRequest(HarnessEndpoint endpoint) {
+    return readFile(endpoint, FIREWALL_DIRECTORY, "request");
+  }
+
+  @Override
+  public void answerFirewallRequest(HarnessEndpoint endpoint, String result) {
+    writeFile(endpoint, FIREWALL_DIRECTORY + "/result", result + "\n");
+    shell(endpoint, "rm -f -- " + quote(FIREWALL_DIRECTORY + "/request"));
+  }
+
   /** The file's text, or empty when it does not exist. */
   private Optional<String> readFile(HarnessEndpoint endpoint, String directory, String name) {
     var response = send(request(endpoint, withLocation("/api/fs/read/" + name, directory)).GET());

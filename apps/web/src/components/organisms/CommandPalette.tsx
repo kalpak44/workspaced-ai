@@ -8,7 +8,6 @@ import {
   Globe,
   KeyRound,
   Layers,
-  type LucideIcon,
   MessageSquare,
   Monitor,
   Moon,
@@ -16,9 +15,11 @@ import {
   Plus,
   Search,
   Settings,
+  Shield,
   SquareTerminal,
   Store,
   Sun,
+  type LucideIcon,
   Variable,
   Wallet,
 } from "lucide-react";
@@ -55,6 +56,7 @@ const SETTINGS_SECTIONS: ReadonlyArray<readonly [string, string, LucideIcon, str
   ["secrets", "Secrets", KeyRound, "tokens keys env"],
   ["variables", "Variables", Variable, "environment env"],
   ["sessions", "Session cleanup", Clock, "ttl delete inactivity"],
+  ["firewall", "Firewall", Shield, "ports open public ip address"],
   ["instructions", "Instructions", FileText, "agents prompt rules"],
   ["tasks", "Scheduled tasks", CalendarClock, "cron schedule"],
 ];

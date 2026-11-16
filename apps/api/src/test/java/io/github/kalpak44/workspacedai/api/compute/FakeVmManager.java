@@ -47,6 +47,7 @@ class FakeVmManager implements AutoCloseable {
   final List<JsonNode> creates = new CopyOnWriteArrayList<>();
   final List<UUID> restarts = new CopyOnWriteArrayList<>();
   final Map<UUID, Map<String, String>> secrets = new ConcurrentHashMap<>();
+  final Map<UUID, JsonNode> firewalls = new ConcurrentHashMap<>();
   volatile int status = 0;
   volatile String detail = "";
 
@@ -63,6 +64,10 @@ class FakeVmManager implements AutoCloseable {
 
   private void vms(HttpExchange exchange) throws IOException {
     var path = exchange.getRequestURI().getPath();
+    if (path.endsWith("/firewall")) {
+      firewall(exchange, UUID.fromString(path.split("/")[4]));
+      return;
+    }
     switch (exchange.getRequestMethod()) {
       case "GET" -> {
         if (path.contains("/secrets")) {
@@ -155,6 +160,24 @@ class FakeVmManager implements AutoCloseable {
       }
       default -> answer(exchange, 405, "{}");
     }
+  }
+
+  // Answers what it was given, as the VM manager does once it has normalized it; a port of 0 is
+  // refused the way the VM manager refuses one.
+  private void firewall(HttpExchange exchange, UUID id) throws IOException {
+    if (!vms.containsKey(id)) {
+      answer(exchange, 404, "{}");
+      return;
+    }
+    if (exchange.getRequestMethod().equals("PUT")) {
+      var request = JSON.readTree(exchange.getRequestBody());
+      if (request.toString().contains("\"port\":\"0\"")) {
+        answer(exchange, 400, "{\"detail\":\"ports run from 1 to 65535\"}");
+        return;
+      }
+      firewalls.put(id, request);
+    }
+    answer(exchange, 200, firewalls.getOrDefault(id, JSON.readTree("{\"rules\":[]}")).toString());
   }
 
   /** One status event per VM, as the stream opens with, then the stream ends. */

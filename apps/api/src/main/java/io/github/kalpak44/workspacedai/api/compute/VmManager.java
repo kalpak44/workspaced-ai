@@ -72,6 +72,22 @@ public interface VmManager {
   void removeSecret(UUID workspaceId, String name);
 
   /**
+   * The workspace VM's address and firewall rules.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   */
+  VmFirewall firewallFor(UUID workspaceId);
+
+  /**
+   * Replaces every rule of the workspace VM's firewall, and answers them as the VM manager keeps
+   * them.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   * @throws FirewallRuleRejectedException when a rule is one Hetzner would refuse
+   */
+  List<FirewallRule> setFirewall(UUID workspaceId, List<FirewallRule> rules);
+
+  /**
    * Hears every VM change from now on, on a thread of its own, reconnecting for as long as the app
    * runs. Never throws: a VM manager that is not configured is simply never heard from.
    */

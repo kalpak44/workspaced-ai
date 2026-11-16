@@ -7,6 +7,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -100,6 +101,35 @@ class HttpVmManagerTest {
     vmManager.removeSecret(workspace, "GITHUB_TOKEN");
     vmManager.removeSecret(workspace, "GITHUB_TOKEN");
     assertThat(fake.secrets.get(vm.id())).doesNotContainKey("GITHUB_TOKEN");
+  }
+
+  @Test
+  void readsAndReplacesTheFirewallOfTheWorkspacesVm() {
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+
+    var empty = vmManager.firewallFor(workspace);
+    assertThat(empty.address()).isEqualTo("203.0.113.10");
+    assertThat(empty.rules()).isEmpty();
+
+    var rule = new FirewallRule("tcp", "8080", List.of("0.0.0.0/0"), "Blog");
+    assertThat(vmManager.setFirewall(workspace, List.of(rule))).containsExactly(rule);
+    assertThat(fake.firewalls.get(vm.id()).path("rules").get(0).path("port").asString())
+        .isEqualTo("8080");
+    assertThat(vmManager.firewallFor(workspace).rules()).containsExactly(rule);
+  }
+
+  @Test
+  void passesOnTheReasonARuleIsRefused() {
+    vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+
+    assertThatThrownBy(
+            () ->
+                vmManager.setFirewall(
+                    workspace, List.of(new FirewallRule("tcp", "0", List.of(), null))))
+        .isInstanceOf(FirewallRuleRejectedException.class)
+        .hasMessageContaining("ports run from 1 to 65535");
+    assertThatThrownBy(() -> vmManager.firewallFor(UUID.randomUUID()))
+        .isInstanceOf(IllegalStateException.class);
   }
 
   @Test

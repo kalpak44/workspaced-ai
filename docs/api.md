@@ -370,6 +370,24 @@ A name must be a valid environment variable name (`[A-Za-z_][A-Za-z0-9_]*`, at m
 remove. A pod reads its environment once, when it starts,
 so a running workspace sees a change only after it restarts.
 
+## Workspace firewall
+
+What the internet may reach on a workspace's VM. The rules are kept only by the VM manager, on the VM's own Hetzner
+firewall, so the API proxies them under a per-workspace lock rather than storing a copy. A new VM has none, so nothing
+reaches it; whatever the workspace publishes on an opened port answers at the VM's address, over plain HTTP unless the
+workspace sets up TLS itself. `409` is a workspace whose VM does not exist yet.
+
+| Method | Path                                     | Body                                                                | Answers                                          |
+|--------|------------------------------------------|---------------------------------------------------------------------|--------------------------------------------------|
+| `GET`  | `/api/v1/workspaces/{id}/firewall`       |                                                                     | `200` with the address and rules, `404` or `409` |
+| `PUT`  | `/api/v1/workspaces/{id}/firewall`       | `{"rules": [{"protocol": "tcp", "port": "8080", "sourceIps": []}]}` | `200`, `400`, `404` or `409`                     |
+| `PUT`  | `/api/v1/workspaces/{id}/firewall/agent` | `{"allowed": true}`                                                 | `204`, `400` or `404`                            |
+
+With `allowed` on, the agent's `firewall` tool writes one request line to `~/.config/workspaced/firewall/request` —
+`list`, `open <port>[/tcp|udp] [<source>]`, `open icmp [<source>]`, `close <port>[/tcp|udp]` or `close icmp` — and the
+API, polling every few seconds and only in workspaces that allow it, carries it out and writes the address and the
+resulting rules, or `error: <reason>`, to `result` beside it. Opening a port it already has replaces that rule.
+
 ## Workspace metrics
 
 | Method | Path                              | Answers                                                       |
