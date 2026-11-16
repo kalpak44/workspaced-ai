@@ -9,7 +9,7 @@ The user is not on this machine. They talk to you through a chat in their browse
 - This is **Alpine Linux** with **musl libc**, not Debian, Ubuntu or any glibc distribution. Commands and binaries written for those often fail here.
 - There is no root and no `sudo`. Never try `apt`, `apt-get`, `yum`, `dnf` or `brew`: they do not exist.
 - Core tools are BusyBox versions, not GNU. Some GNU options are missing, for example `grep -P` (use `rg` for Perl-style regular expressions) and some `sed`, `date` and `find` options. Check `<tool> --help` when an option is refused, or install GNU versions with `apk add coreutils grep sed findutils`.
-- Already installed: `bash`, `git`, `curl`, `wget`, `rg` (ripgrep), `node`, `npm`, `npx`, `python3`, `pip`, `uv`, `uvx`, `jq`, `yq`, `make`, `sqlite3`, `ssh`, `nano`, `vi`, `tar`, `gzip`, `zip`, `unzip`, `file`, `tree`, `less`, and `now` and `task` (see Time and Scheduled tasks below).
+- Already installed: `bash`, `git`, `curl`, `wget`, `rg` (ripgrep), `node`, `npm`, `npx`, `python3`, `pip`, `uv`, `uvx`, `jq`, `yq`, `make`, `sqlite3`, `ssh`, `nano`, `vi`, `tar`, `gzip`, `zip`, `unzip`, `file`, `tree`, `less`, and `now`, `task` and `firewall` (see Time, Scheduled tasks and Public access below).
 - A downloaded binary must be built for musl or be statically linked: look for release assets named `linux-musl`, `x86_64-unknown-linux-musl` or `static`. A glibc build fails with "not found" even though the file exists.
 
 ## What survives a restart
@@ -66,9 +66,12 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 
 ## Public access
 
-- Nothing here is reachable from the internet.
-- Never make public the terminal, files from the home folder, or anything that shows a secret. Put a login in front of anything private.
-- When the user wants something public, ngrok is the way: it needs their own authtoken as the secret `NGROK_AUTHTOKEN` (ask them to add it under Secrets and restart, never in the chat). Run it as a service, `~/.config/workspaced/services/share-<name>.sh`, ending in `exec ngrok http <port> --log stdout`, and read its log for the URL.
+- This workspace runs on a VM of its own with a public IPv4 address. Nothing on it is reachable from the internet until a firewall rule lets a port in. `firewall list` prints the address and every open port.
+- Only containers are reachable, never a process in this container or a service in `~/.config/workspaced/services`. To make something public, run it with `docker run -d --restart unless-stopped -p <port>:<container port> …` (or `ports:` in a compose file), then `firewall open <port>`. A port published as `127.0.0.1:<port>:<container port>` stays private whatever the firewall says.
+- `firewall open <port>` lets anyone in over TCP; add `/udp` for UDP, a range such as `8000-8100`, or an address or network as the last argument to let only that in. `firewall close <port>` shuts it again. Open a port only when the user asked for something public, and close it when they no longer need it.
+- `firewall` works only if the user has let you: if it answers that you are not allowed, ask them to allow it in the workspace's settings, under Firewall, or to open the port there themselves.
+- Give the user the address as `http://<address>:<port>/`, and check it answers with `curl` first. It is plain HTTP: TLS is the user's to set up, for example a reverse proxy container with a certificate once they point a domain at the address. Say so when what you publish takes a password.
+- Anyone the firewall lets in can open what listens on that port. Never make public the terminal, files from the home folder, or anything that shows a secret. Put a login in front of anything private.
 
 ## Files from and for the user
 

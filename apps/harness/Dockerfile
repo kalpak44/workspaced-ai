@@ -134,6 +134,8 @@ COPY apk.sh /usr/local/bin/apk
 # scheduled task files with the time checked against both, so neither is computed by hand.
 COPY --chmod=0755 now.py /usr/local/bin/now
 COPY --chmod=0755 task.py /usr/local/bin/task
+# Opens and closes ports on the VM's firewall, through the app.
+COPY --chmod=0755 firewall.sh /usr/local/bin/firewall
 # The musl loader looks in the image's library folders first, then in the home's package
 # root, so a program installed there finds its libraries and the image's own are never
 # shadowed by them.
