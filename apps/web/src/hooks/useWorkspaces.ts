@@ -56,10 +56,19 @@ export function useWorkspaces() {
   useEffect(() => {
     // StrictMode runs this twice in development; only the live run may set state.
     let active = true;
+    // The list and the end of loading are set together: a render between them would show the
+    // workspace's page without its header, then remount it once loading ended.
     listWorkspaces()
-      .then((list) => active && setWorkspaces(list))
-      .catch(() => active && setError("Could not load workspaces"))
-      .finally(() => active && setLoading(false));
+      .then((list) => {
+        if (!active) return;
+        setWorkspaces(list);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!active) return;
+        setError("Could not load workspaces");
+        setLoading(false);
+      });
     return () => {
       active = false;
     };

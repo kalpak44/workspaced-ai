@@ -1,5 +1,7 @@
 package io.github.kalpak44.workspacedai.api.recipe;
 
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import java.util.Locale;
 import java.util.UUID;
 import org.springframework.data.domain.Page;
@@ -21,9 +23,11 @@ public class RecipeService {
   static final int MAX_PAGE_SIZE = 100;
 
   private final RecipeStore store;
+  private final NotificationService notifications;
 
-  public RecipeService(RecipeStore store) {
+  public RecipeService(RecipeStore store, NotificationService notifications) {
     this.store = store;
+    this.notifications = notifications;
   }
 
   /** The caller's own private recipes, or everyone's public ones, the caller's included. */
@@ -75,16 +79,25 @@ public class RecipeService {
   @Transactional
   public Recipe create(UUID author, RecipeRequest request) {
     var id = store.create(author, request.normalized());
-    return visible(id, author);
+    var created = visible(id, author);
+    if (created.publishedAt() != null) {
+      notifications.send(author, Notifications.recipePublished(id, created.title()));
+    }
+    return created;
   }
 
   /** Only by its author; a public recipe someone else wrote is forbidden rather than hidden. */
   @Transactional
   public Recipe update(UUID id, UUID viewer, RecipeRequest request) {
     var fields = request.normalized();
-    authored(visible(id, viewer), "only its author can change a recipe");
+    var before = visible(id, viewer);
+    authored(before, "only its author can change a recipe");
     store.update(id, fields);
-    return visible(id, viewer);
+    var updated = visible(id, viewer);
+    if (before.publishedAt() == null && updated.publishedAt() != null) {
+      notifications.send(viewer, Notifications.recipePublished(id, updated.title()));
+    }
+    return updated;
   }
 
   /** By its author, or by an admin removing a public recipe. */
@@ -105,6 +118,10 @@ public class RecipeService {
     }
     store.rate(id, viewer, stars);
     var rated = visible(id, viewer);
+    notifications.send(
+        rated.author().id(),
+        Notifications.recipeRated(
+            id, rated.title(), stars, rated.rating().average(), rated.rating().count()));
     return new RatingResult(rated.rating().average(), rated.rating().count(), rated.myRating());
   }
 

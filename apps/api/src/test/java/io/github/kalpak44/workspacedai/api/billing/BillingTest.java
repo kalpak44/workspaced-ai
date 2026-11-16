@@ -8,6 +8,8 @@ import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.notification.Notification;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -25,6 +27,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.server.ResponseStatusException;
@@ -47,6 +50,8 @@ class BillingTest {
   @Autowired UsageRepository usage;
   @Autowired BillingService billing;
   @Autowired UserRepository users;
+  @Autowired NotificationService notifications;
+  @Autowired JdbcTemplate jdbc;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -69,6 +74,7 @@ class BillingTest {
     topUps.deleteAll();
     usage.deleteAll();
     accounts.deleteAll();
+    jdbc.update("DELETE FROM notification");
     STRIPE.status = 0;
   }
 
@@ -133,6 +139,10 @@ class BillingTest {
     assertThat(paid.get("invoiceAvailable").asBoolean()).isTrue();
     assertThat(read(get("/billing")).get("balanceCents").asLong()).isEqualTo(2500);
     assertThat(ledger.count()).isEqualTo(1);
+    assertThat(notifications.list(TestUsers.ADMIN))
+        .singleElement()
+        .extracting(Notification::title, Notification::summary)
+        .containsExactly("Thank you for your payment", "25.00 EUR was added to your balance.");
   }
 
   @Test
@@ -181,8 +191,13 @@ class BillingTest {
     var event = event("checkout.session.expired", STRIPE.lastSessionId());
 
     webhook(event, signature(event));
+    webhook(event, signature(event));
 
     assertThat(read(get("/billing")).get("topUps")).isEmpty();
+    assertThat(notifications.list(TestUsers.ADMIN))
+        .singleElement()
+        .extracting(Notification::title, Notification::summary)
+        .containsExactly("Top-up not completed", "A top-up of 15.00 EUR was never paid.");
   }
 
   @Test
@@ -194,6 +209,10 @@ class BillingTest {
 
     assertThat(read(get("/billing")).get("topUps").get(0).get("status").asString())
         .isEqualTo("FAILED");
+    assertThat(notifications.list(TestUsers.ADMIN))
+        .singleElement()
+        .extracting(Notification::title, Notification::summary)
+        .containsExactly("Payment failed", "A top-up of 15.00 EUR did not go through.");
   }
 
   @Test

@@ -3,6 +3,8 @@ package io.github.kalpak44.workspacedai.api.user;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
 import java.util.Optional;
@@ -34,18 +36,21 @@ public class UserService {
   private final WorkspaceService workspaces;
   private final PasswordEncoder passwords;
   private final TransactionTemplate transactions;
+  private final NotificationService notifications;
 
   public UserService(
       UserRepository users,
       WorkspaceRepository workspaceRows,
       WorkspaceService workspaces,
       PasswordEncoder passwords,
-      TransactionTemplate transactions) {
+      TransactionTemplate transactions,
+      NotificationService notifications) {
     this.users = users;
     this.workspaceRows = workspaceRows;
     this.workspaces = workspaces;
     this.passwords = passwords;
     this.transactions = transactions;
+    this.notifications = notifications;
   }
 
   /** The id breaks ties, so a user never shows on two pages or on none. */
@@ -65,7 +70,10 @@ public class UserService {
     return users.findAll(page).map(User::of);
   }
 
-  /** Conflict when the username is taken, by an earlier user or one created at the same time. */
+  /**
+   * Conflict when the username is taken, by an earlier user or one created at the same time. The
+   * new user finds a welcome among their notifications.
+   */
   public User create(
       String username, String password, String firstName, String lastName, Role role) {
     var hash = passwords.encode(password);
@@ -75,8 +83,10 @@ public class UserService {
             if (users.existsByUsername(username)) {
               throw taken(username);
             }
-            return User.of(
-                users.saveAndFlush(new UserEntity(username, hash, firstName, lastName, role)));
+            var user =
+                users.saveAndFlush(new UserEntity(username, hash, firstName, lastName, role));
+            notifications.send(user.getId(), Notifications.welcome(firstName));
+            return User.of(user);
           });
     } catch (DataIntegrityViolationException e) {
       throw taken(username);

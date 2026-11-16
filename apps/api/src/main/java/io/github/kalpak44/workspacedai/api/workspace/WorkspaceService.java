@@ -6,6 +6,8 @@ import io.github.kalpak44.workspacedai.api.billing.BillingService;
 import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceEnvironment;
@@ -51,6 +53,7 @@ public class WorkspaceService {
   private final UserRepository users;
   private final VmPricing pricing;
   private final BillingService billing;
+  private final NotificationService notifications;
 
   public WorkspaceService(
       WorkspaceRepository repository,
@@ -61,7 +64,8 @@ public class WorkspaceService {
       TransactionTemplate transactions,
       UserRepository users,
       VmPricing pricing,
-      BillingService billing) {
+      BillingService billing,
+      NotificationService notifications) {
     this.repository = repository;
     this.runtime = runtime;
     this.events = events;
@@ -71,6 +75,7 @@ public class WorkspaceService {
     this.users = users;
     this.pricing = pricing;
     this.billing = billing;
+    this.notifications = notifications;
   }
 
   /** The workspaces one user owns; nobody sees another user's. */
@@ -128,6 +133,7 @@ public class WorkspaceService {
               _ -> {
                 var saved = repository.findById(id).orElseThrow();
                 saved.setServerType(startedAs);
+                notifications.send(ownerId, Notifications.workspaceCreated(id, name));
                 return saved;
               });
       return Workspace.of(entity, statusOf(id));
@@ -228,6 +234,18 @@ public class WorkspaceService {
    * not stop the row is kept, so the delete can be retried. False when no workspace has that id.
    */
   public boolean delete(UUID id) {
+    return delete(id, false);
+  }
+
+  /**
+   * Deletes it as {@link #delete(UUID)} does, for a workspace whose owner's balance cannot pay its
+   * next hour; the owner is told that was why.
+   */
+  public boolean deleteUnpaid(UUID id) {
+    return delete(id, true);
+  }
+
+  private boolean delete(UUID id, boolean unpaid) {
     var owner = repository.findOwnerIdById(id);
     if (owner.isEmpty()) {
       return false;
@@ -235,6 +253,13 @@ public class WorkspaceService {
     runtime.stop(id);
     transactions.executeWithoutResult(
         _ -> {
+          repository
+              .findById(id)
+              .ifPresent(
+                  workspace ->
+                      notifications.send(
+                          owner.get(),
+                          Notifications.workspaceDeleted(workspace.getName(), unpaid)));
           repository.deleteById(id);
           events.publishEvent(new WorkspaceDeleted(id, owner.get()));
         });

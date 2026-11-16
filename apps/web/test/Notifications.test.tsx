@@ -7,6 +7,7 @@ import { groupByDay, type Notification } from "../src/hooks/useNotifications";
 import { installFakeApi } from "./fakeApi";
 
 async function openMenu() {
+  installFakeApi();
   const user = userEvent.setup();
   render(<NotificationMenu />);
   await user.click(await screen.findByRole("button", { name: "Notifications, 3 unread" }));
@@ -24,8 +25,8 @@ describe("notifications", () => {
     const { user, menu } = await openMenu();
     const items = within(menu).getAllByRole("menuitem").filter((item) => item.getAttribute("aria-label") === null && !/^(Mark all read|View all)/.test(item.textContent ?? ""));
     expect(items).toHaveLength(5);
-    expect(items[0]).toHaveTextContent("Workspace is ready");
-    expect(items[4]).toHaveTextContent("Payment received");
+    expect(items[0]).toHaveTextContent("Workspace created");
+    expect(items[4]).toHaveTextContent("Thank you for your payment");
     await user.click(within(menu).getByRole("menuitem", { name: "View all notifications (5 more)" }));
     expect(location.pathname).toBe("/notifications");
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
@@ -33,7 +34,7 @@ describe("notifications", () => {
 
   it("opens a notification from the menu and marks it read", async () => {
     const { user, menu } = await openMenu();
-    await user.click(within(menu).getByRole("menuitem", { name: /^Low balance/ }));
+    await user.click(within(menu).getByRole("menuitem", { name: /^demo-box will be deleted/ }));
     expect(location.pathname).toBe("/notifications/n11");
     expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
   });
@@ -47,9 +48,9 @@ describe("notifications", () => {
 
   it("toggles one notification read from its row without opening it", async () => {
     const { user, menu } = await openMenu();
-    await user.click(within(menu).getByRole("menuitem", { name: "Mark “Low balance” as read" }));
+    await user.click(within(menu).getByRole("menuitem", { name: "Mark “demo-box will be deleted in about 5 days” as read" }));
     expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
-    await user.click(within(menu).getByRole("menuitem", { name: "Mark “Low balance” as unread" }));
+    await user.click(within(menu).getByRole("menuitem", { name: "Mark “demo-box will be deleted in about 5 days” as unread" }));
     expect(await screen.findByRole("button", { name: "Notifications, 3 unread" })).toBeInTheDocument();
     expect(location.pathname).toBe("/");
   });
@@ -63,7 +64,7 @@ describe("notifications", () => {
     await user.click(screen.getByRole("button", { name: "Billing" }));
     expect(screen.getAllByRole("listitem")).toHaveLength(1);
     await user.click(screen.getByRole("tab", { name: "All" }));
-    expect(screen.getAllByRole("listitem")).toHaveLength(3);
+    expect(screen.getAllByRole("listitem")).toHaveLength(4);
     await user.click(screen.getByRole("button", { name: "Everything" }));
     await user.click(screen.getByRole("tab", { name: "Unread (3)" }));
     await user.click(screen.getByRole("button", { name: "Mark all read" }));
@@ -83,8 +84,8 @@ describe("notifications", () => {
   it("follows a notification's action straight from the list", async () => {
     await renderAt("/notifications");
     const user = userEvent.setup();
-    const row = (await screen.findByText("Low balance")).closest("li")!;
-    await user.click(within(row).getByRole("button", { name: "Go to billing" }));
+    const row = (await screen.findByText("demo-box will be deleted in about 5 days")).closest("li")!;
+    await user.click(within(row).getByRole("button", { name: "Add funds" }));
     expect(location.pathname).toBe("/billing");
   });
 
@@ -94,7 +95,7 @@ describe("notifications", () => {
     expect(await screen.findByRole("button", { name: "Newer notification" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Older notification" }));
     expect(location.pathname).toBe("/notifications/n11");
-    expect(await screen.findByRole("heading", { name: "Low balance", level: 2 })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "demo-box will be deleted in about 5 days", level: 2 })).toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Mark as unread" }));
     expect(await screen.findByRole("button", { name: "Notifications, 2 unread" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Mark as unread" })).not.toBeInTheDocument();
