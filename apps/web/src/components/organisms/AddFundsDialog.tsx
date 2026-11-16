@@ -8,6 +8,9 @@ const PRESETS = [2500, 5000, 10000, 25000];
 const MIN_CENTS = 500;
 const MAX_CENTS = 100000;
 
+// Whole euros without decimals, as someone would type them.
+const euros = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
+
 interface Props {
   readonly balanceCents: number;
   /** Charged on top; the balance gets the amount before it. Absent from an API older than the app. */
@@ -20,9 +23,9 @@ interface Props {
 
 /** Picks how much to add to the balance before handing over to payment. */
 export function AddFundsDialog({ balanceCents, vatPercent, busy = false, onConfirm, onClose }: Props) {
-  const [preset, setPreset] = useState<number | null>(2500);
-  const [custom, setCustom] = useState("");
-  const amount = preset ?? Math.round(Number(custom) * 100);
+  // The field holds the amount; a preset only fills it in, and shows as chosen while it matches.
+  const [custom, setCustom] = useState(euros(PRESETS[0]));
+  const amount = custom.trim() === "" ? Number.NaN : Math.round(Number(custom) * 100);
   const valid = Number.isFinite(amount) && amount >= MIN_CENTS && amount <= MAX_CENTS;
   // Without the rate the total is unknown, and a charge nobody was shown is not taken.
   const rate = typeof vatPercent === "number" && Number.isFinite(vatPercent) ? vatPercent : null;
@@ -30,7 +33,7 @@ export function AddFundsDialog({ balanceCents, vatPercent, busy = false, onConfi
   const vat = valid && rate !== null ? Math.round((amount * rate) / 100) : 0;
   const total = valid ? amount + vat : 0;
   const payable = valid && rate !== null;
-  const error = preset === null && custom !== "" && !valid
+  const error = custom.trim() !== "" && !valid
     ? `Enter between ${formatMoney(MIN_CENTS)} and ${formatMoney(MAX_CENTS)}.`
     : null;
 
@@ -40,16 +43,16 @@ export function AddFundsDialog({ balanceCents, vatPercent, busy = false, onConfi
         <ModalBody>
           <div role="radiogroup" aria-label="Amount" className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             {PRESETS.map((cents) => (
-              <button key={cents} type="button" role="radio" aria-checked={preset === cents}
-                onClick={() => { setPreset(cents); setCustom(""); }}
-                className={`rounded-lg border px-3 py-2.5 text-sm font-medium ${preset === cents ? "border-zinc-900 bg-zinc-50 dark:border-zinc-200 dark:bg-zinc-800/60" : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"}`}>
+              <button key={cents} type="button" role="radio" aria-checked={amount === cents}
+                onClick={() => setCustom(euros(cents))}
+                className={`rounded-lg border px-3 py-2.5 text-sm font-medium ${amount === cents ? "border-zinc-900 bg-zinc-50 dark:border-zinc-200 dark:bg-zinc-800/60" : "border-zinc-200 hover:border-zinc-400 dark:border-zinc-700 dark:hover:border-zinc-500"}`}>
                 {formatMoney(cents)}
               </button>
             ))}
           </div>
           <TextField id="custom-amount" label="Or another amount (EUR)" type="number" inputMode="decimal"
             min={MIN_CENTS / 100} max={MAX_CENTS / 100} step="0.01" placeholder="e.g. 15"
-            value={custom} error={error} onChange={(event) => { setCustom(event.target.value); setPreset(null); }} />
+            value={custom} error={error} onChange={(event) => setCustom(event.target.value)} />
           <dl aria-label="Summary" className="space-y-1.5 border-t border-zinc-200 pt-4 text-sm tabular-nums dark:border-zinc-800">
             <div className="flex justify-between">
               <dt className="text-zinc-500 dark:text-zinc-400">Amount</dt>
