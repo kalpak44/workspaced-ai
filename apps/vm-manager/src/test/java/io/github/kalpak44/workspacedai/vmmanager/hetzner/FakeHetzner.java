@@ -32,7 +32,8 @@ public class FakeHetzner implements AutoCloseable {
         {"name":"cx23","cores":2,"memory":4.0,"disk":40,"cpu_type":"shared",
          "architecture":"x86","deprecation":null,
          "prices":[{"location":"nbg1","price_monthly":{"net":"5.4900000000","gross":"6.5880000000000000"}},
-                   {"location":"hel1","price_monthly":{"net":"5.4900000000","gross":"6.5880000000000000"}}]},
+                   {"location":"hel1","price_monthly":{"net":"5.4900000000","gross":"6.5880000000000000"}}],
+         "locations":[{"name":"nbg1","available":true},{"name":"hel1","available":false}]},
         {"name":"cx22","cores":2,"memory":4.0,"disk":40,"cpu_type":"shared",
          "architecture":"x86","deprecation":{"announced":"2025-10-01T00:00:00Z"},
          "prices":[{"location":"nbg1","price_monthly":{"net":"3.7900000000","gross":"4.5101000000000000"}}]}

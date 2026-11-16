@@ -19,4 +19,12 @@ public record VmOptionDto(
             description = "Monthly price before VAT, in the Hetzner account's currency",
             example = "5.49")
         BigDecimal monthlyNet,
-    @Schema(description = "Monthly price with VAT", example = "6.59") BigDecimal monthlyGross) {}
+    @Schema(description = "Monthly price with VAT", example = "6.59") BigDecimal monthlyGross,
+    @Schema(
+            description = "One of the low-cost sizes, rather than a pricier stand-in",
+            example = "true")
+        boolean recommended,
+    @Schema(
+            description = "False while Hetzner has it sold out, when a create is refused",
+            example = "true")
+        boolean available) {}

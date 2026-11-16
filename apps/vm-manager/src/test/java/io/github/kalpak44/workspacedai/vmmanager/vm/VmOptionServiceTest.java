@@ -22,17 +22,35 @@ class VmOptionServiceTest {
   final MutableClock clock = new MutableClock(Instant.parse("2026-11-14T10:00:00Z"));
   final FakeHetznerClient hetzner = new FakeHetznerClient();
 
-  static ServerType type(String name, boolean deprecated, String... locations) {
-    var prices =
-        Arrays.stream(locations)
-            .map(l -> new ServerType.Price(l, new BigDecimal("5.49"), new BigDecimal("6.59")))
-            .toList();
-    return new ServerType(name, 2, 4.0, 40, "shared", "x86", deprecated, prices);
+  static ServerType type(String name, String gross, String... locations) {
+    return type(name, gross, "x86", false, locations);
   }
 
-  VmOptionService service(List<String> offered) {
+  static ServerType type(
+      String name, String gross, String architecture, boolean deprecated, String... locations) {
+    var prices =
+        Arrays.stream(locations)
+            .map(l -> new ServerType.Price(l, new BigDecimal(gross), new BigDecimal(gross)))
+            .toList();
+    return new ServerType(name, 2, 4.0, 40, "shared", architecture, deprecated, prices, List.of());
+  }
+
+  static ServerType soldOut(ServerType type) {
+    return new ServerType(
+        type.name(),
+        type.cores(),
+        type.memoryGb(),
+        type.diskGb(),
+        type.cpuType(),
+        type.architecture(),
+        type.deprecated(),
+        type.prices(),
+        type.prices().stream().map(ServerType.Price::location).toList());
+  }
+
+  VmOptionService service(List<String> recommended) {
     return new VmOptionService(
-        new VmProperties(offered),
+        new VmProperties(recommended, new BigDecimal("60")),
         new HetznerProperties(
             "t0ken",
             URI.create("http://unused"),
@@ -46,25 +64,72 @@ class VmOptionServiceTest {
   }
 
   @Test
-  void offersWhatIsOnSaleInTheLocationInConfiguredOrder() {
+  void offersWhatIsOnSaleInTheLocationCheapestFirst() {
     hetzner.types =
         List.of(
-            type("cx23", false, "nbg1"),
-            type("cx33", false, "nbg1", "hel1"),
-            type("cx22", true, "nbg1"),
-            type("cx43", false, "hel1"));
+            type("cx33", "10.19", "nbg1", "hel1"),
+            type("cx23", "6.59", "nbg1"),
+            type("cx22", "4.51", "x86", true, "nbg1"),
+            type("cx43", "19.19", "hel1"));
 
-    var options = service(List.of("cx33", "cx23", "cx22", "cx43", "cx53")).list();
+    var options = service(List.of("cx23", "cx33", "cx22", "cx43", "cx53")).list();
 
-    assertThat(options).extracting(VmOption::serverType).containsExactly("cx33", "cx23");
+    assertThat(options).extracting(VmOption::serverType).containsExactly("cx23", "cx33");
     assertThat(options).extracting(VmOption::isDefault).containsExactly(true, false);
     assertThat(options).allSatisfy(o -> assertThat(o.location()).isEqualTo("nbg1"));
     assertThat(options.getFirst().monthlyGross()).isEqualTo(new BigDecimal("6.59"));
   }
 
   @Test
+  void addsOtherX86SizesNoSmallerThanTheDefaultUpToTheCap() {
+    hetzner.types =
+        List.of(
+            soldOut(type("cx23", "6.59", "nbg1")),
+            type("cpx22", "23.39", "nbg1"),
+            type("ccx13", "51.59", "nbg1"),
+            type("ccx23", "103.19", "nbg1"),
+            type("cax21", "12.59", "arm", false, "nbg1"),
+            new ServerType(
+                "cpx02",
+                1,
+                1.0,
+                20,
+                "shared",
+                "x86",
+                false,
+                List.of(new ServerType.Price("nbg1", BigDecimal.TEN, BigDecimal.TEN)),
+                List.of()));
+
+    var options = service(List.of("cx23")).list();
+
+    assertThat(options).extracting(VmOption::serverType).containsExactly("cx23", "cpx22", "ccx13");
+    assertThat(options).extracting(VmOption::recommended).containsExactly(true, false, false);
+    assertThat(options).extracting(VmOption::available).containsExactly(false, true, true);
+  }
+
+  @Test
+  void marksATypeSoldOutOnlyWhereHetznerSaysSo() {
+    var sold =
+        new ServerType(
+            "cx33",
+            4,
+            8.0,
+            80,
+            "shared",
+            "x86",
+            false,
+            List.of(new ServerType.Price("nbg1", BigDecimal.ONE, BigDecimal.ONE)),
+            List.of("hel1"));
+    hetzner.types = List.of(type("cx23", "6.59", "nbg1"), sold);
+
+    assertThat(service(List.of("cx23", "cx33")).list())
+        .extracting(VmOption::available)
+        .containsExactly(true, true);
+  }
+
+  @Test
   void asksHetznerAgainOnlyOnceTheCacheHasExpired() {
-    hetzner.types = List.of(type("cx23", false, "nbg1"));
+    hetzner.types = List.of(type("cx23", "6.59", "nbg1"));
     var service = service(List.of("cx23"));
 
     service.list();
@@ -85,7 +150,7 @@ class VmOptionServiceTest {
     assertThatThrownBy(service::list).isInstanceOf(HetznerException.NotConfigured.class);
 
     hetzner.failure = null;
-    hetzner.types = List.of(type("cx23", false, "nbg1"));
+    hetzner.types = List.of(type("cx23", "6.59", "nbg1"));
     assertThat(service.list()).hasSize(1);
   }
 }

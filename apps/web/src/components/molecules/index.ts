@@ -26,3 +26,4 @@ export { Toast } from "./Toast";
 export { ConfirmDeleteDialog } from "./ConfirmDeleteDialog";
 export { RestartRequiredBanner } from "./RestartRequiredBanner";
 export { TimeZoneField } from "./TimeZoneField";
+export { initialVmSize, VmSizePicker } from "./VmSizePicker";

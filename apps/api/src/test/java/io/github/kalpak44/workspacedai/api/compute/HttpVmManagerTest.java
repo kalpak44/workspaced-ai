@@ -37,7 +37,7 @@ class HttpVmManagerTest {
   void readsTheSizesOnOffer() {
     var sizes = vmManager.sizes();
 
-    assertThat(sizes).extracting(VmSize::serverType).containsExactly("cx23", "cx33");
+    assertThat(sizes).extracting(VmSize::serverType).containsExactly("cx23", "cx33", "cpx22");
     var cx23 = sizes.getFirst();
     assertThat(cx23.isDefault()).isTrue();
     assertThat(cx23.cores()).isEqualTo(2);
@@ -45,6 +45,9 @@ class HttpVmManagerTest {
     assertThat(cx23.diskGb()).isEqualTo(40);
     assertThat(cx23.location()).isEqualTo("nbg1");
     assertThat(cx23.monthlyGross()).isEqualByComparingTo(new BigDecimal("6.59"));
+    assertThat(cx23.recommended()).isTrue();
+    assertThat(cx23.available()).isTrue();
+    assertThat(vmManager.sizes().getLast().available()).isFalse();
   }
 
   @Test
@@ -157,6 +160,13 @@ class HttpVmManagerTest {
     assertThatThrownBy(() -> vmManager.create(workspace, user, "cx53", "sk-or-v1-test", Map.of()))
         .isInstanceOf(ServerTypeRejectedException.class)
         .hasMessageContaining("server type cx53 is not offered; choose one of cx23, cx33");
+  }
+
+  @Test
+  void passesOnASizeHetznerHasSoldOut() {
+    assertThatThrownBy(() -> vmManager.create(workspace, user, "cpx22", "sk-or-v1-test", Map.of()))
+        .isInstanceOf(ServerTypeSoldOutException.class)
+        .hasMessageContaining("sold out");
   }
 
   @Test

@@ -21,10 +21,11 @@ export const OPENROUTER = {
   apiKeyVariable: "OPENROUTER_API_KEY",
 };
 
-/** What the fake VM manager offers, default first, with the prices the dialog leaves out. */
+/** What the fake VM manager offers, cheapest first: two low-cost sizes and a pricier stand-in. */
 export const VM_SIZES = [
-  { serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 5.49, monthlyGross: 6.59 },
-  { serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 8.49, monthlyGross: 10.19 },
+  { serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 5.49, monthlyGross: 6.59, recommended: true, available: true },
+  { serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 8.49, monthlyGross: 10.19, recommended: true, available: true },
+  { serverType: "cpx22", isDefault: false, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 19.49, monthlyGross: 23.39, recommended: false, available: true },
 ];
 
 /** The key the fake provider refuses; every other key is accepted. */
@@ -130,6 +131,8 @@ export function installFakeApi(
     ],
   };
   const state = {
+    // Each test's own copy, so one can sell a size out.
+    vmSizes: VM_SIZES.map((size) => ({ ...size })),
     fail: 0,
     nextId: 1,
     createStatus: "READY" as WorkspaceStatus,
@@ -401,7 +404,7 @@ export function installFakeApi(
       return json([OPENROUTER]);
     }
     if (url.endsWith("/api/v1/vm-sizes")) {
-      return json(VM_SIZES);
+      return json(state.vmSizes);
     }
     const instructionsRoute = /\/api\/v1\/workspaces\/([^/]+)\/instructions(?:\/([^/]+))?$/.exec(url);
     if (instructionsRoute) {
@@ -471,7 +474,7 @@ export function installFakeApi(
       const [, workspaceId, agent] = firewallRoute;
       if (!rows.some((workspace) => workspace.id === workspaceId)) return json({}, 404);
       if (state.fail) return json({}, state.fail);
-      const firewall = firewalls.get(workspaceId) ?? { address: "203.0.113.10", agentAllowed: false, rules: [] };
+      const firewall = firewalls.get(workspaceId) ?? { address: "203.0.113.10", agentAllowed: true, rules: [] };
       firewalls.set(workspaceId, firewall);
       if (agent) {
         firewall.agentAllowed = Boolean(JSON.parse(String(init?.body)).allowed);
@@ -549,13 +552,14 @@ export function installFakeApi(
     }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
-      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string })
+      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string; serverType?: string })
       : undefined;
     const index = rows.findIndex((w) => w.id === id);
     switch (init?.method ?? "GET") {
       case "POST": {
         if (state.holdCreate) await state.holdCreate;
         if (body!.apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
+        if (state.vmSizes.some((size) => size.serverType === body!.serverType && !size.available)) return json({ status: 409 }, 409);
         const created = {
           id: `ws-${state.nextId++}`,
           name: body!.name,

@@ -7,6 +7,8 @@ import java.math.BigDecimal;
  *
  * @param isDefault taken when a create names no server type
  * @param monthlyNet monthly price before VAT, in the Hetzner account's currency
+ * @param recommended one of the configured low-cost sizes, rather than a pricier stand-in
+ * @param available false while Hetzner has it sold out there, when a create would be refused
  */
 public record VmOption(
     String serverType,
@@ -18,4 +20,6 @@ public record VmOption(
     String architecture,
     String location,
     BigDecimal monthlyNet,
-    BigDecimal monthlyGross) {}
+    BigDecimal monthlyGross,
+    boolean recommended,
+    boolean available) {}

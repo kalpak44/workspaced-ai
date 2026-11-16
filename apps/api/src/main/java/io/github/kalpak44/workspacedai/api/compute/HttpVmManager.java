@@ -56,7 +56,9 @@ public class HttpVmManager implements VmManager {
               option.path("architecture").asString(),
               option.path("location").asString(),
               option.path("monthlyNet").decimalValue(),
-              option.path("monthlyGross").decimalValue()));
+              option.path("monthlyGross").decimalValue(),
+              option.path("recommended").asBoolean(),
+              option.path("available").asBoolean(true)));
     }
     return List.copyOf(sizes);
   }
@@ -93,6 +95,9 @@ public class HttpVmManager implements VmManager {
                 .POST(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body))));
     if (response.statusCode() == 400) {
       throw new ServerTypeRejectedException(detail(response));
+    }
+    if (response.statusCode() == 409) {
+      throw new ServerTypeSoldOutException(detail(response));
     }
     if (response.statusCode() != 200) {
       expect(response, 201);

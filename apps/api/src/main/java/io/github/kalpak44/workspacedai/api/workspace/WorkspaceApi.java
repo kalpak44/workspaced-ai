@@ -144,6 +144,13 @@ public interface WorkspaceApi {
               schema = @Schema(implementation = ProblemDetail.class),
               examples = @ExampleObject(BAD_REQUEST_EXAMPLE)))
   @ApiResponse(
+      responseCode = "409",
+      description = "Hetzner has the serverType sold out right now; nothing was created.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
       responseCode = "422",
       description = "The model provider rejected the API key; nothing was created.",
       content =

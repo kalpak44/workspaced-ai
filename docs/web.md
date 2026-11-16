@@ -36,8 +36,11 @@ user in a dialog and deletes anyone but yourself after a confirmation dialog. A 
 the workspace's instruction files, which its agent is given in every session, with an editor for each and buttons to add
 and delete them. They live in the workspace, so it must be running.
 
-Creating a workspace is a two-step wizard: the name, then the VM type, picked from cards (radios underneath) that show
-each `/vm-sizes` entry's cores, memory and disk but not its price, with the default chosen. It always uses OpenRouter
+Creating a workspace is a wizard: the name, then the VM type, picked from cards (radios underneath) that show each
+`/vm-sizes` entry's cores, memory, disk and monthly price, cheapest first, with the default chosen while Hetzner has it.
+A sold-out size shows but cannot be picked; while every low-cost one is sold out a warning offers to check again, and
+nothing pricier is chosen for the user. A size that sells out during the create (`409`) brings the wizard back to the
+sizes. It always uses OpenRouter
 and asks for no key for now. A failed create keeps the dialog and what was chosen, and goes to the page's error
 banner. Every page has its own address, so a link, a reload or the browser's Back button lands where it should. `nginx.conf`
 already answers every path with `index.html`, which is what makes a deep link load.

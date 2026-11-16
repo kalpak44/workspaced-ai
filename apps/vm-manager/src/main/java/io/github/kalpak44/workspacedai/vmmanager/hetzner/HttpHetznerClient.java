@@ -253,7 +253,8 @@ public class HttpHetznerClient implements HetznerClient {
       }
       if (response.statusCode() != expectedStatus) {
         throw new HetznerException(
-            "Hetzner answered " + response.statusCode() + " on " + method + " " + path);
+            "Hetzner answered " + response.statusCode() + " on " + method + " " + path,
+            response.statusCode());
       }
       // A 204 has no body to read.
       return response.body().isBlank() ? json.missingNode() : json.readTree(response.body());
@@ -342,6 +343,15 @@ public class HttpHetznerClient implements HetznerClient {
                         price.path("location").asString(),
                         amount(price.path("price_monthly").path("net")),
                         amount(price.path("price_monthly").path("gross")))));
+    // An older answer has no flag, and sold out is only what Hetzner says outright.
+    var soldOutIn = new ArrayList<String>();
+    type.path("locations")
+        .forEach(
+            location -> {
+              if (!location.path("available").asBoolean(true)) {
+                soldOutIn.add(location.path("name").asString());
+              }
+            });
     var deprecation = type.path("deprecation");
     return new ServerType(
         type.path("name").asString(),
@@ -351,7 +361,8 @@ public class HttpHetznerClient implements HetznerClient {
         type.path("cpu_type").asString(),
         type.path("architecture").asString(),
         !deprecation.isNull() && !deprecation.isMissingNode(),
-        List.copyOf(prices));
+        List.copyOf(prices),
+        List.copyOf(soldOutIn));
   }
 
   // Hetzner sends prices as strings with ten decimals; cents are what anyone reads.

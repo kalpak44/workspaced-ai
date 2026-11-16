@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm;
 import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHub;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.CreatedServer;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerClient;
+import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.ServerSpec;
 import java.time.Clock;
@@ -26,8 +27,11 @@ public class VmService {
 
   private static final Logger log = LoggerFactory.getLogger(VmService.class);
 
+  // What Hetzner answers a create with when it has no capacity for the type.
+  private static final int RESOURCE_UNAVAILABLE = 412;
+
   private final VmRepository vms;
-  private final VmProperties properties;
+  private final VmOptionService options;
   private final HetznerClient hetzner;
   private final HetznerProperties hetznerProperties;
   private final VmInventory inventory;
@@ -39,7 +43,7 @@ public class VmService {
 
   public VmService(
       VmRepository vms,
-      VmProperties properties,
+      VmOptionService options,
       HetznerClient hetzner,
       HetznerProperties hetznerProperties,
       VmInventory inventory,
@@ -49,7 +53,7 @@ public class VmService {
       ApplicationEventPublisher events,
       Clock clock) {
     this.vms = vms;
-    this.properties = properties;
+    this.options = options;
     this.hetzner = hetzner;
     this.hetznerProperties = hetznerProperties;
     this.inventory = inventory;
@@ -91,10 +95,17 @@ public class VmService {
       Map<String, String> environment) {
     var type =
         serverType == null || serverType.isBlank()
-            ? properties.defaultServerType()
+            ? options.defaultServerType()
             : serverType.strip();
-    if (!properties.offers(type)) {
-      throw new ServerTypeNotOfferedException(type, properties.serverTypes());
+    var option =
+        options
+            .find(type)
+            .orElseThrow(
+                () ->
+                    new ServerTypeNotOfferedException(
+                        type, options.list().stream().map(VmOption::serverType).toList()));
+    if (!option.available()) {
+      throw new ServerTypeSoldOutException(type);
     }
     if (!inventory.isLoaded()) {
       throw new VmInventoryNotLoadedException();
@@ -127,6 +138,10 @@ public class VmService {
                   firewall));
     } catch (RuntimeException e) {
       forget(id, firewall);
+      // Hetzner can sell out between the list and the create.
+      if (e instanceof HetznerException failure && failure.status() == RESOURCE_UNAVAILABLE) {
+        throw new ServerTypeSoldOutException(type);
+      }
       throw e;
     }
     var vm =

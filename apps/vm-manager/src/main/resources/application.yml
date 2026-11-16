@@ -70,5 +70,7 @@ workspaced:
     # asking for its harness answers 503.
     image: ${WORKSPACED_HARNESS_IMAGE:}
   vm:
-    # The sizes offered, default first. Specs and prices come from Hetzner.
+    # The recommended low-cost sizes, default first. Specs, prices and capacity come from Hetzner.
     server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}
+    # Other x86 sizes up to this monthly price with VAT are offered too, for when those sell out.
+    max-monthly-gross: ${WORKSPACED_VM_MAX_MONTHLY_GROSS:60}

@@ -7,25 +7,29 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Function;
-import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 /**
- * The configured server types, as Hetzner currently sells them. Configuration decides which sizes
- * exist; Hetzner supplies their specs and price, so neither is restated here.
+ * The sizes Hetzner currently sells in the location, cheapest first: the configured low-cost ones,
+ * and any other x86 type up to a price cap. Hetzner supplies their specs, price and whether it has
+ * capacity, so none of them is restated here.
  */
 @Service
 public class VmOptionService {
 
   private static final Logger log = LoggerFactory.getLogger(VmOptionService.class);
 
-  // Specs and prices change rarely, and every create screen would otherwise call Hetzner.
-  static final Duration CACHE_FOR = Duration.ofMinutes(10);
+  // Capacity comes and goes within minutes, and every create screen would otherwise call Hetzner.
+  static final Duration CACHE_FOR = Duration.ofMinutes(1);
+
+  // Every VM boots from one snapshot, which only runs on this architecture.
+  private static final String ARCHITECTURE = "x86";
 
   private final VmProperties properties;
   private final HetznerProperties hetznerProperties;
@@ -45,8 +49,8 @@ public class VmOptionService {
   }
 
   /**
-   * In configured order. A type Hetzner deprecated or no longer sells in the location is left out
-   * and logged, rather than offered and then refused on create.
+   * Cheapest first. A type Hetzner deprecated or does not sell in the location is left out; one it
+   * has sold out stays, marked unavailable, so the user sees what to wait for.
    */
   public List<VmOption> list() {
     var now = clock.instant();
@@ -59,23 +63,35 @@ public class VmOptionService {
     return options;
   }
 
+  public Optional<VmOption> find(String serverType) {
+    return list().stream().filter(option -> option.serverType().equals(serverType)).findFirst();
+  }
+
+  String defaultServerType() {
+    return properties.defaultServerType();
+  }
+
   private List<VmOption> fetch() {
     var location = hetznerProperties.location();
-    var types =
-        hetzner.serverTypes().stream()
-            .collect(Collectors.toMap(ServerType::name, Function.identity(), (a, _) -> a));
+    var types = hetzner.serverTypes();
+    // A stand-in is never smaller than the default, which is the least a workspace runs on.
+    var floor =
+        types.stream()
+            .filter(type -> type.name().equals(properties.defaultServerType()))
+            .mapToDouble(ServerType::memoryGb)
+            .findFirst()
+            .orElse(0);
     var options = new ArrayList<VmOption>();
-    for (var name : properties.serverTypes()) {
-      var type = types.get(name);
-      var price = type == null || type.deprecated() ? null : type.priceIn(location).orElse(null);
-      if (price == null) {
-        log.warn("server type {} is not on sale in {}; not offering it", name, location);
+    for (var type : types) {
+      var price = type.deprecated() ? null : type.priceIn(location).orElse(null);
+      var recommended = properties.recommends(type.name());
+      if (price == null || !(recommended || standIn(type, price, floor))) {
         continue;
       }
       options.add(
           new VmOption(
-              name,
-              name.equals(properties.defaultServerType()),
+              type.name(),
+              type.name().equals(properties.defaultServerType()),
               type.cores(),
               type.memoryGb(),
               type.diskGb(),
@@ -83,9 +99,23 @@ public class VmOptionService {
               type.architecture(),
               location,
               price.monthlyNet(),
-              price.monthlyGross()));
+              price.monthlyGross(),
+              recommended,
+              type.availableIn(location)));
     }
+    for (var name : properties.serverTypes()) {
+      if (options.stream().noneMatch(option -> option.serverType().equals(name))) {
+        log.warn("server type {} is not on sale in {}; not offering it", name, location);
+      }
+    }
+    options.sort(Comparator.comparing(VmOption::monthlyGross).thenComparing(VmOption::serverType));
     return List.copyOf(options);
+  }
+
+  private boolean standIn(ServerType type, ServerType.Price price, double memoryFloor) {
+    return ARCHITECTURE.equals(type.architecture())
+        && type.memoryGb() >= memoryFloor
+        && price.monthlyGross().compareTo(properties.maxMonthlyGross()) <= 0;
   }
 
   private record Snapshot(List<VmOption> options, Instant takenAt) {}

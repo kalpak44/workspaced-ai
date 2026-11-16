@@ -38,7 +38,11 @@ class VmMetricsServiceTest {
   final VmService vmService =
       new VmService(
           vms,
-          new VmProperties(List.of("cx23")),
+          new VmOptionService(
+              new VmProperties(List.of("cx23"), BigDecimal.ZERO),
+              hetznerProperties,
+              hetzner,
+              clock),
           hetzner,
           hetznerProperties,
           () -> true,
@@ -58,7 +62,11 @@ class VmMetricsServiceTest {
   final VmMetricsService service =
       new VmMetricsService(
           vmService,
-          new VmOptionService(new VmProperties(List.of("cx23")), hetznerProperties, hetzner, clock),
+          new VmOptionService(
+              new VmProperties(List.of("cx23"), BigDecimal.ZERO),
+              hetznerProperties,
+              hetzner,
+              clock),
           hetzner,
           clock);
   final Vm vm = vm("cx23");
@@ -73,7 +81,8 @@ class VmMetricsServiceTest {
 
   static ServerType type(String name, int cores, double memoryGb) {
     var price = new ServerType.Price("nbg1", new BigDecimal("5.49"), new BigDecimal("6.59"));
-    return new ServerType(name, cores, memoryGb, 40, "shared", "x86", false, List.of(price));
+    return new ServerType(
+        name, cores, memoryGb, 40, "shared", "x86", false, List.of(price), List.of());
   }
 
   Vm vm(String serverType) {

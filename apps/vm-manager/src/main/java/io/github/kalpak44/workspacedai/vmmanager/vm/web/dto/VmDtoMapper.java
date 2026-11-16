@@ -45,6 +45,8 @@ public class VmDtoMapper {
         option.architecture(),
         option.location(),
         option.monthlyNet(),
-        option.monthlyGross());
+        option.monthlyGross(),
+        option.recommended(),
+        option.available());
   }
 }

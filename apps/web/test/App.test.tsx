@@ -185,7 +185,7 @@ describe("App", () => {
     expect(screen.queryByText("OpenRouter did not accept this key")).not.toBeInTheDocument();
   });
 
-  it("offers each VM type with its resources and no price, the default chosen", async () => {
+  it("offers each VM type with its resources and price, the default chosen", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
@@ -194,11 +194,11 @@ describe("App", () => {
 
     expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("VM type");
     const types = screen.getByRole("group", { name: "VM type" });
-    expect(within(types).getAllByRole("radio")).toHaveLength(2);
+    expect(within(types).getAllByRole("radio")).toHaveLength(3);
     expect(within(types).getByRole("radio", { name: /cx23/ })).toBeChecked();
     expect(within(types).getByRole("radio", { name: /2 vCPU · 4 GB RAM · 40 GB disk/ })).toBeInTheDocument();
     expect(within(types).getByRole("radio", { name: /4 vCPU · 8 GB RAM · 80 GB disk/ })).not.toBeChecked();
-    expect(types).not.toHaveTextContent(/€|6\.59|5\.49/);
+    expect(types).toHaveTextContent("€6.59/mo");
     expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
   });
 

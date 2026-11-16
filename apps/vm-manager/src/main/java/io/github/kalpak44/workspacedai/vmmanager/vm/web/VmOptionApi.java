@@ -26,14 +26,15 @@ public interface VmOptionApi {
   String OPTION_EXAMPLE =
       "{\"serverType\":\"cx23\",\"isDefault\":true,\"cores\":2,\"memoryGb\":4.0,\"diskGb\":40,"
           + "\"cpuType\":\"shared\",\"architecture\":\"x86\",\"location\":\"nbg1\","
-          + "\"monthlyNet\":5.49,\"monthlyGross\":6.59}";
+          + "\"monthlyNet\":5.49,\"monthlyGross\":6.59,\"recommended\":true,\"available\":true}";
 
   @Operation(
       operationId = "listVmOptions",
       summary = "List VM options",
       description =
-          "Each serverType a create may name, in the order offered, with its specs and monthly "
-              + "price as Hetzner currently sells it. Exactly one is the default.")
+          "Each serverType a create may name, cheapest first, with its specs, monthly price and "
+              + "capacity as Hetzner currently sells it: the recommended low-cost ones and other x86 "
+              + "sizes up to a price cap. Exactly one is the default.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",

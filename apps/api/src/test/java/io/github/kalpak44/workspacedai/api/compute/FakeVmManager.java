@@ -29,10 +29,13 @@ class FakeVmManager implements AutoCloseable {
       """
       [{"serverType":"cx23","isDefault":true,"cores":2,"memoryGb":4.0,"diskGb":40,
         "cpuType":"shared","architecture":"x86","location":"nbg1",
-        "monthlyNet":5.49,"monthlyGross":6.59},
+        "monthlyNet":5.49,"monthlyGross":6.59,"recommended":true,"available":true},
        {"serverType":"cx33","isDefault":false,"cores":4,"memoryGb":8.0,"diskGb":80,
         "cpuType":"shared","architecture":"x86","location":"nbg1",
-        "monthlyNet":8.49,"monthlyGross":10.19}]
+        "monthlyNet":8.49,"monthlyGross":10.19,"recommended":true,"available":true},
+       {"serverType":"cpx22","isDefault":false,"cores":2,"memoryGb":4.0,"diskGb":80,
+        "cpuType":"shared","architecture":"x86","location":"nbg1",
+        "monthlyNet":19.49,"monthlyGross":23.39,"recommended":false,"available":false}]
       """;
 
   static final String METRICS =
@@ -118,6 +121,11 @@ class FakeVmManager implements AutoCloseable {
         var request = JSON.readTree(exchange.getRequestBody());
         creates.add(request);
         var type = request.path("serverType").asString("cx23");
+        if (type.equals("cpx22")) {
+          answer(
+              exchange, 409, "{\"detail\":\"server type cpx22 is sold out at Hetzner right now\"}");
+          return;
+        }
         if (!type.equals("cx23") && !type.equals("cx33")) {
           answer(
               exchange,

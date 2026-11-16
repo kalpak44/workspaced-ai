@@ -1,10 +1,10 @@
-import { ArrowLeft, ArrowRight, Check, Server, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useModelProviders } from "../../hooks/useModelProviders";
-import { useVmSizes, type VmSize } from "../../hooks/useVmSizes";
+import { useVmSizes } from "../../hooks/useVmSizes";
 import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
 import { Button, ChoiceCard, Spinner, TextField } from "../atoms";
-import { Modal, ModalBody, ModalFooter } from "../molecules";
+import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../molecules";
 
 // The API rejects anything longer, so the field never lets the user type past it.
 const MAX_NAME = 100;
@@ -22,11 +22,6 @@ function hostOf(url: string): string {
   }
 }
 
-/** What the VM is, without its price: cores, memory and disk. */
-function resources(size: VmSize): string {
-  return `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk`;
-}
-
 interface Props {
   readonly initialName: string;
   /** Resolves "created" once it exists; on anything else the dialog stays and keeps its input. */
@@ -37,7 +32,8 @@ interface Props {
 /**
  * Three steps: the name, the size of the VM it runs on, then the model provider and its key. The
  * sizes are fetched as the dialog opens, since they come from Hetzner and can change, and the
- * default one starts out chosen; so does the provider while there is only one. The API checks the
+ * default one starts out chosen while Hetzner has it; so does the provider while there is only one.
+ * A size that sells out before the create brings the dialog back to the sizes. The API checks the
  * key before it creates anything, so a wrong one is reported here rather than as a broken
  * workspace.
  */
@@ -49,7 +45,8 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
   const [apiKey, setApiKey] = useState("");
   const [rejected, setRejected] = useState(false);
   const [pending, setPending] = useState(false);
-  const { sizes, status } = useVmSizes();
+  const [soldOut, setSoldOut] = useState<string | null>(null);
+  const { sizes, status, reload } = useVmSizes();
   const providers = useModelProviders();
   const provider = providers.providers.find((p) => p.id === providerId);
   const nameInput = useRef<HTMLInputElement>(null);
@@ -64,11 +61,13 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
     }
   }, [step]);
 
+  // A size that is sold out after a reload cannot stay chosen.
   useEffect(() => {
-    if (!serverType && sizes.length > 0) {
-      setServerType((sizes.find((s) => s.isDefault) ?? sizes[0]).serverType);
+    if (status !== "ready") return;
+    if (!serverType || !sizes.some((s) => s.serverType === serverType && s.available)) {
+      setServerType(initialVmSize(sizes));
     }
-  }, [sizes, serverType]);
+  }, [sizes, status, serverType]);
 
   useEffect(() => {
     if (!providerId && providers.providers.length === 1) {
@@ -115,41 +114,16 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
       } else if (result === "rejected") {
         setRejected(true);
         keyInput.current?.focus();
+      } else if (result === "soldOut") {
+        setSoldOut(serverType);
+        setServerType("");
+        setStep(1);
+        reload();
       }
     } finally {
       setPending(false);
     }
   };
-
-  let sizeChoices;
-  if (status === "loading") {
-    sizeChoices = (
-      <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
-        <Spinner label="Loading VM types" />
-        Loading VM types…
-      </div>
-    );
-  } else if (status === "failed" || sizes.length === 0) {
-    sizeChoices = (
-      <p className="rounded-lg border border-rose-300 px-4 py-3 text-sm text-rose-600 dark:border-rose-900 dark:text-rose-400">
-        Could not load VM types. Close this and try again.
-      </p>
-    );
-  } else {
-    sizeChoices = sizes.map((size) => (
-      <ChoiceCard
-        key={size.serverType}
-        name="workspace-vm-type"
-        value={size.serverType}
-        label={size.serverType}
-        detail={resources(size)}
-        icon={Server}
-        checked={size.serverType === serverType}
-        disabled={pending}
-        onChange={setServerType}
-      />
-    ));
-  }
 
   let providerChoices;
   if (providers.status === "loading") {
@@ -200,7 +174,18 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
     stepBody = (
       <fieldset ref={types} className="flex min-w-0 flex-col gap-2">
         <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">VM type</legend>
-        {sizeChoices}
+        <VmSizePicker
+          sizes={sizes}
+          status={status}
+          value={serverType}
+          disabled={pending}
+          soldOut={soldOut}
+          onChange={(type) => {
+            setServerType(type);
+            setSoldOut(null);
+          }}
+          onReload={reload}
+        />
       </fieldset>
     );
   } else {

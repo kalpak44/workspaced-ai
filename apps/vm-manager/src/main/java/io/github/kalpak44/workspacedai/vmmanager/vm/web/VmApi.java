@@ -134,6 +134,13 @@ public interface VmApi {
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @ApiResponse(
+      responseCode = "409",
+      description = "Hetzner has the serverType sold out; nothing was kept.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
       responseCode = "502",
       description = "Hetzner refused or failed the create; nothing was kept.",
       content =

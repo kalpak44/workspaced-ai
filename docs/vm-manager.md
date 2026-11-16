@@ -134,11 +134,14 @@ and its metadata, so it can read neither its own Hetzner token nor any other sec
 
 ## VM options
 
-`GET /api/v1/vm-options` lists the sizes a VM can be created as, default first, with their cores, memory, disk and
-monthly price as Hetzner currently sells them in the configured location. Which sizes exist is configuration
-(`WORKSPACED_VM_SERVER_TYPES`, `cx23,cx33` by default); specs and prices are never restated, they come from Hetzner and
-are cached for ten minutes. A size Hetzner deprecates or stops selling in the location drops out of the list. Adding
-CX43 is `WORKSPACED_VM_SERVER_TYPES=cx23,cx33,cx43`. The sizes themselves are chosen in
+`GET /api/v1/vm-options` lists the sizes a VM can be created as, cheapest first, with their cores, memory, disk,
+monthly price and whether Hetzner has capacity for them in the configured location right now. The recommended low-cost
+sizes are configuration (`WORKSPACED_VM_SERVER_TYPES`, `cx23,cx33` by default, the first the default); any other x86 size
+with at least the default's memory, up to `WORKSPACED_VM_MAX_MONTHLY_GROSS` (60 by default, 0 for none) is offered beside them, so there is something to
+choose while they are sold out. Specs, prices and capacity are never restated: they come from Hetzner and are cached for
+a minute. A size Hetzner deprecates or does not sell in the location drops out; one it has sold out stays, with
+`available: false`, and a create naming it answers `409`, as does a create Hetzner refuses with `412` because it sold
+out in between. The sizes themselves are chosen in
 [hetzner-vm-runtime.md](hetzner-vm-runtime.md#vm-sizes).
 
 Without a Hetzner token it answers `503`; when Hetzner fails or answers unexpectedly, `502`.

@@ -13,7 +13,13 @@ public record ServerType(
     String cpuType,
     String architecture,
     boolean deprecated,
-    List<Price> prices) {
+    List<Price> prices,
+    List<String> soldOutIn) {
+
+  /** Priced in a location is not enough: Hetzner refuses a create there while it is sold out. */
+  public boolean availableIn(String location) {
+    return priceIn(location).isPresent() && !soldOutIn.contains(location);
+  }
 
   /** Hetzner lists a price only for the locations it sells the type in. */
   public Optional<Price> priceIn(String location) {

@@ -37,7 +37,9 @@ class VmSizesTest {
           "x86",
           "nbg1",
           new BigDecimal("5.49"),
-          new BigDecimal("6.59"));
+          new BigDecimal("6.59"),
+          true,
+          true);
 
   @LocalServerPort int port;
   @MockitoBean VmManager vmManager;

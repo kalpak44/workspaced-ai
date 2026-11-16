@@ -48,6 +48,16 @@ class HttpHetznerClientTest {
   }
 
   @Test
+  void readsWhereATypeIsSoldOut() {
+    var types = client("t0ken").serverTypes();
+    assertThat(types.getFirst().availableIn("nbg1")).isTrue();
+    assertThat(types.getFirst().availableIn("hel1")).isFalse();
+    assertThat(types.getFirst().availableIn("ash")).isFalse();
+    // No flag at all is not sold out.
+    assertThat(types.get(2).availableIn("nbg1")).isTrue();
+  }
+
+  @Test
   void alignsEveryMetricsSeriesToTheSameTimestamps() {
     var metrics =
         client("t0ken")

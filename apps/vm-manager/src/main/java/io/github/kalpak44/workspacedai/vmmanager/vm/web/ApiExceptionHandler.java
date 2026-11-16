@@ -10,6 +10,7 @@ import io.github.kalpak44.workspacedai.vmmanager.vm.MetricsRangeNotOfferedExcept
 import io.github.kalpak44.workspacedai.vmmanager.vm.SecretNotFoundException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.SecretRefusedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.ServerTypeNotOfferedException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.ServerTypeSoldOutException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmInventoryNotLoadedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmNotFoundException;
 import org.slf4j.Logger;
@@ -56,6 +57,11 @@ public class ApiExceptionHandler {
   @ExceptionHandler(ServerTypeNotOfferedException.class)
   ProblemDetail notOffered(ServerTypeNotOfferedException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(ServerTypeSoldOutException.class)
+  ProblemDetail soldOut(ServerTypeSoldOutException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 
   @ExceptionHandler(MetricsRangeNotOfferedException.class)

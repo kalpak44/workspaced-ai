@@ -8,6 +8,7 @@ import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHub;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.Instant;
@@ -27,7 +28,27 @@ class VmServiceTest {
 
   final MutableClock clock = new MutableClock(Instant.parse("2026-11-14T10:00:00Z"));
   final List<Object> published = new ArrayList<>();
+  static final HetznerProperties HETZNER_PROPERTIES =
+      new HetznerProperties(
+          "t0ken",
+          URI.create("http://unused"),
+          "nbg1",
+          "ubuntu-24.04",
+          List.of("ops"),
+          Duration.ofSeconds(1),
+          null);
+
   final FakeHetznerClient hetzner = new FakeHetznerClient();
+
+  {
+    hetzner.types =
+        List.of(
+            VmOptionServiceTest.type("cx23", "6.59", "nbg1"),
+            VmOptionServiceTest.type("cx33", "10.19", "nbg1"),
+            VmOptionServiceTest.soldOut(VmOptionServiceTest.type("cpx22", "23.39", "nbg1")),
+            VmOptionServiceTest.type("ccx63", "1024.19", "nbg1"));
+  }
+
   final VmRepository vms = new InMemoryVmRepository();
   final InMemorySecretStore secrets = new InMemorySecretStore();
   final List<UUID> bootstrapped = new ArrayList<>();
@@ -53,16 +74,13 @@ class VmServiceTest {
   final VmService service =
       new VmService(
           vms,
-          new VmProperties(List.of("cx23", "cx33")),
+          new VmOptionService(
+              new VmProperties(List.of("cx23", "cx33"), new BigDecimal("60")),
+              HETZNER_PROPERTIES,
+              hetzner,
+              clock),
           hetzner,
-          new HetznerProperties(
-              "t0ken",
-              URI.create("http://unused"),
-              "nbg1",
-              "ubuntu-24.04",
-              List.of("ops"),
-              Duration.ofSeconds(1),
-              null),
+          HETZNER_PROPERTIES,
           () -> inventoryLoaded,
           new VmSecretService(vms, secrets),
           new VmFirewallService(vms, hetzner, () -> inventoryLoaded, clock),
@@ -129,8 +147,26 @@ class VmServiceTest {
   void refusesATypeNotOfferedBeforeAskingHetzner() {
     assertThatThrownBy(() -> service.create(workspace, user, "cx53", KEY, ENV))
         .isInstanceOf(ServerTypeNotOfferedException.class)
-        .hasMessage("server type cx53 is not offered; choose one of cx23, cx33");
+        .hasMessage("server type cx53 is not offered; choose one of cx23, cx33, cpx22");
     assertThat(hetzner.created).isEmpty();
+  }
+
+  @Test
+  void refusesATypeSoldOutBeforeAskingHetzner() {
+    assertThatThrownBy(() -> service.create(workspace, user, "cpx22", KEY, ENV))
+        .isInstanceOf(ServerTypeSoldOutException.class)
+        .hasMessage("server type cpx22 is sold out at Hetzner right now");
+    assertThat(hetzner.created).isEmpty();
+  }
+
+  @Test
+  void reportsATypeThatSoldOutDuringTheCreateAndKeepsNothing() {
+    hetzner.createFailure = new HetznerException("Hetzner answered 412 on POST /servers", 412);
+
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY, ENV))
+        .isInstanceOf(ServerTypeSoldOutException.class);
+    assertThat(vms.findAll()).isEmpty();
+    assertThat(hetzner.firewalls).isEmpty();
   }
 
   @Test
@@ -144,10 +180,10 @@ class VmServiceTest {
 
   @Test
   void keepsNothingWhenHetznerRefuses() {
-    hetzner.failure = new HetznerException("Hetzner answered 422 on POST /servers");
+    hetzner.createFailure = new HetznerException("Hetzner answered 422 on POST /servers");
 
     assertThatThrownBy(() -> service.create(workspace, user, null, KEY, ENV))
-        .isSameAs(hetzner.failure);
+        .isSameAs(hetzner.createFailure);
     assertThat(vms.findAll()).isEmpty();
     assertThat(secrets.entries).isEmpty();
     assertThat(published).isEmpty();
@@ -236,10 +272,10 @@ class VmServiceTest {
 
   @Test
   void revokesTheAgentWhenHetznerRefuses() {
-    hetzner.failure = new HetznerException("Hetzner answered 422 on POST /servers");
+    hetzner.createFailure = new HetznerException("Hetzner answered 422 on POST /servers");
 
     assertThatThrownBy(() -> service.create(workspace, user, null, KEY, ENV))
-        .isSameAs(hetzner.failure);
+        .isSameAs(hetzner.createFailure);
     assertThat(revoked).containsExactlyElementsOf(bootstrapped);
   }
 

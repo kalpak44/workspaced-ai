@@ -11,6 +11,12 @@ export interface VmSize {
   /** shared or dedicated */
   readonly cpuType: string;
   readonly architecture: string;
+  /** Per month with VAT, in EUR. */
+  readonly monthlyGross: number;
+  /** One of the low-cost sizes, rather than a pricier stand-in. */
+  readonly recommended: boolean;
+  /** False while Hetzner has it sold out, when a create would be refused. */
+  readonly available: boolean;
 }
 
 export const VM_SIZES_URL = "/api/v1/vm-sizes";

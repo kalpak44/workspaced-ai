@@ -66,7 +66,7 @@ the order they were created.
 
 | Method   | Path                      | Body               | Answers                                         |
 |----------|---------------------------|--------------------|-------------------------------------------------|
-| `GET`    | `/api/v1/vm-sizes`        |                    | `200` and the VM sizes, default first; `503` without the VM manager |
+| `GET`    | `/api/v1/vm-sizes`        |                    | `200` and the VM sizes, cheapest first, each with its price and whether Hetzner has it now; `503` without the VM manager |
 | `GET`    | `/api/v1/workspaces`      |                    | `200` and every workspace                       |
 | `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "serverType": "cx23"}` | `201`, the workspace, and its URL in `Location` |
@@ -75,7 +75,8 @@ the order they were created.
 | `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM |
 
 A blank or overlong name, an unknown provider, a `serverType` `/vm-sizes` does not list, or an `id` that is not a UUID,
-answers `400`. Every error body is an RFC 9457 problem detail (`application/problem+json`).
+answers `400`; a `serverType` Hetzner has sold out answers `409`, and nothing is created. Every error body is an RFC 9457
+problem detail (`application/problem+json`).
 
 `apiKey` is required. Creating a workspace first calls the provider with it (OpenRouter's `GET /key`): a key the
 provider refuses answers `422` and creates nothing, and a provider that cannot be reached answers `502`. The key goes
@@ -393,7 +394,7 @@ workspace sets up TLS itself. `409` is a workspace whose VM does not exist yet.
 | `PUT`  | `/api/v1/workspaces/{id}/firewall`       | `{"rules": [{"protocol": "tcp", "port": "8080", "sourceIps": []}]}` | `200`, `400`, `404` or `409`                     |
 | `PUT`  | `/api/v1/workspaces/{id}/firewall/agent` | `{"allowed": true}`                                                 | `204`, `400` or `404`                            |
 
-With `allowed` on, the agent's `firewall` tool writes one request line to `~/.config/workspaced/firewall/request` —
+`allowed` is on for a new workspace; the agent still asks in the chat before it opens a port. With it on, the agent's `firewall` tool writes one request line to `~/.config/workspaced/firewall/request` —
 `list`, `open <port>[/tcp|udp] [<source>]`, `open icmp [<source>]`, `close <port>[/tcp|udp]` or `close icmp` — and the
 API, polling every few seconds and only in workspaces that allow it, carries it out and writes the address and the
 resulting rules, or `error: <reason>`, to `result` beside it. Opening a port it already has replaces that rule.

@@ -29,6 +29,7 @@ public interface VmManager {
    * @param environment the rest of what the harness starts with, kept by the VM manager apart from
    *     the user's secrets
    * @throws ServerTypeRejectedException when the size is not one on offer
+   * @throws ServerTypeSoldOutException when Hetzner has the size sold out
    */
   ProvisionedVm create(
       UUID workspaceId,
