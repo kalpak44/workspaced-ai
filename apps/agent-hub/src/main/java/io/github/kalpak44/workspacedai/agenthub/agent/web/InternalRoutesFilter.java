@@ -100,8 +100,8 @@ public class InternalRoutesFilter extends OncePerRequestFilter {
 
   /**
    * Refuses anything the servlet container would normalise differently from the raw URI: path
-   * parameters, dot segments, empty segments and encoded dots or slashes. Otherwise one route
-   * could be authorized while another is served.
+   * parameters, dot segments, empty segments and encoded dots or slashes. Otherwise one route could
+   * be authorized while another is served.
    */
   private static boolean canonical(String raw) {
     var lower = raw.toLowerCase(Locale.ROOT);
