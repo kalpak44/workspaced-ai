@@ -26,13 +26,16 @@ public interface VmOptionApi {
   String OPTION_EXAMPLE =
       "{\"serverType\":\"cx23\",\"isDefault\":true,\"cores\":2,\"memoryGb\":4.0,\"diskGb\":40,"
           + "\"cpuType\":\"shared\",\"architecture\":\"x86\",\"location\":\"nbg1\","
-          + "\"monthlyNet\":5.49,\"monthlyGross\":6.59,\"recommended\":true,\"available\":true}";
+          + "\"monthlyNet\":5.99,\"monthlyGross\":7.19,\"recommended\":true,\"available\":true,"
+          + "\"costs\":[{\"item\":\"server\",\"monthlyNet\":5.49,\"monthlyGross\":6.59},"
+          + "{\"item\":\"ipv4\",\"monthlyNet\":0.50,\"monthlyGross\":0.60}]}";
 
   @Operation(
       operationId = "listVmOptions",
       summary = "List VM options",
       description =
-          "Each serverType a create may name, cheapest first, with its specs, monthly price and "
+          "Each serverType a create may name, cheapest first, with its specs, whole monthly cost "
+              + "(server and IPv4 address, broken down in costs) and "
               + "capacity as Hetzner currently sells it: the recommended low-cost ones and other x86 "
               + "sizes up to a price cap. Exactly one is the default.")
   @ApiResponse(

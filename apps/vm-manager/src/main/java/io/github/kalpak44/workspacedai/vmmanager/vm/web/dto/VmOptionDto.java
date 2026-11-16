@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import java.math.BigDecimal;
+import java.util.List;
 
 @Schema(name = "VmOption", description = "A size a VM can be created as")
 public record VmOptionDto(
@@ -16,10 +17,13 @@ public record VmOptionDto(
     @Schema(description = "The Hetzner location it is created in", example = "nbg1")
         String location,
     @Schema(
-            description = "Monthly price before VAT, in the Hetzner account's currency",
-            example = "5.49")
+            description =
+                "The VM's whole monthly cost before VAT, server and IPv4 address, in the Hetzner"
+                    + " account's currency",
+            example = "5.99")
         BigDecimal monthlyNet,
-    @Schema(description = "Monthly price with VAT", example = "6.59") BigDecimal monthlyGross,
+    @Schema(description = "The VM's whole monthly cost with VAT", example = "7.19")
+        BigDecimal monthlyGross,
     @Schema(
             description = "One of the low-cost sizes, rather than a pricier stand-in",
             example = "true")
@@ -27,4 +31,5 @@ public record VmOptionDto(
     @Schema(
             description = "False while Hetzner has it sold out, when a create is refused",
             example = "true")
-        boolean available) {}
+        boolean available,
+    @Schema(description = "What the monthly cost is made of") List<VmCostDto> costs) {}

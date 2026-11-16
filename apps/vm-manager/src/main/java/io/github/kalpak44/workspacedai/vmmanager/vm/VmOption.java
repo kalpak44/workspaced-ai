@@ -1,14 +1,17 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * A size a VM can be created as, as Hetzner currently sells it in the configured location.
  *
  * @param isDefault taken when a create names no server type
- * @param monthlyNet monthly price before VAT, in the Hetzner account's currency
+ * @param monthlyNet what the VM costs a month before VAT, in the Hetzner account's currency: every
+ *     one of {@code costs} added up
  * @param recommended one of the configured low-cost sizes, rather than a pricier stand-in
  * @param available false while Hetzner has it sold out there, when a create would be refused
+ * @param costs what the monthly price is made of
  */
 public record VmOption(
     String serverType,
@@ -22,4 +25,5 @@ public record VmOption(
     BigDecimal monthlyNet,
     BigDecimal monthlyGross,
     boolean recommended,
-    boolean available) {}
+    boolean available,
+    List<VmCost> costs) {}

@@ -52,6 +52,15 @@ public class FakeHetzner implements AutoCloseable {
       ],"meta":{"pagination":{"page":2,"next_page":null}}}
       """;
 
+  static final String PRICING =
+      """
+      {"pricing":{"currency":"EUR","primary_ips":[
+        {"type":"ipv6","prices":[{"location":"nbg1","price_monthly":{"net":"0","gross":"0"}}]},
+        {"type":"ipv4","prices":[
+          {"location":"nbg1","price_monthly":{"net":"0.5000000000","gross":"0.6000000000000000"}},
+          {"location":"hel1","price_monthly":{"net":"0.5000000000","gross":"0.6000000000000000"}}]}]}}
+      """;
+
   // Two samples a minute apart; the disk read series misses the second, as Hetzner sends gaps.
   static final String METRICS =
       """
@@ -87,6 +96,12 @@ public class FakeHetzner implements AutoCloseable {
           record(exchange);
           var page = exchange.getRequestURI().getQuery().contains("page=2") ? PAGE_2 : PAGE_1;
           answer(exchange, 200, page);
+        });
+    server.createContext(
+        "/pricing",
+        exchange -> {
+          record(exchange);
+          answer(exchange, 200, PRICING);
         });
     server.createContext("/servers", this::servers);
     server.createContext("/firewalls", this::firewalls);

@@ -21,6 +21,7 @@ public class FakeHetznerClient implements HetznerClient {
   public final Map<Long, Firewall> firewalls = new ConcurrentHashMap<>();
   public final List<Long> deletedFirewalls = new ArrayList<>();
   public volatile List<ServerType> types = List.of();
+  public volatile List<ServerType.Price> ipv4Prices = List.of();
   public volatile HetznerException failure;
   public volatile HetznerException createFailure;
   public volatile ServerMetrics metrics = new ServerMetrics(List.of(), Map.of());
@@ -40,6 +41,12 @@ public class FakeHetznerClient implements HetznerClient {
     fail();
     typeCalls++;
     return types;
+  }
+
+  @Override
+  public List<ServerType.Price> primaryIpv4Prices() {
+    fail();
+    return ipv4Prices;
   }
 
   @Override

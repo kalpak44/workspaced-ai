@@ -18,6 +18,9 @@ public interface HetznerClient {
   /** Every server type the project can see. */
   List<ServerType> serverTypes();
 
+  /** What a primary IPv4 address costs a month in each location, which a server type leaves out. */
+  List<ServerType.Price> primaryIpv4Prices();
+
   /**
    * Every server carrying the label, e.g. {@code managed-by=x}, across all of Hetzner's pages.
    *

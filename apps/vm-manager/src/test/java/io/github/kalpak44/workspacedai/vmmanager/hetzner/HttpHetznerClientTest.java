@@ -48,6 +48,14 @@ class HttpHetznerClientTest {
   }
 
   @Test
+  void readsWhatAnIpv4AddressCostsInEachLocation() {
+    assertThat(client("t0ken").primaryIpv4Prices())
+        .containsExactly(
+            new ServerType.Price("nbg1", new BigDecimal("0.50"), new BigDecimal("0.60")),
+            new ServerType.Price("hel1", new BigDecimal("0.50"), new BigDecimal("0.60")));
+  }
+
+  @Test
   void readsWhereATypeIsSoldOut() {
     var types = client("t0ken").serverTypes();
     assertThat(types.getFirst().availableIn("nbg1")).isTrue();

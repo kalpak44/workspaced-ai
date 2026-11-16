@@ -47,6 +47,9 @@ public class VmDtoMapper {
         option.monthlyNet(),
         option.monthlyGross(),
         option.recommended(),
-        option.available());
+        option.available(),
+        option.costs().stream()
+            .map(cost -> new VmCostDto(cost.item(), cost.monthlyNet(), cost.monthlyGross()))
+            .toList());
   }
 }

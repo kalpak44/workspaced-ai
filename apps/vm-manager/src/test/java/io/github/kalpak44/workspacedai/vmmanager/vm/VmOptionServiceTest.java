@@ -108,6 +108,35 @@ class VmOptionServiceTest {
   }
 
   @Test
+  void pricesTheWholeVmServerAndIpv4Address() {
+    hetzner.types = List.of(type("cx23", "6.59", "nbg1"));
+    hetzner.ipv4Prices =
+        List.of(
+            new ServerType.Price("hel1", BigDecimal.ONE, BigDecimal.ONE),
+            new ServerType.Price("nbg1", new BigDecimal("0.50"), new BigDecimal("0.60")));
+
+    var cx23 = service(List.of("cx23")).list().getFirst();
+
+    assertThat(cx23.monthlyNet()).isEqualTo(new BigDecimal("7.09"));
+    assertThat(cx23.monthlyGross()).isEqualTo(new BigDecimal("7.19"));
+    assertThat(cx23.costs())
+        .containsExactly(
+            new VmCost("server", new BigDecimal("6.59"), new BigDecimal("6.59")),
+            new VmCost("ipv4", new BigDecimal("0.50"), new BigDecimal("0.60")));
+  }
+
+  @Test
+  void capsAStandInByItsWholeCost() {
+    hetzner.types = List.of(type("cx23", "6.59", "nbg1"), type("cpx32", "59.50", "nbg1"));
+    hetzner.ipv4Prices =
+        List.of(new ServerType.Price("nbg1", new BigDecimal("0.50"), new BigDecimal("0.60")));
+
+    assertThat(service(List.of("cx23")).list())
+        .extracting(VmOption::serverType)
+        .containsExactly("cx23");
+  }
+
+  @Test
   void marksATypeSoldOutOnlyWhereHetznerSaysSo() {
     var sold =
         new ServerType(

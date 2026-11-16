@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetzner;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmCostDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmOptionDto;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -57,8 +58,10 @@ class VmOptionControllerTest {
     assertThat(cx33.memoryGb()).isEqualTo(8.0);
     assertThat(cx33.diskGb()).isEqualTo(80);
     assertThat(cx33.location()).isEqualTo("nbg1");
-    assertThat(cx33.monthlyNet()).isEqualTo(new BigDecimal("8.49"));
-    assertThat(cx33.monthlyGross()).isEqualTo(new BigDecimal("10.19"));
+    // The whole VM: the server and its IPv4 address.
+    assertThat(cx33.monthlyNet()).isEqualTo(new BigDecimal("8.99"));
+    assertThat(cx33.monthlyGross()).isEqualTo(new BigDecimal("10.79"));
+    assertThat(cx33.costs()).extracting(VmCostDto::item).containsExactly("server", "ipv4");
   }
 
   @Test

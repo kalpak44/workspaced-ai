@@ -54,6 +54,21 @@ public class HttpHetznerClient implements HetznerClient {
   }
 
   @Override
+  public List<ServerType.Price> primaryIpv4Prices() {
+    var prices = new ArrayList<ServerType.Price>();
+    get("/pricing")
+        .path("pricing")
+        .path("primary_ips")
+        .forEach(
+            ip -> {
+              if ("ipv4".equals(ip.path("type").asString())) {
+                ip.path("prices").forEach(price -> prices.add(price(price)));
+              }
+            });
+    return List.copyOf(prices);
+  }
+
+  @Override
   public List<Server> servers(String labelSelector) {
     var servers = new ArrayList<Server>();
     var selector = URLEncoder.encode(labelSelector, StandardCharsets.UTF_8);
@@ -335,14 +350,7 @@ public class HttpHetznerClient implements HetznerClient {
 
   private static ServerType serverType(JsonNode type) {
     var prices = new ArrayList<ServerType.Price>();
-    type.path("prices")
-        .forEach(
-            price ->
-                prices.add(
-                    new ServerType.Price(
-                        price.path("location").asString(),
-                        amount(price.path("price_monthly").path("net")),
-                        amount(price.path("price_monthly").path("gross")))));
+    type.path("prices").forEach(price -> prices.add(price(price)));
     // An older answer has no flag, and sold out is only what Hetzner says outright.
     var soldOutIn = new ArrayList<String>();
     type.path("locations")
@@ -363,6 +371,13 @@ public class HttpHetznerClient implements HetznerClient {
         !deprecation.isNull() && !deprecation.isMissingNode(),
         List.copyOf(prices),
         List.copyOf(soldOutIn));
+  }
+
+  private static ServerType.Price price(JsonNode price) {
+    return new ServerType.Price(
+        price.path("location").asString(),
+        amount(price.path("price_monthly").path("net")),
+        amount(price.path("price_monthly").path("gross")));
   }
 
   // Hetzner sends prices as strings with ten decimals; cents are what anyone reads.

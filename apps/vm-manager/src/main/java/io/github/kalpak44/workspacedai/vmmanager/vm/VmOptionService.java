@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.ServerType;
+import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -18,7 +19,9 @@ import org.springframework.stereotype.Service;
 /**
  * The sizes Hetzner currently sells in the location, cheapest first: the configured low-cost ones,
  * and any other x86 type up to a price cap. Hetzner supplies their specs, price and whether it has
- * capacity, so none of them is restated here.
+ * capacity, so none of them is restated here. The price is the VM's whole monthly cost: the server
+ * and the public IPv4 address every VM gets, which Hetzner bills apart; its firewall and IPv6 are
+ * free.
  */
 @Service
 public class VmOptionService {
@@ -27,6 +30,9 @@ public class VmOptionService {
 
   // Capacity comes and goes within minutes, and every create screen would otherwise call Hetzner.
   static final Duration CACHE_FOR = Duration.ofMinutes(1);
+
+  static final String SERVER = "server";
+  static final String IPV4 = "ipv4";
 
   // Every VM boots from one snapshot, which only runs on this architecture.
   private static final String ARCHITECTURE = "x86";
@@ -81,11 +87,29 @@ public class VmOptionService {
             .mapToDouble(ServerType::memoryGb)
             .findFirst()
             .orElse(0);
+    var ipv4 =
+        hetzner.primaryIpv4Prices().stream()
+            .filter(price -> price.location().equals(location))
+            .findFirst()
+            .orElse(null);
+    if (ipv4 == null) {
+      log.warn("no IPv4 price for {}; prices leave the address out", location);
+    }
     var options = new ArrayList<VmOption>();
     for (var type : types) {
-      var price = type.deprecated() ? null : type.priceIn(location).orElse(null);
+      var server = type.deprecated() ? null : type.priceIn(location).orElse(null);
+      if (server == null) {
+        continue;
+      }
+      var costs = new ArrayList<VmCost>();
+      costs.add(new VmCost(SERVER, server.monthlyNet(), server.monthlyGross()));
+      if (ipv4 != null) {
+        costs.add(new VmCost(IPV4, ipv4.monthlyNet(), ipv4.monthlyGross()));
+      }
+      var net = costs.stream().map(VmCost::monthlyNet).reduce(BigDecimal.ZERO, BigDecimal::add);
+      var gross = costs.stream().map(VmCost::monthlyGross).reduce(BigDecimal.ZERO, BigDecimal::add);
       var recommended = properties.recommends(type.name());
-      if (price == null || !(recommended || standIn(type, price, floor))) {
+      if (!(recommended || standIn(type, gross, floor))) {
         continue;
       }
       options.add(
@@ -98,10 +122,11 @@ public class VmOptionService {
               type.cpuType(),
               type.architecture(),
               location,
-              price.monthlyNet(),
-              price.monthlyGross(),
+              net,
+              gross,
               recommended,
-              type.availableIn(location)));
+              type.availableIn(location),
+              List.copyOf(costs)));
     }
     for (var name : properties.serverTypes()) {
       if (options.stream().noneMatch(option -> option.serverType().equals(name))) {
@@ -112,10 +137,10 @@ public class VmOptionService {
     return List.copyOf(options);
   }
 
-  private boolean standIn(ServerType type, ServerType.Price price, double memoryFloor) {
+  private boolean standIn(ServerType type, BigDecimal monthlyGross, double memoryFloor) {
     return ARCHITECTURE.equals(type.architecture())
         && type.memoryGb() >= memoryFloor
-        && price.monthlyGross().compareTo(properties.maxMonthlyGross()) <= 0;
+        && monthlyGross.compareTo(properties.maxMonthlyGross()) <= 0;
   }
 
   private record Snapshot(List<VmOption> options, Instant takenAt) {}
