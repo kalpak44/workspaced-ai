@@ -149,6 +149,8 @@ class FakeVmManager implements AutoCloseable {
         vm.put("serverId", 42);
         vm.put("status", "PROVISIONING");
         vm.put("ipv4", "203.0.113.10");
+        vm.put("ipv6", "2001:db8::1");
+        vm.put("hostname", id + ".vm.example.com");
         vms.put(id, vm);
         answer(exchange, 201, vm.toString());
       }

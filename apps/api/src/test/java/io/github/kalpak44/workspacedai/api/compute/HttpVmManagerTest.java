@@ -122,6 +122,19 @@ class HttpVmManagerTest {
   }
 
   @Test
+  void readsWhereTheVmIsReached() {
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+
+    var address = vmManager.addressFor(workspace);
+
+    assertThat(address)
+        .isEqualTo(
+            new VmAddress(vm.id(), "203.0.113.10", "2001:db8::1", vm.id() + ".vm.example.com"));
+    assertThatThrownBy(() -> vmManager.addressFor(UUID.randomUUID()))
+        .isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
   void passesOnTheReasonARuleIsRefused() {
     vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
 

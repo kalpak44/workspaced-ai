@@ -42,6 +42,9 @@ class OpenApiTest {
             "\"operationId\":\"deleteUser\"",
             "\"operationId\":\"getBilling\"",
             "\"operationId\":\"startTopUp\"",
+            "\"operationId\":\"listWorkspaceDomains\"",
+            "\"operationId\":\"attachWorkspaceDomain\"",
+            "\"operationId\":\"detachWorkspaceDomain\"",
             "application/problem+json");
   }
 

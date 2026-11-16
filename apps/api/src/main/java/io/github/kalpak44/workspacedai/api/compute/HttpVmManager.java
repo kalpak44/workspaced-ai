@@ -213,6 +213,21 @@ public class HttpVmManager implements VmManager {
   }
 
   @Override
+  public VmAddress addressFor(UUID workspaceId) {
+    var vm = vmOf(workspaceId);
+    return new VmAddress(
+        UUID.fromString(vm.path("id").asString()),
+        text(vm, "ipv4"),
+        text(vm, "ipv6"),
+        text(vm, "hostname"));
+  }
+
+  private static String text(JsonNode node, String field) {
+    var value = node.path(field);
+    return value.isString() ? value.asString() : null;
+  }
+
+  @Override
   public List<FirewallRule> setFirewall(UUID workspaceId, List<FirewallRule> rules) {
     var vm = vmOf(workspaceId);
     var body = json.createObjectNode();

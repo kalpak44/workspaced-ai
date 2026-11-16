@@ -53,6 +53,11 @@ workspaced:
   # locally, no workspace's harness answers.
   agent-hub:
     url: ${WORKSPACED_AGENT_HUB_URL:}
+  # A user's own domains, pointed at their workspace. Without the key, which is the
+  # domain-connect-private-key in Vault, every domain is set up by hand.
+  domains:
+    private-key: ${WORKSPACED_DOMAIN_CONNECT_PRIVATE_KEY:}
+    app-url: ${WORKSPACED_APP_URL:https://ai.workspaced.online}
   auth:
     # Signs the login tokens (HS256), so it must be at least 32 bytes. No default, like the
     # database password: every instance has to sign with the same key, or a token from one

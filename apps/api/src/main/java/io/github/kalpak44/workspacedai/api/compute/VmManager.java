@@ -88,6 +88,13 @@ public interface VmManager {
   VmFirewall firewallFor(UUID workspaceId);
 
   /**
+   * The workspace VM's addresses and its own name.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   */
+  VmAddress addressFor(UUID workspaceId);
+
+  /**
    * Replaces every rule of the workspace VM's firewall, and answers them as the VM manager keeps
    * them.
    *
