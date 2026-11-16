@@ -23,7 +23,7 @@ class HetznerVmInventoryTest {
   final Instant created = Instant.parse("2026-11-01T08:00:00Z");
 
   Server server(long id, Map<String, String> labels) {
-    return new Server(id, "vm-" + id, "cx33", "203.0.113.7", created, labels);
+    return new Server(id, "vm-" + id, "cx33", "203.0.113.7", "2001:db8::1", created, labels);
   }
 
   Map<String, String> labels(String vm, String workspace) {
@@ -55,6 +55,7 @@ class HetznerVmInventoryTest {
                 7,
                 VmStatus.PROVISIONING,
                 "203.0.113.7",
+                "2001:db8::1",
                 created,
                 null));
   }
@@ -75,7 +76,16 @@ class HetznerVmInventoryTest {
   void neverOverwritesAVmItAlreadyKnows() {
     var known =
         new Vm(
-            vmId, workspaceId, userId, "cx23", 7, VmStatus.READY, "203.0.113.7", created, created);
+            vmId,
+            workspaceId,
+            userId,
+            "cx23",
+            7,
+            VmStatus.READY,
+            "203.0.113.7",
+            null,
+            created,
+            created);
     vms.save(known);
     hetzner.servers.put(7L, server(7, labels(vmId.toString(), workspaceId.toString())));
 

@@ -142,6 +142,7 @@ class VmFirewallServiceTest {
             1,
             VmStatus.READY,
             "203.0.113.1",
+            null,
             clock.instant(),
             null));
   }

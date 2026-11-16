@@ -123,6 +123,7 @@ class VmServiceTest {
     var server = hetzner.servers.values().iterator().next();
     assertThat(vm.serverId()).isEqualTo(server.id());
     assertThat(vm.ipv4()).isEqualTo(server.ipv4());
+    assertThat(vm.ipv6()).isEqualTo(server.ipv6());
     assertThat(vm.workspaceId()).isEqualTo(workspace);
     assertThat(vm.serverType()).isEqualTo("cx33");
     assertThat(vm.status()).isEqualTo(VmStatus.PROVISIONING);

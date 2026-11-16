@@ -124,6 +124,7 @@ class HttpHetznerClientTest {
 
     assertThat(created.id()).isPositive();
     assertThat(created.ipv4()).startsWith("203.0.113.");
+    assertThat(created.ipv6()).startsWith("2001:db8:0:").endsWith(":0:0:0:1");
     var body = hetzner.createBodies.getFirst();
     assertThat(body.path("name").asString()).isEqualTo("vm-1");
     assertThat(body.path("server_type").asString()).isEqualTo("cx23");
@@ -238,6 +239,7 @@ class HttpHetznerClientTest {
     assertThat(server.name()).isEqualTo("vm-1");
     assertThat(server.serverType()).isEqualTo("cx23");
     assertThat(server.ipv4()).isEqualTo(mine.ipv4());
+    assertThat(server.ipv6()).isEqualTo(mine.ipv6());
     assertThat(server.labels()).containsEntry("app", "a");
   }
 

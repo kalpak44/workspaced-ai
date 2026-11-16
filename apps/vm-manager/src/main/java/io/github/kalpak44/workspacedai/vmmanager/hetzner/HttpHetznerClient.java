@@ -3,8 +3,10 @@ package io.github.kalpak44.workspacedai.vmmanager.hetzner;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.URLEncoder;
+import java.net.UnknownHostException;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse.BodyHandlers;
@@ -110,7 +112,7 @@ public class HttpHetznerClient implements HetznerClient {
             "POST",
             201);
     var server = response.path("server");
-    return new CreatedServer(server.path("id").asLong(), ipv4(server));
+    return new CreatedServer(server.path("id").asLong(), ipv4(server), ipv6(server));
   }
 
   @Override
@@ -299,6 +301,25 @@ public class HttpHetznerClient implements HetznerClient {
     return ip.isString() ? ip.asString() : null;
   }
 
+  /**
+   * Hetzner assigns each server a /64 and configures the first address in it, ::1, on the server;
+   * the network alone is not an address anything can point at.
+   */
+  static String ipv6(JsonNode server) {
+    var ip = server.path("public_net").path("ipv6").path("ip");
+    if (!ip.isString()) {
+      return null;
+    }
+    var network = ip.asString().split("/", 2)[0];
+    try {
+      var bytes = InetAddress.ofLiteral(network).getAddress();
+      bytes[bytes.length - 1] |= 1;
+      return InetAddress.getByAddress(bytes).getHostAddress();
+    } catch (IllegalArgumentException | UnknownHostException _) {
+      return null;
+    }
+  }
+
   private static Map<String, String> labels(JsonNode resource) {
     var labels = new HashMap<String, String>();
     resource
@@ -314,6 +335,7 @@ public class HttpHetznerClient implements HetznerClient {
         server.path("name").asString(),
         server.path("server_type").path("name").asString(),
         ipv4(server),
+        ipv6(server),
         Instant.parse(server.path("created").asString()),
         labels(server));
   }

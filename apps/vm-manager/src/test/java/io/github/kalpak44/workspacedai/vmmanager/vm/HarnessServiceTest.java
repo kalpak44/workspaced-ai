@@ -27,6 +27,7 @@ class HarnessServiceTest {
             1,
             VmStatus.PROVISIONING,
             null,
+            null,
             Instant.EPOCH,
             null));
     secrets.init(vm, "sk-or-v1-test", Map.of("OPENCODE_PASSWORD", "harness-pw"));

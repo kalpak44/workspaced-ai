@@ -29,6 +29,7 @@ class VmSecretServiceTest {
             1,
             VmStatus.PROVISIONING,
             null,
+            null,
             Instant.EPOCH,
             null));
     service.init(vm, "sk-or-v1-test", Map.of("OPENROUTER_BASE_URL", "https://or", "PW", "x"));

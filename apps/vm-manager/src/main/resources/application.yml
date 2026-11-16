@@ -69,6 +69,13 @@ workspaced:
     # ghcr.io/kalpak44/workspaced-ai-harness:85c2bd5. Unset, the app still starts, and a VM
     # asking for its harness answers 503.
     image: ${WORKSPACED_HARNESS_IMAGE:}
+  cloudflare:
+    # Limited to DNS edit on the zone below. Unset, the app still starts, and VMs get no name.
+    token: ${WORKSPACED_CLOUDFLARE_TOKEN:}
+    zone-id: ${WORKSPACED_CLOUDFLARE_ZONE_ID:}
+  vm-dns:
+    # Each VM is published as <vm id>.<domain>, in the zone above.
+    domain: ${WORKSPACED_VM_DNS_DOMAIN:vm.workspaced.online}
   vm:
     # The recommended low-cost sizes, default first. Specs, prices and capacity come from Hetzner.
     server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}

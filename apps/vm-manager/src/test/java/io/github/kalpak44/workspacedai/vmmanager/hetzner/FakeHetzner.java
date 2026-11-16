@@ -136,7 +136,9 @@ public class FakeHetzner implements AutoCloseable {
         created.put("name", request.path("name").asString());
         created.put("created", "2026-11-14T10:00:00Z");
         created.putObject("server_type").put("name", request.path("server_type").asString());
-        created.putObject("public_net").putObject("ipv4").put("ip", "203.0.113." + (id % 250));
+        var net = created.putObject("public_net");
+        net.putObject("ipv4").put("ip", "203.0.113." + (id % 250));
+        net.putObject("ipv6").put("ip", "2001:db8:0:" + Long.toHexString(id) + "::/64");
         created.set("labels", request.path("labels"));
         servers.put(id, created);
         var body = JSON.createObjectNode();

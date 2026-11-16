@@ -154,6 +154,7 @@ public class VmService {
                 server.id(),
                 VmStatus.PROVISIONING,
                 server.ipv4(),
+                server.ipv6(),
                 clock.instant(),
                 null));
     events.publishEvent(new VmEvent.Changed(vm));

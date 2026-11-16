@@ -11,6 +11,7 @@ import java.util.UUID;
  * @param userId who owns that workspace; also a label on its Hetzner server
  * @param serverId the Hetzner server it runs as
  * @param ipv4 its public address; null until it has one
+ * @param ipv6 the address it answers on in its public /64; null until it has one
  * @param lastSeenAt when it last reported ready or a heartbeat; null before it has
  */
 public record Vm(
@@ -21,15 +22,16 @@ public record Vm(
     long serverId,
     VmStatus status,
     String ipv4,
+    String ipv6,
     Instant createdAt,
     Instant lastSeenAt) {
 
   Vm withStatus(VmStatus status) {
     return new Vm(
-        id, workspaceId, userId, serverType, serverId, status, ipv4, createdAt, lastSeenAt);
+        id, workspaceId, userId, serverType, serverId, status, ipv4, ipv6, createdAt, lastSeenAt);
   }
 
   Vm seen(VmStatus status, Instant at) {
-    return new Vm(id, workspaceId, userId, serverType, serverId, status, ipv4, createdAt, at);
+    return new Vm(id, workspaceId, userId, serverType, serverId, status, ipv4, ipv6, createdAt, at);
   }
 }

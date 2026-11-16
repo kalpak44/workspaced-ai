@@ -63,12 +63,19 @@ public class FakeHetznerClient implements HetznerClient {
     }
     var id = ids.incrementAndGet();
     var ip = "203.0.113." + (id % 250);
+    var ipv6 = "2001:db8:0:" + Long.toHexString(id) + "::1";
     created.add(spec);
     servers.put(
         id,
         new Server(
-            id, spec.name(), spec.serverType(), ip, Instant.EPOCH, Map.copyOf(spec.labels())));
-    return new CreatedServer(id, ip);
+            id,
+            spec.name(),
+            spec.serverType(),
+            ip,
+            ipv6,
+            Instant.EPOCH,
+            Map.copyOf(spec.labels())));
+    return new CreatedServer(id, ip, ipv6);
   }
 
   @Override

@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web.dto;
 
 import io.github.kalpak44.workspacedai.vmmanager.vm.Vm;
+import io.github.kalpak44.workspacedai.vmmanager.vm.VmDnsService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmMetrics;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmOption;
 import org.springframework.stereotype.Component;
@@ -8,6 +9,12 @@ import org.springframework.stereotype.Component;
 /** The one place the domain model turns into what the API answers. */
 @Component
 public class VmDtoMapper {
+
+  private final VmDnsService dns;
+
+  public VmDtoMapper(VmDnsService dns) {
+    this.dns = dns;
+  }
 
   public VmDto toDto(Vm vm) {
     return new VmDto(
@@ -18,6 +25,8 @@ public class VmDtoMapper {
         vm.serverId(),
         vm.status().name(),
         vm.ipv4(),
+        vm.ipv6(),
+        dns.hostname(vm.id()).orElse(null),
         vm.createdAt(),
         vm.lastSeenAt());
   }

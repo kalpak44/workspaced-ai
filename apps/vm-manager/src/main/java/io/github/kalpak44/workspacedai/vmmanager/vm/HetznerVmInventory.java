@@ -101,6 +101,7 @@ public class HetznerVmInventory implements VmInventory {
             server.id(),
             VmStatus.PROVISIONING,
             server.ipv4(),
+            server.ipv6(),
             server.created(),
             null));
     return true;

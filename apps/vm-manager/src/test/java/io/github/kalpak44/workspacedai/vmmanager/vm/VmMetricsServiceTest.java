@@ -95,6 +95,7 @@ class VmMetricsServiceTest {
             7,
             VmStatus.READY,
             null,
+            null,
             clock.instant(),
             null));
   }

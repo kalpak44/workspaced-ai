@@ -25,6 +25,16 @@ public record VmDto(
         String status,
     @Schema(description = "Public IPv4; null until it has one", example = "203.0.113.10")
         String ipv4,
+    @Schema(
+            description = "Public IPv6 it answers on; null until it has one",
+            example = "2001:db8:1234:5678::1")
+        String ipv6,
+    @Schema(
+            description =
+                "Its own name, with A and AAAA records to its addresses; null when no zone is"
+                    + " configured",
+            example = "8d1e4b0a-2f6c-4f7e-9b1d-0c3a5e7f9a21.vm.workspaced.online")
+        String hostname,
     @Schema(description = "When it was requested") Instant createdAt,
     @Schema(description = "When it last reported ready or a heartbeat; null before it has")
         Instant lastSeenAt) {}
