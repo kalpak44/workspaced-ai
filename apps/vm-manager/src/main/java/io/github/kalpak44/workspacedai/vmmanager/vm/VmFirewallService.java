@@ -7,7 +7,6 @@ import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import java.net.InetAddress;
 import java.time.Clock;
 import java.time.Duration;
-import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
@@ -130,7 +129,7 @@ public class VmFirewallService {
     try {
       return vms.findById(UUID.fromString(firewall.labels().get(HetznerVmInventory.VM_ID)))
           .isPresent();
-    } catch (IllegalArgumentException | NullPointerException e) {
+    } catch (IllegalArgumentException | NullPointerException _) {
       // Not one this app labelled; leave it alone.
       return true;
     }
@@ -140,33 +139,39 @@ public class VmFirewallService {
     if (rules.size() > MAX_RULES) {
       throw new FirewallRuleRefusedException("a VM may have at most " + MAX_RULES + " rules");
     }
-    var valid = new ArrayList<FirewallRule>();
-    for (var rule : rules) {
-      var protocol = rule.protocol() == null ? "" : rule.protocol().strip().toLowerCase();
-      if (!PROTOCOLS.contains(protocol)) {
-        throw new FirewallRuleRefusedException("protocol must be tcp, udp or icmp");
-      }
-      var port = port(protocol, rule.port());
-      var sources = new LinkedHashSet<String>();
-      for (var source : rule.sourceIps() == null ? List.<String>of() : rule.sourceIps()) {
-        sources.add(network(source));
-      }
-      if (sources.size() > MAX_SOURCES) {
-        throw new FirewallRuleRefusedException(
-            "a rule may let in at most " + MAX_SOURCES + " networks");
-      }
-      var description =
-          rule.description() == null || rule.description().isBlank()
-              ? null
-              : rule.description().strip();
-      if (description != null && description.length() > 255) {
-        throw new FirewallRuleRefusedException("a description has at most 255 characters");
-      }
-      valid.add(
-          new FirewallRule(
-              protocol, port, sources.isEmpty() ? ANYWHERE : List.copyOf(sources), description));
+    return rules.stream().map(VmFirewallService::rule).toList();
+  }
+
+  private static FirewallRule rule(FirewallRule rule) {
+    var protocol = rule.protocol() == null ? "" : rule.protocol().strip().toLowerCase();
+    if (!PROTOCOLS.contains(protocol)) {
+      throw new FirewallRuleRefusedException("protocol must be tcp, udp or icmp");
     }
-    return List.copyOf(valid);
+    return new FirewallRule(
+        protocol, port(protocol, rule.port()), sources(rule.sourceIps()), description(rule));
+  }
+
+  private static List<String> sources(List<String> given) {
+    var sources = new LinkedHashSet<String>();
+    for (var source : given == null ? List.<String>of() : given) {
+      sources.add(network(source));
+    }
+    if (sources.size() > MAX_SOURCES) {
+      throw new FirewallRuleRefusedException(
+          "a rule may let in at most " + MAX_SOURCES + " networks");
+    }
+    return sources.isEmpty() ? ANYWHERE : List.copyOf(sources);
+  }
+
+  private static String description(FirewallRule rule) {
+    if (rule.description() == null || rule.description().isBlank()) {
+      return null;
+    }
+    var description = rule.description().strip();
+    if (description.length() > 255) {
+      throw new FirewallRuleRefusedException("a description has at most 255 characters");
+    }
+    return description;
   }
 
   // icmp has no ports, and Hetzner refuses one; tcp and udp need one.
@@ -204,7 +209,7 @@ public class VmFirewallService {
     InetAddress parsed;
     try {
       parsed = InetAddress.ofLiteral(address);
-    } catch (IllegalArgumentException e) {
+    } catch (IllegalArgumentException _) {
       throw new FirewallRuleRefusedException(source + " is not an IP address or network");
     }
     var bytes = parsed.getAddress();
@@ -212,7 +217,7 @@ public class VmFirewallService {
     int prefix;
     try {
       prefix = slash < 0 ? bits : Integer.parseInt(text.substring(slash + 1));
-    } catch (NumberFormatException e) {
+    } catch (NumberFormatException _) {
       throw new FirewallRuleRefusedException(source + " is not an IP address or network");
     }
     if (prefix < 0 || prefix > bits) {

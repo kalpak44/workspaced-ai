@@ -39,11 +39,11 @@ class VmFirewallServiceTest {
 
   @Test
   void refusesAVmWithNoFirewallOrNoVmAtAll() {
-    var vm = vm();
+    var vm = vm().id();
+    var unknown = UUID.randomUUID();
 
-    assertThatThrownBy(() -> service.rules(vm.id())).isInstanceOf(FirewallMissingException.class);
-    assertThatThrownBy(() -> service.rules(UUID.randomUUID()))
-        .isInstanceOf(VmNotFoundException.class);
+    assertThatThrownBy(() -> service.rules(vm)).isInstanceOf(FirewallMissingException.class);
+    assertThatThrownBy(() -> service.rules(unknown)).isInstanceOf(VmNotFoundException.class);
   }
 
   @Test
@@ -84,7 +84,8 @@ class VmFirewallServiceTest {
             rule("tcp", "80", List.of("example.com")),
             rule("tcp", "80", List.of("10.0.0.0/x")),
             new FirewallRule("tcp", "80", List.of(), "x".repeat(256)))) {
-      assertThatThrownBy(() -> VmFirewallService.validate(List.of(rule)))
+      var one = List.of(rule);
+      assertThatThrownBy(() -> VmFirewallService.validate(one))
           .as(rule.toString())
           .isInstanceOf(FirewallRuleRefusedException.class);
     }
@@ -97,7 +98,8 @@ class VmFirewallServiceTest {
 
     assertThatThrownBy(() -> VmFirewallService.validate(many))
         .isInstanceOf(FirewallRuleRefusedException.class);
-    assertThatThrownBy(() -> VmFirewallService.validate(List.of(rule("tcp", "80", sources))))
+    var wide = List.of(rule("tcp", "80", sources));
+    assertThatThrownBy(() -> VmFirewallService.validate(wide))
         .isInstanceOf(FirewallRuleRefusedException.class);
   }
 

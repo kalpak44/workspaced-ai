@@ -27,6 +27,9 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class HttpHetznerClient implements HetznerClient {
 
+  private static final String LABELS = "labels";
+  private static final String RULES = "rules";
+
   private final HetznerProperties properties;
   private final HttpClient http;
   private final JsonMapper json;
@@ -79,7 +82,7 @@ public class HttpHetznerClient implements HetznerClient {
     body.put("start_after_create", true);
     var keys = body.putArray("ssh_keys");
     spec.sshKeys().forEach(keys::add);
-    var labels = body.putObject("labels");
+    var labels = body.putObject(LABELS);
     spec.labels().forEach(labels::put);
     body.putArray("firewalls").addObject().put("firewall", spec.firewall());
     if (spec.userData() != null) {
@@ -108,9 +111,9 @@ public class HttpHetznerClient implements HetznerClient {
   public long createFirewall(String name, Map<String, String> labels) {
     var body = json.createObjectNode();
     body.put("name", name);
-    var labelNode = body.putObject("labels");
+    var labelNode = body.putObject(LABELS);
     labels.forEach(labelNode::put);
-    body.putArray("rules");
+    body.putArray(RULES);
     var created =
         send(
             "/firewalls",
@@ -136,7 +139,7 @@ public class HttpHetznerClient implements HetznerClient {
   @Override
   public void setFirewallRules(long id, List<FirewallRule> rules) {
     var body = json.createObjectNode();
-    var array = body.putArray("rules");
+    var array = body.putArray(RULES);
     for (var rule : rules) {
       var node = array.addObject();
       node.put("direction", "in");
@@ -206,7 +209,7 @@ public class HttpHetznerClient implements HetznerClient {
     try {
       var parsed = Double.parseDouble(value.asString());
       return Double.isFinite(parsed) ? parsed : null;
-    } catch (NumberFormatException e) {
+    } catch (NumberFormatException _) {
       return null;
     }
   }
@@ -283,7 +286,7 @@ public class HttpHetznerClient implements HetznerClient {
   private static Map<String, String> labels(JsonNode resource) {
     var labels = new HashMap<String, String>();
     resource
-        .path("labels")
+        .path(LABELS)
         .properties()
         .forEach(e -> labels.put(e.getKey(), e.getValue().asString()));
     return Map.copyOf(labels);
@@ -303,7 +306,7 @@ public class HttpHetznerClient implements HetznerClient {
   private static Firewall firewall(JsonNode firewall) {
     var rules = new ArrayList<FirewallRule>();
     firewall
-        .path("rules")
+        .path(RULES)
         .forEach(
             rule -> {
               if (!"in".equals(rule.path("direction").asString())) {
