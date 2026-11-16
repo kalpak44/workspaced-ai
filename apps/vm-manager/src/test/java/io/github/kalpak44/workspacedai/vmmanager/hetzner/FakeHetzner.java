@@ -21,8 +21,8 @@ import tools.jackson.databind.node.ObjectNode;
 /**
  * Answers as the Hetzner Cloud API does, so no test calls the real one: /server_types in two pages
  * (a trimmed copy of a real answer), /servers listed by label, created and deleted in memory, and
- * /firewalls looked up by name and created in memory. Setting {@link #status} makes every route
- * answer with it instead.
+ * /firewalls listed by label, created, given rules and deleted in memory. Setting {@link #status}
+ * makes every route answer with it instead.
  */
 public class FakeHetzner implements AutoCloseable {
 
@@ -138,17 +138,25 @@ public class FakeHetzner implements AutoCloseable {
 
   private void firewalls(HttpExchange exchange) throws IOException {
     record(exchange);
+    var path = exchange.getRequestURI().getPath();
+    if (path.endsWith("/actions/set_rules")) {
+      var id = Long.parseLong(path.split("/")[2]);
+      var firewall = firewalls.get(id);
+      if (firewall == null) {
+        answer(exchange, 404, "{}");
+        return;
+      }
+      firewall.set("rules", JSON.readTree(exchange.getRequestBody()).path("rules"));
+      answer(exchange, 201, "{\"actions\":[]}");
+      return;
+    }
     switch (exchange.getRequestMethod()) {
       case "GET" -> {
-        var query =
-            URLDecoder.decode(exchange.getRequestURI().getRawQuery(), StandardCharsets.UTF_8);
-        var name = query.replaceAll(".*name=([^&]*).*", "$1");
         var list = JSON.createArrayNode();
-        firewalls.values().stream()
-            .filter(f -> f.path("name").asString().equals(name))
-            .forEach(list::add);
+        firewalls.values().stream().filter(f -> matches(exchange, f)).forEach(list::add);
         var body = JSON.createObjectNode();
         body.set("firewalls", list);
+        body.putObject("meta").putObject("pagination").putNull("next_page");
         answer(exchange, 200, body.toString());
       }
       case "POST" -> {
@@ -157,11 +165,18 @@ public class FakeHetzner implements AutoCloseable {
         var id = ids.incrementAndGet();
         created.put("id", id);
         created.put("name", request.path("name").asString());
+        created.put("created", "2026-11-14T10:00:00Z");
+        created.set("labels", request.path("labels"));
         created.set("rules", request.path("rules"));
+        created.putArray("applied_to");
         firewalls.put(id, created);
         var body = JSON.createObjectNode();
         body.set("firewall", created);
         answer(exchange, 201, body.toString());
+      }
+      case "DELETE" -> {
+        var id = Long.parseLong(path.substring(path.lastIndexOf('/') + 1));
+        answer(exchange, firewalls.remove(id) == null ? 404 : 204, "");
       }
       default -> answer(exchange, 405, "{}");
     }

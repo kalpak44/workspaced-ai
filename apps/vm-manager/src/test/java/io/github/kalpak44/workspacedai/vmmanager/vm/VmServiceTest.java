@@ -61,11 +61,11 @@ class VmServiceTest {
               "nbg1",
               "ubuntu-24.04",
               List.of("ops"),
-              "workspaced-ai-vms",
               Duration.ofSeconds(1),
               null),
           () -> inventoryLoaded,
           new VmSecretService(vms, secrets),
+          new VmFirewallService(vms, hetzner, () -> inventoryLoaded, clock),
           agentHub,
           published::add,
           clock);
@@ -151,6 +151,29 @@ class VmServiceTest {
     assertThat(vms.findAll()).isEmpty();
     assertThat(secrets.entries).isEmpty();
     assertThat(published).isEmpty();
+  }
+
+  @Test
+  void createsTheServerBehindAFirewallOfItsOwn() {
+    var vm = service.create(workspace, user, null, KEY, ENV).vm();
+
+    var firewall = hetzner.firewalls.get(hetzner.created.getFirst().firewall());
+    assertThat(firewall.name()).isEqualTo("vm-" + vm.id());
+    assertThat(firewall.labels())
+        .containsEntry("managed-by", "workspaced-ai-vm-manager")
+        .containsEntry("vm-id", vm.id().toString())
+        .containsEntry("workspace-id", workspace.toString());
+    assertThat(firewall.rules()).isEmpty();
+  }
+
+  @Test
+  void deletesTheFirewallWhenHetznerRefusesTheServer() {
+    hetzner.createFailure = new HetznerException("Hetzner answered 422 on POST /servers");
+
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY, ENV))
+        .isSameAs(hetzner.createFailure);
+    assertThat(hetzner.firewalls).isEmpty();
+    assertThat(hetzner.deletedFirewalls).hasSize(1);
   }
 
   @Test

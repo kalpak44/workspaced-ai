@@ -11,15 +11,18 @@ import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * A HetznerClient that keeps servers in memory, for testing the services above it without HTTP.
- * Setting {@link #failure} makes every call throw it.
+ * Setting {@link #failure} makes every call throw it, {@link #createFailure} only a server create.
  */
 public class FakeHetznerClient implements HetznerClient {
 
   public final Map<Long, Server> servers = new ConcurrentHashMap<>();
   public final List<ServerSpec> created = new ArrayList<>();
   public final List<Long> deleted = new ArrayList<>();
+  public final Map<Long, Firewall> firewalls = new ConcurrentHashMap<>();
+  public final List<Long> deletedFirewalls = new ArrayList<>();
   public volatile List<ServerType> types = List.of();
   public volatile HetznerException failure;
+  public volatile HetznerException createFailure;
   public volatile ServerMetrics metrics = new ServerMetrics(List.of(), Map.of());
   public final List<String> metricsCalls = new ArrayList<>();
   public int typeCalls;
@@ -48,6 +51,9 @@ public class FakeHetznerClient implements HetznerClient {
   @Override
   public CreatedServer createServer(ServerSpec spec) {
     fail();
+    if (createFailure != null) {
+      throw createFailure;
+    }
     var id = ids.incrementAndGet();
     var ip = "203.0.113." + (id % 250);
     created.add(spec);
@@ -63,6 +69,37 @@ public class FakeHetznerClient implements HetznerClient {
     fail();
     deleted.add(id);
     servers.remove(id);
+  }
+
+  @Override
+  public long createFirewall(String name, Map<String, String> labels) {
+    fail();
+    var id = ids.incrementAndGet();
+    firewalls.put(id, new Firewall(id, name, Instant.EPOCH, Map.copyOf(labels), List.of(), 0));
+    return id;
+  }
+
+  @Override
+  public List<Firewall> firewalls(String labelSelector) {
+    fail();
+    return firewalls.values().stream().filter(f -> matches(f.labels(), labelSelector)).toList();
+  }
+
+  @Override
+  public void setFirewallRules(long id, List<FirewallRule> rules) {
+    fail();
+    firewalls.computeIfPresent(
+        id,
+        (key, f) ->
+            new Firewall(
+                f.id(), f.name(), f.created(), f.labels(), List.copyOf(rules), f.servers()));
+  }
+
+  @Override
+  public void deleteFirewall(long id) {
+    fail();
+    deletedFirewalls.add(id);
+    firewalls.remove(id);
   }
 
   @Override

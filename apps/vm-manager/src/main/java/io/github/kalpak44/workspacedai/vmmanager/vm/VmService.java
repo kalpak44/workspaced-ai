@@ -32,6 +32,7 @@ public class VmService {
   private final HetznerProperties hetznerProperties;
   private final VmInventory inventory;
   private final VmSecretService secrets;
+  private final VmFirewallService firewalls;
   private final AgentHub agentHub;
   private final ApplicationEventPublisher events;
   private final Clock clock;
@@ -43,6 +44,7 @@ public class VmService {
       HetznerProperties hetznerProperties,
       VmInventory inventory,
       VmSecretService secrets,
+      VmFirewallService firewalls,
       AgentHub agentHub,
       ApplicationEventPublisher events,
       Clock clock) {
@@ -52,6 +54,7 @@ public class VmService {
     this.hetznerProperties = hetznerProperties;
     this.inventory = inventory;
     this.secrets = secrets;
+    this.firewalls = firewalls;
     this.agentHub = agentHub;
     this.events = events;
     this.clock = clock;
@@ -102,9 +105,11 @@ public class VmService {
     }
     var id = UUID.randomUUID();
     CreatedServer server;
+    Long firewall = null;
     try {
       secrets.init(id, openRouterApiKey, environment);
       var userData = agentHub.bootstrap(id).orElse(null);
+      firewall = firewalls.create(id, workspaceId);
       server =
           hetzner.createServer(
               new ServerSpec(
@@ -118,9 +123,10 @@ public class VmService {
                       HetznerVmInventory.VM_ID, id.toString(),
                       HetznerVmInventory.WORKSPACE_ID, workspaceId.toString(),
                       HetznerVmInventory.USER_ID, userId.toString()),
-                  userData));
+                  userData,
+                  firewall));
     } catch (RuntimeException e) {
-      forget(id);
+      forget(id, firewall);
       throw e;
     }
     var vm =
@@ -141,7 +147,9 @@ public class VmService {
 
   /**
    * The server first, then its secrets and its agent: a VM any of them could not be deleted for is
-   * kept, so the delete can retry, and a server already gone counts as deleted on the retry.
+   * kept, so the delete can retry, and a server already gone counts as deleted on the retry. Its
+   * firewall is left to {@link VmFirewallService}, since Hetzner refuses it until the server is
+   * fully gone.
    */
   public void delete(UUID id) {
     var vm = get(id);
@@ -155,10 +163,13 @@ public class VmService {
   }
 
   // Best effort: the create has already failed, and that failure is the one to report.
-  private void forget(UUID id) {
+  private void forget(UUID id, Long firewall) {
     try {
       secrets.deleteAll(id);
       agentHub.revoke(id);
+      if (firewall != null) {
+        hetzner.deleteFirewall(firewall);
+      }
     } catch (RuntimeException e) {
       log.error("VM {} failed to create and could not be fully cleaned up", id, e);
     }

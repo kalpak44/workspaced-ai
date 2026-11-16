@@ -49,9 +49,6 @@ workspaced:
     # Comma-separated names of project SSH keys put on every VM. Empty, Hetzner emails a root
     # password for each one instead.
     ssh-keys: ${WORKSPACED_HETZNER_SSH_KEYS:}
-    # Every VM is created behind this Cloud Firewall, made with no rules when it is missing, so
-    # no inbound connection reaches a VM; outbound still works.
-    firewall: ${WORKSPACED_HETZNER_FIREWALL:workspaced-ai-vms}
     # A label selector, e.g. image=workspace-vm: every VM is created from the newest snapshot
     # carrying it, which has the supervisor installed. Empty uses the plain image above.
     image-selector: ${WORKSPACED_HETZNER_IMAGE_SELECTOR:}

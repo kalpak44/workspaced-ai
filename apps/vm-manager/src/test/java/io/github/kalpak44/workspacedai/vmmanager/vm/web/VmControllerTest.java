@@ -370,6 +370,63 @@ class VmControllerTest {
     }
   }
 
+  @Test
+  void givesEachVmItsOwnFirewallThatStartsClosed() throws Exception {
+    var vm = create();
+    var body =
+        HETZNER.createBodies.stream()
+            .filter(c -> c.path("labels").path("vm-id").asString().equals(vm.id().toString()))
+            .findFirst()
+            .orElseThrow();
+    var created = body.path("firewalls").get(0).path("firewall").asLong();
+    assertThat(HETZNER.firewalls.get(created).path("labels").path("vm-id").asString())
+        .isEqualTo(vm.id().toString());
+
+    var read = send("GET", "/" + vm.id() + "/firewall", null);
+    assertThat(read.statusCode()).isEqualTo(200);
+    assertThat(read.body()).isEqualTo("{\"rules\":[]}");
+  }
+
+  @Test
+  void replacesTheRulesAndAnswersThemAsKept() throws Exception {
+    var vm = create();
+
+    var set =
+        send(
+            "PUT",
+            "/" + vm.id() + "/firewall",
+            "{\"rules\":[{\"protocol\":\"TCP\",\"port\":\"8080\",\"sourceIps\":[]},"
+                + "{\"protocol\":\"icmp\",\"sourceIps\":[\"192.0.2.7\"]}]}");
+
+    assertThat(set.statusCode()).isEqualTo(200);
+    var expected =
+        "{\"rules\":[{\"protocol\":\"tcp\",\"port\":\"8080\","
+            + "\"sourceIps\":[\"0.0.0.0/0\",\"::/0\"],\"description\":null},"
+            + "{\"protocol\":\"icmp\",\"port\":null,"
+            + "\"sourceIps\":[\"192.0.2.7/32\"],\"description\":null}]}";
+    assertThat(set.body()).isEqualTo(expected);
+    assertThat(send("GET", "/" + vm.id() + "/firewall", null).body()).isEqualTo(expected);
+  }
+
+  @Test
+  void refusesARuleHetznerWouldRefuse() throws Exception {
+    var vm = create();
+
+    var noPort = send("PUT", "/" + vm.id() + "/firewall", "{\"rules\":[{\"protocol\":\"tcp\"}]}");
+    var hostBits =
+        send(
+            "PUT",
+            "/" + vm.id() + "/firewall",
+            "{\"rules\":[{\"protocol\":\"udp\",\"port\":\"53\","
+                + "\"sourceIps\":[\"10.0.0.1/8\"]}]}");
+    var missing = send("GET", "/" + UUID.randomUUID() + "/firewall", null);
+
+    assertThat(noPort.statusCode()).isEqualTo(400);
+    assertThat(hostBits.statusCode()).isEqualTo(400);
+    assertThat(hostBits.body()).contains("host bits");
+    assertThat(missing.statusCode()).isEqualTo(404);
+  }
+
   private VmDto create() throws Exception {
     var response =
         send(

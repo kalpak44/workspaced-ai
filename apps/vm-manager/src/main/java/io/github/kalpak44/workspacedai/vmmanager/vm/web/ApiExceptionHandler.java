@@ -3,6 +3,8 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHubException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.vault.VaultException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.FirewallMissingException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.FirewallRuleRefusedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessNotConfiguredException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.MetricsRangeNotOfferedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.SecretNotFoundException;
@@ -38,6 +40,16 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(SecretRefusedException.class)
   ProblemDetail secretRefused(SecretRefusedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
+  }
+
+  @ExceptionHandler(FirewallRuleRefusedException.class)
+  ProblemDetail ruleRefused(FirewallRuleRefusedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(FirewallMissingException.class)
+  ProblemDetail firewallMissing(FirewallMissingException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT, e.getMessage());
   }
 

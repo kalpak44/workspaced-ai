@@ -11,6 +11,8 @@ import java.util.Map;
  * @param image the image name; ignored when the client is configured to pick a snapshot by label
  * @param labels what the server is for; the VM manager rebuilds its inventory from them
  * @param userData cloud-config the server reads on its first boot; null for none
+ * @param firewall the Cloud Firewall it is created behind, so nothing reaches it before its rules
+ *     say so
  */
 public record ServerSpec(
     String name,
@@ -19,4 +21,5 @@ public record ServerSpec(
     String image,
     List<String> sshKeys,
     Map<String, String> labels,
-    String userData) {}
+    String userData,
+    long firewall) {}

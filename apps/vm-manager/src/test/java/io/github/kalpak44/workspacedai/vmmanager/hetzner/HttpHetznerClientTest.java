@@ -99,7 +99,8 @@ class HttpHetznerClientTest {
             "ubuntu-24.04",
             List.of("ops"),
             Map.of("managed-by", "workspaced-ai-vm-manager", "workspace-id", "w-1"),
-            "#cloud-config\n");
+            "#cloud-config\n",
+            7);
 
     var created = client("t0ken").createServer(spec);
 
@@ -124,7 +125,7 @@ class HttpHetznerClientTest {
 
     client("t0ken", "image=workspace-vm")
         .createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
+            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 7));
 
     var body = hetzner.createBodies.getFirst();
     assertThat(body.path("image").asString()).isEqualTo("42");
@@ -134,7 +135,7 @@ class HttpHetznerClientTest {
   @Test
   void createsNothingWhenNoSnapshotCarriesTheLabel() {
     var client = client("t0ken", "image=workspace-vm");
-    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null);
+    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 7);
 
     assertThatThrownBy(() -> client.createServer(spec))
         .isInstanceOf(HetznerException.class)
@@ -143,22 +144,62 @@ class HttpHetznerClientTest {
   }
 
   @Test
-  void createsEveryServerBehindOneFirewallThatLetsNothingIn() {
+  void createsAServerBehindTheFirewallItIsGiven() {
     var client = client("t0ken");
     client.createServer(
-        new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
-    client.createServer(
-        new ServerSpec("vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
+        new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 42));
 
-    assertThat(hetzner.firewalls).hasSize(1);
-    var firewall = hetzner.firewalls.values().iterator().next();
-    assertThat(firewall.path("name").asString()).isEqualTo("workspaced-ai-vms");
-    assertThat(firewall.path("rules")).isEmpty();
-    assertThat(hetzner.createBodies)
-        .allSatisfy(
-            body ->
-                assertThat(body.path("firewalls").get(0).path("firewall").asLong())
-                    .isEqualTo(firewall.path("id").asLong()));
+    assertThat(hetzner.createBodies.getFirst().path("firewalls").get(0).path("firewall").asLong())
+        .isEqualTo(42);
+  }
+
+  @Test
+  void createsAFirewallThatLetsNothingInAndFindsItByLabel() {
+    var client = client("t0ken");
+    var id = client.createFirewall("vm-1", Map.of("vm-id", "1"));
+    client.createFirewall("vm-2", Map.of("vm-id", "2"));
+
+    var found = client.firewalls("vm-id=1");
+
+    assertThat(found).extracting(Firewall::id).containsExactly(id);
+    var firewall = found.getFirst();
+    assertThat(firewall.name()).isEqualTo("vm-1");
+    assertThat(firewall.labels()).containsEntry("vm-id", "1");
+    assertThat(firewall.rules()).isEmpty();
+    assertThat(firewall.servers()).isZero();
+    assertThat(firewall.created()).isEqualTo(Instant.parse("2026-11-14T10:00:00Z"));
+  }
+
+  @Test
+  void setsInboundRulesAndReadsThemBack() {
+    var client = client("t0ken");
+    var id = client.createFirewall("vm-1", Map.of("vm-id", "1"));
+
+    client.setFirewallRules(
+        id,
+        List.of(
+            new FirewallRule("tcp", "8000-8100", List.of("0.0.0.0/0", "::/0"), "Blog"),
+            new FirewallRule("icmp", null, List.of("10.0.0.0/8"), null)));
+
+    var sent = hetzner.firewalls.get(id).path("rules");
+    assertThat(sent.get(0).path("direction").asString()).isEqualTo("in");
+    assertThat(sent.get(1).has("port")).isFalse();
+    assertThat(sent.get(1).has("description")).isFalse();
+    assertThat(client.firewalls("vm-id=1").getFirst().rules())
+        .containsExactly(
+            new FirewallRule("tcp", "8000-8100", List.of("0.0.0.0/0", "::/0"), "Blog"),
+            new FirewallRule("icmp", null, List.of("10.0.0.0/8"), null));
+  }
+
+  @Test
+  void deletesAFirewallAndTreatsOneAlreadyGoneAsDeleted() {
+    var client = client("t0ken");
+    var id = client.createFirewall("vm-1", Map.of());
+
+    client.deleteFirewall(id);
+    assertThat(hetzner.firewalls).isEmpty();
+
+    client.deleteFirewall(id);
   }
 
   @Test
@@ -167,10 +208,10 @@ class HttpHetznerClientTest {
     var mine =
         client.createServer(
             new ServerSpec(
-                "vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "a"), null));
+                "vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "a"), null, 7));
     client.createServer(
         new ServerSpec(
-            "vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "b"), null));
+            "vm-2", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "b"), null, 7));
 
     var servers = client.servers("app=a");
 
@@ -187,7 +228,7 @@ class HttpHetznerClientTest {
     var client = client("t0ken");
     var created =
         client.createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null));
+            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 7));
 
     client.deleteServer(created.id());
     assertThat(hetzner.servers).isEmpty();
@@ -198,7 +239,7 @@ class HttpHetznerClientTest {
   @Test
   void reportsAFailedCreate() {
     hetzner.status = 422;
-    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null);
+    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 7);
     var client = client("t0ken");
 
     assertThatThrownBy(() -> client.createServer(spec))
@@ -218,7 +259,6 @@ class HttpHetznerClientTest {
             "nbg1",
             "ubuntu-24.04",
             List.of(),
-            "workspaced-ai-vms",
             Duration.ofSeconds(5),
             imageSelector);
     return new HttpHetznerClient(

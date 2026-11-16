@@ -33,7 +33,6 @@ class VmMetricsServiceTest {
           "nbg1",
           "ubuntu-24.04",
           List.of(),
-          "workspaced-ai-vms",
           Duration.ofSeconds(1),
           null);
   final VmService vmService =
@@ -44,6 +43,7 @@ class VmMetricsServiceTest {
           hetznerProperties,
           () -> true,
           new VmSecretService(vms, new InMemorySecretStore()),
+          new VmFirewallService(vms, hetzner, () -> true, clock),
           new AgentHub() {
             @Override
             public Optional<String> bootstrap(UUID vmId) {

@@ -35,13 +35,26 @@ answers `400`; Hetzner or Vault refusing answers `502`
 and keeps nothing. Deleting a VM deletes its server, disk included, then its secrets; a server already gone counts as
 deleted, and a VM whose server or secrets could not be deleted is kept so the delete can be retried.
 
-### No inbound access
+### Firewall
 
-Every server is created behind the Cloud Firewall `workspaced-ai-vms` (`WORKSPACED_HETZNER_FIREWALL`), which the VM
-manager makes, with no rules, the first time it is missing. A Hetzner firewall drops every inbound packet no rule
-allows, so nothing on the internet can open a connection to a VM, SSH included, while the VM can still reach out to the
-API and to package mirrors. The firewall goes in the create request rather than being applied after it, so a VM is
-never reachable even while it boots. Opening a port is a rule added to that firewall, never a server outside it.
+Every VM gets a Cloud Firewall of its own, `vm-<vm id>`, labelled with its VM and workspace ids, made with no rules
+and named in the server's create request, so nothing reaches a VM until a rule lets it in, not even while it boots.
+SSH is masked in the image, so the only ports a rule can open are ones the workspace publishes.
+
+| Method | Path                        | Body                                                                | Answers                              |
+|--------|-----------------------------|---------------------------------------------------------------------|--------------------------------------|
+| `GET`  | `/api/v1/vms/{id}/firewall` |                                                                     | `200` and the rules, `404`, or `409` |
+| `PUT`  | `/api/v1/vms/{id}/firewall` | `{"rules": [{"protocol": "tcp", "port": "8080", "sourceIps": []}]}` | `200`, `400`, `404`, or `409`        |
+
+A `PUT` replaces every rule, as Hetzner does; an empty list closes the VM again. A rule is `tcp` or `udp` with a port
+or range (`8000-8100`), or `icmp` with none; no `sourceIps` lets in anyone over IPv4 and IPv6, and a bare address
+means that one address. A source with host bits set (`10.0.0.1/8`) is refused rather than rounded, and a VM holds at
+most 50 rules of at most 20 sources each. `409` is a VM created before it had a firewall of its own.
+
+Hetzner refuses to delete a firewall while it still applies to a server, which lasts a while after the server is
+deleted, so the VM's delete leaves it and a sweep every ten minutes deletes each labelled firewall that applies to no
+server and whose VM is gone. Hetzner allows 50 firewalls per account, so that is also the cap on VMs until Hetzner
+raises it.
 
 ### Enrollment
 

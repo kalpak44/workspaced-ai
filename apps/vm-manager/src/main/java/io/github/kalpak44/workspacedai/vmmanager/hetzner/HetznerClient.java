@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.hetzner;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Map;
 
 /**
  * The Hetzner Cloud API, as far as this app uses it. An interface so the services above it are
@@ -29,6 +30,25 @@ public interface HetznerClient {
 
   /** A server already gone counts as deleted, so a retried delete succeeds. */
   void deleteServer(long id);
+
+  /** A firewall with no rules, which lets nothing in; Hetzner refuses a name already taken. */
+  long createFirewall(String name, Map<String, String> labels);
+
+  /**
+   * Every firewall carrying the label, across all of Hetzner's pages.
+   *
+   * @param labelSelector in Hetzner's label selector syntax
+   */
+  List<Firewall> firewalls(String labelSelector);
+
+  /** Replaces every rule at once; Hetzner has no call that changes one rule alone. */
+  void setFirewallRules(long id, List<FirewallRule> rules);
+
+  /**
+   * A firewall already gone counts as deleted. Hetzner refuses one that still applies to a server,
+   * which it keeps doing for a while after that server is deleted.
+   */
+  void deleteFirewall(long id);
 
   /**
    * The server's CPU, disk and network series over the period. Hetzner keeps 30 days of them.

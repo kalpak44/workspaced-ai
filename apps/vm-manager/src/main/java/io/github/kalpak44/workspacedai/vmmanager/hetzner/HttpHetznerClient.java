@@ -65,13 +65,12 @@ public class HttpHetznerClient implements HetznerClient {
 
   /**
    * Public IPv4 and IPv6 both on, so the VM can reach the API with no network of ours, and behind
-   * the firewall from its first boot, so nothing can reach the VM. The answer also carries a root
-   * password when no SSH key is given; it is deliberately never read.
+   * its firewall from its first boot, so nothing reaches the VM that its rules do not let in. The
+   * answer also carries a root password when no SSH key is given; it is deliberately never read.
    */
   @Override
   public CreatedServer createServer(ServerSpec spec) {
     var image = properties.hasImageSelector() ? newestSnapshot() : spec.image();
-    var firewall = firewallId();
     var body = json.createObjectNode();
     body.put("name", spec.name());
     body.put("server_type", spec.serverType());
@@ -82,7 +81,7 @@ public class HttpHetznerClient implements HetznerClient {
     spec.sshKeys().forEach(keys::add);
     var labels = body.putObject("labels");
     spec.labels().forEach(labels::put);
-    body.putArray("firewalls").addObject().put("firewall", firewall);
+    body.putArray("firewalls").addObject().put("firewall", spec.firewall());
     if (spec.userData() != null) {
       body.put("user_data", spec.userData());
     }
@@ -100,6 +99,68 @@ public class HttpHetznerClient implements HetznerClient {
   public void deleteServer(long id) {
     try {
       send("/servers/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 200);
+    } catch (Gone _) {
+      // Already deleted, by an earlier attempt or by hand.
+    }
+  }
+
+  @Override
+  public long createFirewall(String name, Map<String, String> labels) {
+    var body = json.createObjectNode();
+    body.put("name", name);
+    var labelNode = body.putObject("labels");
+    labels.forEach(labelNode::put);
+    body.putArray("rules");
+    var created =
+        send(
+            "/firewalls",
+            HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
+            "POST",
+            201);
+    return created.path("firewall").path("id").asLong();
+  }
+
+  @Override
+  public List<Firewall> firewalls(String labelSelector) {
+    var firewalls = new ArrayList<Firewall>();
+    var selector = URLEncoder.encode(labelSelector, StandardCharsets.UTF_8);
+    var page = 1;
+    while (page > 0) {
+      var body = get("/firewalls?per_page=50&label_selector=" + selector + "&page=" + page);
+      body.path("firewalls").forEach(firewall -> firewalls.add(firewall(firewall)));
+      page = nextPage(body);
+    }
+    return List.copyOf(firewalls);
+  }
+
+  @Override
+  public void setFirewallRules(long id, List<FirewallRule> rules) {
+    var body = json.createObjectNode();
+    var array = body.putArray("rules");
+    for (var rule : rules) {
+      var node = array.addObject();
+      node.put("direction", "in");
+      node.put("protocol", rule.protocol());
+      if (rule.port() != null) {
+        node.put("port", rule.port());
+      }
+      var sources = node.putArray("source_ips");
+      rule.sourceIps().forEach(sources::add);
+      if (rule.description() != null) {
+        node.put("description", rule.description());
+      }
+    }
+    send(
+        "/firewalls/" + id + "/actions/set_rules",
+        HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
+        "POST",
+        201);
+  }
+
+  @Override
+  public void deleteFirewall(long id) {
+    try {
+      send("/firewalls/" + id, HttpRequest.BodyPublishers.noBody(), "DELETE", 204);
     } catch (Gone _) {
       // Already deleted, by an earlier attempt or by hand.
     }
@@ -163,29 +224,6 @@ public class HttpHetznerClient implements HetznerClient {
       throw new HetznerException("no snapshot is labelled " + properties.imageSelector());
     }
     return images.get(0).path("id").asString();
-  }
-
-  /**
-   * Looked up by name on every create rather than cached, so a firewall deleted by hand is made
-   * again instead of failing every create after it. Made with no rules: a Hetzner firewall drops
-   * every inbound packet no rule allows, and lets every outbound one through.
-   */
-  private long firewallId() {
-    var name = URLEncoder.encode(properties.firewall(), StandardCharsets.UTF_8);
-    var found = get("/firewalls?name=" + name).path("firewalls");
-    if (!found.isEmpty()) {
-      return found.get(0).path("id").asLong();
-    }
-    var body = json.createObjectNode();
-    body.put("name", properties.firewall());
-    body.putArray("rules");
-    var created =
-        send(
-            "/firewalls",
-            HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
-            "POST",
-            201);
-    return created.path("firewall").path("id").asLong();
   }
 
   private JsonNode get(String path) {
@@ -259,6 +297,36 @@ public class HttpHetznerClient implements HetznerClient {
         ipv4(server),
         Instant.parse(server.path("created").asString()),
         labels(server));
+  }
+
+  // Outbound rules are never set here, so only inbound ones are read back.
+  private static Firewall firewall(JsonNode firewall) {
+    var rules = new ArrayList<FirewallRule>();
+    firewall
+        .path("rules")
+        .forEach(
+            rule -> {
+              if (!"in".equals(rule.path("direction").asString())) {
+                return;
+              }
+              var sources = new ArrayList<String>();
+              rule.path("source_ips").forEach(ip -> sources.add(ip.asString()));
+              var port = rule.path("port");
+              var description = rule.path("description");
+              rules.add(
+                  new FirewallRule(
+                      rule.path("protocol").asString(),
+                      port.isString() ? port.asString() : null,
+                      List.copyOf(sources),
+                      description.isString() ? description.asString() : null));
+            });
+    return new Firewall(
+        firewall.path("id").asLong(),
+        firewall.path("name").asString(),
+        Instant.parse(firewall.path("created").asString()),
+        labels(firewall),
+        List.copyOf(rules),
+        firewall.path("applied_to").size());
   }
 
   private static ServerType serverType(JsonNode type) {
