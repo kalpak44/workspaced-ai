@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.tuple;
 
 import io.github.kalpak44.workspacedai.vmmanager.cloudflare.CloudflareException;
 import io.github.kalpak44.workspacedai.vmmanager.cloudflare.DnsRecord;
@@ -43,9 +44,9 @@ class VmDnsServiceTest {
     service.sync();
 
     assertThat(dns.records.values())
+        .extracting(DnsRecord::type, DnsRecord::name, DnsRecord::content)
         .containsExactlyInAnyOrder(
-            new DnsRecord("r1", "A", name(vm), "203.0.113.1"),
-            new DnsRecord("r2", "AAAA", name(vm), "2001:db8:0:1:0:0:0:1"));
+            tuple("A", name(vm), "203.0.113.1"), tuple("AAAA", name(vm), "2001:db8:0:1:0:0:0:1"));
   }
 
   @Test

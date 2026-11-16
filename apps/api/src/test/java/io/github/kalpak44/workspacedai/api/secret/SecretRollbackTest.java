@@ -17,6 +17,8 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** A name must not be listed for a value the runtime never got, or kept for one it dropped. */
@@ -30,6 +32,12 @@ class SecretRollbackTest {
   @Autowired WorkspaceSecretRepository secrets;
 
   UUID id;
+
+  @DynamicPropertySource
+  static void properties(DynamicPropertyRegistry registry) {
+    // The scheduled pass reads the runtime this test stubs; keep it out of the test's way.
+    registry.add("workspaced.firewall.request-interval", () -> "PT1H");
+  }
 
   @BeforeEach
   void setUp() {
