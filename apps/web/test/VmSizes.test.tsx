@@ -66,6 +66,23 @@ describe("VM sizes", () => {
     expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33"]);
   });
 
+  it("says when the balance is short and links to adding funds", async () => {
+    const api = installFakeApi();
+    api.state.noFunds = true;
+    const user = userEvent.setup();
+    await openSizes(user);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.type(await screen.findByLabelText("OpenRouter API key"), "sk-or-v1-test");
+
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Your balance does not cover a month of cx23 (€6.59 a month).");
+    await user.click(within(alert).getByRole("link", { name: "Add funds" }));
+    expect(globalThis.location.pathname).toBe("/billing");
+    expect(api.rows.map((w) => w.name)).not.toContain("Research");
+  });
+
   it("comes back to the sizes when the one chosen sells out during the create", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();

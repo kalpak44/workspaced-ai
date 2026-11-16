@@ -1,5 +1,10 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.auth.Role;
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.billing.BillingService;
+import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
+import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
@@ -7,6 +12,7 @@ import io.github.kalpak44.workspacedai.api.runtime.WorkspaceEnvironment;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.OutputStream;
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.time.ZoneId;
 import java.util.Base64;
@@ -42,6 +48,9 @@ public class WorkspaceService {
   private final ApiKeyCheck keyCheck;
   private final Harness harness;
   private final TransactionTemplate transactions;
+  private final UserRepository users;
+  private final VmPricing pricing;
+  private final BillingService billing;
 
   public WorkspaceService(
       WorkspaceRepository repository,
@@ -49,13 +58,19 @@ public class WorkspaceService {
       ApplicationEventPublisher events,
       ApiKeyCheck keyCheck,
       Harness harness,
-      TransactionTemplate transactions) {
+      TransactionTemplate transactions,
+      UserRepository users,
+      VmPricing pricing,
+      BillingService billing) {
     this.repository = repository;
     this.runtime = runtime;
     this.events = events;
     this.keyCheck = keyCheck;
     this.harness = harness;
     this.transactions = transactions;
+    this.users = users;
+    this.pricing = pricing;
+    this.billing = billing;
   }
 
   /** The workspaces one user owns; nobody sees another user's. */
@@ -82,6 +97,8 @@ public class WorkspaceService {
       String serverType,
       String timeZone) {
     validTimeZone(timeZone);
+    var price = priceFor(ownerId, serverType);
+    price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
@@ -105,6 +122,7 @@ public class WorkspaceService {
                       Harness.TIME_ZONE_VARIABLE,
                       timeZone),
                   secrets(provider, apiKey)));
+      price.ifPresent(monthly -> billing.startCharging(id, ownerId, monthly));
       var entity =
           transactions.execute(
               _ -> {
@@ -120,6 +138,24 @@ public class WorkspaceService {
       transactions.executeWithoutResult(_ -> repository.deleteById(id));
       throw e;
     }
+  }
+
+  /**
+   * What the owner pays a month for the size; nothing for an admin, whose workspaces are not
+   * charged.
+   */
+  private Optional<BigDecimal> priceFor(UUID ownerId, String serverType) {
+    var admin = users.findById(ownerId).map(user -> user.getRole() == Role.ADMIN).orElse(false);
+    if (admin) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        pricing
+            .monthlyPrice(serverType)
+            .orElseThrow(
+                () ->
+                    new ServerTypeRejectedException(
+                        "server type " + serverType + " is not one /vm-sizes lists")));
   }
 
   // Best effort: when the runtime cannot be reached either, a VM keeps its workspace-id label and

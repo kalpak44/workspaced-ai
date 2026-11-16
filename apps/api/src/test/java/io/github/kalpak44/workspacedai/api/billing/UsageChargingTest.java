@@ -1,0 +1,167 @@
+package io.github.kalpak44.workspacedai.api.billing;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.when;
+
+import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
+import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.UserEntity;
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.compute.VmManager;
+import io.github.kalpak44.workspacedai.api.compute.VmSize;
+import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Instant;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * A user who is not an admin pays for a workspace from the balance: a month of it up front to
+ * create one, then by the hour, until the balance runs out and the workspace goes.
+ */
+@SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
+@Import({TestDatabase.class, TestRuntime.class})
+class UsageChargingTest {
+
+  private static final JsonMapper JSON = JsonMapper.builder().build();
+  // 6.59 a month costs a user 8.90 with the 35% markup, which is 8.90 / 730 an hour.
+  private static final VmSize CX23 =
+      new VmSize(
+          "cx23",
+          true,
+          2,
+          4.0,
+          40,
+          "shared",
+          "x86",
+          "nbg1",
+          new BigDecimal("5.49"),
+          new BigDecimal("6.59"),
+          true,
+          true);
+  private static final long HOURLY = 12_192;
+  private static final long MONTH = 8_900_000;
+
+  @LocalServerPort int port;
+  @MockitoBean VmManager vmManager;
+  @MockitoBean ApiKeyCheck keyCheck;
+  @Autowired UserRepository users;
+  @Autowired PasswordEncoder passwords;
+  @Autowired WorkspaceRepository workspaces;
+  @Autowired UsageRepository usage;
+  @Autowired BillingAccountRepository accounts;
+  @Autowired Ledger ledger;
+  @Autowired TransactionTemplate transactions;
+  @Autowired UsageCharger charger;
+
+  private final HttpClient http = HttpClient.newHttpClient();
+  private UUID user;
+  private String bearer;
+
+  @BeforeEach
+  void signIn() {
+    when(vmManager.sizes()).thenReturn(List.of(CX23));
+    when(keyCheck.accepts(any(), any())).thenReturn(true);
+    var name = "payer-" + UUID.randomUUID();
+    user = users.save(new UserEntity(name, passwords.encode("password1"))).getId();
+    bearer = "Bearer " + TestUsers.login(port, name, "password1");
+  }
+
+  @Test
+  void refusesWithoutAMonthOfBalanceAndSaysHowMuch() throws Exception {
+    fund(MONTH - 1);
+
+    var refused = create(bearer);
+
+    assertThat(refused.statusCode()).isEqualTo(402);
+    assertThat(refused.body()).contains("costs 8.90 EUR a month").contains("add funds");
+    assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
+  }
+
+  @Test
+  void chargesEachStartedHourAndNothingTwice() throws Exception {
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    var row = usage.findById(workspace).orElseThrow();
+    assertThat(row.getHourlyMicros()).isEqualTo(HOURLY);
+
+    var now = row.getChargedUntil().plusSeconds(90 * 60);
+    charger.charge(workspace, now);
+    charger.charge(workspace, now);
+
+    assertThat(balance()).isEqualTo(MONTH - 2 * HOURLY);
+    assertThat(usage.findById(workspace).orElseThrow().getChargedUntil())
+        .isEqualTo(row.getChargedUntil().plusSeconds(2 * 3600));
+    assertThat(workspaces.findById(workspace)).isPresent();
+  }
+
+  @Test
+  void deletesTheWorkspaceOnceTheBalanceCannotPayTheNextHour() throws Exception {
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    var row = usage.findById(workspace).orElseThrow();
+    // Leaves one hour's worth short of the second hour.
+    fund(-(MONTH - HOURLY - HOURLY / 2));
+
+    charger.charge(workspace, row.getChargedUntil().plusSeconds(3600));
+
+    assertThat(balance()).isEqualTo(HOURLY / 2);
+    assertThat(workspaces.findById(workspace)).isEmpty();
+    assertThat(usage.findById(workspace)).isEmpty();
+  }
+
+  @Test
+  void neverChargesAnAdmin() throws Exception {
+    var workspace = created(create(TestUsers.bearer(port)));
+
+    assertThat(usage.findById(workspace)).isEmpty();
+  }
+
+  private void fund(long micros) {
+    transactions.executeWithoutResult(
+        _ -> ledger.post(user, micros, Ledger.TOP_UP, "test-" + UUID.randomUUID()));
+  }
+
+  private long balance() {
+    return accounts.findById(user).orElseThrow().getBalanceMicros();
+  }
+
+  private UUID created(HttpResponse<String> response) {
+    assertThat(response.statusCode()).isEqualTo(201);
+    return UUID.fromString(JSON.readTree(response.body()).get("id").asString());
+  }
+
+  private HttpResponse<String> create(String authorization) throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/workspaces"))
+            .header("Authorization", authorization)
+            .header("Content-Type", "application/json")
+            .POST(
+                BodyPublishers.ofString(
+                    "{\"name\":\"Paid "
+                        + Instant.now().toEpochMilli()
+                        + "\",\"modelProvider\":\"openrouter\",\"apiKey\":\"sk-or-1\"}"))
+            .build();
+    return http.send(request, BodyHandlers.ofString());
+  }
+}

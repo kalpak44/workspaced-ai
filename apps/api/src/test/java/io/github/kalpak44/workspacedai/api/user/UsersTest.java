@@ -10,8 +10,11 @@ import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.billing.BillingService;
+import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -19,6 +22,7 @@ import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.util.ArrayList;
+import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +46,9 @@ class UsersTest {
   @Autowired UserRepository users;
   @Autowired WorkspaceRepository workspaces;
   @Autowired PasswordEncoder passwords;
+  // A user who is not an admin pays for a workspace; paying is tested with billing, not here.
+  @MockitoBean VmPricing pricing;
+  @MockitoBean BillingService billing;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -113,6 +120,7 @@ class UsersTest {
 
   @Test
   void deletesAnotherUserWithTheirWorkspaces() throws Exception {
+    when(pricing.monthlyPrice(any())).thenReturn(Optional.of(BigDecimal.ONE));
     users.save(new UserEntity("ada", passwords.encode("password1")));
     var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
     var workspace =

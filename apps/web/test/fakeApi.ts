@@ -133,6 +133,8 @@ export function installFakeApi(
   const state = {
     // Each test's own copy, so one can sell a size out.
     vmSizes: VM_SIZES.map((size) => ({ ...size })),
+    // When set, a create is refused as the balance not covering a month of the size.
+    noFunds: false,
     fail: 0,
     nextId: 1,
     createStatus: "READY" as WorkspaceStatus,
@@ -560,6 +562,7 @@ export function installFakeApi(
         if (state.holdCreate) await state.holdCreate;
         if (body!.apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
         if (state.vmSizes.some((size) => size.serverType === body!.serverType && !size.available)) return json({ status: 409 }, 409);
+        if (state.noFunds) return json({ status: 402, detail: "add funds" }, 402);
         const created = {
           id: `ws-${state.nextId++}`,
           name: body!.name,

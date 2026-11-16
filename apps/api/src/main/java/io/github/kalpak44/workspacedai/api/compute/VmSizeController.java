@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.compute;
 
+import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
@@ -8,14 +9,15 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 public class VmSizeController implements VmSizeApi {
 
-  private final VmManager vmManager;
+  private final VmPricing pricing;
 
-  public VmSizeController(VmManager vmManager) {
-    this.vmManager = vmManager;
+  public VmSizeController(VmPricing pricing) {
+    this.pricing = pricing;
   }
 
+  /** An admin sees what a VM costs; everyone else sees the price they pay, with the markup. */
   @Override
   public ResponseEntity<List<VmSize>> list() {
-    return ResponseEntity.ok(vmManager.sizes());
+    return ResponseEntity.ok(pricing.sizes(CurrentUser.admin()));
   }
 }

@@ -25,7 +25,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.web.server.ResponseStatusException;
@@ -42,7 +41,10 @@ class BillingTest {
   private static final String WEBHOOK_SECRET = "whsec_test";
 
   @LocalServerPort int port;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired LedgerEntryRepository ledger;
+  @Autowired TopUpRepository topUps;
+  @Autowired BillingAccountRepository accounts;
+  @Autowired UsageRepository usage;
   @Autowired BillingService billing;
   @Autowired UserRepository users;
 
@@ -63,9 +65,10 @@ class BillingTest {
 
   @BeforeEach
   void clean() {
-    jdbc.update("DELETE FROM billing_ledger_entry");
-    jdbc.update("DELETE FROM billing_top_up");
-    jdbc.update("DELETE FROM billing_account");
+    ledger.deleteAll();
+    topUps.deleteAll();
+    usage.deleteAll();
+    accounts.deleteAll();
     STRIPE.status = 0;
   }
 
@@ -127,8 +130,7 @@ class BillingTest {
     assertThat(paid.get("invoiceNumber").asString()).isEqualTo("WSAI-" + STRIPE.lastSessionId());
     assertThat(paid.get("invoiceAvailable").asBoolean()).isTrue();
     assertThat(read(get("/billing")).get("balanceCents").asLong()).isEqualTo(2500);
-    assertThat(jdbc.queryForObject("SELECT count(*) FROM billing_ledger_entry", Long.class))
-        .isEqualTo(1);
+    assertThat(ledger.count()).isEqualTo(1);
   }
 
   @Test

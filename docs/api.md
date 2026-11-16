@@ -66,13 +66,22 @@ the order they were created.
 
 | Method   | Path                      | Body               | Answers                                         |
 |----------|---------------------------|--------------------|-------------------------------------------------|
-| `GET`    | `/api/v1/vm-sizes`        |                    | `200` and the VM sizes, cheapest first, each with its price and whether Hetzner has it now; `503` without the VM manager |
+| `GET`    | `/api/v1/vm-sizes`        |                    | `200` and the VM sizes, cheapest first, each with its monthly price and whether it is available now; `503` without the VM manager |
 | `GET`    | `/api/v1/workspaces`      |                    | `200` and every workspace                       |
 | `GET`    | `/api/v1/workspaces/events` |                  | `200` and a server-sent event stream            |
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "serverType": "cx23"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its VM is deleted, or `404`          |
 | `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM |
+
+A size's price is what the VM costs, server and IPv4 address, for an admin, and that plus
+`workspaced.vm-pricing.markup-percent` (`WORKSPACED_VM_MARKUP_PERCENT`, 35 by default) for everyone else.
+
+A user who is not an admin pays for workspaces from their balance. Creating one needs a balance that covers a month of
+the size at their price, or answers `402` saying how much, and nothing is created. From then on each workspace is
+charged by the hour, its monthly price over 730 hours, for every hour as it starts; the price is fixed when the
+workspace is created. When the balance cannot pay a workspace's next hour, the workspace is deleted. An admin's
+workspaces are never charged.
 
 A blank or overlong name, an unknown provider, a `serverType` `/vm-sizes` does not list, or an `id` that is not a UUID,
 answers `400`; a `serverType` Hetzner has sold out answers `409`, and nothing is created. Every error body is an RFC 9457

@@ -1,10 +1,14 @@
-import { ArrowLeft, ArrowRight, Check, Sparkles } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Sparkles, Wallet } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useModelProviders } from "../../hooks/useModelProviders";
+import { navigate } from "../../hooks/useRoute";
+import { routePath } from "../../lib/routes";
 import { useVmSizes } from "../../hooks/useVmSizes";
 import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
 import { Button, ChoiceCard, Spinner, TextField } from "../atoms";
 import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../molecules";
+
+const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
 
 // The API rejects anything longer, so the field never lets the user type past it.
 const MAX_NAME = 100;
@@ -46,7 +50,9 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
   const [rejected, setRejected] = useState(false);
   const [pending, setPending] = useState(false);
   const [soldOut, setSoldOut] = useState<string | null>(null);
+  const [noFunds, setNoFunds] = useState(false);
   const { sizes, status, reload } = useVmSizes();
+  const chosen = sizes.find((size) => size.serverType === serverType);
   const providers = useModelProviders();
   const provider = providers.providers.find((p) => p.id === providerId);
   const nameInput = useRef<HTMLInputElement>(null);
@@ -105,6 +111,7 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
     }
     setPending(true);
     setRejected(false);
+    setNoFunds(false);
     try {
       const result = await onCreate({ name, serverType, modelProvider: providerId, apiKey }).catch(
         (): CreateResult => "failed",
@@ -114,6 +121,8 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
       } else if (result === "rejected") {
         setRejected(true);
         keyInput.current?.focus();
+      } else if (result === "noFunds") {
+        setNoFunds(true);
       } else if (result === "soldOut") {
         setSoldOut(serverType);
         setServerType("");
@@ -183,6 +192,7 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
           onChange={(type) => {
             setServerType(type);
             setSoldOut(null);
+            setNoFunds(false);
           }}
           onReload={reload}
         />
@@ -214,6 +224,26 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
               setRejected(false);
             }}
           />
+        )}
+        {noFunds && (
+          <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
+            <p>
+              Your balance does not cover a month of {serverType}
+              {chosen ? ` (${PRICE.format(chosen.monthlyGross)} a month)` : ""}. Add funds, then create the workspace.
+            </p>
+            <a
+              href={routePath({ name: "billing" })}
+              onClick={(event) => {
+                event.preventDefault();
+                onClose();
+                navigate({ name: "billing" });
+              }}
+              className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+            >
+              <Wallet aria-hidden className="size-4" />
+              Add funds
+            </a>
+          </div>
         )}
       </>
     );

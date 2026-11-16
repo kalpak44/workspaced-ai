@@ -46,6 +46,9 @@ workspaced:
   # locally, workspace routes answer 503.
   vm-manager:
     url: ${WORKSPACED_VM_MANAGER_URL:}
+  vm-pricing:
+    # Added, in percent, to a VM's cost in the prices users who are not admins see.
+    markup-percent: ${WORKSPACED_VM_MARKUP_PERCENT:35}
   # Every harness is reached through this service's tunnel to its VM. Left unset, as it is
   # locally, no workspace's harness answers.
   agent-hub:
@@ -60,6 +63,8 @@ workspaced:
   # still answer and starting a top-up answers 503.
   billing:
     return-url: ${WORKSPACED_BILLING_RETURN_URL:http://localhost:5173/billing}
+    # How often started hours of workspaces are charged; each is charged once, however late.
+    charge-interval: ${WORKSPACED_BILLING_CHARGE_INTERVAL:PT5M}
     stripe:
       secret-key: ${WORKSPACED_STRIPE_SECRET_KEY:}
       webhook-secret: ${WORKSPACED_STRIPE_WEBHOOK_SECRET:}

@@ -25,8 +25,9 @@ public interface VmSizeApi {
       operationId = "listVmSizes",
       summary = "List VM sizes",
       description =
-          "Every size a new workspace's VM can be created as, default first, with its specs as "
-              + "Hetzner currently sells it.")
+          "Every size a new workspace's VM can be created as, cheapest first, with its specs and "
+              + "monthly price. An admin sees what the VM costs; any other user sees the price with "
+              + "the configured markup added.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",

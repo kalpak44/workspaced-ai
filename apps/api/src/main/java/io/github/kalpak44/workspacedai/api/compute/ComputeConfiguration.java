@@ -4,5 +4,5 @@ import org.springframework.boot.context.properties.EnableConfigurationProperties
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(VmManagerProperties.class)
+@EnableConfigurationProperties({VmManagerProperties.class, VmPricingProperties.class})
 public class ComputeConfiguration {}

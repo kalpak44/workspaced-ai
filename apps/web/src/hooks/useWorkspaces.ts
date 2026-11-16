@@ -18,8 +18,11 @@ import { BROWSER_TIME_ZONE } from "../lib/timeZones";
 export type { NewWorkspace, Workspace, WorkspaceStatus } from "../api/workspacesApi";
 
 /** "rejected" is the provider refusing the key, which the form can point at; "failed" is anything else. */
-/** `soldOut`: Hetzner sold out the size chosen before the VM could be made; nothing was created. */
-export type CreateResult = "created" | "rejected" | "soldOut" | "failed";
+/**
+ * `soldOut`: the size chosen ran out before the VM could be made. `noFunds`: the balance does not
+ * cover a month of it. Nothing was created for either.
+ */
+export type CreateResult = "created" | "rejected" | "soldOut" | "noFunds" | "failed";
 
 export const DEFAULT_NAME = "New Workspace";
 
@@ -85,8 +88,8 @@ export function useWorkspaces() {
   // Plain functions, not async ones: they are handed to click handlers that expect no
   // return value, so each settles its own promise, failure included.
   /**
-   * A rejected key or a sold-out size is left to the form to show; any other failure goes to the
-   * banner.
+   * A rejected key, a sold-out size or a short balance is left to the form to show; any other
+   * failure goes to the banner.
    * `onCreated` hears the new workspace, e.g. to open it.
    */
   const create = (
@@ -107,6 +110,9 @@ export function useWorkspaces() {
         }
         if (error_ instanceof ApiError && error_.status === 409) {
           return "soldOut";
+        }
+        if (error_ instanceof ApiError && error_.status === 402) {
+          return "noFunds";
         }
         setError("Could not create the workspace");
         return "failed";
