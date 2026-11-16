@@ -219,7 +219,7 @@ public class VmFirewallService {
       throw new FirewallRuleRefusedException(source + " has a prefix longer than its address");
     }
     for (var bit = prefix; bit < bits; bit++) {
-      if ((bytes[bit / 8] & (0x80 >> (bit % 8))) != 0) {
+      if (((bytes[bit / 8] & 0xff) & (0x80 >> (bit % 8))) != 0) {
         throw new FirewallRuleRefusedException(
             source + " has host bits set; give the network it starts at");
       }
