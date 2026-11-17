@@ -4,6 +4,9 @@ import { useAccount } from "../../hooks/useAccount";
 import { useTheme } from "../../hooks/useTheme";
 import { Button, Logo, TextField } from "../atoms";
 
+// The public site, which hosts the documents a user agrees to by signing in.
+const LEGAL_SITE = "https://workspaced.online";
+
 /** Shown instead of the app until someone signs in. */
 export function LoginPage({ unreachable = false }: { readonly unreachable?: boolean }) {
   useTheme();
@@ -49,6 +52,13 @@ export function LoginPage({ unreachable = false }: { readonly unreachable?: bool
         <div className="flex flex-col [&>button]:w-full">
           <Button label="Sign in" type="submit" icon={LogIn} busy={busy} disabled={!username.trim() || !password} />
         </div>
+        {/* A new tab, so following a link never discards the credentials already typed. */}
+        <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">
+          By signing in you agree to the{" "}
+          <a href={`${LEGAL_SITE}/terms`} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-zinc-900 dark:hover:text-zinc-100">Terms of service</a>
+          {" "}and{" "}
+          <a href={`${LEGAL_SITE}/privacy`} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2 hover:text-zinc-900 dark:hover:text-zinc-100">Privacy policy</a>.
+        </p>
       </form>
     </main>
   );

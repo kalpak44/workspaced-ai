@@ -1368,6 +1368,16 @@ describe("signing in", () => {
     expect(await screen.findAllByRole("button", { name: "Starter" })).not.toHaveLength(0);
   });
 
+  it("links the terms and privacy policy, each in a new tab", async () => {
+    api.auth.signedIn = false;
+    render(<App />);
+    const terms = await screen.findByRole("link", { name: "Terms of service" });
+    const privacy = screen.getByRole("link", { name: "Privacy policy" });
+    expect(terms).toHaveAttribute("href", "https://workspaced.online/terms");
+    expect(privacy).toHaveAttribute("href", "https://workspaced.online/privacy");
+    for (const link of [terms, privacy]) expect(link).toHaveAttribute("target", "_blank");
+  });
+
   it("signs out from the account menu", async () => {
     const user = userEvent.setup();
     render(<App />);
