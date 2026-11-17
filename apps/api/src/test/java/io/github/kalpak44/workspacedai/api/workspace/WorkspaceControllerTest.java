@@ -21,6 +21,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
@@ -102,14 +103,87 @@ class WorkspaceControllerTest {
   }
 
   @Test
-  void createsNothingWithoutAKey() throws Exception {
-    var blank = send("POST", "", body("Blank", "openrouter", "  "));
-    var none = send("POST", "", "{\"name\":\"None\",\"modelProvider\":\"openrouter\"}");
-
-    assertThat(blank.statusCode()).isEqualTo(400);
-    assertThat(none.statusCode()).isEqualTo(400);
+  void createsNothingWithABlankKey() throws Exception {
+    assertThat(send("POST", "", body("Blank", "openrouter", "  ")).statusCode()).isEqualTo(400);
     verify(keyCheck, never()).accepts(any(), any());
     assertThat(list()).isEmpty();
+  }
+
+  @Test
+  void createsAnUnlistedDraftWithoutAKeyOrAVm() throws Exception {
+    var created = send("POST", "", draftBody("Later"));
+
+    assertThat(created.statusCode()).isEqualTo(201);
+    var draft = JSON.readValue(created.body(), Workspace.class);
+    assertThat(draft.status()).isEqualTo(WorkspaceStatus.DRAFT);
+    assertThat(draft.serverType()).isEqualTo("cx23");
+    verify(keyCheck, never()).accepts(any(), any());
+    verify(runtime, never()).start(any(), any(), any(), any());
+    assertThat(list()).isEmpty();
+  }
+
+  @Test
+  void launchesADraftWithItsKeyUnderTheSameId() throws Exception {
+    var id = draft("Later");
+
+    var launched = send("POST", "/" + id + "/launch", "{\"apiKey\":\" sk-or-2\\n\"}");
+
+    assertThat(launched.statusCode()).isEqualTo(200);
+    assertThat(JSON.readValue(launched.body(), Workspace.class).id()).isEqualTo(id);
+    verify(keyCheck).accepts(ModelProvider.OPENROUTER, "sk-or-2");
+    var environment = ArgumentCaptor.forClass(WorkspaceEnvironment.class);
+    verify(runtime).start(eq(id), any(), eq("cx23"), environment.capture());
+    assertThat(environment.getValue().secrets()).containsEntry("OPENROUTER_API_KEY", "sk-or-2");
+    assertThat(list()).extracting(Workspace::id).containsExactly(id);
+    // A second launch would start a second VM for the same workspace.
+    assertThat(send("POST", "/" + id + "/launch", "{\"apiKey\":\"sk-or-2\"}").statusCode())
+        .isEqualTo(409);
+  }
+
+  @Test
+  void keepsADraftWhoseKeyTheProviderRejects() throws Exception {
+    when(keyCheck.accepts(ModelProvider.OPENROUTER, "sk-bad")).thenReturn(false);
+    var id = draft("Later");
+
+    assertThat(send("POST", "/" + id + "/launch", "{\"apiKey\":\"sk-bad\"}").statusCode())
+        .isEqualTo(422);
+    assertThat(repository.findById(id)).hasValueSatisfying(w -> assertThat(w.isDraft()).isTrue());
+    assertThat(send("POST", "/" + id + "/launch", "{\"apiKey\":\"sk-or-1\"}").statusCode())
+        .isEqualTo(200);
+  }
+
+  @Test
+  void refusesToLaunchWithoutAKeyOrAWorkspace() throws Exception {
+    var id = draft("Later");
+    assertThat(send("POST", "/" + id + "/launch", "{\"apiKey\":\" \"}").statusCode())
+        .isEqualTo(400);
+    assertThat(send("POST", "/" + id + "/launch", "{}").statusCode()).isEqualTo(400);
+    assertThat(
+            send("POST", "/" + UUID.randomUUID() + "/launch", "{\"apiKey\":\"sk-or-1\"}")
+                .statusCode())
+        .isEqualTo(404);
+  }
+
+  @Test
+  void deletesADraftWithoutTouchingTheRuntime() throws Exception {
+    var id = draft("Abandoned");
+
+    assertThat(send("DELETE", "/" + id, null).statusCode()).isEqualTo(204);
+    assertThat(repository.existsById(id)).isFalse();
+    verify(runtime, never()).stop(id);
+  }
+
+  @Test
+  void cleansUpOnlyDraftsOlderThanTheirMaxAge() throws Exception {
+    var draft = draft("Abandoned");
+    var launched = create("Kept");
+
+    new DraftCleanup(repository, Duration.ofHours(1)).run();
+    assertThat(repository.existsById(draft)).isTrue();
+
+    new DraftCleanup(repository, Duration.ofSeconds(-60)).run();
+    assertThat(repository.existsById(draft)).isFalse();
+    assertThat(repository.existsById(launched)).isTrue();
   }
 
   @Test
@@ -254,6 +328,14 @@ class WorkspaceControllerTest {
   private UUID create(String name) throws Exception {
     var response = send("POST", "", body(name, "openrouter", "sk-or-1"));
     return JSON.readValue(response.body(), Workspace.class).id();
+  }
+
+  private UUID draft(String name) throws Exception {
+    return JSON.readValue(send("POST", "", draftBody(name)).body(), Workspace.class).id();
+  }
+
+  private static String draftBody(String name) {
+    return "{\"name\":\"" + name + "\",\"modelProvider\":\"openrouter\",\"serverType\":\"cx23\"}";
   }
 
   private static String body(String name, String provider, String apiKey) {

@@ -123,7 +123,9 @@ public interface WorkspaceApi {
               + "workspace's VM, of the chosen serverType or the default one; it is INITIALIZING "
               + "until the VM reports ready. The key goes to the VM manager, which keeps it in "
               + "Vault as the workspace's provider secret; the API does not store it. Surrounding "
-              + "whitespace is trimmed from the name and the key.")
+              + "whitespace is trimmed from the name and the key. Without apiKey the workspace "
+              + "is a DRAFT: it has an id but no VM, is not listed or charged, and is deleted "
+              + "unless /workspaces/{id}/launch gives it a key within an hour.")
   @ApiResponse(
       responseCode = "201",
       description = "Created; its URL is in the Location header.",
@@ -135,7 +137,7 @@ public interface WorkspaceApi {
   @ApiResponse(
       responseCode = "400",
       description =
-          "The name is blank or longer than 100 characters, the API key is missing, the model "
+          "The name is blank or longer than 100 characters, the API key is blank, the model "
               + "provider is not one /model-providers lists, or the serverType is not one "
               + "/vm-sizes lists.",
       content =
@@ -176,6 +178,65 @@ public interface WorkspaceApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(consumes = JSON, produces = JSON)
   ResponseEntity<Workspace> create(@Valid @RequestBody CreateWorkspaceRequest request);
+
+  /**
+   * Launches a draft workspace with its provider key.
+   *
+   * @param id the draft
+   * @param request the key, trimmed before it is checked
+   * @return the workspace, now INITIALIZING
+   */
+  @Operation(
+      operationId = "launchWorkspace",
+      summary = "Launch a draft workspace",
+      description =
+          "Checks the API key with the model provider and creates the draft's VM, as a create "
+              + "with a key would have. A failed launch leaves it a draft, to be launched again.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "OK.",
+      content =
+          @Content(
+              mediaType = JSON,
+              schema = @Schema(implementation = Workspace.class),
+              examples = @ExampleObject(CREATED_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "400",
+      description = "The API key is missing or blank.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No workspace has that id.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class),
+              examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "409",
+      description =
+          "The workspace is not a draft, or Hetzner has its serverType sold out right now.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "422",
+      description = "The model provider rejected the API key; it is still a draft.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class),
+              examples = @ExampleObject(REJECTED_KEY_EXAMPLE)))
+  @PostMapping(path = "/{id}/launch", consumes = JSON, produces = JSON)
+  ResponseEntity<Workspace> launch(
+      @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
+          @PathVariable
+          UUID id,
+      @Valid @RequestBody LaunchWorkspaceRequest request);
 
   /**
    * Renames a workspace.

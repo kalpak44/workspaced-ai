@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { ApiError } from "../api/http";
 import {
+  createDraftWorkspace,
   createWorkspace,
   type DeletedEvent,
   deleteWorkspace,
   EVENTS_URL,
+  launchWorkspace,
   listWorkspaces,
   type NewWorkspace,
   renameWorkspace,
@@ -23,6 +25,9 @@ export type { NewWorkspace, Workspace, WorkspaceStatus } from "../api/workspaces
  * cover a month of it. Nothing was created for either.
  */
 export type CreateResult = "created" | "rejected" | "soldOut" | "noFunds" | "failed";
+
+/** A draft's id, or why there is none; a draft has no key yet, so it cannot be "rejected". */
+export type DraftResult = { readonly id: string } | Exclude<CreateResult, "created" | "rejected">;
 
 export const DEFAULT_NAME = "New Workspace";
 
@@ -96,37 +101,55 @@ export function useWorkspaces() {
 
   // Plain functions, not async ones: they are handed to click handlers that expect no
   // return value, so each settles its own promise, failure included.
-  /**
-   * A rejected key, a sold-out size or a short balance is left to the form to show; any other
-   * failure goes to the banner.
-   * `onCreated` hears the new workspace, e.g. to open it.
-   */
+  // A rejected key, a sold-out size or a short balance is left to the form to show; any other
+  // failure goes to the banner.
+  const refusal = (error_: unknown): Exclude<CreateResult, "created"> => {
+    if (error_ instanceof ApiError && error_.status === 422) {
+      return "rejected";
+    }
+    if (error_ instanceof ApiError && error_.status === 409) {
+      return "soldOut";
+    }
+    if (error_ instanceof ApiError && error_.status === 402) {
+      return "noFunds";
+    }
+    setError("Could not create the workspace");
+    return "failed";
+  };
+
+  const added = (created: Workspace, onCreated?: (workspace: Workspace) => void): CreateResult => {
+    const workspace = { ...created, status: latest.current.get(created.id) ?? created.status };
+    setWorkspaces((current) => [...current, workspace]);
+    setSelectedId(workspace.id);
+    onCreated?.(workspace);
+    return "created";
+  };
+
+  /** `onCreated` hears the new workspace, e.g. to open it. */
   const create = (
     request: NewWorkspace,
     onCreated?: (workspace: Workspace) => void,
   ): Promise<CreateResult> =>
     createWorkspace({ timeZone: BROWSER_TIME_ZONE, ...request, name: request.name.trim(), apiKey: request.apiKey.trim() }).then(
-      (created): CreateResult => {
-        const workspace = { ...created, status: latest.current.get(created.id) ?? created.status };
-        setWorkspaces((current) => [...current, workspace]);
-        setSelectedId(workspace.id);
-        onCreated?.(workspace);
-        return "created";
-      },
-      (error_: unknown): CreateResult => {
-        if (error_ instanceof ApiError && error_.status === 422) {
-          return "rejected";
-        }
-        if (error_ instanceof ApiError && error_.status === 409) {
-          return "soldOut";
-        }
-        if (error_ instanceof ApiError && error_.status === 402) {
-          return "noFunds";
-        }
-        setError("Could not create the workspace");
-        return "failed";
-      },
+      (created) => added(created, onCreated),
+      refusal,
     );
+
+  /** Reserves the id a provider key can be labelled with; nothing is listed or charged yet. */
+  const draft = (request: Omit<NewWorkspace, "apiKey">): Promise<DraftResult> =>
+    createDraftWorkspace({ timeZone: BROWSER_TIME_ZONE, ...request, name: request.name.trim() }).then(
+      ({ id }) => ({ id }),
+      (error_: unknown) => refusal(error_) as Exclude<CreateResult, "created" | "rejected">,
+    );
+
+  /** Gives a draft its key and VM; it then joins the list as {@link create} would add it. */
+  const launch = (id: string, apiKey: string, onCreated?: (workspace: Workspace) => void): Promise<CreateResult> =>
+    launchWorkspace(id, apiKey.trim()).then((created) => added(created, onCreated), refusal);
+
+  // Best effort: the API deletes a draft nobody launched on its own after a while.
+  const discardDraft = (id: string) => {
+    deleteWorkspace(id).catch(() => undefined);
+  };
 
   /** A name for a new workspace that no existing one already has. */
   const suggestName = (base: string = DEFAULT_NAME) =>
@@ -198,6 +221,9 @@ export function useWorkspaces() {
     dismissError: () => setError(null),
     select: setSelectedId,
     create,
+    draft,
+    launch,
+    discardDraft,
     suggestName,
     rename,
     restart,

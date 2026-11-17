@@ -110,6 +110,9 @@ export function installFakeApi(
   ],
 ) {
   const rows = [...initial];
+  // Created without a key: unlisted until launched, as the API keeps them.
+  const drafts = new Map<string, Omit<Workspace, "status">>();
+  const launched: { id: string; apiKey: string }[] = [];
   // Names only, as the API keeps them; the provider key is added on every list.
   const secrets = new Map<string, string[]>();
   const sent: { name: string; value: string }[] = [];
@@ -662,6 +665,18 @@ export function installFakeApi(
       markRestartRequired(restartRoute[1], false);
       return new Response(null, { status: 202 });
     }
+    const launchRoute = /\/api\/v1\/workspaces\/([^/]+)\/launch$/.exec(url);
+    if (launchRoute) {
+      const draft = drafts.get(launchRoute[1]);
+      if (!draft) return json({}, 404);
+      const { apiKey } = JSON.parse(String(init!.body)) as { apiKey: string };
+      if (apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
+      drafts.delete(draft.id);
+      launched.push({ id: draft.id, apiKey });
+      const workspace = { ...draft, status: state.createStatus };
+      rows.push(workspace);
+      return json(workspace);
+    }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
       ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string; serverType?: string })
@@ -673,6 +688,18 @@ export function installFakeApi(
         if (body!.apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
         if (state.vmSizes.some((size) => size.serverType === body!.serverType && !size.available)) return json({ status: 409 }, 409);
         if (state.noFunds) return json({ status: 402, detail: "add funds" }, 402);
+        if (body!.apiKey === undefined) {
+          const draft = {
+            id: `ws-${state.nextId++}`,
+            name: body!.name,
+            modelProvider: body!.modelProvider!,
+            model: null,
+            timeZone: body!.timeZone ?? "UTC",
+            restartRequired: false,
+          };
+          drafts.set(draft.id, draft);
+          return json({ ...draft, status: "DRAFT" }, 201);
+        }
         const created = {
           id: `ws-${state.nextId++}`,
           name: body!.name,
@@ -691,6 +718,7 @@ export function installFakeApi(
         return json(rows[index]);
       case "DELETE":
         if (state.holdDelete) await state.holdDelete;
+        if (drafts.delete(id)) return new Response(null, { status: 204 });
         if (index < 0) return json({}, 404);
         rows.splice(index, 1);
         return new Response(null, { status: 204 });
@@ -854,5 +882,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { billing, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { drafts, launched, billing, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

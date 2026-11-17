@@ -78,10 +78,10 @@ public class WorkspaceService {
     this.notifications = notifications;
   }
 
-  /** The workspaces one user owns; nobody sees another user's. */
+  /** The workspaces one user owns; nobody sees another user's, and drafts are not listed. */
   @Transactional(readOnly = true)
   public List<Workspace> list(UUID ownerId) {
-    var entities = repository.findAllByOwnerIdOrderByCreatedAtAscIdAsc(ownerId);
+    var entities = repository.findAllByOwnerIdAndDraftFalseOrderByCreatedAtAscIdAsc(ownerId);
     var statuses = runtime.statuses(entities.stream().map(WorkspaceEntity::getId).toList());
     return entities.stream().map(e -> Workspace.of(e, statuses.get(e.getId()))).toList();
   }
@@ -115,28 +115,7 @@ public class WorkspaceService {
                         new WorkspaceEntity(ownerId, name, provider.id(), timeZone)))
             .getId();
     try {
-      var startedAs =
-          runtime.start(
-              id,
-              ownerId,
-              serverType,
-              new WorkspaceEnvironment(
-                  Map.of(
-                      provider.baseUrlVariable(),
-                      provider.baseUrl(),
-                      Harness.TIME_ZONE_VARIABLE,
-                      timeZone),
-                  secrets(provider, apiKey)));
-      price.ifPresent(monthly -> billing.startCharging(id, ownerId, monthly));
-      var entity =
-          transactions.execute(
-              _ -> {
-                var saved = repository.findById(id).orElseThrow();
-                saved.setServerType(startedAs);
-                notifications.send(ownerId, Notifications.workspaceCreated(id, name));
-                return saved;
-              });
-      return Workspace.of(entity, statusOf(id));
+      return start(id, ownerId, name, provider, apiKey, serverType, timeZone, price);
     } catch (RuntimeException e) {
       // The user sees only that it failed; this is where the reason is kept.
       log.warn("workspace {} failed to create", id, e);
@@ -144,6 +123,100 @@ public class WorkspaceService {
       transactions.executeWithoutResult(_ -> repository.deleteById(id));
       throw e;
     }
+  }
+
+  /**
+   * A workspace with an id but no VM, for a key that is issued only once the id exists. It is
+   * checked as {@link #create} checks one, so its launch fails only on the key or on Hetzner.
+   *
+   * @param serverType null for the default size
+   */
+  public Workspace createDraft(
+      UUID ownerId, String name, ModelProvider provider, String serverType, String timeZone) {
+    validTimeZone(timeZone);
+    priceFor(ownerId, serverType).ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    var entity =
+        transactions.execute(
+            _ ->
+                repository.saveAndFlush(
+                    WorkspaceEntity.draft(ownerId, name, provider.id(), serverType, timeZone)));
+    return Workspace.of(entity, WorkspaceStatus.DRAFT);
+  }
+
+  /**
+   * Creates a draft's VM with its key, as {@link #create} would have. A failed launch leaves it a
+   * draft, so the same id can be launched again. Empty when no workspace has that id.
+   */
+  public Optional<Workspace> launch(UUID id, String apiKey) {
+    var found = repository.findById(id);
+    if (found.isEmpty()) {
+      return Optional.empty();
+    }
+    var draft = found.get();
+    if (!draft.isDraft()) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace is already launched");
+    }
+    var ownerId = draft.getOwnerId();
+    var provider = ModelProvider.byId(draft.getModelProvider()).orElseThrow();
+    var price = priceFor(ownerId, draft.getServerType());
+    price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    if (!keyCheck.accepts(provider, apiKey)) {
+      throw new ApiKeyRejectedException(provider);
+    }
+    // Claimed before the VM is asked for, so two launches at once start one VM between them.
+    if (repository.claimDraft(id) == 0) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace is already launched");
+    }
+    try {
+      return Optional.of(
+          start(
+              id,
+              ownerId,
+              draft.getName(),
+              provider,
+              apiKey,
+              draft.getServerType(),
+              draft.getTimeZone(),
+              price));
+    } catch (RuntimeException e) {
+      log.warn("workspace {} failed to launch", id, e);
+      release(id);
+      repository.returnToDraft(id);
+      throw e;
+    }
+  }
+
+  private Workspace start(
+      UUID id,
+      UUID ownerId,
+      String name,
+      ModelProvider provider,
+      String apiKey,
+      String serverType,
+      String timeZone,
+      Optional<BigDecimal> price) {
+    var startedAs =
+        runtime.start(
+            id,
+            ownerId,
+            serverType,
+            new WorkspaceEnvironment(
+                Map.of(
+                    provider.baseUrlVariable(),
+                    provider.baseUrl(),
+                    Harness.TIME_ZONE_VARIABLE,
+                    timeZone),
+                secrets(provider, apiKey)));
+    price.ifPresent(monthly -> billing.startCharging(id, ownerId, monthly));
+    var entity =
+        transactions.execute(
+            _ -> {
+              var saved = repository.findById(id).orElseThrow();
+              saved.setServerType(startedAs);
+              notifications.send(ownerId, Notifications.workspaceCreated(id, name));
+              return saved;
+            });
+    return Workspace.of(entity, statusOf(id));
   }
 
   /**
@@ -249,6 +322,11 @@ public class WorkspaceService {
     var owner = repository.findOwnerIdById(id);
     if (owner.isEmpty()) {
       return false;
+    }
+    // A draft has no VM to stop and was never announced, so it goes without a notification.
+    if (repository.findById(id).map(WorkspaceEntity::isDraft).orElse(false)) {
+      repository.deleteById(id);
+      return true;
     }
     runtime.stop(id);
     transactions.executeWithoutResult(

@@ -42,20 +42,36 @@ public class WorkspaceController implements WorkspaceApi {
                     new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "unknown model provider " + request.modelProvider()));
+    var apiKey = request.trimmedApiKey();
     var workspace =
-        service.create(
-            CurrentUser.id(),
-            request.trimmedName(),
-            provider,
-            request.trimmedApiKey(),
-            request.serverTypeOrNull(),
-            request.timeZoneOrUtc());
+        apiKey == null
+            ? service.createDraft(
+                CurrentUser.id(),
+                request.trimmedName(),
+                provider,
+                request.serverTypeOrNull(),
+                request.timeZoneOrUtc())
+            : service.create(
+                CurrentUser.id(),
+                request.trimmedName(),
+                provider,
+                apiKey,
+                request.serverTypeOrNull(),
+                request.timeZoneOrUtc());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
             .buildAndExpand(workspace.id())
             .toUri();
     return ResponseEntity.created(location).body(workspace);
+  }
+
+  @Override
+  public ResponseEntity<Workspace> launch(UUID id, LaunchWorkspaceRequest request) {
+    return service
+        .launch(id, request.trimmedApiKey())
+        .map(ResponseEntity::ok)
+        .orElseThrow(() -> notFound(id));
   }
 
   @Override

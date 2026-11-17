@@ -64,6 +64,19 @@ export async function createWorkspace(workspace: NewWorkspace): Promise<Workspac
   return (await send(BASE, { method: "POST", body: JSON.stringify(workspace) })).json();
 }
 
+/**
+ * A workspace with an id but no VM or key, never listed, for a key that can be issued only once
+ * the id exists. Only the id is of use until {@link launchWorkspace}.
+ */
+export async function createDraftWorkspace(workspace: Omit<NewWorkspace, "apiKey">): Promise<{ readonly id: string }> {
+  return (await send(BASE, { method: "POST", body: JSON.stringify(workspace) })).json();
+}
+
+/** Creates a draft's VM with its key; a rejected key leaves it a draft to launch again. */
+export async function launchWorkspace(id: string, apiKey: string): Promise<Workspace> {
+  return (await send(`${workspaceUrl(id)}/launch`, { method: "POST", body: JSON.stringify({ apiKey }) })).json();
+}
+
 export async function renameWorkspace(id: string, name: string): Promise<Workspace> {
   return (await send(workspaceUrl(id), { method: "PUT", body: JSON.stringify({ name }) })).json();
 }

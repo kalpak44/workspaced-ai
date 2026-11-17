@@ -58,6 +58,14 @@ public class WorkspaceEntity {
   @Column(name = "firewall_agent_allowed", nullable = false)
   private boolean firewallAgentAllowed = true;
 
+  // Waiting for its provider key: it has no VM until it is launched.
+  @Column(nullable = false)
+  private boolean draft;
+
+  public boolean isDraft() {
+    return draft;
+  }
+
   public boolean isFirewallAgentAllowed() {
     return firewallAgentAllowed;
   }
@@ -96,6 +104,15 @@ public class WorkspaceEntity {
     this.name = name;
     this.modelProvider = modelProvider;
     this.timeZone = timeZone;
+  }
+
+  /** One without a VM yet, which holds the size it will be launched as. */
+  public static WorkspaceEntity draft(
+      UUID ownerId, String name, String modelProvider, String serverType, String timeZone) {
+    var entity = new WorkspaceEntity(ownerId, name, modelProvider, timeZone);
+    entity.serverType = serverType;
+    entity.draft = true;
+    return entity;
   }
 
   public String getTimeZone() {

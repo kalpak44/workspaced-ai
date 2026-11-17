@@ -2,9 +2,13 @@ package io.github.kalpak44.workspacedai.api.workspace;
 
 import io.swagger.v3.oas.annotations.media.Schema;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
-/** The key is checked with the provider and handed to the workspace's VM, never stored here. */
+/**
+ * The key is checked with the provider and handed to the workspace's VM, never stored here. Without
+ * one the workspace is a draft, launched once its key arrives.
+ */
 @Schema(description = "A new workspace: its name, its VM size and its model provider")
 public record CreateWorkspaceRequest(
     @Schema(example = "Research", maxLength = 100) @NotBlank @Size(max = 100) String name,
@@ -13,10 +17,12 @@ public record CreateWorkspaceRequest(
     @Schema(
             description =
                 "Checked with the provider before the workspace is created, then kept as its "
-                    + "provider secret, which cannot be removed",
+                    + "provider secret, which cannot be removed. Omitted, the workspace is a "
+                    + "DRAFT with no VM until /workspaces/{id}/launch gives it one",
             example = "sk-or-v1-…",
             maxLength = 1000)
-        @NotBlank
+        // Absent makes a draft; present but blank is a mistake, not a request for one.
+        @Pattern(regexp = "(?s).*\\S.*", message = "must not be blank")
         @Size(max = 1000)
         String apiKey,
     @Schema(description = "One of /vm-sizes; the default size when omitted", example = "cx23")
@@ -44,8 +50,8 @@ public record CreateWorkspaceRequest(
     return name.strip();
   }
 
-  /** A key pasted with a trailing newline is the same key. */
+  /** A key pasted with a trailing newline is the same key. Null asks for a draft. */
   String trimmedApiKey() {
-    return apiKey.strip();
+    return apiKey == null ? null : apiKey.strip();
   }
 }

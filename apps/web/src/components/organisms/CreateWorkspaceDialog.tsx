@@ -1,13 +1,14 @@
-import { ArrowLeft, ArrowRight, Check, Sparkles, Wallet } from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, Plug, Sparkles, Wallet } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { type Billing, useBilling } from "../../hooks/useBilling";
 import { useModelProviders } from "../../hooks/useModelProviders";
+import { type OpenRouterConnectStatus, useOpenRouterConnect } from "../../hooks/useOpenRouterConnect";
 import { navigate } from "../../hooks/useRoute";
 import { formatMoney } from "../../lib/format";
 import { routePath } from "../../lib/routes";
 import { type VmSize, useVmSizes } from "../../hooks/useVmSizes";
-import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
+import type { CreateResult, DraftResult, NewWorkspace } from "../../hooks/useWorkspaces";
 import { Button, ChoiceCard, Spinner, TextField } from "../atoms";
 import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../molecules";
 
@@ -56,6 +57,22 @@ function coverage(balanceCents: number, monthCents: number): string {
   return `about ${months >= 10 ? Math.floor(months) : Number(months.toFixed(1))} months`;
 }
 
+/** What the OpenRouter popup is doing, once the user has started it; null while there is nothing to say. */
+function connectNote(status: OpenRouterConnectStatus): { text: string; error: boolean } | null {
+  switch (status) {
+    case "waiting":
+      return { text: "Approve the key in the OpenRouter window.", error: false };
+    case "exchanging":
+      return { text: "Getting the key from OpenRouter…", error: false };
+    case "blocked":
+      return { text: "The browser blocked the OpenRouter window. Allow pop-ups for this site and try again.", error: true };
+    case "failed":
+      return { text: "OpenRouter did not issue a key. Try again, or paste one.", error: true };
+    default:
+      return null;
+  }
+}
+
 /** Leaves the dialog for the billing page. */
 function AddFundsLink({ onClose }: { readonly onClose: () => void }) {
   return (
@@ -97,6 +114,12 @@ interface Props {
   readonly initialName: string;
   /** Resolves "created" once it exists; on anything else the dialog stays and keeps its input. */
   readonly onCreate: (workspace: NewWorkspace) => Promise<CreateResult>;
+  /** Reserves the id OpenRouter's key is labelled with, before the key exists. */
+  readonly onDraft: (workspace: Omit<NewWorkspace, "apiKey">) => Promise<DraftResult>;
+  /** Creates the draft's VM with its key, resolving as `onCreate` does. */
+  readonly onLaunch: (id: string, apiKey: string) => Promise<CreateResult>;
+  /** Drops a draft the dialog will not launch. */
+  readonly onDiscard: (id: string) => void;
   readonly onClose: () => void;
 }
 
@@ -106,10 +129,12 @@ interface Props {
  * default one starts out chosen while Hetzner has it; so does the provider while there is only one.
  * A size that sells out before the create brings the dialog back to the sizes. The API checks the
  * key before it creates anything, so a wrong one is reported here rather than as a broken
- * workspace. A user who pays for workspaces sees, with the size, how long the balance lasts with
- * it among their others, since the API refuses one the balance cannot pay a month of.
+ * workspace. OpenRouter can also issue the key itself, from the user's own account, so nobody has
+ * to find and copy one: the workspace is drafted first, so the key is labelled with its id, and
+ * launched once the key arrives. A draft the dialog leaves without launching is discarded. A user who pays for workspaces sees, with the size, how long the balance
+ * lasts with it among their others, since the API refuses one the balance cannot pay a month of.
  */
-export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props) {
+export function CreateWorkspaceDialog({ initialName, onCreate, onDraft, onLaunch, onDiscard, onClose }: Props) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initialName);
   const [serverType, setServerType] = useState("");
@@ -130,6 +155,20 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
   const nameInput = useRef<HTMLInputElement>(null);
   const types = useRef<HTMLFieldSetElement>(null);
   const keyInput = useRef<HTMLInputElement>(null);
+  // A draft holds the name and size it was made with, so it is dropped whenever those may change.
+  const draftId = useRef<string | null>(null);
+  const discardDraft = () => {
+    if (draftId.current) {
+      onDiscard(draftId.current);
+      draftId.current = null;
+    }
+  };
+  const openRouter = useOpenRouterConnect((key) => {
+    setApiKey(key);
+    setRejected(false);
+    void finish(key);
+  });
+  const note = connectNote(openRouter.status);
 
   // The suggested name is selected, so typing replaces it and Enter moves on.
   useEffect(() => {
@@ -171,7 +210,60 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
   // Closing mid-request would hide whether the workspace was made, so it waits.
   const close = () => {
     if (!pending) {
+      discardDraft();
       onClose();
+    }
+  };
+
+  // What the create, the draft or the launch refused, shown where the user can act on it.
+  const refused = (result: Exclude<CreateResult, "created">) => {
+    if (result === "rejected") {
+      setRejected(true);
+      keyInput.current?.focus();
+    } else if (result === "noFunds") {
+      setNoFunds(true);
+    } else if (result === "soldOut") {
+      discardDraft();
+      setSoldOut(serverType);
+      setServerType("");
+      setStep(1);
+      reload();
+    }
+  };
+
+  /** The id to label OpenRouter's key with, drafting the workspace the first time. */
+  const keyLabel = async (): Promise<string | null> => {
+    if (!draftId.current) {
+      setNoFunds(false);
+      const result = await onDraft({ name, serverType, modelProvider: providerId }).catch((): DraftResult => "failed");
+      if (typeof result === "string") {
+        refused(result);
+        return null;
+      }
+      draftId.current = result.id;
+    }
+    return `workspaced: ${draftId.current}`;
+  };
+
+  // A draft is launched with the key; without one, the workspace is created in one go.
+  const finish = async (key: string) => {
+    setPending(true);
+    setRejected(false);
+    setNoFunds(false);
+    try {
+      const draft = draftId.current;
+      const result = await (draft
+        ? onLaunch(draft, key)
+        : onCreate({ name, serverType, modelProvider: providerId, apiKey: key })
+      ).catch((): CreateResult => "failed");
+      if (result === "created") {
+        draftId.current = null;
+        onClose();
+      } else {
+        refused(result);
+      }
+    } finally {
+      setPending(false);
     }
   };
 
@@ -181,29 +273,7 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
       setStep(step + 1);
       return;
     }
-    setPending(true);
-    setRejected(false);
-    setNoFunds(false);
-    try {
-      const result = await onCreate({ name, serverType, modelProvider: providerId, apiKey }).catch(
-        (): CreateResult => "failed",
-      );
-      if (result === "created") {
-        onClose();
-      } else if (result === "rejected") {
-        setRejected(true);
-        keyInput.current?.focus();
-      } else if (result === "noFunds") {
-        setNoFunds(true);
-      } else if (result === "soldOut") {
-        setSoldOut(serverType);
-        setServerType("");
-        setStep(1);
-        reload();
-      }
-    } finally {
-      setPending(false);
-    }
+    await finish(apiKey);
   };
 
   let providerChoices;
@@ -278,6 +348,29 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
           <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">Model provider</legend>
           {providerChoices}
         </fieldset>
+        {provider?.id === "openrouter" && (
+          <div className="flex flex-col gap-1.5">
+            <div className="flex flex-wrap items-center gap-3">
+              <Button
+                label={openRouter.status === "connected" ? "Connected to OpenRouter" : "Connect OpenRouter"}
+                variant="secondary"
+                icon={openRouter.status === "connected" ? Check : Plug}
+                busy={openRouter.status === "exchanging"}
+                disabled={pending}
+                onClick={() => openRouter.connect(keyLabel)}
+              />
+              <span className="text-sm text-zinc-500 dark:text-zinc-400">or paste a key below</span>
+            </div>
+            {note && (
+              <p
+                role={note.error ? "alert" : "status"}
+                className={note.error ? "text-xs text-rose-600 dark:text-rose-400" : "text-xs text-zinc-500 dark:text-zinc-400"}
+              >
+                {note.text}
+              </p>
+            )}
+          </div>
+        )}
         {provider && (
           <TextField
             ref={keyInput}
@@ -364,13 +457,16 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
         </ModalBody>
         <ModalFooter>
           {step === 0 ? (
-            <Button label="Cancel" variant="secondary" onClick={onClose} />
+            <Button label="Cancel" variant="secondary" onClick={close} />
           ) : (
             <Button
               label="Back"
               variant="secondary"
               icon={ArrowLeft}
-              onClick={() => setStep(step - 1)}
+              onClick={() => {
+                discardDraft();
+                setStep(step - 1);
+              }}
               disabled={pending}
             />
           )}

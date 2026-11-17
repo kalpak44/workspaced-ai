@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
 import jakarta.persistence.LockModeType;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -28,6 +29,30 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
 
   /** Oldest first; the id breaks ties between workspaces created in the same instant. */
   List<WorkspaceEntity> findAllByOwnerIdOrderByCreatedAtAscIdAsc(UUID ownerId);
+
+  /** As above, without the drafts, which nobody but the dialog that made them knows of. */
+  List<WorkspaceEntity> findAllByOwnerIdAndDraftFalseOrderByCreatedAtAscIdAsc(UUID ownerId);
+
+  /**
+   * Takes a draft for launching; 0 when it is not one, or another launch took it first. Its own
+   * transaction, committed before the VM is asked for.
+   */
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.draft = false where w.id = :id and w.draft = true")
+  int claimDraft(@Param("id") UUID id);
+
+  /** Hands a draft back after its launch failed, so it can be launched again. */
+  @Transactional
+  @Modifying
+  @Query("update WorkspaceEntity w set w.draft = true where w.id = :id")
+  int returnToDraft(@Param("id") UUID id);
+
+  /** The database cascades the delete to whatever a draft collected. */
+  @Transactional
+  @Modifying
+  @Query("delete from WorkspaceEntity w where w.draft = true and w.createdAt < :before")
+  int deleteDraftsCreatedBefore(@Param("before") Instant before);
 
   /** Its own transaction, for a caller that must not hold one while it asks the harness. */
   @Transactional

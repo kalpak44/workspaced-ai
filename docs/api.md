@@ -91,6 +91,13 @@ problem detail (`application/problem+json`).
 provider refuses answers `422` and creates nothing, and a provider that cannot be reached answers `502`. The key goes
 to the VM manager, which keeps it in Vault as the workspace's provider secret; the API never stores it.
 
+Without `apiKey` the workspace is a **draft** (`status: DRAFT`): it gets an id and passes the same size and balance
+checks, but has no VM, is not listed or charged, and announces nothing. `POST /workspaces/$ID/launch` with
+`{"apiKey":"…"}` checks the key and creates the VM as a create with a key would have; a rejected key (`422`) or a failed
+VM leaves it a draft to launch again, and launching one that is not a draft answers `409`. The web app drafts first so
+the key OpenRouter issues can be labelled with the workspace id. Deleting a draft only drops its row, and `DraftCleanup`
+deletes drafts older than `workspaced.workspace.draft-max-age` (an hour) that nobody launched or deleted.
+
 ```sh
 curl -X POST localhost:8080/api/v1/workspaces -H 'Content-Type: application/json' \
   -d '{"name":"Docs","modelProvider":"openrouter","apiKey":"sk-or-v1-…","serverType":"cx23"}'

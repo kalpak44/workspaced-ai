@@ -7,8 +7,17 @@ import { installFakeApi } from "./fakeApi";
 
 /** The dialog creating through the real hook, so the API's answers reach it as they would in the app. */
 function Dialog() {
-  const { create } = useWorkspaces();
-  return <CreateWorkspaceDialog initialName="Research" onCreate={(workspace) => create(workspace)} onClose={() => {}} />;
+  const { create, draft, launch, discardDraft } = useWorkspaces();
+  return (
+    <CreateWorkspaceDialog
+      initialName="Research"
+      onCreate={(workspace) => create(workspace)}
+      onDraft={draft}
+      onLaunch={(id, key) => launch(id, key)}
+      onDiscard={discardDraft}
+      onClose={() => {}}
+    />
+  );
 }
 
 type User = ReturnType<typeof userEvent.setup>;
