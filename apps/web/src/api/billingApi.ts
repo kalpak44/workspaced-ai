@@ -1,14 +1,34 @@
 import { send } from "./http";
 
-/** What the account has to spend, and every top-up that paid into it. */
+/** What the account has to spend, what its workspaces spend, and every top-up that paid into it. */
 export interface Billing {
   /** In cents, rounded down. */
   readonly balanceCents: number;
   readonly currency: string;
   /** Charged on top of a top-up, in percent; the balance gets the amount before it. */
   readonly vatPercent: number;
+  /** What the workspaces cost together over a month, in cents. */
+  readonly monthlySpendCents: number;
+  /** When the balance stops paying for the workspaces and they are deleted; null while none is charged. */
+  readonly fundedUntil: string | null;
+  /** Every charged workspace, oldest first. */
+  readonly workspaces: readonly WorkspaceSpend[];
+  /** What was charged each of the last 30 days anything was, newest first. */
+  readonly usage: readonly DailySpend[];
   /** Newest first; checkouts abandoned at Stripe are left out. */
   readonly topUps: readonly TopUp[];
+}
+
+export interface WorkspaceSpend {
+  readonly id: string;
+  readonly name: string;
+  readonly monthlyCents: number;
+}
+
+export interface DailySpend {
+  /** The day in UTC, as 2026-11-16. */
+  readonly date: string;
+  readonly amountCents: number;
 }
 
 export interface TopUp {

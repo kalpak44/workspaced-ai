@@ -1,9 +1,12 @@
 import { ArrowLeft, ArrowRight, Check, Sparkles, Wallet } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
+import { useAccount } from "../../hooks/useAccount";
+import { type Billing, useBilling } from "../../hooks/useBilling";
 import { useModelProviders } from "../../hooks/useModelProviders";
 import { navigate } from "../../hooks/useRoute";
+import { formatMoney } from "../../lib/format";
 import { routePath } from "../../lib/routes";
-import { useVmSizes } from "../../hooks/useVmSizes";
+import { type VmSize, useVmSizes } from "../../hooks/useVmSizes";
 import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
 import { Button, ChoiceCard, Spinner, TextField } from "../atoms";
 import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../molecules";
@@ -26,6 +29,70 @@ function hostOf(url: string): string {
   }
 }
 
+/**
+ * A month of every workspace the user has with one of this size, which the balance must cover for
+ * the API to create it, and how much the balance falls short of that.
+ */
+function monthWith(billing: Billing, size: VmSize) {
+  const monthCents = billing.monthlySpendCents + Math.round(size.monthlyGross * 100);
+  return { monthCents, shortCents: Math.max(0, monthCents - billing.balanceCents) };
+}
+
+/** Why the balance cannot pay for the size: by how much, once the balance and the size are known. */
+function shortfall(billing: Billing | null, size: VmSize | undefined, serverType: string): string {
+  if (!billing || !size || monthWith(billing, size).shortCents === 0) {
+    return `Your balance does not cover a month of ${serverType}${size ? ` (${PRICE.format(size.monthlyGross)} a month)` : ""}. Add funds, then create the workspace.`;
+  }
+  const { monthCents, shortCents } = monthWith(billing, size);
+  const month = billing.monthlySpendCents === 0
+    ? `a month of ${serverType} (${formatMoney(monthCents)})`
+    : `a month of your workspaces with this one (${formatMoney(monthCents)})`;
+  return `Your balance of ${formatMoney(billing.balanceCents)} does not cover ${month}. Add ${formatMoney(shortCents)}, then create the workspace.`;
+}
+
+/** "about 1.4 months", "about 12 months": how long a balance of at least a month lasts. */
+function coverage(balanceCents: number, monthCents: number): string {
+  const months = balanceCents / monthCents;
+  return `about ${months >= 10 ? Math.floor(months) : Number(months.toFixed(1))} months`;
+}
+
+/** Leaves the dialog for the billing page. */
+function AddFundsLink({ onClose }: { readonly onClose: () => void }) {
+  return (
+    <a
+      href={routePath({ name: "billing" })}
+      onClick={(event) => {
+        event.preventDefault();
+        onClose();
+        navigate({ name: "billing" });
+      }}
+      className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
+    >
+      <Wallet aria-hidden className="size-4" />
+      Add funds
+    </a>
+  );
+}
+
+/** How long the balance lasts with the size, or what it lacks for the API to create it. */
+function BalanceHint({ billing, size, onClose }: { readonly billing: Billing; readonly size: VmSize; readonly onClose: () => void }) {
+  const { monthCents, shortCents } = monthWith(billing, size);
+  if (shortCents > 0) {
+    return (
+      <div role="status" aria-label="Balance" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
+        <p>{shortfall(billing, size, size.serverType)}</p>
+        <AddFundsLink onClose={onClose} />
+      </div>
+    );
+  }
+  return (
+    <p role="status" aria-label="Balance" className="text-sm text-zinc-500 dark:text-zinc-400">
+      {billing.monthlySpendCents === 0 ? "It costs" : "With it, your workspaces cost"} {formatMoney(monthCents)} a month.
+      Your balance of {formatMoney(billing.balanceCents)} lasts {coverage(billing.balanceCents, monthCents)}.
+    </p>
+  );
+}
+
 interface Props {
   readonly initialName: string;
   /** Resolves "created" once it exists; on anything else the dialog stays and keeps its input. */
@@ -39,7 +106,8 @@ interface Props {
  * default one starts out chosen while Hetzner has it; so does the provider while there is only one.
  * A size that sells out before the create brings the dialog back to the sizes. The API checks the
  * key before it creates anything, so a wrong one is reported here rather than as a broken
- * workspace.
+ * workspace. A user who pays for workspaces sees, with the size, how long the balance lasts with
+ * it among their others, since the API refuses one the balance cannot pay a month of.
  */
 export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props) {
   const [step, setStep] = useState(0);
@@ -54,6 +122,10 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
   const { sizes, status, reload } = useVmSizes();
   const chosen = sizes.find((size) => size.serverType === serverType);
   const providers = useModelProviders();
+  const { account } = useAccount();
+  const { billing } = useBilling();
+  // Admins' workspaces are free, so only everyone else is told what one costs them.
+  const charged = account !== null && account.role !== "ADMIN";
   const provider = providers.providers.find((p) => p.id === providerId);
   const nameInput = useRef<HTMLInputElement>(null);
   const types = useRef<HTMLFieldSetElement>(null);
@@ -196,6 +268,7 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
           }}
           onReload={reload}
         />
+        {charged && billing && chosen && <BalanceHint billing={billing} size={chosen} onClose={onClose} />}
       </fieldset>
     );
   } else {
@@ -227,22 +300,8 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onClose }: Props)
         )}
         {noFunds && (
           <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
-            <p>
-              Your balance does not cover a month of {serverType}
-              {chosen ? ` (${PRICE.format(chosen.monthlyGross)} a month)` : ""}. Add funds, then create the workspace.
-            </p>
-            <a
-              href={routePath({ name: "billing" })}
-              onClick={(event) => {
-                event.preventDefault();
-                onClose();
-                navigate({ name: "billing" });
-              }}
-              className="inline-flex w-fit items-center gap-1.5 rounded-lg border border-zinc-300 bg-white px-3 py-1.5 font-medium text-zinc-900 hover:bg-zinc-50 dark:border-zinc-700 dark:bg-zinc-900 dark:text-zinc-100 dark:hover:bg-zinc-800"
-            >
-              <Wallet aria-hidden className="size-4" />
-              Add funds
-            </a>
+            <p>{shortfall(billing, chosen, serverType)}</p>
+            <AddFundsLink onClose={onClose} />
           </div>
         )}
       </>

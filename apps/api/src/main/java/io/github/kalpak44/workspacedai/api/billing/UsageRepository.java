@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Lock;
 
 interface UsageRepository extends JpaRepository<UsageEntity, UUID> {
 
+  List<UsageEntity> findAllByUserId(UUID userId);
+
   /** The workspaces whose next hour has started and is not paid for yet. */
   List<UsageEntity> findAllByChargedUntilLessThanEqual(Instant now);
 

@@ -72,7 +72,7 @@ public class FundsReminder {
   private void remind(UUID user, List<UsageEntity> rows, Instant now) {
     var hourly = rows.stream().mapToLong(UsageEntity::getHourlyMicros).sum();
     var balance = accounts.findById(user).map(BillingAccountEntity::getBalanceMicros).orElse(0L);
-    var hoursLeft = Math.max(balance, 0) / hourly;
+    var hoursLeft = BillingService.hoursCovered(balance, hourly);
     if (hoursLeft >= WARN_BEFORE.toHours()) {
       return;
     }

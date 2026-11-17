@@ -66,9 +66,45 @@ describe("VM sizes", () => {
     expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33"]);
   });
 
+  it("tells a paying user how long the balance lasts with the size among their workspaces", async () => {
+    const api = installFakeApi();
+    api.auth.account = { ...api.auth.account, role: "USER" };
+    api.billing.balanceCents = 5000;
+    api.billing.monthlySpendCents = 890;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    expect(await screen.findByRole("status", { name: "Balance" })).toHaveTextContent(
+      "With it, your workspaces cost €15.49 a month. Your balance of €50.00 lasts about 3.2 months.",
+    );
+  });
+
+  it("warns a paying user before the create when the balance is short of a month of everything", async () => {
+    const api = installFakeApi();
+    api.auth.account = { ...api.auth.account, role: "USER" };
+    api.billing.monthlySpendCents = 890;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    const hint = await screen.findByRole("status", { name: "Balance" });
+    expect(hint).toHaveTextContent(
+      "Your balance of €12.40 does not cover a month of your workspaces with this one (€15.49). Add €3.09, then create the workspace.",
+    );
+    expect(within(hint).getByRole("link", { name: "Add funds" })).toBeInTheDocument();
+  });
+
+  it("tells an admin nothing of the balance, since their workspaces are free", async () => {
+    installFakeApi();
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    expect(screen.queryByRole("status", { name: "Balance" })).not.toBeInTheDocument();
+  });
+
   it("says when the balance is short and links to adding funds", async () => {
     const api = installFakeApi();
     api.state.noFunds = true;
+    api.billing.balanceCents = 500;
     const user = userEvent.setup();
     await openSizes(user);
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -77,7 +113,7 @@ describe("VM sizes", () => {
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Your balance does not cover a month of cx23 (€6.59 a month).");
+    expect(alert).toHaveTextContent("Your balance of €5.00 does not cover a month of cx23 (€6.59). Add €1.59, then create the workspace.");
     await user.click(within(alert).getByRole("link", { name: "Add funds" }));
     expect(globalThis.location.pathname).toBe("/billing");
     expect(api.rows.map((w) => w.name)).not.toContain("Research");

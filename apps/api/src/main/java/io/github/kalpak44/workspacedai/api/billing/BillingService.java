@@ -4,11 +4,18 @@ import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
+import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.URI;
 import java.time.Instant;
+import java.time.LocalDate;
+import java.time.ZoneOffset;
+import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
+import java.util.List;
 import java.util.Locale;
+import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
@@ -38,6 +45,7 @@ public class BillingService {
 
   // A month is 730 hours on average, which is how an hourly charge adds up to the monthly price.
   static final BigDecimal HOURS_PER_MONTH = BigDecimal.valueOf(730);
+  static final int USAGE_DAYS = 30;
   private static final BigDecimal MICROS = BigDecimal.valueOf(1_000_000);
 
   private static final Logger log = LoggerFactory.getLogger(BillingService.class);
@@ -45,6 +53,8 @@ public class BillingService {
   private final BillingAccountRepository accounts;
   private final TopUpRepository topUps;
   private final UsageRepository usage;
+  private final LedgerEntryRepository entries;
+  private final WorkspaceRepository workspaces;
   private final Ledger ledger;
   private final TransactionTemplate transactions;
   private final Stripe stripe;
@@ -57,6 +67,8 @@ public class BillingService {
       BillingAccountRepository accounts,
       TopUpRepository topUps,
       UsageRepository usage,
+      LedgerEntryRepository entries,
+      WorkspaceRepository workspaces,
       Ledger ledger,
       TransactionTemplate transactions,
       Stripe stripe,
@@ -67,6 +79,8 @@ public class BillingService {
     this.accounts = accounts;
     this.topUps = topUps;
     this.usage = usage;
+    this.entries = entries;
+    this.workspaces = workspaces;
     this.ledger = ledger;
     this.transactions = transactions;
     this.stripe = stripe;
@@ -77,32 +91,73 @@ public class BillingService {
   }
 
   public Billing billing(UUID user) {
+    var now = Instant.now();
+    var balance = balanceMicros(user);
+    var hourly =
+        usage.findAllByUserId(user).stream()
+            .collect(Collectors.toMap(UsageEntity::getWorkspaceId, UsageEntity::getHourlyMicros));
+    var hourlyTotal = hourly.values().stream().mapToLong(Long::longValue).sum();
     return new Billing(
-        Math.floorDiv(balanceMicros(user), Ledger.MICROS_PER_CENT),
+        Math.floorDiv(balance, Ledger.MICROS_PER_CENT),
         properties.currency(),
         properties.vatPercent(),
+        cents(monthOf(hourlyTotal)),
+        hourlyTotal == 0
+            ? null
+            : now.plus(hoursCovered(balance, hourlyTotal), ChronoUnit.HOURS)
+                .truncatedTo(ChronoUnit.HOURS),
+        workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user).stream()
+            .filter(workspace -> hourly.containsKey(workspace.getId()))
+            .map(
+                workspace ->
+                    new WorkspaceSpend(
+                        workspace.getId(),
+                        workspace.getName(),
+                        cents(monthOf(hourly.get(workspace.getId())))))
+            .toList(),
+        usageByDay(user, now),
         topUps.findAllByUserIdAndStatusNotOrderByCreatedAtDesc(user, TopUpStatus.EXPIRED).stream()
             .map(BillingService::view)
             .toList());
   }
 
   /**
-   * Refuses unless the balance covers a month of the price, so a new workspace is not deleted for
-   * want of funds soon after it is made.
+   * Refuses unless the balance covers a month of the price together with the workspaces the user
+   * already has, which draw on the same balance, so no workspace is deleted for want of funds soon
+   * after a new one is made.
    *
    * @param monthlyPrice what the user pays a month, in the billing currency
    * @throws InsufficientFundsException when it does not
    */
   public void requireMonthOf(UUID user, BigDecimal monthlyPrice) {
     var balance = balanceMicros(user);
-    if (balance < micros(monthlyPrice)) {
+    var price = micros(monthlyPrice);
+    var running =
+        monthOf(usage.findAllByUserId(user).stream().mapToLong(UsageEntity::getHourlyMicros).sum());
+    if (balance >= running + price) {
+      return;
+    }
+    if (running == 0) {
       throw new InsufficientFundsException(
           "This size costs "
-              + amount(micros(monthlyPrice))
+              + amount(price)
               + " a month and the balance is "
               + amount(balance)
               + "; add funds to create it.");
     }
+    throw new InsufficientFundsException(
+        "Your workspaces cost "
+            + amount(running)
+            + " a month and this size adds "
+            + amount(price)
+            + ", but the balance is "
+            + amount(balance)
+            + "; add funds to cover a month of them all.");
+  }
+
+  /** Whole hours the balance pays for at the hourly charge; none when it is not positive. */
+  static long hoursCovered(long balanceMicros, long hourlyMicros) {
+    return Math.max(balanceMicros, 0) / hourlyMicros;
   }
 
   /** Charges the workspace from now on, by the hour, at the monthly price spread over a month. */
@@ -303,6 +358,34 @@ public class BillingService {
     return BigDecimal.valueOf(amountCents)
         .multiply(BigDecimal.valueOf(properties.vatPercent()))
         .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+        .longValueExact();
+  }
+
+  // Charges are posted as each hour starts, so what was posted on a day is what that day cost.
+  private List<DailySpend> usageByDay(UUID user, Instant now) {
+    var since = LocalDate.ofInstant(now, ZoneOffset.UTC).minusDays(USAGE_DAYS - 1);
+    var byDay = new TreeMap<LocalDate, Long>(Comparator.reverseOrder());
+    entries
+        .findAllByUserIdAndKindAndCreatedAtGreaterThanEqual(
+            user, Ledger.USAGE, since.atStartOfDay(ZoneOffset.UTC).toInstant())
+        .forEach(
+            entry ->
+                byDay.merge(
+                    LocalDate.ofInstant(entry.getCreatedAt(), ZoneOffset.UTC),
+                    -entry.getAmountMicros(),
+                    Long::sum));
+    return byDay.entrySet().stream()
+        .map(day -> new DailySpend(day.getKey(), cents(day.getValue())))
+        .toList();
+  }
+
+  private static long monthOf(long hourlyMicros) {
+    return HOURS_PER_MONTH.multiply(BigDecimal.valueOf(hourlyMicros)).longValueExact();
+  }
+
+  private static long cents(long micros) {
+    return BigDecimal.valueOf(micros)
+        .divide(BigDecimal.valueOf(Ledger.MICROS_PER_CENT), 0, RoundingMode.HALF_UP)
         .longValueExact();
   }
 

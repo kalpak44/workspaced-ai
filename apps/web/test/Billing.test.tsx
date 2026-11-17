@@ -41,6 +41,37 @@ describe("billing", () => {
     expect(screen.getByRole("button", { name: /Download invoice for €10\.00/ })).toBeDisabled();
   });
 
+  it("shows what each workspace costs, what was charged, and until when the balance lasts", async () => {
+    const api = installFakeApi();
+    api.billing.monthlySpendCents = 1780;
+    api.billing.fundedUntil = new Date(Date.now() + (25 * 24 + 2) * 60 * 60 * 1000).toISOString();
+    api.billing.workspaces = [
+      { id: "w1", name: "research-box", monthlyCents: 890 },
+      { id: "w2", name: "scraper", monthlyCents: 890 },
+    ];
+    api.billing.usage = [
+      { date: "2026-11-16", amountCents: 59 },
+      { date: "2026-11-15", amountCents: 30 },
+    ];
+    globalThis.history.replaceState(null, "", "/billing");
+    render(<App />);
+    await screen.findByText("Current balance");
+
+    expect(balance().getByText(/about 25 days at €17\.80 a month/)).toBeInTheDocument();
+    const workspaces = within(screen.getByRole("table", { name: "Workspaces" }));
+    expect(workspaces.getByRole("row", { name: "research-box €8.90" })).toBeInTheDocument();
+    expect(workspaces.getByRole("row", { name: "Total €17.80" })).toBeInTheDocument();
+    const days = within(screen.getByRole("table", { name: "Daily charges" }));
+    expect(days.getByRole("row", { name: "Nov 16, 2026 €0.59" })).toBeInTheDocument();
+    expect(days.getAllByRole("row")).toHaveLength(3);
+  });
+
+  it("says when nothing draws on the balance", async () => {
+    await renderBilling();
+    expect(balance().getByText("No workspace is drawing on it.")).toBeInTheDocument();
+    expect(screen.getByText("Nothing is charged yet. Workspaces you create are charged here.")).toBeInTheDocument();
+  });
+
   it("opens the invoice in a new tab", async () => {
     const openTab = vi.spyOn(browser, "openTab").mockImplementation(() => {});
     const user = userEvent.setup();

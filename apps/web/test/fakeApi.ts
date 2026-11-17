@@ -1,7 +1,7 @@
 import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
-import type { TopUp } from "../src/api/billingApi";
+import type { DailySpend, TopUp, WorkspaceSpend } from "../src/api/billingApi";
 import type { DnsRecord, WorkspaceDomain } from "../src/api/domainsApi";
 import type { ApiNotification } from "../src/api/notificationsApi";
 import type { FirewallRule } from "../src/api/firewallApi";
@@ -194,6 +194,10 @@ export function installFakeApi(
   // The account's balance and top-ups; `nextStatus` is what Stripe reports on the next refresh.
   const billing = {
     balanceCents: 1240,
+    monthlySpendCents: 0,
+    fundedUntil: null as string | null,
+    workspaces: [] as WorkspaceSpend[],
+    usage: [] as DailySpend[],
     topUps: [
       { id: "t2", amountCents: 1000, status: "FAILED", createdAt: "2026-10-14T17:40:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false },
       { id: "t1", amountCents: 2500, status: "PAID", createdAt: "2026-10-02T08:05:00Z", paidAt: "2026-10-02T08:06:00Z", invoiceNumber: "WSAI-0001", invoiceAvailable: true },
@@ -222,7 +226,8 @@ export function installFakeApi(
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
-      return json({ balanceCents: billing.balanceCents, currency: "eur", vatPercent: billing.vatPercent, topUps: billing.topUps });
+      const { balanceCents, vatPercent, monthlySpendCents, fundedUntil, workspaces, usage, topUps } = billing;
+      return json({ balanceCents, currency: "eur", vatPercent, monthlySpendCents, fundedUntil, workspaces, usage, topUps });
     }
     if (url.endsWith("/api/v1/billing/top-ups") && init?.method === "POST") {
       if (billing.failStart) return json({}, billing.failStart);

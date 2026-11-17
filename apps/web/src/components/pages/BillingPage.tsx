@@ -1,14 +1,19 @@
 import { Download, Plus, Receipt, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePagination } from "../../hooks/usePagination";
-import { type TopUp, useBilling } from "../../hooks/useBilling";
+import { type Billing, type TopUp, useBilling } from "../../hooks/useBilling";
 import { formatMoney } from "../../lib/format";
 import { Button, IconButton } from "../atoms";
 import { EmptyState, PageHeader, Pagination, SettingsSection, Toast } from "../molecules";
 import { AddFundsDialog } from "../organisms";
 
 const DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
+const DAY = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
+const FUNDED_UNTIL = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
 const PAGE_SIZE = 10;
+const DAY_MS = 24 * 60 * 60 * 1000;
+// The funds reminders start a week out, so the card warns from then too.
+const WARN_DAYS = 7;
 
 const STATUS: Record<TopUp["status"], { readonly label: string; readonly className: string }> = {
   PAID: { label: "Paid", className: "bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-400" },
@@ -16,6 +21,21 @@ const STATUS: Record<TopUp["status"], { readonly label: string; readonly classNa
   FAILED: { label: "Failed", className: "bg-rose-50 text-rose-700 dark:bg-rose-950/50 dark:text-rose-400" },
   EXPIRED: { label: "Expired", className: "bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400" },
 };
+
+/** "Lasts until Fri, Dec 12 · about 25 days": what the balance still pays for at the current spend. */
+function Runway({ billing }: { readonly billing: Billing }) {
+  if (!billing.fundedUntil) {
+    return <p className="text-sm text-white/70">No workspace is drawing on it.</p>;
+  }
+  const until = new Date(billing.fundedUntil);
+  const days = Math.floor((until.getTime() - Date.now()) / DAY_MS);
+  const span = days < 1 ? "less than a day" : `about ${days} ${days === 1 ? "day" : "days"}`;
+  return (
+    <p className={`text-sm ${days < WARN_DAYS ? "font-medium text-amber-300" : "text-white/70"}`}>
+      Lasts until {FUNDED_UNTIL.format(until)} · {span} at {formatMoney(billing.monthlySpendCents)} a month
+    </p>
+  );
+}
 
 /** Stripe sends the browser back with ?top_up=<id>&outcome=success|cancelled. */
 function returnedTopUp(): { readonly id: string; readonly cancelled: boolean } | null {
@@ -31,6 +51,7 @@ export function BillingPage() {
   const [paying, setPaying] = useState(false);
   const [notice, setNotice] = useState("");
   const topUps = usePagination(billing?.topUps ?? [], PAGE_SIZE);
+  const days = usePagination(billing?.usage ?? [], PAGE_SIZE);
 
   useEffect(() => {
     const returned = returnedTopUp();
@@ -76,7 +97,7 @@ export function BillingPage() {
 
   return (
     <>
-      <PageHeader title="Billing" description="Your balance pays for workspaces. Top it up any time." />
+      <PageHeader title="Billing" description="Your balance pays for workspaces by the hour. Top it up any time." />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-6 pb-10 sm:px-6">
         <section aria-label="Balance" className="relative flex flex-col gap-4 overflow-hidden rounded-2xl bg-zinc-900 p-5 text-white shadow-lg sm:flex-row sm:items-center sm:justify-between sm:p-6 dark:bg-zinc-900 dark:ring-1 dark:ring-white/10 [&_button]:bg-white [&_button]:text-zinc-900 [&_button:hover]:bg-zinc-200 dark:[&_button]:bg-white dark:[&_button]:text-zinc-900 dark:[&_button:hover]:bg-zinc-200">
           <span aria-hidden className="pointer-events-none absolute -top-16 -right-10 size-48 rounded-full bg-linear-to-br from-sky-400/30 via-fuchsia-500/20 to-orange-400/20 blur-2xl" />
@@ -87,10 +108,76 @@ export function BillingPage() {
             <div>
               <p className="text-sm text-white/70">Current balance</p>
               <p className="text-3xl font-semibold tracking-tight tabular-nums">{formatMoney(billing.balanceCents)}</p>
+              <Runway billing={billing} />
             </div>
           </div>
           <div className="relative"><Button label="Add funds" icon={Plus} onClick={() => { setAdding(true); setNotice(""); }} /></div>
         </section>
+
+        <SettingsSection title="Spending" description="Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges.">
+          {billing.workspaces.length === 0 && billing.usage.length === 0 ? (
+            <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-300 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
+              <Receipt aria-hidden className="size-6" />
+              Nothing is charged yet. Workspaces you create are charged here.
+            </div>
+          ) : (
+            <>
+              {billing.workspaces.length > 0 && (
+                <div className="-mx-4 overflow-x-auto sm:-mx-6">
+                  <table aria-label="Workspaces" className="w-full text-left text-sm">
+                    <thead className="border-y border-zinc-200 bg-zinc-50 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                      <tr>
+                        <th scope="col" className="px-4 py-2 font-medium sm:pl-6">Workspace</th>
+                        <th scope="col" className="px-4 py-2 text-right font-medium sm:pr-6">Per month</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                      {billing.workspaces.map((workspace) => (
+                        <tr key={workspace.id}>
+                          <td className="px-4 py-3 [overflow-wrap:anywhere] sm:pl-6">{workspace.name}</td>
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6">{formatMoney(workspace.monthlyCents)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    {billing.workspaces.length > 1 && (
+                      <tfoot className="border-t border-zinc-200 font-medium dark:border-zinc-800">
+                        <tr>
+                          <th scope="row" className="px-4 py-3 text-left font-medium sm:pl-6">Total</th>
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6">{formatMoney(billing.monthlySpendCents)}</td>
+                        </tr>
+                      </tfoot>
+                    )}
+                  </table>
+                </div>
+              )}
+              {billing.usage.length > 0 && (
+                <>
+                  <h3 className="text-sm font-medium">Charged in the last 30 days</h3>
+                  <div className="-mx-4 overflow-x-auto sm:-mx-6">
+                    <table aria-label="Daily charges" className="w-full text-left text-sm">
+                      <thead className="border-y border-zinc-200 bg-zinc-50 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+                        <tr>
+                          <th scope="col" className="px-4 py-2 font-medium sm:pl-6">Day (UTC)</th>
+                          <th scope="col" className="px-4 py-2 text-right font-medium sm:pr-6">Charged</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
+                        {days.items.map((day) => (
+                          <tr key={day.date}>
+                            <td className="whitespace-nowrap px-4 py-3 sm:pl-6">{DAY.format(new Date(day.date))}</td>
+                            <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6">{formatMoney(day.amountCents)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <Pagination label="Charge pages" noun="day" page={days.page} pageCount={days.pageCount} onChange={days.setPage}
+                    range={{ first: days.first, last: days.last, total: days.total }} />
+                </>
+              )}
+            </>
+          )}
+        </SettingsSection>
 
         <SettingsSection title="Top-ups" description="Every payment into your balance, with Stripe's invoice for it.">
           {billing.topUps.length === 0 ? (

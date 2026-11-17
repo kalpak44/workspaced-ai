@@ -4,6 +4,7 @@ import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.UUID;
 
 /** One change to a balance, never updated or deleted: the balance is always their sum. */
@@ -26,6 +27,10 @@ class LedgerEntryEntity {
   @Column(nullable = false)
   private String reference;
 
+  // Set by the database as the entry is inserted.
+  @Column(name = "created_at", insertable = false, updatable = false)
+  private Instant createdAt;
+
   protected LedgerEntryEntity() {}
 
   LedgerEntryEntity(UUID userId, long amountMicros, String kind, String reference) {
@@ -34,5 +39,13 @@ class LedgerEntryEntity {
     this.amountMicros = amountMicros;
     this.kind = kind;
     this.reference = reference;
+  }
+
+  long getAmountMicros() {
+    return amountMicros;
+  }
+
+  Instant getCreatedAt() {
+    return createdAt;
   }
 }

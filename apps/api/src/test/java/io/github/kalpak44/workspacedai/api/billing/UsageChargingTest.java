@@ -41,8 +41,9 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * A user who is not an admin pays for a workspace from the balance: a month of it up front to
- * create one, then by the hour, until the balance runs out and the workspace goes.
+ * A user who is not an admin pays for a workspace from the balance: a month of it and of every
+ * workspace they already have up front to create one, then by the hour, until the balance runs out
+ * and the workspace goes.
  */
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import({TestDatabase.class, TestRuntime.class})
@@ -103,6 +104,58 @@ class UsageChargingTest {
     assertThat(refused.statusCode()).isEqualTo(402);
     assertThat(refused.body()).contains("costs 8.90 EUR a month").contains("add funds");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
+  }
+
+  @Test
+  void refusesUnlessTheBalanceCoversAMonthOfEveryWorkspaceWithTheNewOne() throws Exception {
+    fund(2 * MONTH - 1);
+    created(create(bearer));
+
+    var refused = create(bearer);
+
+    assertThat(refused.statusCode()).isEqualTo(402);
+    assertThat(refused.body())
+        .contains("Your workspaces cost 8.90 EUR a month and this size adds 8.90 EUR");
+    assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).hasSize(1);
+  }
+
+  @Test
+  void reportsWhatTheWorkspacesCostAndUntilWhenTheBalancePaysForThem() throws Exception {
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    var row = usage.findById(workspace).orElseThrow();
+    charger.charge(workspace, row.getChargedUntil().plusSeconds(3600));
+    var now = Instant.now();
+
+    var billing = JSON.readTree(billing().body());
+
+    assertThat(billing.get("monthlySpendCents").asLong()).isEqualTo(890);
+    assertThat(billing.get("workspaces"))
+        .singleElement()
+        .satisfies(
+            spend -> {
+              assertThat(spend.get("id").asString()).isEqualTo(workspace.toString());
+              assertThat(spend.get("monthlyCents").asLong()).isEqualTo(890);
+            });
+    // Two hours are paid, which leaves 727 whole hours of the balance.
+    var fundedUntil = Instant.parse(billing.get("fundedUntil").asString());
+    assertThat(fundedUntil)
+        .isBetween(now.plus(Duration.ofHours(726)), now.plus(Duration.ofHours(727)));
+    assertThat(billing.get("usage"))
+        .singleElement()
+        .satisfies(day -> assertThat(day.get("amountCents").asLong()).isEqualTo(2));
+  }
+
+  @Test
+  void reportsNoSpendingWithoutWorkspaces() throws Exception {
+    fund(MONTH);
+
+    var billing = JSON.readTree(billing().body());
+
+    assertThat(billing.get("monthlySpendCents").asLong()).isZero();
+    assertThat(billing.get("fundedUntil").isNull()).isTrue();
+    assertThat(billing.get("workspaces")).isEmpty();
+    assertThat(billing.get("usage")).isEmpty();
   }
 
   @Test
@@ -191,6 +244,15 @@ class UsageChargingTest {
   private UUID created(HttpResponse<String> response) {
     assertThat(response.statusCode()).isEqualTo(201);
     return UUID.fromString(JSON.readTree(response.body()).get("id").asString());
+  }
+
+  private HttpResponse<String> billing() throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/billing"))
+            .header("Authorization", bearer)
+            .GET()
+            .build();
+    return http.send(request, BodyHandlers.ofString());
   }
 
   private HttpResponse<String> create(String authorization) throws Exception {

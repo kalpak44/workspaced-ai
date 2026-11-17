@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { type Billing, type TopUp, browser, fetchBilling, invoiceUrl, refreshTopUp, startTopUp } from "../api/billingApi";
 import { ApiError } from "../api/http";
 
-export type { Billing, TopUp } from "../api/billingApi";
+export type { Billing, DailySpend, TopUp, WorkspaceSpend } from "../api/billingApi";
 
 /** Fetched once per mount, so the account menu and the billing page each show a fresh balance. */
 export function useBilling() {

@@ -34,8 +34,11 @@ public interface BillingApi {
 
   @Operation(
       operationId = "getBilling",
-      summary = "Get the balance and top-ups",
-      description = "The balance, and every top-up but the abandoned ones, newest first.")
+      summary = "Get the balance, spending and top-ups",
+      description =
+          "The balance, what the workspaces cost and until when the balance pays for them, what"
+              + " they were charged each of the last 30 days, and every top-up but the abandoned"
+              + " ones, newest first.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",
