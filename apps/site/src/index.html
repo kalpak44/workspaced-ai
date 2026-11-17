@@ -68,7 +68,8 @@
         </a>
         <nav class="flex items-center gap-1 text-sm sm:gap-2">
           <a href="#features" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Features</a>
-          <a href="#how" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 md:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">How it works</a>
+          <a href="#recipes" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 md:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Recipes</a>
+          <a href="#how" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 lg:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">How it works</a>
           <a href="/support" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Support</a>
           <a href="https://ai.workspaced.online/" class="btn btn-primary">Open app</a>
         </nav>
@@ -149,18 +150,67 @@
             <article class="card p-5">
               <svg class="size-5 text-orange-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z" /><path d="M6 17h12" /></svg>
               <h3 class="mt-3 font-semibold">Cook with recipes</h3>
-              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Start from a recipe that sets up a whole project in one go, or have your AI write a new one for you.</p>
+              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Made something nice? Your AI can write down how it cooked it as a recipe, so you or anyone else can make it again.</p>
             </article>
             <article class="card p-5">
               <svg class="size-5 text-fuchsia-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M22 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg>
               <h3 class="mt-3 font-semibold">Join the community</h3>
-              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Share your best recipes, rate the ones you try, and see what others are building.</p>
+              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Share your recipes with everyone or keep them to yourself, try what others have cooked, and rate the best.</p>
             </article>
             <article class="card p-5">
               <svg class="size-5 text-sky-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20" /><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20" /><path d="M2 12h20" /></svg>
               <h3 class="mt-3 font-semibold">Show it to the world</h3>
               <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">When you are happy with it, put it online on your own domain in a few clicks.</p>
             </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="recipes" class="scroll-mt-16 border-t border-zinc-200 py-20 dark:border-zinc-800">
+        <div class="mx-auto max-w-6xl px-4">
+          <div class="grid gap-10 lg:grid-cols-[1fr_2fr] lg:items-start">
+            <div>
+              <h2 class="text-2xl font-semibold tracking-tight sm:text-3xl">Recipes: share how you cooked it</h2>
+              <p class="mt-3 text-zinc-600 dark:text-zinc-400">
+                Built something you love? A recipe is the story of how you made it, written so your AI, or anyone else's,
+                can cook it again in their own workspace.
+              </p>
+              <ul class="mt-6 space-y-3 text-sm text-zinc-600 dark:text-zinc-400">
+                <li><span class="font-medium text-zinc-900 dark:text-zinc-100">Cook.</span> Ask your AI to build something, your way.</li>
+                <li><span class="font-medium text-zinc-900 dark:text-zinc-100">Write it down.</span> Your AI turns what it did into a recipe you can edit.</li>
+                <li><span class="font-medium text-zinc-900 dark:text-zinc-100">Share.</span> Publish it to the community, or keep it private.</li>
+                <li><span class="font-medium text-zinc-900 dark:text-zinc-100">Taste.</span> Try other people's recipes and rate the ones you like.</li>
+              </ul>
+            </div>
+            <div>
+              <p class="text-xs font-medium text-zinc-500">Ideas for a first recipe</p>
+              <ul class="mt-3 grid gap-4 sm:grid-cols-2">
+            <li class="card flex flex-col p-5">
+              <span class="w-fit rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">Websites</span>
+              <h3 class="mt-3 font-semibold">A personal blog</h3>
+              <p class="mt-1.5 flex-1 text-sm text-zinc-600 dark:text-zinc-400">Your own site with posts, an about page and your domain, ready to write in.</p>
+              <span class="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z" /><path d="M6 17h12" /></svg> Cook it in your workspace</span>
+            </li>
+            <li class="card flex flex-col p-5">
+              <span class="w-fit rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">Bots</span>
+              <h3 class="mt-3 font-semibold">A Telegram bot</h3>
+              <p class="mt-1.5 flex-1 text-sm text-zinc-600 dark:text-zinc-400">A bot that answers questions, sends reminders or runs a small task for your group.</p>
+              <span class="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z" /><path d="M6 17h12" /></svg> Cook it in your workspace</span>
+            </li>
+            <li class="card flex flex-col p-5">
+              <span class="w-fit rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">Business</span>
+              <h3 class="mt-3 font-semibold">A small online shop</h3>
+              <p class="mt-1.5 flex-1 text-sm text-zinc-600 dark:text-zinc-400">Products, photos and prices on a simple shop you can run yourself.</p>
+              <span class="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z" /><path d="M6 17h12" /></svg> Cook it in your workspace</span>
+            </li>
+            <li class="card flex flex-col p-5">
+              <span class="w-fit rounded-full bg-zinc-100 px-2.5 py-0.5 text-xs text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">Home</span>
+              <h3 class="mt-3 font-semibold">A family photo gallery</h3>
+              <p class="mt-1.5 flex-1 text-sm text-zinc-600 dark:text-zinc-400">A private place to keep and share photos with the people you choose.</p>
+              <span class="mt-4 inline-flex items-center gap-1.5 text-xs font-medium text-zinc-500"><svg class="size-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M17 21a1 1 0 0 0 1-1v-5.35c0-.457.316-.844.727-1.041a4 4 0 0 0-2.134-7.589 5 5 0 0 0-9.186 0 4 4 0 0 0-2.134 7.588c.411.198.727.585.727 1.041V20a1 1 0 0 0 1 1Z" /><path d="M6 17h12" /></svg> Cook it in your workspace</span>
+            </li>
+              </ul>
+            </div>
           </div>
         </div>
       </section>
