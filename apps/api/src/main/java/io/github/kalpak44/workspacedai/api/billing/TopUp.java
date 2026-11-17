@@ -17,4 +17,5 @@ public record TopUp(
             nullable = true)
         String invoiceNumber,
     @Schema(description = "Whether GET /billing/top-ups/{id}/invoice has an invoice to send")
-        boolean invoiceAvailable) {}
+        boolean invoiceAvailable,
+    @Schema(description = "Charged to the saved card by an automatic top-up") boolean automatic) {}

@@ -1,9 +1,9 @@
-import { Download, Plus, Receipt, TriangleAlert, Wallet } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CreditCard, Download, Plus, Receipt, TriangleAlert, Wallet } from "lucide-react";
+import { type SubmitEvent, useEffect, useState } from "react";
 import { usePagination } from "../../hooks/usePagination";
-import { type Billing, type TopUp, useBilling } from "../../hooks/useBilling";
+import { type AutoTopUp, type Billing, type TopUp, useBilling } from "../../hooks/useBilling";
 import { formatMoney } from "../../lib/format";
-import { Button, IconButton } from "../atoms";
+import { Button, IconButton, TextField } from "../atoms";
 import { EmptyState, PageHeader, Pagination, SettingsSection, Toast } from "../molecules";
 import { AddFundsDialog } from "../organisms";
 
@@ -74,6 +74,80 @@ function FundsWarning({ billing, onAddFunds }: { readonly billing: Billing; read
   );
 }
 
+// The API takes €5.00 to €1,000.00 for either amount, as it does for a top-up.
+const MIN_EUROS = 5;
+const MAX_EUROS = 1000;
+
+/**
+ * The saved card, and whether it is charged when the balance runs low. The amounts are edited as
+ * euros and saved as cents; turning it on needs a card, which Stripe's own page saves.
+ */
+function AutoTopUpSection({ billing, onSaveCard, onRemoveCard, onSave }: {
+  readonly billing: Billing;
+  readonly onSaveCard: () => void;
+  readonly onRemoveCard: () => Promise<void>;
+  readonly onSave: (settings: AutoTopUp) => Promise<void>;
+}) {
+  const saved = billing.autoTopUp;
+  const [enabled, setEnabled] = useState(saved.enabled);
+  const [below, setBelow] = useState(String(saved.belowCents / 100));
+  const [amount, setAmount] = useState(String(saved.amountCents / 100));
+  const [busy, setBusy] = useState(false);
+  const [failed, setFailed] = useState(false);
+  // A saved change, or the card's removal, comes back in the billing; the form follows it.
+  useEffect(() => {
+    setEnabled(saved.enabled);
+    setBelow(String(saved.belowCents / 100));
+    setAmount(String(saved.amountCents / 100));
+  }, [saved.enabled, saved.belowCents, saved.amountCents]);
+
+  const euros = (value: string) => Number(value);
+  const valid = (value: string) => value.trim() !== "" && euros(value) >= MIN_EUROS && euros(value) <= MAX_EUROS;
+  const range = `Between ${formatMoney(MIN_EUROS * 100)} and ${formatMoney(MAX_EUROS * 100)}.`;
+  const changed = enabled !== saved.enabled || Math.round(euros(below) * 100) !== saved.belowCents || Math.round(euros(amount) * 100) !== saved.amountCents;
+
+  const submit = (event: SubmitEvent) => {
+    event.preventDefault();
+    setBusy(true);
+    setFailed(false);
+    onSave({ enabled, belowCents: Math.round(euros(below) * 100), amountCents: Math.round(euros(amount) * 100) })
+      .catch(() => setFailed(true))
+      .finally(() => setBusy(false));
+  };
+
+  return (
+    <SettingsSection title="Automatic top-up" description="Charge a saved card whenever the balance runs low, so your workspaces are never paused. VAT is charged on top, and Stripe issues an invoice for each top-up.">
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-zinc-200 px-4 py-3 text-sm dark:border-zinc-800">
+        <span className="flex items-center gap-2">
+          <CreditCard aria-hidden className="size-4 text-zinc-500" />
+          {billing.card ?? <span className="text-zinc-500 dark:text-zinc-400">No card saved</span>}
+        </span>
+        <span className="flex gap-2">
+          {billing.card && <Button label="Remove card" variant="secondary" disabled={busy} onClick={() => { setBusy(true); void onRemoveCard().finally(() => setBusy(false)); }} />}
+          <Button label={billing.card ? "Replace card" : "Save a card"} variant="secondary" disabled={busy} onClick={onSaveCard} />
+        </span>
+      </div>
+      <form onSubmit={submit} className="flex flex-col gap-4">
+        <label className="flex items-center gap-2 text-sm font-medium">
+          <input type="checkbox" className="size-4 accent-zinc-900 dark:accent-zinc-100" checked={enabled && billing.card !== null} disabled={!billing.card || busy}
+            onChange={(e) => setEnabled(e.currentTarget.checked)} />
+          Top up automatically
+        </label>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField id="auto-top-up-below" label="When the balance drops below (EUR)" type="number" inputMode="decimal" min={MIN_EUROS} max={MAX_EUROS} step="0.01"
+            value={below} disabled={busy} error={valid(below) ? null : range} onChange={(e) => setBelow(e.currentTarget.value)} />
+          <TextField id="auto-top-up-amount" label="Add (EUR)" type="number" inputMode="decimal" min={MIN_EUROS} max={MAX_EUROS} step="0.01"
+            value={amount} disabled={busy} error={valid(amount) ? null : range}
+            hint={valid(amount) && Number.isFinite(billing.vatPercent) ? `Charged as ${formatMoney(Math.round(euros(amount) * 100 * (1 + billing.vatPercent / 100)))} with VAT.` : undefined}
+            onChange={(e) => setAmount(e.currentTarget.value)} />
+        </div>
+        {failed && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">The setting could not be saved. Please try again.</p>}
+        <div><Button label="Save" type="submit" busy={busy} disabled={!changed || !valid(below) || !valid(amount)} /></div>
+      </form>
+    </SettingsSection>
+  );
+}
+
 /** Stripe sends the browser back with ?top_up=<id>&outcome=success|cancelled. */
 function returnedTopUp(): { readonly id: string; readonly cancelled: boolean } | null {
   const query = new URLSearchParams(globalThis.location.search);
@@ -83,12 +157,37 @@ function returnedTopUp(): { readonly id: string; readonly cancelled: boolean } |
 
 /** The account's balance, a way to top it up, and every top-up with its invoice. */
 export function BillingPage() {
-  const { billing, status, pay: startPayment, confirm, openInvoice } = useBilling();
+  const { billing, status, pay: startPayment, confirm, openInvoice, saveCard, confirmCard, removeCard, setAutoTopUp } = useBilling();
   const [adding, setAdding] = useState(false);
   const [paying, setPaying] = useState(false);
   const [notice, setNotice] = useState("");
   const topUps = usePagination(billing?.topUps ?? [], PAGE_SIZE);
   const days = usePagination(billing?.usage ?? [], PAGE_SIZE);
+
+  useEffect(() => {
+    const query = new URLSearchParams(globalThis.location.search);
+    const cardSession = query.get("card_session");
+    if (!cardSession && query.get("card") !== "cancelled") return;
+    globalThis.history.replaceState(globalThis.history.state, "", globalThis.location.pathname);
+    if (!cardSession) {
+      setNotice("Saving the card was cancelled.");
+      return;
+    }
+    confirmCard(cardSession).then(
+      () => setNotice("Your card was saved. Turn on automatic top-ups to use it."),
+      () => setNotice("Your card is being saved. It shows here once Stripe confirms it."),
+    );
+  }, [confirmCard]);
+
+  const startCardSetup = () => {
+    setNotice("");
+    void saveCard().then((outcome) => {
+      if (outcome === "redirected") return;
+      setNotice(outcome === "unavailable"
+        ? "Payments are unavailable right now. Please try again later."
+        : "The card could not be saved. Please try again.");
+    });
+  };
 
   useEffect(() => {
     const returned = returnedTopUp();
@@ -225,6 +324,8 @@ export function BillingPage() {
           )}
         </SettingsSection>
 
+        <AutoTopUpSection billing={billing} onSaveCard={startCardSetup} onRemoveCard={removeCard} onSave={setAutoTopUp} />
+
         <SettingsSection title="Top-ups" description="Every payment into your balance, with Stripe's invoice for it.">
           {billing.topUps.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-300 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
@@ -249,6 +350,7 @@ export function BillingPage() {
                     <tr key={topUp.id} className="transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
                       <td className="whitespace-nowrap px-4 py-3 sm:pl-6">
                         {DATE.format(new Date(topUp.paidAt ?? topUp.createdAt))}
+                        {topUp.automatic && <span className="ml-2 rounded-full bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Auto</span>}
                         {topUp.invoiceNumber && <span className="block font-mono text-xs text-zinc-500 sm:hidden dark:text-zinc-400">{topUp.invoiceNumber}</span>}
                       </td>
                       <td className="hidden whitespace-nowrap px-4 py-3 font-mono text-xs sm:table-cell">{topUp.invoiceNumber ?? "—"}</td>

@@ -41,4 +41,9 @@ public record Billing(
         List<WorkspaceSpend> workspaces,
     @Schema(description = "The last 30 days anything was charged, newest first")
         List<DailySpend> usage,
+    @Schema(
+            description = "The card charged by automatic top-ups; null while none is saved",
+            example = "Visa •••• 4242")
+        String card,
+    AutoTopUp autoTopUp,
     @Schema(description = "Newest first; abandoned checkouts are left out") List<TopUp> topUps) {}

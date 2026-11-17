@@ -10,8 +10,8 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * A payment started through Stripe Checkout. Stripe issues the invoice once it is paid and keeps
- * it; only its id and number are kept here.
+ * A payment started through Stripe Checkout, or charged to the saved card by an automatic top-up.
+ * Stripe issues the invoice once it is paid and keeps it; only its id and number are kept here.
  */
 @Entity
 @Table(name = "billing_top_up")
@@ -45,6 +45,9 @@ class TopUpEntity {
   @Column(name = "paid_at")
   private Instant paidAt;
 
+  @Column(nullable = false)
+  private boolean automatic;
+
   protected TopUpEntity() {}
 
   TopUpEntity(UUID id, UUID userId, long amountCents) {
@@ -52,6 +55,17 @@ class TopUpEntity {
     this.userId = userId;
     this.amountCents = amountCents;
     this.status = TopUpStatus.PENDING;
+  }
+
+  /** One charged to the saved card when the balance ran low, rather than paid at a checkout. */
+  static TopUpEntity automatic(UUID id, UUID userId, long amountCents) {
+    var topUp = new TopUpEntity(id, userId, amountCents);
+    topUp.automatic = true;
+    return topUp;
+  }
+
+  boolean isAutomatic() {
+    return automatic;
   }
 
   UUID getId() {

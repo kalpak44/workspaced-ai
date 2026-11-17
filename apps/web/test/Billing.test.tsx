@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -117,6 +117,72 @@ describe("billing", () => {
     expect(screen.getByText("Nothing is charged yet. Workspaces you create are charged here.")).toBeInTheDocument();
   });
 
+  it("sends the browser to Stripe to save a card and keeps it on the way back", async () => {
+    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const user = userEvent.setup();
+    const api = await renderBilling();
+    const section = within(screen.getByRole("region", { name: "Automatic top-up" }));
+    expect(section.getByText("No card saved")).toBeInTheDocument();
+    expect(section.getByRole("checkbox", { name: "Top up automatically" })).toBeDisabled();
+
+    await user.click(section.getByRole("button", { name: "Save a card" }));
+    expect(open).toHaveBeenCalledWith("https://checkout.stripe.test/setup");
+
+    cleanup();
+    api.billing.cardSessions.set("cs_1", "Visa •••• 4242");
+    globalThis.history.replaceState(null, "", "/billing?card_session=cs_1");
+    render(<App />);
+    expect(await screen.findByText("Your card was saved. Turn on automatic top-ups to use it.")).toBeInTheDocument();
+    expect(await screen.findByText("Visa •••• 4242")).toBeInTheDocument();
+    expect(location.search).toBe("");
+  });
+
+  it("turns automatic top-ups on with the amounts chosen, and off with the card", async () => {
+    const api = installFakeApi();
+    api.billing.card = "Visa •••• 4242";
+    const user = userEvent.setup();
+    await openBilling();
+    const section = within(screen.getByRole("region", { name: "Automatic top-up" }));
+    const save = section.getByRole("button", { name: "Save" });
+    expect(save).toBeDisabled();
+
+    await user.click(section.getByRole("checkbox", { name: "Top up automatically" }));
+    await user.clear(section.getByLabelText("When the balance drops below (EUR)"));
+    await user.type(section.getByLabelText("When the balance drops below (EUR)"), "15");
+    await user.clear(section.getByLabelText("Add (EUR)"));
+    await user.type(section.getByLabelText("Add (EUR)"), "30");
+    expect(section.getByText("Charged as €36.00 with VAT.")).toBeInTheDocument();
+    await user.click(save);
+
+    await waitFor(() => expect(api.billing.savedAutoTopUps).toEqual([{ enabled: true, belowCents: 1500, amountCents: 3000 }]));
+    await waitFor(() => expect(section.getByRole("checkbox", { name: "Top up automatically" })).toBeChecked());
+
+    await user.click(section.getByRole("button", { name: "Remove card" }));
+    expect(await section.findByText("No card saved")).toBeInTheDocument();
+    expect(section.getByRole("checkbox", { name: "Top up automatically" })).not.toBeChecked();
+  });
+
+  it("refuses an amount outside what a top-up can be", async () => {
+    const api = installFakeApi();
+    api.billing.card = "Visa •••• 4242";
+    const user = userEvent.setup();
+    await openBilling();
+    const section = within(screen.getByRole("region", { name: "Automatic top-up" }));
+
+    await user.clear(section.getByLabelText("Add (EUR)"));
+    await user.type(section.getByLabelText("Add (EUR)"), "2");
+
+    expect(section.getByText("Between €5.00 and €1,000.00.")).toBeInTheDocument();
+    expect(section.getByRole("button", { name: "Save" })).toBeDisabled();
+  });
+
+  it("marks a top-up the card was charged for automatically", async () => {
+    const api = installFakeApi();
+    api.billing.topUps = [{ id: "t3", amountCents: 2000, status: "PAID", createdAt: "2026-11-16T10:00:00Z", paidAt: "2026-11-16T10:00:00Z", invoiceNumber: "WSAI-0003", invoiceAvailable: true, automatic: true }];
+    await openBilling();
+    expect(within(screen.getByRole("region", { name: "Top-ups" })).getByText("Auto")).toBeInTheDocument();
+  });
+
   it("opens the invoice in a new tab", async () => {
     const openTab = vi.spyOn(browser, "openTab").mockImplementation(() => {});
     const user = userEvent.setup();
@@ -177,7 +243,7 @@ describe("billing", () => {
   });
 
   it("credits a payment on the way back from Stripe and clears the return address", async () => {
-    installFakeApi().billing.topUps.unshift({ id: "t9", amountCents: 5000, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false });
+    installFakeApi().billing.topUps.unshift({ id: "t9", amountCents: 5000, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false, automatic: false });
     globalThis.history.replaceState(null, "", "/billing?top_up=t9&outcome=success");
     render(<App />);
     expect(await screen.findByText("€50.00 was added to your balance.")).toBeInTheDocument();
@@ -188,7 +254,7 @@ describe("billing", () => {
   it("says a payment is still clearing when Stripe has not confirmed it", async () => {
     const api = installFakeApi();
     api.billing.nextStatus = "PENDING";
-    api.billing.topUps.unshift({ id: "t9", amountCents: 5000, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false });
+    api.billing.topUps.unshift({ id: "t9", amountCents: 5000, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false, automatic: false });
     globalThis.history.replaceState(null, "", "/billing?top_up=t9&outcome=success");
     render(<App />);
     expect(await screen.findByText(/Your payment is being confirmed/)).toBeInTheDocument();

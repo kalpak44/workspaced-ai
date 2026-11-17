@@ -36,7 +36,12 @@ class FakeStripe implements AutoCloseable {
   final List<Map<String, String>> checkouts = new CopyOnWriteArrayList<>();
   final List<String> idempotencyKeys = new CopyOnWriteArrayList<>();
   final Map<String, ObjectNode> taxRates = new ConcurrentHashMap<>();
+  final Map<String, ObjectNode> invoices = new ConcurrentHashMap<>();
+  final List<String> detached = new CopyOnWriteArrayList<>();
+  // What each keyed POST first answered, which Stripe answers again to a retry with the key.
+  private final Map<String, String> answered = new ConcurrentHashMap<>();
   volatile int status = 0;
+  volatile boolean declineCards;
   private volatile String lastSession;
 
   FakeStripe() {
@@ -48,6 +53,8 @@ class FakeStripe implements AutoCloseable {
     server.createContext("/v1/customers", this::customers);
     server.createContext("/v1/checkout/sessions", this::sessions);
     server.createContext("/v1/invoices", this::invoices);
+    server.createContext("/v1/invoiceitems", this::invoiceItems);
+    server.createContext("/v1/payment_methods", this::paymentMethods);
     server.createContext("/v1/tax_rates", this::taxRates);
     server.start();
   }
@@ -62,6 +69,24 @@ class FakeStripe implements AutoCloseable {
     session.put("status", "complete");
     session.put("payment_status", "paid");
     session.put("invoice", "in_" + sessionId);
+  }
+
+  /** Completes a setup session as a customer saving their card does. */
+  void saveCard(String sessionId, String paymentMethodId, String brand, String last4) {
+    var session = sessions.get(sessionId);
+    session.put("status", "complete");
+    var method = session.putObject("setup_intent").putObject("payment_method");
+    method.put("id", paymentMethodId);
+    method.putObject("card").put("brand", brand).put("last4", last4);
+  }
+
+  /** Forgets what earlier tests sent, so each test sees only its own requests. */
+  void reset() {
+    status = 0;
+    declineCards = false;
+    checkouts.clear();
+    invoices.clear();
+    detached.clear();
   }
 
   void expire(String sessionId) {
@@ -91,6 +116,17 @@ class FakeStripe implements AutoCloseable {
       var id = "cs_" + ids.incrementAndGet();
       var session = JSON.createObjectNode();
       session.put("id", id);
+      if ("setup".equals(form.get("mode"))) {
+        session.put("mode", "setup");
+        session.put("status", "open");
+        session.put("customer", form.get("customer"));
+        session.put("url", "https://checkout.stripe.test/" + id);
+        session.putNull("setup_intent");
+        sessions.put(id, session);
+        lastSession = id;
+        answer(exchange, 200, JSON.writeValueAsString(session));
+        return;
+      }
       session.put("status", "open");
       session.put("payment_status", "unpaid");
       var amount = Long.parseLong(form.get("line_items[0][price_data][unit_amount]"));
@@ -153,7 +189,17 @@ class FakeStripe implements AutoCloseable {
     if (refused(exchange)) {
       return;
     }
+    if (exchange.getRequestMethod().equals("POST")) {
+      keyed(exchange, this::invoiceAction);
+      return;
+    }
     var id = exchange.getRequestURI().getPath().substring("/v1/invoices/".length());
+    if (invoices.containsKey(id)) {
+      var invoice = invoices.get(id).deepCopy();
+      invoice.put("invoice_pdf", "https://pay.stripe.test/" + id + "/pdf");
+      answer(exchange, 200, JSON.writeValueAsString(invoice));
+      return;
+    }
     var issued = sessions.values().stream().anyMatch(s -> id.equals(s.path("invoice").asString()));
     if (!issued) {
       answer(exchange, 404, "{\"error\":{\"message\":\"No such invoice\"}}");
@@ -163,6 +209,102 @@ class FakeStripe implements AutoCloseable {
         exchange,
         200,
         "{\"id\":\"" + id + "\",\"invoice_pdf\":\"https://pay.stripe.test/" + id + "/pdf\"}");
+  }
+
+  // POST /v1/invoices creates one; /v1/invoices/{id}/finalize, /pay and /void move it on.
+  private Answer invoiceAction(String path, Map<String, String> form) {
+    var parts = path.split("/");
+    if (parts.length == 3) {
+      var invoice = JSON.createObjectNode();
+      var id = "in_" + ids.incrementAndGet();
+      invoice.put("id", id);
+      invoice.put("status", "draft");
+      invoice.put("customer", form.get("customer"));
+      invoice.put("currency", form.get("currency"));
+      invoice.put("default_payment_method", form.get("default_payment_method"));
+      invoice.put("metadata_top_up_id", form.get("metadata[top_up_id]"));
+      invoice.put("subtotal", 0);
+      invoice.put("total", 0);
+      invoice.putNull("number");
+      invoices.put(id, invoice);
+      return new Answer(200, JSON.writeValueAsString(invoice));
+    }
+    var invoice = invoices.get(parts[3]);
+    if (invoice == null) {
+      return new Answer(404, "{\"error\":{\"message\":\"No such invoice\"}}");
+    }
+    switch (parts[4]) {
+      case "finalize" -> {
+        invoice.put("status", "open");
+        invoice.put("number", "WSAI-" + parts[3]);
+      }
+      case "pay" -> {
+        if (declineCards) {
+          return new Answer(402, "{\"error\":{\"message\":\"Your card was declined.\"}}");
+        }
+        invoice.put("status", "paid");
+      }
+      case "void" -> invoice.put("status", "void");
+      default -> {
+        return new Answer(404, "{}");
+      }
+    }
+    return new Answer(200, JSON.writeValueAsString(invoice));
+  }
+
+  private void invoiceItems(HttpExchange exchange) throws IOException {
+    if (refused(exchange)) {
+      return;
+    }
+    keyed(
+        exchange,
+        (path, form) -> {
+          var invoice = invoices.get(form.get("invoice"));
+          var amount = Long.parseLong(form.get("amount"));
+          var rate = taxRates.get(form.get("tax_rates[0]"));
+          var tax =
+              rate == null
+                  ? 0
+                  : rate.path("percentage")
+                      .decimalValue()
+                      .multiply(BigDecimal.valueOf(amount))
+                      .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                      .longValueExact();
+          invoice.put("subtotal", invoice.path("subtotal").asLong() + amount);
+          invoice.put("total", invoice.path("total").asLong() + amount + tax);
+          return new Answer(200, "{\"id\":\"ii_" + ids.incrementAndGet() + "\"}");
+        });
+  }
+
+  private void paymentMethods(HttpExchange exchange) throws IOException {
+    if (refused(exchange)) {
+      return;
+    }
+    var path = exchange.getRequestURI().getPath();
+    detached.add(path.split("/")[3]);
+    answer(exchange, 200, "{}");
+  }
+
+  private record Answer(int status, String body) {}
+
+  // Answers a keyed request it has seen before as it did the first time, as Stripe does.
+  private void keyed(
+      HttpExchange exchange,
+      java.util.function.BiFunction<String, Map<String, String>, Answer> handle)
+      throws IOException {
+    var key = exchange.getRequestHeaders().getFirst("Idempotency-Key");
+    var form = form(exchange);
+    if (key != null && answered.containsKey(key)) {
+      var cached = answered.get(key);
+      var split = cached.indexOf(' ');
+      answer(exchange, Integer.parseInt(cached.substring(0, split)), cached.substring(split + 1));
+      return;
+    }
+    var result = handle.apply(exchange.getRequestURI().getPath(), form);
+    if (key != null) {
+      answered.put(key, result.status() + " " + result.body());
+    }
+    answer(exchange, result.status(), result.body());
   }
 
   /** Stripe answers 401 to a wrong key, and the test-set status to everything once it is set. */

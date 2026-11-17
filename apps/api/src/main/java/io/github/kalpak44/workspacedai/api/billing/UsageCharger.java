@@ -48,6 +48,7 @@ public class UsageCharger {
   private final NotificationService notifications;
   private final BillingService billing;
   private final BillingProperties properties;
+  private final AutoTopUps autoTopUps;
 
   UsageCharger(
       UsageRepository usage,
@@ -58,7 +59,8 @@ public class UsageCharger {
       WorkspaceRepository workspaceRows,
       NotificationService notifications,
       BillingService billing,
-      BillingProperties properties) {
+      BillingProperties properties,
+      AutoTopUps autoTopUps) {
     this.usage = usage;
     this.accounts = accounts;
     this.ledger = ledger;
@@ -68,6 +70,7 @@ public class UsageCharger {
     this.notifications = notifications;
     this.billing = billing;
     this.properties = properties;
+    this.autoTopUps = autoTopUps;
   }
 
   @Scheduled(fixedDelayString = "${workspaced.billing.charge-interval:PT5M}")
@@ -82,6 +85,9 @@ public class UsageCharger {
         log.warn("could not charge workspace {}", due.getWorkspaceId(), e);
       }
     }
+    // After the hours, which may have taken a balance below its threshold, and before the paused
+    // workspaces, which a top-up may now pay to start again.
+    autoTopUps.run();
     for (var paused : usage.findAllByPausedAtIsNotNull()) {
       try {
         settlePaused(paused.getWorkspaceId(), now);

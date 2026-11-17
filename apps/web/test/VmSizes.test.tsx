@@ -30,7 +30,8 @@ describe("VM sizes", () => {
     const radios = screen.getAllByRole("radio");
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cpx22"]);
     expect(screen.getByRole("radio", { name: /cx23/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€6\.59.*per month/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€6\.59.*per month.*€0\.009\/hour/ })).toBeInTheDocument();
+    expect(screen.getByText("Billed by the hour from your balance. Delete the workspace any time and its charges stop.")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /cpx22/ })).toBeEnabled();
     expect(warning()).not.toBeInTheDocument();
   });

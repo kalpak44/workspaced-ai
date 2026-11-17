@@ -427,6 +427,10 @@ yet.
 | `POST` | `/api/v1/billing/top-ups`                | `201` and a Stripe Checkout URL, `400`, `502`, or `503` |
 | `POST` | `/api/v1/billing/top-ups/{id}/refresh`   | `200` and the top-up, or `404`                          |
 | `GET`  | `/api/v1/billing/top-ups/{id}/invoice`   | `303` to Stripe's invoice PDF, or `404`                 |
+| `POST`  | `/api/v1/billing/card`                   | `201` and a Stripe Checkout URL that saves a card, `502`, or `503` |
+| `POST`  | `/api/v1/billing/card/confirm`           | `204`, `404`, or `409` until Stripe has saved it |
+| `DELETE` | `/api/v1/billing/card`                   | `204`; automatic top-ups turn off |
+| `PUT`   | `/api/v1/billing/auto-top-up`            | `200` and the settings, `400`, or `409` without a card |
 | `POST` | `/api/v1/billing/stripe/webhook`         | Stripe only: `200`, or `400` for a bad signature        |
 
 A top-up is credited only once Stripe reports its Checkout Session paid; the webhook and the browser returning to
@@ -438,10 +442,20 @@ the invoice shows it as tax. The balance is credited the amount before VAT, and 
 from what was asked is not credited.
 Amounts are €5.00 to €1,000.00, in euros, the currency the Stripe account settles in. The balance lives in `billing_account` in micro-units, so later
 usage charges can be fractions of a cent, and every change to it is a row in `billing_ledger_entry`.
-`WORKSPACED_STRIPE_SECRET_KEY` (a restricted key: write on Customers, Checkout Sessions and Tax Rates, read on Invoices) and
+`WORKSPACED_STRIPE_SECRET_KEY` (a restricted key: write on Customers, Checkout Sessions, Tax Rates, Invoices, Invoice
+Items and Payment Methods, read on Setup Intents) and
 `WORKSPACED_STRIPE_WEBHOOK_SECRET` have no default; without the key a top-up answers `503`, and
 `WORKSPACED_BILLING_RETURN_URL` is the page Checkout returns to. The webhook subscribes to
 `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed` and `.expired`.
+
+A user can save a card through a Checkout Session in setup mode, which charges nothing; the browser comes back with
+`?card_session=<id>`, and the API keeps the card from that or from the session's `checkout.session.completed` event,
+detaching any card it replaces. With automatic top-ups on, the charge run after each round of hourly charges charges
+the card `amountCents`, plus VAT, whenever the balance is below `belowCents`: it creates an invoice with that one line,
+finalizes it and pays it off session, so Stripe issues an invoice as it does for a checkout, and the top-up is listed
+with `automatic` set. Every step is keyed by the top-up's id, so one Stripe could not be reached for stays pending and
+is finished on the next run without charging twice. A declined card voids the invoice, marks the top-up `FAILED`,
+turns automatic top-ups off and notifies the user. An admin's card is never charged.
 
 A user who is not an admin needs a balance covering a month of every workspace they have plus the new one to create
 one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even

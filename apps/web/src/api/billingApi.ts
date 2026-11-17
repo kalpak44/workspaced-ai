@@ -19,8 +19,18 @@ export interface Billing {
   readonly workspaces: readonly WorkspaceSpend[];
   /** What was charged each of the last 30 days anything was, newest first. */
   readonly usage: readonly DailySpend[];
+  /** The card automatic top-ups charge, e.g. "Visa •••• 4242"; null while none is saved. */
+  readonly card: string | null;
+  readonly autoTopUp: AutoTopUp;
   /** Newest first; checkouts abandoned at Stripe are left out. */
   readonly topUps: readonly TopUp[];
+}
+
+/** While enabled, the saved card is charged amountCents, plus VAT, each time the balance drops below belowCents. */
+export interface AutoTopUp {
+  readonly enabled: boolean;
+  readonly belowCents: number;
+  readonly amountCents: number;
 }
 
 export interface WorkspaceSpend {
@@ -46,6 +56,8 @@ export interface TopUp {
   /** The number Stripe gave the invoice; null until it is issued. */
   readonly invoiceNumber: string | null;
   readonly invoiceAvailable: boolean;
+  /** Charged to the saved card by an automatic top-up. */
+  readonly automatic: boolean;
 }
 
 export interface Checkout {
@@ -67,6 +79,26 @@ export async function startTopUp(amountCents: number): Promise<Checkout> {
 /** Has the API read the payment back from Stripe, so a return from checkout sees it credited. */
 export async function refreshTopUp(id: string): Promise<TopUp> {
   return (await send(`${BILLING_URL}/top-ups/${encodeURIComponent(id)}/refresh`, { method: "POST" })).json();
+}
+
+/** Stripe's page that saves a card without charging it; it comes back with ?card_session=<id>. */
+export async function startCardSetup(): Promise<string> {
+  const body: { checkoutUrl: string } = await (await send(`${BILLING_URL}/card`, { method: "POST" })).json();
+  return body.checkoutUrl;
+}
+
+/** Has the API keep the card the setup session saved, so it shows before Stripe's webhook arrives. */
+export async function confirmCard(sessionId: string): Promise<void> {
+  await send(`${BILLING_URL}/card/confirm`, { method: "POST", body: JSON.stringify({ sessionId }) });
+}
+
+/** Forgets the card, which turns automatic top-ups off. */
+export async function removeCard(): Promise<void> {
+  await send(`${BILLING_URL}/card`, { method: "DELETE" });
+}
+
+export async function saveAutoTopUp(settings: AutoTopUp): Promise<AutoTopUp> {
+  return (await send(`${BILLING_URL}/auto-top-up`, { method: "PUT", body: JSON.stringify(settings) })).json();
 }
 
 /** Redirects to Stripe's PDF, so a plain link downloads it with the sign-in cookie. */

@@ -196,13 +196,18 @@ export function installFakeApi(
     balanceCents: 1240,
     reactivationFeeCents: 500,
     pausedForHours: 72,
+    card: null as string | null,
+    autoTopUp: { enabled: false, belowCents: 1000, amountCents: 2000 },
+    // The card a setup session returning with this id saved.
+    cardSessions: new Map<string, string>(),
+    savedAutoTopUps: [] as { enabled: boolean; belowCents: number; amountCents: number }[],
     monthlySpendCents: 0,
     fundedUntil: null as string | null,
     workspaces: [] as WorkspaceSpend[],
     usage: [] as DailySpend[],
     topUps: [
-      { id: "t2", amountCents: 1000, status: "FAILED", createdAt: "2026-10-14T17:40:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false },
-      { id: "t1", amountCents: 2500, status: "PAID", createdAt: "2026-10-02T08:05:00Z", paidAt: "2026-10-02T08:06:00Z", invoiceNumber: "WSAI-0001", invoiceAvailable: true },
+      { id: "t2", amountCents: 1000, status: "FAILED", createdAt: "2026-10-14T17:40:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false, automatic: false },
+      { id: "t1", amountCents: 2500, status: "PAID", createdAt: "2026-10-02T08:05:00Z", paidAt: "2026-10-02T08:06:00Z", invoiceNumber: "WSAI-0001", invoiceAvailable: true, automatic: false },
     ] as TopUp[],
     started: [] as number[],
     refreshed: [] as string[],
@@ -228,15 +233,37 @@ export function installFakeApi(
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
-      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, topUps } = billing;
-      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, topUps });
+      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps } = billing;
+      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps });
+    }
+    if (url.endsWith("/api/v1/billing/card") && init?.method === "POST") {
+      if (billing.failStart) return json({}, billing.failStart);
+      return json({ checkoutUrl: "https://checkout.stripe.test/setup" }, 201);
+    }
+    if (url.endsWith("/api/v1/billing/card") && init?.method === "DELETE") {
+      billing.card = null;
+      billing.autoTopUp = { ...billing.autoTopUp, enabled: false };
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith("/api/v1/billing/card/confirm")) {
+      const card = billing.cardSessions.get(JSON.parse(String(init?.body)).sessionId);
+      if (!card) return json({}, 409);
+      billing.card = card;
+      return new Response(null, { status: 204 });
+    }
+    if (url.endsWith("/api/v1/billing/auto-top-up")) {
+      const settings = JSON.parse(String(init?.body));
+      if (settings.enabled && !billing.card) return json({}, 409);
+      billing.savedAutoTopUps.push(settings);
+      billing.autoTopUp = settings;
+      return json(settings);
     }
     if (url.endsWith("/api/v1/billing/top-ups") && init?.method === "POST") {
       if (billing.failStart) return json({}, billing.failStart);
       const amountCents = JSON.parse(String(init.body)).amountCents as number;
       billing.started.push(amountCents);
       const id = `t${billing.topUps.length + 1}`;
-      billing.topUps.unshift({ id, amountCents, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false });
+      billing.topUps.unshift({ id, amountCents, status: "PENDING", createdAt: "2026-11-15T10:00:00Z", paidAt: null, invoiceNumber: null, invoiceAvailable: false, automatic: false });
       return json({ id, checkoutUrl: `https://checkout.stripe.test/${id}` }, 201);
     }
     const refresh = /\/api\/v1\/billing\/top-ups\/([^/]+)\/refresh$/.exec(url);

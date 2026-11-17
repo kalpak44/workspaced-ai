@@ -52,6 +52,7 @@ class BillingTest {
   @Autowired UserRepository users;
   @Autowired NotificationService notifications;
   @Autowired JdbcTemplate jdbc;
+  @Autowired AutoTopUps autoTopUps;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -75,7 +76,7 @@ class BillingTest {
     usage.deleteAll();
     accounts.deleteAll();
     jdbc.update("DELETE FROM notification");
-    STRIPE.status = 0;
+    STRIPE.reset();
   }
 
   @Test
@@ -261,6 +262,182 @@ class BillingTest {
         .isInstanceOf(ResponseStatusException.class)
         .hasMessageContaining("no such top-up");
     assertThat(billing.billing(other.getId()).topUps()).isEmpty();
+  }
+
+  @Test
+  void savesACardThroughASetupCheckoutAndShowsIt() throws Exception {
+    var response = post("/billing/card");
+
+    assertThat(response.statusCode()).isEqualTo(201);
+    var session = STRIPE.lastSessionId();
+    assertThat(read(response).get("checkoutUrl").asString())
+        .isEqualTo("https://checkout.stripe.test/" + session);
+    assertThat(STRIPE.checkouts.getLast())
+        .containsEntry("mode", "setup")
+        .containsEntry(
+            "success_url", "https://ai.workspaced.test/billing?card_session={CHECKOUT_SESSION_ID}");
+    assertThat(confirmCard(session).statusCode()).isEqualTo(409);
+
+    STRIPE.saveCard(session, "pm_1", "visa", "4242");
+    assertThat(confirmCard(session).statusCode()).isEqualTo(204);
+
+    assertThat(read(get("/billing")).get("card").asString()).isEqualTo("Visa •••• 4242");
+  }
+
+  @Test
+  void keepsTheCardFromTheWebhookAndDetachesTheOneItReplaces() throws Exception {
+    post("/billing/card");
+    STRIPE.saveCard(STRIPE.lastSessionId(), "pm_old", "visa", "4242");
+    confirmCard(STRIPE.lastSessionId());
+    post("/billing/card");
+    var session = STRIPE.lastSessionId();
+    STRIPE.saveCard(session, "pm_new", "mastercard", "4444");
+    var event = setupEvent(session);
+
+    assertThat(webhook(event, signature(event)).statusCode()).isEqualTo(200);
+
+    assertThat(read(get("/billing")).get("card").asString()).isEqualTo("Mastercard •••• 4444");
+    assertThat(STRIPE.detached).containsExactly("pm_old");
+  }
+
+  @Test
+  void refusesAutomaticTopUpsWithoutACardAndTurnsThemOffWithIt() throws Exception {
+    assertThat(read(get("/billing")).get("autoTopUp").get("enabled").asBoolean()).isFalse();
+    assertThat(setAutoTopUp(true, 1000, 2000).statusCode()).isEqualTo(409);
+    assertThat(setAutoTopUp(false, 400, 2000).statusCode()).isEqualTo(400);
+
+    post("/billing/card");
+    STRIPE.saveCard(STRIPE.lastSessionId(), "pm_1", "visa", "4242");
+    confirmCard(STRIPE.lastSessionId());
+    assertThat(read(setAutoTopUp(true, 1500, 3000)))
+        .isEqualTo(JSON.readTree("{\"enabled\":true,\"belowCents\":1500,\"amountCents\":3000}"));
+
+    assertThat(send(request("/billing/card").DELETE()).statusCode()).isEqualTo(204);
+
+    var billing = read(get("/billing"));
+    assertThat(billing.get("card").isNull()).isTrue();
+    assertThat(billing.get("autoTopUp").get("enabled").asBoolean()).isFalse();
+    assertThat(STRIPE.detached).containsExactly("pm_1");
+  }
+
+  @Test
+  void chargesTheSavedCardOnceTheBalanceIsLowWithAnInvoiceForItAndVat() {
+    var user = payer();
+
+    autoTopUps.topUp(user);
+
+    var shown = billing.billing(user);
+    assertThat(shown.balanceCents()).isEqualTo(2000);
+    var topUp = shown.topUps().getFirst();
+    assertThat(topUp.automatic()).isTrue();
+    assertThat(topUp.status()).isEqualTo(TopUpStatus.PAID);
+    assertThat(topUp.invoiceNumber()).startsWith("WSAI-in_");
+    var invoice = STRIPE.invoices.values().iterator().next();
+    assertThat(invoice.get("status").asString()).isEqualTo("paid");
+    assertThat(invoice.get("subtotal").asLong()).isEqualTo(2000);
+    assertThat(invoice.get("total").asLong()).isEqualTo(2400);
+    assertThat(invoice.get("default_payment_method").asString()).isEqualTo("pm_payer");
+
+    // Above the threshold now, so nothing more is charged.
+    autoTopUps.topUp(user);
+    assertThat(billing.billing(user).topUps()).hasSize(1);
+  }
+
+  @Test
+  void turnsAutomaticTopUpsOffAndSaysWhyWhenTheCardIsDeclined() {
+    var user = payer();
+    STRIPE.declineCards = true;
+
+    autoTopUps.topUp(user);
+
+    var shown = billing.billing(user);
+    assertThat(shown.balanceCents()).isZero();
+    assertThat(shown.topUps().getFirst().status()).isEqualTo(TopUpStatus.FAILED);
+    assertThat(shown.autoTopUp().enabled()).isFalse();
+    assertThat(STRIPE.invoices.values().iterator().next().get("status").asString())
+        .isEqualTo("void");
+    assertThat(notifications.list(user).getFirst())
+        .extracting(Notification::title, Notification::body)
+        .satisfies(
+            fields -> {
+              assertThat(fields.get(0)).isEqualTo("Automatic top-up failed");
+              assertThat((String) fields.get(1)).contains("Your card was declined.");
+            });
+
+    STRIPE.declineCards = false;
+    autoTopUps.topUp(user);
+    assertThat(billing.billing(user).topUps()).hasSize(1);
+  }
+
+  @Test
+  void triesACardChargeStripeCouldNotTakeAgainAndCreditsItOnce() {
+    var user = payer();
+    STRIPE.status = 503;
+
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    assertThat(billing.billing(user).topUps().getFirst().status()).isEqualTo(TopUpStatus.PENDING);
+
+    STRIPE.status = 0;
+    autoTopUps.topUp(user);
+    autoTopUps.topUp(user);
+
+    assertThat(billing.billing(user).balanceCents()).isEqualTo(2000);
+    assertThat(billing.billing(user).topUps()).hasSize(1);
+    assertThat(STRIPE.invoices).hasSize(1);
+  }
+
+  @Test
+  void neverChargesAnAdminsCard() throws Exception {
+    post("/billing/card");
+    STRIPE.saveCard(STRIPE.lastSessionId(), "pm_1", "visa", "4242");
+    confirmCard(STRIPE.lastSessionId());
+    setAutoTopUp(true, 1000, 2000);
+
+    autoTopUps.run();
+
+    assertThat(STRIPE.invoices).isEmpty();
+    assertThat(read(get("/billing")).get("topUps")).isEmpty();
+  }
+
+  /** A user who is not an admin, with a saved card and automatic top-ups of 20 below 10. */
+  private UUID payer() {
+    var user = users.save(new UserEntity("billing-payer-" + UUID.randomUUID(), "{noop}x")).getId();
+    billing.startCardSetup(user);
+    STRIPE.saveCard(STRIPE.lastSessionId(), "pm_payer", "visa", "4242");
+    billing.confirmCard(user, STRIPE.lastSessionId());
+    billing.setAutoTopUp(user, new AutoTopUp(true, 1000, 2000));
+    return user;
+  }
+
+  private static byte[] setupEvent(String sessionId) {
+    return ("{\"type\":\"checkout.session.completed\",\"data\":{\"object\":{\"id\":\""
+            + sessionId
+            + "\",\"mode\":\"setup\"}}}")
+        .getBytes(StandardCharsets.UTF_8);
+  }
+
+  private HttpResponse<String> confirmCard(String sessionId) throws Exception {
+    return send(
+        request("/billing/card/confirm")
+            .header("Content-Type", "application/json")
+            .POST(BodyPublishers.ofString("{\"sessionId\":\"" + sessionId + "\"}")));
+  }
+
+  private HttpResponse<String> setAutoTopUp(boolean enabled, long below, long amount)
+      throws Exception {
+    return send(
+        request("/billing/auto-top-up")
+            .header("Content-Type", "application/json")
+            .PUT(
+                BodyPublishers.ofString(
+                    "{\"enabled\":"
+                        + enabled
+                        + ",\"belowCents\":"
+                        + below
+                        + ",\"amountCents\":"
+                        + amount
+                        + "}")));
   }
 
   private static byte[] event(String type, String objectId) {

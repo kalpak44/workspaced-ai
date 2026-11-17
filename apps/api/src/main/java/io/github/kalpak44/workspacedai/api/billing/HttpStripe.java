@@ -12,6 +12,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
@@ -99,6 +100,115 @@ public class HttpStripe implements Stripe {
     // Two top-ups racing to create the rate get the same one back.
     var key = "vat-rate-" + percent.toPlainString();
     return vatRateId = read(send(post("/v1/tax_rates", form, key))).path("id").asString();
+  }
+
+  @Override
+  public CheckoutSession createCardSetup(String customerId, String successUrl, URI cancelUrl) {
+    var form = new LinkedHashMap<String, String>();
+    form.put("mode", "setup");
+    form.put("customer", customerId);
+    form.put("currency", properties.currency());
+    form.put("payment_method_types[0]", "card");
+    form.put("metadata[purpose]", "auto-top-up");
+    form.put("success_url", successUrl);
+    form.put("cancel_url", cancelUrl.toString());
+    form.put("expires_at", Long.toString(Instant.now().plus(CHECKOUT_LIFETIME).getEpochSecond()));
+    return session(read(send(post("/v1/checkout/sessions", form, null))));
+  }
+
+  @Override
+  public Optional<SavedCard> savedCard(String sessionId) {
+    var session =
+        read(
+            send(
+                get(
+                    "/v1/checkout/sessions/"
+                        + encode(sessionId)
+                        + "?expand[]=setup_intent.payment_method")));
+    var method = session.path("setup_intent").path("payment_method");
+    if (!"complete".equals(session.path("status").asString()) || !method.isObject()) {
+      return Optional.empty();
+    }
+    var card = method.path("card");
+    var brand = card.path("brand").asString("card");
+    var label =
+        brand.substring(0, 1).toUpperCase(Locale.ROOT)
+            + brand.substring(1)
+            + " •••• "
+            + card.path("last4").asString("");
+    return Optional.of(
+        new SavedCard(session.path("customer").asString(), method.path("id").asString(), label));
+  }
+
+  /**
+   * Creates the invoice with only this line, so nothing else pending on the customer is charged
+   * with it, then finalizes it and pays it off session. Each step has a key of its own, so a retry
+   * after a dropped answer picks up where the last attempt got to.
+   */
+  @Override
+  public ChargedInvoice chargeCard(
+      String customerId, String paymentMethodId, UUID topUpId, long amountCents) {
+    var key = "top-up-" + topUpId;
+    var invoiceForm = new LinkedHashMap<String, String>();
+    invoiceForm.put("customer", customerId);
+    invoiceForm.put("collection_method", "charge_automatically");
+    invoiceForm.put("auto_advance", "false");
+    invoiceForm.put("currency", properties.currency());
+    invoiceForm.put("default_payment_method", paymentMethodId);
+    invoiceForm.put("pending_invoice_items_behavior", "exclude");
+    invoiceForm.put("description", "Automatic balance top-up");
+    invoiceForm.put("metadata[top_up_id]", topUpId.toString());
+    var invoice = read(send(post("/v1/invoices", invoiceForm, key + "-invoice"))).path("id");
+    var id = encode(invoice.asString());
+    var item = new LinkedHashMap<String, String>();
+    item.put("customer", customerId);
+    item.put("invoice", invoice.asString());
+    item.put("currency", properties.currency());
+    item.put("amount", Long.toString(amountCents));
+    item.put("description", "Balance top-up");
+    item.put("tax_rates[0]", vatRate());
+    read(send(post("/v1/invoiceitems", item, key + "-item")));
+    read(send(post("/v1/invoices/" + id + "/finalize", Map.of(), key + "-finalize")));
+    var pay = new LinkedHashMap<String, String>();
+    pay.put("off_session", "true");
+    pay.put("payment_method", paymentMethodId);
+    try {
+      return invoice(read(send(post("/v1/invoices/" + id + "/pay", pay, key + "-pay"))));
+    } catch (StripeFailedException e) {
+      try {
+        send(post("/v1/invoices/" + id + "/void", Map.of(), key + "-void"));
+      } catch (RuntimeException voidFailed) {
+        // An open invoice nobody pays is untidy, not wrong: auto_advance keeps Stripe from it.
+        e.addSuppressed(voidFailed);
+      }
+      throw new CardDeclinedException(stripeReason(e));
+    }
+  }
+
+  @Override
+  public void detachCard(String paymentMethodId) {
+    send(
+        post(
+            "/v1/payment_methods/" + encode(paymentMethodId) + "/detach",
+            Map.of(),
+            "detach-" + paymentMethodId));
+  }
+
+  // Stripe's message is the last part of the failure's reason.
+  private static String stripeReason(StripeFailedException e) {
+    var reason = e.getReason() == null ? "" : e.getReason();
+    var colon = reason.lastIndexOf(": ");
+    return colon < 0 ? reason : reason.substring(colon + 2);
+  }
+
+  private static ChargedInvoice invoice(JsonNode invoice) {
+    return new ChargedInvoice(
+        invoice.path("id").asString(),
+        text(invoice.path("number")),
+        invoice.path("status").asString(),
+        invoice.path("subtotal").asLong(),
+        invoice.path("total").asLong(),
+        invoice.path("currency").asString());
   }
 
   @Override

@@ -25,9 +25,9 @@ public record BillingProperties(
     @DefaultValue Stripe stripe) {
 
   /**
-   * @param secretKey a restricted key with write access to Customers and Checkout Sessions and read
-   *     access to Invoices and Tax Rates; unset, as it is locally, no top-up can start and they
-   *     answer 503
+   * @param secretKey a restricted key with write access to Customers, Checkout Sessions, Tax Rates,
+   *     Invoices, Invoice Items and Payment Methods, and read access to Setup Intents; unset, as it
+   *     is locally, no top-up can start and they answer 503
    * @param webhookSecret signs the events Stripe sends; unset, the webhook answers 503
    * @param url the API root, replaced only by tests
    * @param timeout how long one call may take

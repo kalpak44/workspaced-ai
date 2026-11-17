@@ -17,6 +17,7 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -44,6 +45,11 @@ public class BillingService {
 
   static final long MIN_TOP_UP_CENTS = 500;
   static final long MAX_TOP_UP_CENTS = 100_000;
+
+  // What the auto top-up form starts from before the user sets it.
+  private static final long DEFAULT_AUTO_BELOW_CENTS = 1000;
+  private static final long DEFAULT_AUTO_AMOUNT_CENTS = 2000;
+  private static final String CARD_SESSION = "card_session";
 
   // A month is 730 hours on average, which is how an hourly charge adds up to the monthly price.
   static final BigDecimal HOURS_PER_MONTH = BigDecimal.valueOf(730);
@@ -121,6 +127,8 @@ public class BillingService {
             .map(workspace -> spend(workspace.getId(), workspace.getName(), rows))
             .toList(),
         usageByDay(user, now),
+        accounts.findById(user).map(BillingAccountEntity::getCardLabel).orElse(null),
+        accounts.findById(user).map(BillingService::autoTopUp).orElse(autoTopUp(null)),
         topUps.findAllByUserIdAndStatusNotOrderByCreatedAtDesc(user, TopUpStatus.EXPIRED).stream()
             .map(BillingService::view)
             .toList());
@@ -179,11 +187,7 @@ public class BillingService {
     if (amountCents < MIN_TOP_UP_CENTS || amountCents > MAX_TOP_UP_CENTS) {
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "amount out of range");
     }
-    var customer =
-        accounts
-            .findById(user)
-            .map(BillingAccountEntity::getStripeCustomerId)
-            .orElseGet(() -> claimCustomer(user, stripe.createCustomer(user, name(user))));
+    var customer = customer(user);
     var id = UUID.randomUUID();
     topUps.save(new TopUpEntity(id, user, amountCents));
     Stripe.CheckoutSession session;
@@ -199,6 +203,121 @@ public class BillingService {
     transactions.executeWithoutResult(
         _ -> topUps.findById(id).ifPresent(topUp -> topUp.setCheckoutSessionId(session.id())));
     return new Checkout(id, session.url());
+  }
+
+  /**
+   * Opens a Stripe page that saves a card for automatic top-ups without charging it. The browser
+   * comes back with ?card_session=, which {@link #confirmCard} takes.
+   */
+  public CardCheckout startCardSetup(UUID user) {
+    // Stripe fills the placeholder in; it must reach Stripe unencoded.
+    var success =
+        UriComponentsBuilder.fromUri(properties.returnUrl())
+            .queryParam(CARD_SESSION, "SESSION_ID")
+            .build()
+            .toUriString()
+            .replace("SESSION_ID", "{CHECKOUT_SESSION_ID}");
+    var cancel =
+        UriComponentsBuilder.fromUri(properties.returnUrl())
+            .queryParam("card", "cancelled")
+            .build()
+            .toUri();
+    return new CardCheckout(stripe.createCardSetup(customer(user), success, cancel).url());
+  }
+
+  /**
+   * Keeps the card the browser's setup session saved, for the browser coming back before Stripe's
+   * webhook does. A session of another customer's is not found.
+   */
+  public void confirmCard(UUID user, String sessionId) {
+    var card =
+        stripe
+            .savedCard(sessionId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.CONFLICT, "the card is not saved yet; try again shortly"));
+    var account =
+        accounts
+            .findByStripeCustomerId(card.customerId())
+            .filter(found -> found.getUserId().equals(user))
+            .orElseThrow(
+                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such card setup"));
+    keepCard(account.getUserId(), card);
+  }
+
+  /** Forgets the saved card, which also turns automatic top-ups off. */
+  public void removeCard(UUID user) {
+    var removed =
+        transactions.execute(
+            _ -> {
+              var account = ledger.account(user);
+              var paymentMethod = account.getPaymentMethodId();
+              account.forgetCard();
+              return paymentMethod;
+            });
+    if (removed != null) {
+      detachQuietly(removed);
+    }
+  }
+
+  /**
+   * Turns automatic top-ups on or off. They charge the saved card, so turning them on without one
+   * is refused.
+   */
+  public AutoTopUp setAutoTopUp(UUID user, AutoTopUp settings) {
+    return transactions.execute(
+        _ -> {
+          var account = ledger.account(user);
+          if (settings.enabled() && account.getPaymentMethodId() == null) {
+            throw new ResponseStatusException(
+                HttpStatus.CONFLICT, "save a card before turning automatic top-ups on");
+          }
+          account.setAutoTopUp(settings.enabled(), settings.belowCents(), settings.amountCents());
+          return autoTopUp(account);
+        });
+  }
+
+  // The newest card replaces the one before, which is detached so Stripe keeps one alone.
+  private void keepCard(UUID user, Stripe.SavedCard card) {
+    var replaced =
+        transactions.execute(
+            _ -> {
+              var account = ledger.account(user);
+              var before = account.getPaymentMethodId();
+              account.saveCard(card.paymentMethodId(), card.label());
+              return card.paymentMethodId().equals(before) ? null : before;
+            });
+    if (replaced != null) {
+      detachQuietly(replaced);
+    }
+  }
+
+  // The card is already forgotten here; one left on the customer is only never charged.
+  private void detachQuietly(String paymentMethodId) {
+    try {
+      stripe.detachCard(paymentMethodId);
+    } catch (RuntimeException e) {
+      log.warn("could not detach card {} at Stripe", paymentMethodId, e);
+    }
+  }
+
+  private static AutoTopUp autoTopUp(BillingAccountEntity account) {
+    if (account == null) {
+      return new AutoTopUp(false, DEFAULT_AUTO_BELOW_CENTS, DEFAULT_AUTO_AMOUNT_CENTS);
+    }
+    return new AutoTopUp(
+        account.isAutoTopUpEnabled(),
+        Objects.requireNonNullElse(account.getAutoTopUpBelowCents(), DEFAULT_AUTO_BELOW_CENTS),
+        Objects.requireNonNullElse(account.getAutoTopUpAmountCents(), DEFAULT_AUTO_AMOUNT_CENTS));
+  }
+
+  // The user's Stripe customer, created on first use.
+  String customer(UUID user) {
+    return accounts
+        .findById(user)
+        .map(BillingAccountEntity::getStripeCustomerId)
+        .orElseGet(() -> claimCustomer(user, stripe.createCustomer(user, name(user))));
   }
 
   /** Asks Stripe where a top-up stands, for the browser coming back from checkout. */
@@ -250,12 +369,21 @@ public class BillingService {
     }
     String type;
     String sessionId;
+    String mode;
     try {
       var event = json.readTree(payload);
       type = event.path("type").asString();
       sessionId = event.path("data").path("object").path("id").asString();
+      mode = event.path("data").path("object").path("mode").asString("payment");
     } catch (JacksonException e) {
       return false;
+    }
+    // A setup session saves a card, and only its completion matters.
+    if ("setup".equals(mode)) {
+      if ("checkout.session.completed".equals(type)) {
+        stripe.savedCard(sessionId).ifPresent(this::keepCardOfCustomer);
+      }
+      return true;
     }
     switch (type) {
       case "checkout.session.completed",
@@ -266,6 +394,14 @@ public class BillingService {
       default -> log.debug("ignoring Stripe event {}", type);
     }
     return true;
+  }
+
+  private void keepCardOfCustomer(Stripe.SavedCard card) {
+    accounts
+        .findByStripeCustomerId(card.customerId())
+        .ifPresentOrElse(
+            account -> keepCard(account.getUserId(), card),
+            () -> log.warn("Stripe customer {} belongs to no account", card.customerId()));
   }
 
   private void settle(String sessionId, boolean failed) {
@@ -467,6 +603,7 @@ public class BillingService {
         topUp.getCreatedAt(),
         topUp.getPaidAt(),
         topUp.getInvoiceNumber(),
-        topUp.getStatus() == TopUpStatus.PAID);
+        topUp.getStatus() == TopUpStatus.PAID,
+        topUp.isAutomatic());
   }
 }

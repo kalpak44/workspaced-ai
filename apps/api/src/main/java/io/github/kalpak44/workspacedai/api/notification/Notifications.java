@@ -77,6 +77,26 @@ public final class Notifications {
         BILLING);
   }
 
+  /**
+   * For an automatic top-up the card was not charged for; automatic top-ups are then off.
+   *
+   * @param reason Stripe's, e.g. Your card was declined.
+   */
+  public static NotificationMessage autoTopUpFailed(String amount, String reason) {
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.ERROR,
+        "Automatic top-up failed",
+        amount + " could not be charged to your card. Automatic top-ups are off.",
+        "We tried to add "
+            + amount
+            + " to your balance from your saved card, but it was not charged: "
+            + reason
+            + " Automatic top-ups are now off, so the card is not tried again. Check the card or"
+            + " save another, then turn them back on.",
+        BILLING);
+  }
+
   public static NotificationMessage workspaceCreated(UUID id, String name) {
     return new NotificationMessage(
         NotificationKind.WORKSPACE,

@@ -33,6 +33,28 @@ public class BillingController implements BillingApi {
   }
 
   @Override
+  public ResponseEntity<CardCheckout> startCardSetup() {
+    return ResponseEntity.status(HttpStatus.CREATED).body(billing.startCardSetup(CurrentUser.id()));
+  }
+
+  @Override
+  public ResponseEntity<Void> confirmCard(CardConfirmRequest request) {
+    billing.confirmCard(CurrentUser.id(), request.sessionId());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<Void> removeCard() {
+    billing.removeCard(CurrentUser.id());
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<AutoTopUp> setAutoTopUp(AutoTopUp request) {
+    return ResponseEntity.ok(billing.setAutoTopUp(CurrentUser.id(), request));
+  }
+
+  @Override
   public ResponseEntity<Void> invoice(UUID id) {
     return ResponseEntity.status(HttpStatus.SEE_OTHER)
         .location(billing.invoice(CurrentUser.id(), id))
