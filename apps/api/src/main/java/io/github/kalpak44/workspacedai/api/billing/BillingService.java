@@ -363,7 +363,7 @@ public class BillingService {
 
   // Charges are posted as each hour starts, so what was posted on a day is what that day cost.
   private List<DailySpend> usageByDay(UUID user, Instant now) {
-    var since = LocalDate.ofInstant(now, ZoneOffset.UTC).minusDays(USAGE_DAYS - 1);
+    var since = LocalDate.ofInstant(now, ZoneOffset.UTC).minusDays(USAGE_DAYS - 1L);
     var byDay = new TreeMap<LocalDate, Long>(Comparator.reverseOrder());
     entries
         .findAllByUserIdAndKindAndCreatedAtGreaterThanEqual(
