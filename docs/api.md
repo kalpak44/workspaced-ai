@@ -448,7 +448,7 @@ one, and each workspace is then charged by the hour as the hour starts. An admin
 those made before the user became one. When the balance cannot pay a workspace's next hour, its VM is shut down and it
 is `PAUSED`: it is not charged, nor can it be restarted. Once the balance pays `WORKSPACED_BILLING_REACTIVATION_FEE`
 (5.00 by default, returned as `reactivationFeeCents`) and an hour, it starts again within the charge interval, the fee is
-taken, and it is charged from then on. A workspace still paused after `WORKSPACED_BILLING_PAUSED_FOR` (`3d` by default)
+taken, and it is charged from then on. A workspace still paused after `WORKSPACED_BILLING_PAUSED_FOR` (`3d` by default, returned as `pausedForHours`)
 is deleted. The owner is notified when it is paused, each day it stays paused, when it starts again and when it is
 deleted, and each day in the week before the balance runs out. `GET /billing` also returns what the running
 workspaces cost a month, when the balance stops paying for them (`fundedUntil`), each workspace's cost with when a

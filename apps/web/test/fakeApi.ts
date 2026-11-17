@@ -195,6 +195,7 @@ export function installFakeApi(
   const billing = {
     balanceCents: 1240,
     reactivationFeeCents: 500,
+    pausedForHours: 72,
     monthlySpendCents: 0,
     fundedUntil: null as string | null,
     workspaces: [] as WorkspaceSpend[],
@@ -227,8 +228,8 @@ export function installFakeApi(
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
-      const { balanceCents, vatPercent, reactivationFeeCents, monthlySpendCents, fundedUntil, workspaces, usage, topUps } = billing;
-      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, monthlySpendCents, fundedUntil, workspaces, usage, topUps });
+      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, topUps } = billing;
+      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, topUps });
     }
     if (url.endsWith("/api/v1/billing/top-ups") && init?.method === "POST") {
       if (billing.failStart) return json({}, billing.failStart);

@@ -83,7 +83,7 @@ class NotificationsTest {
 
   @Test
   void sendsAKeyedReminderOnce() {
-    var message = Notifications.fundsRunningOut("box", 2, Duration.ofDays(3));
+    var message = Notifications.fundsRunningOut("box", 2, Duration.ofDays(3), "5.00 EUR");
 
     notifications.sendOnce(user, "key", message);
     notifications.sendOnce(user, "key", message);

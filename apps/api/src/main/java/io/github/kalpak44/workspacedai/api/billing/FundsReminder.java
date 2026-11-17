@@ -89,6 +89,7 @@ public class FundsReminder {
     var hourly = running.stream().mapToLong(UsageEntity::getHourlyMicros).sum();
     var balance = accounts.findById(user).map(BillingAccountEntity::getBalanceMicros).orElse(0L);
     var hoursLeft = hourly == 0 ? Long.MAX_VALUE : BillingService.hoursCovered(balance, hourly);
+    var fee = billing.amount(billing.reactivationFeeMicros());
     if (hoursLeft < WARN_BEFORE.toHours()) {
       var days = hoursLeft / 24;
       send(
@@ -96,10 +97,10 @@ public class FundsReminder {
           running,
           workspace -> "funds-running-out:" + workspace.getId() + ":" + today,
           (workspace, row) ->
-              Notifications.fundsRunningOut(workspace.getName(), days, properties.pausedFor()));
+              Notifications.fundsRunningOut(
+                  workspace.getName(), days, properties.pausedFor(), fee));
     }
     // The day it is paused, the pause itself said so.
-    var fee = billing.amount(billing.reactivationFeeMicros());
     send(
         user,
         rows.stream()

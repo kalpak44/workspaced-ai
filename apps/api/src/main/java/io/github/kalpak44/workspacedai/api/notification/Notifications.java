@@ -160,22 +160,35 @@ public final class Notifications {
    *
    * @param days whole days the balance still covers; 0 when less than one
    * @param pausedFor how long it then stays paused before it is deleted
+   * @param fee what starting it again once paused costs, e.g. 5.00 EUR
    */
-  public static NotificationMessage fundsRunningOut(String name, long days, Duration pausedFor) {
+  public static NotificationMessage fundsRunningOut(
+      String name, long days, Duration pausedFor, String fee) {
     var span = days == 0 ? "less than a day" : "about " + days + (days == 1 ? " day" : " days");
     var when = days == 0 ? "within a day" : "in " + span;
     return new NotificationMessage(
         NotificationKind.BILLING,
         days <= 1 ? NotificationTone.ERROR : NotificationTone.WARNING,
         name + " will be paused " + when,
-        "Your balance runs out " + when + ". Add funds to keep " + name + " running.",
+        "Your balance runs out "
+            + when
+            + ". Then starting "
+            + name
+            + " again costs a "
+            + fee
+            + " fee, and it is deleted "
+            + span(pausedFor)
+            + " later.",
         "Your balance pays for your workspaces for "
             + span
             + " more. Once it cannot pay the next hour, "
             + name
-            + " is paused, and permanently deleted with its files, sessions and secrets "
+            + " is paused: its VM is shut down. Starting it again then costs a "
+            + fee
+            + " reactivation fee on top of its hours, and if the balance is not topped up within "
             + span(pausedFor)
-            + " later unless you add funds. We remind you each day until then.",
+            + ", it is permanently deleted with its files, sessions and secrets. Add funds now to"
+            + " avoid both; we remind you each day until then.",
         ADD_FUNDS);
   }
 

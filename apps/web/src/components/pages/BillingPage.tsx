@@ -1,4 +1,4 @@
-import { Download, Plus, Receipt, Wallet } from "lucide-react";
+import { Download, Plus, Receipt, TriangleAlert, Wallet } from "lucide-react";
 import { useEffect, useState } from "react";
 import { usePagination } from "../../hooks/usePagination";
 import { type Billing, type TopUp, useBilling } from "../../hooks/useBilling";
@@ -38,6 +38,39 @@ function Runway({ billing }: { readonly billing: Billing }) {
     <p className={`text-sm ${days < WARN_DAYS ? "font-medium text-amber-300" : "text-white/70"}`}>
       Lasts until {FUNDED_UNTIL.format(until)} · {span} at {formatMoney(billing.monthlySpendCents)} a month
     </p>
+  );
+}
+
+/** "3 days", "12 hours": how long a paused workspace is kept. */
+function keptFor(hours: number): string {
+  if (hours < 24) return `${hours} ${hours === 1 ? "hour" : "hours"}`;
+  const days = Math.round(hours / 24);
+  return `${days} ${days === 1 ? "day" : "days"}`;
+}
+
+/**
+ * What running out costs, said before it happens: once the balance lasts under a week, or while
+ * workspaces are already paused. Null otherwise.
+ */
+function FundsWarning({ billing, onAddFunds }: { readonly billing: Billing; readonly onAddFunds: () => void }) {
+  const fee = formatMoney(billing.reactivationFeeCents);
+  const kept = keptFor(billing.pausedForHours);
+  const paused = billing.workspaces.filter((workspace) => workspace.deletesAt).length;
+  const until = billing.fundedUntil ? new Date(billing.fundedUntil) : null;
+  let message;
+  if (paused > 0) {
+    message = `${paused === 1 ? "A workspace is" : `${paused} workspaces are`} paused because the balance ran out. Add funds to start ${paused === 1 ? "it" : "them"} again: each costs a ${fee} reactivation fee on top of its hours. A workspace still paused ${kept} after it stopped is deleted with its files, sessions and secrets.`;
+  } else if (until && until.getTime() - Date.now() < WARN_DAYS * DAY_MS) {
+    message = `Your balance runs out on ${FUNDED_UNTIL.format(until)}. Your workspaces are then paused, and starting each again costs a ${fee} reactivation fee. Any still paused ${kept} later is deleted with its files, sessions and secrets. Add funds before then to avoid both.`;
+  } else {
+    return null;
+  }
+  return (
+    <section role="alert" aria-label="Funds warning" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 sm:flex-row sm:items-start dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
+      <TriangleAlert aria-hidden className="mt-0.5 size-4 shrink-0 text-amber-600 dark:text-amber-400" />
+      <p className="flex-1">{message}</p>
+      <Button label="Add funds" icon={Plus} variant="secondary" onClick={onAddFunds} />
+    </section>
   );
 }
 
@@ -118,7 +151,9 @@ export function BillingPage() {
           <div className="relative"><Button label="Add funds" icon={Plus} onClick={() => { setAdding(true); setNotice(""); }} /></div>
         </section>
 
-        <SettingsSection title="Spending" description={`Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges. When the balance runs out, workspaces are paused rather than deleted: add funds and they start again, for a ${formatMoney(billing.reactivationFeeCents)} reactivation fee each.`}>
+        <FundsWarning billing={billing} onAddFunds={() => { setAdding(true); setNotice(""); }} />
+
+        <SettingsSection title="Spending" description={`Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges. When the balance runs out, workspaces are paused rather than deleted: add funds within ${keptFor(billing.pausedForHours)} and they start again, for a ${formatMoney(billing.reactivationFeeCents)} reactivation fee each.`}>
           {billing.workspaces.length === 0 && billing.usage.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-300 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
               <Receipt aria-hidden className="size-6" />

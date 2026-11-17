@@ -15,6 +15,13 @@ async function renderBilling(path = "/billing") {
   return api;
 }
 
+/** The billing page, on a fake API the test has already set up. */
+async function openBilling() {
+  globalThis.history.replaceState(null, "", "/billing");
+  render(<App />);
+  await screen.findByText("Current balance");
+}
+
 const balance = () => within(screen.getByRole("region", { name: "Balance" }));
 
 describe("billing", () => {
@@ -77,7 +84,31 @@ describe("billing", () => {
     expect(balance().getByText("Your workspaces are paused until you add funds.")).toBeInTheDocument();
     const row = within(screen.getByRole("table", { name: "Workspaces" })).getByRole("row", { name: /research-box/ });
     expect(row).toHaveTextContent(/Paused · deleted Nov 20, \d+:00 [AP]M unless you add funds/);
-    expect(screen.getByText(/for a €5\.00 reactivation fee each/)).toBeInTheDocument();
+    expect(screen.getByText(/add funds within 3 days and they start again, for a €5\.00 reactivation fee each/)).toBeInTheDocument();
+    expect(screen.getByRole("alert", { name: "Funds warning" })).toHaveTextContent(
+      "A workspace is paused because the balance ran out. Add funds to start it again: each costs a €5.00 reactivation fee on top of its hours.",
+    );
+  });
+
+  it("warns a week before the balance runs out of the fee and the deletion that follow", async () => {
+    const api = installFakeApi();
+    api.billing.monthlySpendCents = 890;
+    api.billing.fundedUntil = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString();
+    api.billing.workspaces = [{ id: "w1", name: "research-box", monthlyCents: 890, deletesAt: null }];
+    const user = userEvent.setup();
+    await openBilling();
+
+    const warning = screen.getByRole("alert", { name: "Funds warning" });
+    expect(warning).toHaveTextContent(/^Your balance runs out on .+\. Your workspaces are then paused, and starting each again costs a €5\.00 reactivation fee\. Any still paused 3 days later is deleted/);
+    await user.click(within(warning).getByRole("button", { name: "Add funds" }));
+    expect(screen.getByRole("dialog", { name: "Add funds" })).toBeInTheDocument();
+  });
+
+  it("does not warn while the balance lasts more than a week", async () => {
+    const api = installFakeApi();
+    api.billing.fundedUntil = new Date(Date.now() + 8 * 24 * 60 * 60 * 1000).toISOString();
+    await openBilling();
+    expect(screen.queryByRole("alert", { name: "Funds warning" })).not.toBeInTheDocument();
   });
 
   it("says when nothing draws on the balance", async () => {

@@ -9,6 +9,8 @@ export interface Billing {
   readonly vatPercent: number;
   /** Taken from the balance to start a workspace paused for want of funds again, in cents. */
   readonly reactivationFeeCents: number;
+  /** How long a workspace stays paused for want of funds before it is deleted, in hours. */
+  readonly pausedForHours: number;
   /** What the running workspaces cost together over a month, in cents; paused ones cost nothing. */
   readonly monthlySpendCents: number;
   /** When the balance stops paying for the running workspaces and they are paused; null while none is charged. */

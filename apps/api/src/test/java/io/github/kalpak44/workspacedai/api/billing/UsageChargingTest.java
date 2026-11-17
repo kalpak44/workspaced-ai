@@ -243,6 +243,7 @@ class UsageChargingTest {
     var billing = JSON.readTree(billing().body());
 
     assertThat(billing.get("reactivationFeeCents").asLong()).isEqualTo(500);
+    assertThat(billing.get("pausedForHours").asLong()).isEqualTo(72);
     assertThat(billing.get("monthlySpendCents").asLong()).isZero();
     assertThat(billing.get("fundedUntil").isNull()).isTrue();
     var deletesAt = Instant.parse(billing.get("workspaces").get(0).get("deletesAt").asString());
@@ -283,6 +284,9 @@ class UsageChargingTest {
         .extracting(Notification::title)
         .asString()
         .endsWith("will be paused in about 3 days");
+    assertThat(reminders().getFirst().summary())
+        .contains("costs a 5.00 EUR fee")
+        .endsWith("deleted about 3 days later.");
 
     reminder.remind(now.plus(Duration.ofDays(1)));
     assertThat(reminders()).hasSize(2);

@@ -22,6 +22,12 @@ public record Billing(
         long reactivationFeeCents,
     @Schema(
             description =
+                "How long a workspace stays paused for want of funds before it is deleted, in"
+                    + " hours",
+            example = "72")
+        long pausedForHours,
+    @Schema(
+            description =
                 "What the running workspaces cost together over a month, in cents; paused ones"
                     + " cost nothing",
             example = "1780")

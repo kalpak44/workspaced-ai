@@ -110,6 +110,7 @@ public class BillingService {
         properties.currency(),
         properties.vatPercent(),
         cents(reactivationFeeMicros()),
+        properties.pausedFor().toHours(),
         cents(monthOf(hourlyTotal)),
         hourlyTotal == 0
             ? null
