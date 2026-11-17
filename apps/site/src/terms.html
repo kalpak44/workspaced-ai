@@ -332,5 +332,31 @@
         </nav>
       </div>
     </footer>
+
+    <!-- Hidden until the script below finds no earlier dismissal, so a returning visitor never sees it flash. -->
+    <section id="privacy-notice" hidden aria-label="Cookies and privacy" class="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-xl">
+      <div class="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-xl sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+        <p class="min-w-0 flex-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          This site sets no cookies and runs no analytics or tracking. The app uses only the cookies needed to keep you
+          signed in. Your data is handled under the GDPR as described in our
+          <a href="/privacy" class="font-medium text-zinc-900 underline underline-offset-2 dark:text-zinc-100">Privacy policy</a>.
+        </p>
+        <button type="button" id="privacy-notice-dismiss" class="btn btn-secondary shrink-0">I agree</button>
+      </div>
+    </section>
+    <script>
+      // Storage can be blocked (private windows, site data off); the notice then shows on
+      // every visit and still closes for this one.
+      (() => {
+        const key = "workspaced.privacyNotice";
+        const notice = document.getElementById("privacy-notice");
+        try { if (localStorage.getItem(key) === "dismissed") return; } catch {}
+        notice.hidden = false;
+        document.getElementById("privacy-notice-dismiss").addEventListener("click", () => {
+          notice.hidden = true;
+          try { localStorage.setItem(key, "dismissed"); } catch {}
+        });
+      })();
+    </script>
   </body>
 </html>
