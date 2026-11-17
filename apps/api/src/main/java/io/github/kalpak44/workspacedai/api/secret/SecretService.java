@@ -32,7 +32,9 @@ public class SecretService {
           Harness.PASSWORD_VARIABLE,
           "OPENCODE_SERVER_PASSWORD",
           "OPENCODE_SERVER_USERNAME",
-          Harness.TIME_ZONE_VARIABLE);
+          Harness.TIME_ZONE_VARIABLE,
+          Harness.HOSTNAME_VARIABLE,
+          Harness.ADDRESS_VARIABLE);
 
   private final WorkspaceRepository workspaces;
   private final WorkspaceSecretRepository secrets;

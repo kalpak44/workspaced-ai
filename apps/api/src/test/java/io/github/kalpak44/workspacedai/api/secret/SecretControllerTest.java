@@ -126,9 +126,12 @@ class SecretControllerTest {
   }
 
   @Test
-  void refusesToShadowTheWorkspacesTimeZone() throws Exception {
-    assertThat(send("POST", "", "{\"name\":\"USER_TIMEZONE\",\"value\":\"x\"}").statusCode())
-        .isEqualTo(409);
+  void refusesToShadowTheWorkspacesTimeZoneNameAndAddress() throws Exception {
+    for (var name : List.of("USER_TIMEZONE", "WORKSPACE_HOSTNAME", "WORKSPACE_IP")) {
+      assertThat(send("POST", "", "{\"name\":\"" + name + "\",\"value\":\"x\"}").statusCode())
+          .as(name)
+          .isEqualTo(409);
+    }
   }
 
   @Test

@@ -57,6 +57,12 @@ public interface Harness {
   /** The workspace's time zone, an IANA name, which the harness always starts with. */
   String TIME_ZONE_VARIABLE = "USER_TIMEZONE";
 
+  /** The VM's own name, {@code <vm id>.vm.workspaced.online}, which the VM manager sets. */
+  String HOSTNAME_VARIABLE = "WORKSPACE_HOSTNAME";
+
+  /** The VM's public IPv4 address, which the VM manager sets. */
+  String ADDRESS_VARIABLE = "WORKSPACE_IP";
+
   /**
    * Where the agent's `firewall` tool writes a request, and waits for the API's answer beside it.
    */

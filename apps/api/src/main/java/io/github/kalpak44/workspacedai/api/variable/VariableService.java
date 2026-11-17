@@ -59,7 +59,9 @@ public class VariableService {
     var names = new HashSet<String>();
     for (var variable : variables) {
       if (variable.name().startsWith("OPENCODE_")
-          || variable.name().equals(Harness.TIME_ZONE_VARIABLE)) {
+          || variable.name().equals(Harness.TIME_ZONE_VARIABLE)
+          || variable.name().equals(Harness.HOSTNAME_VARIABLE)
+          || variable.name().equals(Harness.ADDRESS_VARIABLE)) {
         throw badRequest(variable.name() + " is set by the workspace itself");
       }
       if (variable.value().contains("\n") || variable.value().contains("\r")) {

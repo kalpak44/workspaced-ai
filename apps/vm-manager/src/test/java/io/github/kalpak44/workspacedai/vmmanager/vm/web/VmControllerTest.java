@@ -204,7 +204,8 @@ class VmControllerTest {
                 "OPENROUTER_API_KEY", "sk-or-v1-test",
                 "GITHUB_TOKEN", "ghp_x",
                 "OPENROUTER_BASE_URL", "https://or",
-                "OPENCODE_PASSWORD", "harness-pw"));
+                "OPENCODE_PASSWORD", "harness-pw",
+                "WORKSPACE_IP", vm.ipv4()));
 
     send("DELETE", "/" + vm.id(), null);
     assertThat(VAULT.entries)

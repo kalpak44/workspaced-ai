@@ -125,6 +125,8 @@ class VariablesTest {
             "[{\"name\":\"A-B\",\"value\":\"x\"}]",
             "[{\"name\":\"OPENCODE_SERVER_USERNAME\",\"value\":\"x\"}]",
             "[{\"name\":\"USER_TIMEZONE\",\"value\":\"Asia/Tokyo\"}]",
+            "[{\"name\":\"WORKSPACE_HOSTNAME\",\"value\":\"x.example.com\"}]",
+            "[{\"name\":\"WORKSPACE_IP\",\"value\":\"203.0.113.10\"}]",
             "[{\"name\":\"A\",\"value\":\"two\\nlines\"}]",
             "[{\"name\":\"A\",\"value\":\"x\"},{\"name\":\"A\",\"value\":\"y\"}]",
             "[{\"name\":\"A\",\"value\":\"" + "x".repeat(4097) + "\"}]",
