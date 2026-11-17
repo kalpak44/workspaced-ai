@@ -28,6 +28,7 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
@@ -224,7 +225,7 @@ class UsageChargingTest {
     assertThat(usage.findById(workspace).orElseThrow().getPausedAt()).isNotNull();
 
     fund(1);
-    var now = Instant.now();
+    var now = Instant.now().truncatedTo(ChronoUnit.MICROS);
     charger.settlePaused(workspace, now);
 
     var row = usage.findById(workspace).orElseThrow();
@@ -291,7 +292,7 @@ class UsageChargingTest {
   @Test
   void remindsOnceADayOfAPausedWorkspaceUntilItIsDeleted() throws Exception {
     var workspace = paused();
-    var now = Instant.now();
+    var now = Instant.now().truncatedTo(ChronoUnit.DAYS);
     reminder.remind(now);
     assertThat(deletionReminders()).isEmpty();
 
