@@ -191,12 +191,42 @@ public class VmService {
     }
   }
 
+  /** A stopped VM has nothing to reboot, so it stays stopped. */
   public Vm restart(UUID id) {
-    return change(id, vm -> vm.withStatus(VmStatus.RESTARTING));
+    return change(
+        id, vm -> vm.status() == VmStatus.STOPPED ? vm : vm.withStatus(VmStatus.RESTARTING));
   }
 
+  /**
+   * Shuts its server down, keeping its disk, secrets and agent so {@link #start} can bring it back
+   * as it was. Stopping one already stopped asks nothing of Hetzner.
+   */
+  public Vm stop(UUID id) {
+    var vm = get(id);
+    if (vm.status() == VmStatus.STOPPED) {
+      return vm;
+    }
+    hetzner.shutdownServer(vm.serverId());
+    return change(id, stopped -> stopped.withStatus(VmStatus.STOPPED));
+  }
+
+  /**
+   * Powers a stopped VM's server back on; it is PROVISIONING until it reports ready again. Starting
+   * one that is not stopped asks nothing of Hetzner.
+   */
+  public Vm start(UUID id) {
+    var vm = get(id);
+    if (vm.status() != VmStatus.STOPPED) {
+      return vm;
+    }
+    hetzner.powerOnServer(vm.serverId());
+    return change(id, started -> started.withStatus(VmStatus.PROVISIONING));
+  }
+
+  /** A stopped VM's late report leaves it stopped. */
   public Vm ready(UUID id) {
-    return change(id, vm -> vm.seen(VmStatus.READY, clock.instant()));
+    return change(
+        id, vm -> vm.status() == VmStatus.STOPPED ? vm : vm.seen(VmStatus.READY, clock.instant()));
   }
 
   /** Only refreshes when it was last seen; its status stays as it is. */

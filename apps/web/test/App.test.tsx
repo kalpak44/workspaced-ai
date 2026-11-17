@@ -746,6 +746,17 @@ describe("App", () => {
     await sessionsHere();
   });
 
+  it("shows a paused workspace as such, with its tools off and a way to add funds", async () => {
+    const user = userEvent.setup();
+    await renderLoaded();
+    FakeEventSource.emit("starter", "PAUSED");
+
+    expect(screen.getByText("Workspace paused")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Terminal" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Add funds" }));
+    expect(path()).toBe("/billing");
+  });
+
   it("opens settings for a workspace that is not ready", async () => {
     const user = userEvent.setup();
     await renderLoaded();

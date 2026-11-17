@@ -1,13 +1,13 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
@@ -16,7 +16,9 @@ import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.NotificationTone;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -27,6 +29,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -67,6 +70,7 @@ class UsageChargingTest {
           true);
   private static final long HOURLY = 12_192;
   private static final long MONTH = 8_900_000;
+  private static final long FEE = 5_000_000;
 
   @LocalServerPort int port;
   @MockitoBean VmManager vmManager;
@@ -81,6 +85,7 @@ class UsageChargingTest {
   @Autowired UsageCharger charger;
   @Autowired FundsReminder reminder;
   @Autowired NotificationService notifications;
+  @Autowired WorkspaceRuntime runtime;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
@@ -176,24 +181,88 @@ class UsageChargingTest {
   }
 
   @Test
-  void deletesTheWorkspaceOnceTheBalanceCannotPayTheNextHour() throws Exception {
-    fund(MONTH);
-    var workspace = created(create(bearer));
-    var row = usage.findById(workspace).orElseThrow();
-    // Leaves one hour's worth short of the second hour.
-    fund(-(MONTH - HOURLY - HOURLY / 2));
-
-    charger.charge(workspace, row.getChargedUntil().plusSeconds(3600));
+  void pausesTheWorkspaceOnceTheBalanceCannotPayTheNextHourAndStopsCharging() throws Exception {
+    var workspace = paused();
 
     assertThat(balance()).isEqualTo(HOURLY / 2);
+    assertThat(workspaces.findById(workspace)).isPresent();
+    assertThat(usage.findById(workspace).orElseThrow().getPausedAt()).isNotNull();
+    assertThat(runtime.statuses(Set.of(workspace)))
+        .containsEntry(workspace, WorkspaceStatus.PAUSED);
+    var notice = notifications.list(user).getFirst();
+    assertThat(notice.title()).endsWith("is paused");
+    assertThat(notice.tone()).isEqualTo(NotificationTone.ERROR);
+    assertThat(notice.body()).contains("5.00 EUR reactivation fee");
+
+    charger.charge(workspace, Instant.now().plus(Duration.ofHours(5)));
+    assertThat(balance()).isEqualTo(HOURLY / 2);
+  }
+
+  @Test
+  void deletesAPausedWorkspaceOnceItHasBeenPausedForThreeDays() throws Exception {
+    var workspace = paused();
+    var pausedAt = usage.findById(workspace).orElseThrow().getPausedAt();
+    var name = workspaces.findById(workspace).orElseThrow().getName();
+
+    charger.settlePaused(workspace, pausedAt.plus(Duration.ofDays(3)).minusSeconds(1));
+    assertThat(workspaces.findById(workspace)).isPresent();
+
+    charger.settlePaused(workspace, pausedAt.plus(Duration.ofDays(3)));
     assertThat(workspaces.findById(workspace)).isEmpty();
     assertThat(usage.findById(workspace)).isEmpty();
-    assertThat(notifications.list(user))
-        .extracting(Notification::title, Notification::tone)
-        .containsExactly(
-            tuple("Workspace deleted", NotificationTone.ERROR),
-            tuple("Workspace created", NotificationTone.SUCCESS));
-    assertThat(notifications.list(user).getFirst().summary()).endsWith("the balance ran out.");
+    assertThat(notifications.list(user).getFirst())
+        .extracting(Notification::title, Notification::summary)
+        .containsExactly("Workspace deleted", name + " was deleted: the balance ran out.");
+  }
+
+  @Test
+  void startsAPausedWorkspaceAgainOnceTheBalancePaysTheFeeAndAnHour() throws Exception {
+    var workspace = paused();
+    fund(FEE + HOURLY / 2 - 1);
+
+    charger.settlePaused(workspace, Instant.now());
+    assertThat(usage.findById(workspace).orElseThrow().getPausedAt()).isNotNull();
+
+    fund(1);
+    var now = Instant.now();
+    charger.settlePaused(workspace, now);
+
+    var row = usage.findById(workspace).orElseThrow();
+    assertThat(row.getPausedAt()).isNull();
+    assertThat(row.getChargedUntil()).isEqualTo(now);
+    assertThat(balance()).isEqualTo(HOURLY);
+    assertThat(runtime.statuses(Set.of(workspace))).containsEntry(workspace, WorkspaceStatus.READY);
+    assertThat(notifications.list(user).getFirst().title()).endsWith("is running again");
+  }
+
+  @Test
+  void showsAPausedWorkspaceWithWhenItIsDeletedAndCountsItsHoursNoMore() throws Exception {
+    var workspace = paused();
+
+    var billing = JSON.readTree(billing().body());
+
+    assertThat(billing.get("reactivationFeeCents").asLong()).isEqualTo(500);
+    assertThat(billing.get("monthlySpendCents").asLong()).isZero();
+    assertThat(billing.get("fundedUntil").isNull()).isTrue();
+    var deletesAt = Instant.parse(billing.get("workspaces").get(0).get("deletesAt").asString());
+    assertThat(deletesAt)
+        .isEqualTo(usage.findById(workspace).orElseThrow().getPausedAt().plus(Duration.ofDays(3)));
+  }
+
+  @Test
+  void neverChargesAUserMadeAnAdmin() throws Exception {
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    var entity = users.findById(user).orElseThrow();
+    entity.setRole(Role.ADMIN);
+    users.save(entity);
+    var before = balance();
+
+    var now = Instant.now().plus(Duration.ofHours(3));
+    charger.charge(workspace, now);
+
+    assertThat(balance()).isEqualTo(before);
+    assertThat(usage.findById(workspace).orElseThrow().getChargedUntil()).isAfter(now);
   }
 
   @Test
@@ -212,11 +281,30 @@ class UsageChargingTest {
         .singleElement()
         .extracting(Notification::title)
         .asString()
-        .endsWith("will be deleted in about 3 days");
+        .endsWith("will be paused in about 3 days");
 
     reminder.remind(now.plus(Duration.ofDays(1)));
     assertThat(reminders()).hasSize(2);
     assertThat(workspaces.findById(workspace)).isPresent();
+  }
+
+  @Test
+  void remindsOnceADayOfAPausedWorkspaceUntilItIsDeleted() throws Exception {
+    var workspace = paused();
+    var now = Instant.now();
+    reminder.remind(now);
+    assertThat(deletionReminders()).isEmpty();
+
+    transactions.executeWithoutResult(
+        _ -> usage.findById(workspace).orElseThrow().pause(now.minus(Duration.ofDays(1))));
+    reminder.remind(now);
+    reminder.remind(now);
+
+    assertThat(deletionReminders())
+        .singleElement()
+        .extracting(Notification::title)
+        .asString()
+        .endsWith("will be deleted in about 2 days");
   }
 
   @Test
@@ -226,9 +314,26 @@ class UsageChargingTest {
     assertThat(usage.findById(workspace)).isEmpty();
   }
 
-  private List<Notification> reminders() {
+  /** A workspace that paid its first hour, then could not pay its second. */
+  private UUID paused() throws Exception {
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    var row = usage.findById(workspace).orElseThrow();
+    // Leaves half an hour's worth, short of the second hour.
+    fund(-(balance() - HOURLY - HOURLY / 2));
+    charger.charge(workspace, row.getChargedUntil().plusSeconds(3600));
+    return workspace;
+  }
+
+  private List<Notification> deletionReminders() {
     return notifications.list(user).stream()
         .filter(n -> n.title().contains("will be deleted"))
+        .toList();
+  }
+
+  private List<Notification> reminders() {
+    return notifications.list(user).stream()
+        .filter(n -> n.title().contains("will be paused"))
         .toList();
   }
 

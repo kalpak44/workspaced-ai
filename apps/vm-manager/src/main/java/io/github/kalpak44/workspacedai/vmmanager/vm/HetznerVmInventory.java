@@ -74,7 +74,8 @@ public class HetznerVmInventory implements VmInventory {
     }
   }
 
-  // Status and heartbeats are not kept at Hetzner; the VM reports them again once it is up.
+  // Status and heartbeats are not kept at Hetzner; the VM reports them again once it is up. Only a
+  // server that is off is known as such, since it reports nothing.
   private boolean adopt(Server server) {
     UUID id;
     UUID workspaceId;
@@ -99,7 +100,7 @@ public class HetznerVmInventory implements VmInventory {
             userId,
             server.serverType(),
             server.id(),
-            VmStatus.PROVISIONING,
+            Server.OFF.equals(server.status()) ? VmStatus.STOPPED : VmStatus.PROVISIONING,
             server.ipv4(),
             server.ipv6(),
             server.created(),

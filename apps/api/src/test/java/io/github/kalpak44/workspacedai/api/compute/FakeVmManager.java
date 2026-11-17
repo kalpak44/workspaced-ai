@@ -49,6 +49,7 @@ class FakeVmManager implements AutoCloseable {
   final Map<UUID, ObjectNode> vms = new ConcurrentHashMap<>();
   final List<JsonNode> creates = new CopyOnWriteArrayList<>();
   final List<UUID> restarts = new CopyOnWriteArrayList<>();
+  final List<String> powerActions = new CopyOnWriteArrayList<>();
   final Map<UUID, Map<String, String>> secrets = new ConcurrentHashMap<>();
   final Map<UUID, JsonNode> firewalls = new ConcurrentHashMap<>();
   volatile int status = 0;
@@ -109,6 +110,13 @@ class FakeVmManager implements AutoCloseable {
           }
           kept.put(name, request.path("value").asString());
           answer(exchange, 201, "{\"name\":\"" + name + "\",\"system\":false}");
+          return;
+        }
+        if (path.endsWith("/stop") || path.endsWith("/start")) {
+          var id = UUID.fromString(path.split("/")[4]);
+          powerActions.add(path.substring(path.lastIndexOf('/') + 1) + " " + id);
+          var vm = vms.get(id);
+          answer(exchange, vm == null ? 404 : 202, vm == null ? "{}" : vm.toString());
           return;
         }
         if (path.endsWith("/restart")) {

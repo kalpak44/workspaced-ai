@@ -343,6 +343,40 @@ class VmServiceTest {
   }
 
   @Test
+  void stopsTheServerKeepingTheVmUntilItIsStartedAgain() {
+    var vm = service.create(workspace, user, null, KEY, ENV).vm();
+    service.ready(vm.id());
+
+    var stopped = service.stop(vm.id());
+    service.stop(vm.id());
+
+    assertThat(stopped.status()).isEqualTo(VmStatus.STOPPED);
+    assertThat(published).last().isEqualTo(new VmEvent.Changed(stopped));
+    // Neither a late ready nor a restart wakes it.
+    assertThat(service.ready(vm.id()).status()).isEqualTo(VmStatus.STOPPED);
+    assertThat(service.restart(vm.id()).status()).isEqualTo(VmStatus.STOPPED);
+
+    var started = service.start(vm.id());
+    service.start(vm.id());
+
+    assertThat(started.status()).isEqualTo(VmStatus.PROVISIONING);
+    assertThat(hetzner.powerActions)
+        .containsExactly("shutdown " + vm.serverId(), "poweron " + vm.serverId());
+    assertThat(service.ready(vm.id()).status()).isEqualTo(VmStatus.READY);
+    assertThat(hetzner.deleted).isEmpty();
+  }
+
+  @Test
+  void keepsTheVmRunningWhenHetznerRefusesTheShutdown() {
+    var vm = service.create(workspace, user, null, KEY, ENV).vm();
+    service.ready(vm.id());
+    hetzner.failure = new HetznerException("Hetzner answered 503 on POST /servers/1/actions");
+
+    assertThatThrownBy(() -> service.stop(vm.id())).isSameAs(hetzner.failure);
+    assertThat(service.get(vm.id()).status()).isEqualTo(VmStatus.READY);
+  }
+
+  @Test
   void deletesTheServerThenTheVm() {
     var vm = service.create(workspace, user, null, KEY, ENV).vm();
 
@@ -369,6 +403,8 @@ class VmServiceTest {
     assertThatThrownBy(() -> service.delete(id)).isInstanceOf(VmNotFoundException.class);
     assertThatThrownBy(() -> service.ready(id)).isInstanceOf(VmNotFoundException.class);
     assertThatThrownBy(() -> service.restart(id)).isInstanceOf(VmNotFoundException.class);
+    assertThatThrownBy(() -> service.stop(id)).isInstanceOf(VmNotFoundException.class);
+    assertThatThrownBy(() -> service.start(id)).isInstanceOf(VmNotFoundException.class);
     assertThatThrownBy(() -> service.heartbeat(id)).isInstanceOf(VmNotFoundException.class);
     assertThat(hetzner.deleted).isEmpty();
     assertThat(published).isEmpty();

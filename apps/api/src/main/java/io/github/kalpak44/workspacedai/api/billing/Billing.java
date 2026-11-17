@@ -15,15 +15,24 @@ public record Billing(
             example = "20")
         int vatPercent,
     @Schema(
-            description = "What the workspaces cost together over a month, in cents",
+            description =
+                "Taken from the balance to start a workspace paused for want of funds again, in"
+                    + " cents",
+            example = "500")
+        long reactivationFeeCents,
+    @Schema(
+            description =
+                "What the running workspaces cost together over a month, in cents; paused ones"
+                    + " cost nothing",
             example = "1780")
         long monthlySpendCents,
     @Schema(
             description =
-                "To the hour, when the balance stops paying for the workspaces and they are"
-                    + " deleted; null while none is charged")
+                "To the hour, when the balance stops paying for the running workspaces and they"
+                    + " are paused; null while none is charged")
         Instant fundedUntil,
-    @Schema(description = "Every charged workspace, oldest first") List<WorkspaceSpend> workspaces,
+    @Schema(description = "Every charged workspace, paused or not, oldest first")
+        List<WorkspaceSpend> workspaces,
     @Schema(description = "The last 30 days anything was charged, newest first")
         List<DailySpend> usage,
     @Schema(description = "Newest first; abandoned checkouts are left out") List<TopUp> topUps) {}

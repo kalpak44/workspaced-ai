@@ -1,4 +1,4 @@
-import { CircleAlert } from "lucide-react";
+import { CircleAlert, CirclePause } from "lucide-react";
 import type { WorkspaceStatus } from "../../hooks/useWorkspaces";
 import { Spinner } from "../atoms";
 
@@ -6,6 +6,11 @@ import { Spinner } from "../atoms";
 export function WorkspaceStatusIcon({ status }: { readonly status: WorkspaceStatus }) {
   if (status === "INITIALIZING") {
     return <Spinner label="Initializing" className="size-3.5 shrink-0 text-zinc-400" />;
+  }
+  if (status === "PAUSED") {
+    return (
+      <CirclePause role="status" aria-label="Paused" className="size-3.5 shrink-0 text-zinc-400" />
+    );
   }
   if (status === "FAILED") {
     return (

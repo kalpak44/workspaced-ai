@@ -15,6 +15,7 @@ class Ledger {
   static final long MICROS_PER_CENT = 10_000;
   static final String TOP_UP = "TOP_UP";
   static final String USAGE = "USAGE";
+  static final String REACTIVATION = "REACTIVATION";
 
   private final BillingAccountRepository accounts;
   private final LedgerEntryRepository entries;

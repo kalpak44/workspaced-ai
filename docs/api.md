@@ -72,7 +72,7 @@ the order they were created.
 | `POST`   | `/api/v1/workspaces`      | `{"name": "Docs", "modelProvider": "openrouter", "serverType": "cx23"}` | `201`, the workspace, and its URL in `Location` |
 | `PUT`    | `/api/v1/workspaces/{id}` | `{"name": "Docs"}` | `200` and the renamed workspace, or `404`       |
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its VM is deleted, or `404`          |
-| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM |
+| `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM or while `PAUSED` |
 
 A size's price is what the VM costs, server and IPv4 address, for an admin, and that plus
 `workspaced.vm-pricing.markup-percent` (`WORKSPACED_VM_MARKUP_PERCENT`, 35 by default) for everyone else.
@@ -442,6 +442,17 @@ usage charges can be fractions of a cent, and every change to it is a row in `bi
 `WORKSPACED_STRIPE_WEBHOOK_SECRET` have no default; without the key a top-up answers `503`, and
 `WORKSPACED_BILLING_RETURN_URL` is the page Checkout returns to. The webhook subscribes to
 `checkout.session.completed`, `.async_payment_succeeded`, `.async_payment_failed` and `.expired`.
+
+A user who is not an admin needs a balance covering a month of every workspace they have plus the new one to create
+one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even
+those made before the user became one. When the balance cannot pay a workspace's next hour, its VM is shut down and it
+is `PAUSED`: it is not charged, nor can it be restarted. Once the balance pays `WORKSPACED_BILLING_REACTIVATION_FEE`
+(5.00 by default, returned as `reactivationFeeCents`) and an hour, it starts again within the charge interval, the fee is
+taken, and it is charged from then on. A workspace still paused after `WORKSPACED_BILLING_PAUSED_FOR` (`3d` by default)
+is deleted. The owner is notified when it is paused, each day it stays paused, when it starts again and when it is
+deleted, and each day in the week before the balance runs out. `GET /billing` also returns what the running
+workspaces cost a month, when the balance stops paying for them (`fundedUntil`), each workspace's cost with when a
+paused one is deleted, and what was charged each of the last 30 days.
 
 The schema is created by Flyway from `apps/api/src/main/resources/db/migration` when the API starts.
 

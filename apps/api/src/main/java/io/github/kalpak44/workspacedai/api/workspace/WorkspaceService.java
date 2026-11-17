@@ -238,8 +238,8 @@ public class WorkspaceService {
   }
 
   /**
-   * Deletes it as {@link #delete(UUID)} does, for a workspace whose owner's balance cannot pay its
-   * next hour; the owner is told that was why.
+   * Deletes it as {@link #delete(UUID)} does, for a workspace left paused until its owner's balance
+   * could no longer keep it; the owner is told that was why.
    */
   public boolean deleteUnpaid(UUID id) {
     return delete(id, true);
@@ -267,6 +267,27 @@ public class WorkspaceService {
   }
 
   /**
+   * Shuts its VM down, keeping its files, for an owner whose balance cannot pay its next hour.
+   * False when no workspace has that id.
+   */
+  public boolean pause(UUID id) {
+    if (!repository.existsById(id)) {
+      return false;
+    }
+    runtime.pause(id);
+    return true;
+  }
+
+  /** Starts a paused one again once its owner can pay. False when no workspace has that id. */
+  public boolean resume(UUID id) {
+    if (!repository.existsById(id)) {
+      return false;
+    }
+    runtime.resume(id);
+    return true;
+  }
+
+  /**
    * Returns once the reboot is under way; the status stream reports it starting and then ready. It
    * reads the secrets afresh, so none is left pending. False when no workspace has that id.
    */
@@ -275,6 +296,10 @@ public class WorkspaceService {
     var entity = repository.findById(id);
     if (entity.isEmpty()) {
       return false;
+    }
+    if (statusOf(id) == WorkspaceStatus.PAUSED) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "the workspace is paused until the balance is topped up");
     }
     entity.get().setSecretsPendingRestart(false);
     try {

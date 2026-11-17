@@ -21,7 +21,7 @@ public record VmDto(
     @Schema(
             description = "Where it stands",
             example = "PROVISIONING",
-            allowableValues = {"PROVISIONING", "READY", "RESTARTING"})
+            allowableValues = {"PROVISIONING", "READY", "RESTARTING", "STOPPED"})
         String status,
     @Schema(description = "Public IPv4; null until it has one", example = "203.0.113.10")
         String ipv4,

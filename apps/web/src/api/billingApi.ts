@@ -7,11 +7,13 @@ export interface Billing {
   readonly currency: string;
   /** Charged on top of a top-up, in percent; the balance gets the amount before it. */
   readonly vatPercent: number;
-  /** What the workspaces cost together over a month, in cents. */
+  /** Taken from the balance to start a workspace paused for want of funds again, in cents. */
+  readonly reactivationFeeCents: number;
+  /** What the running workspaces cost together over a month, in cents; paused ones cost nothing. */
   readonly monthlySpendCents: number;
-  /** When the balance stops paying for the workspaces and they are deleted; null while none is charged. */
+  /** When the balance stops paying for the running workspaces and they are paused; null while none is charged. */
   readonly fundedUntil: string | null;
-  /** Every charged workspace, oldest first. */
+  /** Every charged workspace, paused or not, oldest first. */
   readonly workspaces: readonly WorkspaceSpend[];
   /** What was charged each of the last 30 days anything was, newest first. */
   readonly usage: readonly DailySpend[];
@@ -23,6 +25,8 @@ export interface WorkspaceSpend {
   readonly id: string;
   readonly name: string;
   readonly monthlyCents: number;
+  /** While it is paused for want of funds, when it is deleted unless funds start it again; null while it runs. */
+  readonly deletesAt: string | null;
 }
 
 export interface DailySpend {

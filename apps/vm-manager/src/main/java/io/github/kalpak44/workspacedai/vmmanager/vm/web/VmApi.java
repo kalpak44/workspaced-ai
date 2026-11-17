@@ -179,7 +179,9 @@ public interface VmApi {
   @Operation(
       operationId = "restartVm",
       summary = "Restart a VM",
-      description = "Reboots it, keeping its disk; it is RESTARTING until it reports ready.")
+      description =
+          "Reboots it, keeping its disk; it is RESTARTING until it reports ready. A STOPPED VM"
+              + " stays stopped.")
   @ApiResponse(
       responseCode = "202",
       description = "Restarting.",
@@ -193,6 +195,60 @@ public interface VmApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/{id}/restart", produces = JSON)
   ResponseEntity<VmDto> restart(@PathVariable UUID id);
+
+  @Operation(
+      operationId = "stopVm",
+      summary = "Stop a VM",
+      description =
+          "Shuts its server down, keeping its disk, secrets and agent; it is STOPPED until it is"
+              + " started. Hetzner still bills it. Stopping a stopped VM does nothing.")
+  @ApiResponse(
+      responseCode = "202",
+      description = "Stopping.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = VmDto.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "There is no such VM.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description = "Hetzner refused it.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping(path = "/{id}/stop", produces = JSON)
+  ResponseEntity<VmDto> stop(@PathVariable UUID id);
+
+  @Operation(
+      operationId = "startVm",
+      summary = "Start a stopped VM",
+      description =
+          "Powers its server back on; it is PROVISIONING until it reports ready. Starting a VM"
+              + " that is not stopped does nothing.")
+  @ApiResponse(
+      responseCode = "202",
+      description = "Starting.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = VmDto.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "There is no such VM.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "502",
+      description = "Hetzner refused it.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping(path = "/{id}/start", produces = JSON)
+  ResponseEntity<VmDto> start(@PathVariable UUID id);
 
   @Operation(
       operationId = "reportVmReady",

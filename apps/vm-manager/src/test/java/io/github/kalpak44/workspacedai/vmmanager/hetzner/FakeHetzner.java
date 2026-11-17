@@ -118,6 +118,18 @@ public class FakeHetzner implements AutoCloseable {
       answer(exchange, 200, METRICS);
       return;
     }
+    // POST /servers/{id}/actions/shutdown or /poweron sets its status as Hetzner would once done.
+    var action = path.split("/");
+    if (action.length == 5 && "actions".equals(action[3])) {
+      var server = servers.get(Long.parseLong(action[2]));
+      if (server == null) {
+        answer(exchange, 404, "{}");
+        return;
+      }
+      server.put("status", "shutdown".equals(action[4]) ? "off" : "running");
+      answer(exchange, 201, "{\"action\":{}}");
+      return;
+    }
     switch (exchange.getRequestMethod()) {
       case "GET" -> {
         var list = JSON.createArrayNode();
@@ -135,6 +147,7 @@ public class FakeHetzner implements AutoCloseable {
         created.put("id", id);
         created.put("name", request.path("name").asString());
         created.put("created", "2026-11-14T10:00:00Z");
+        created.put("status", "initializing");
         created.putObject("server_type").put("name", request.path("server_type").asString());
         var net = created.putObject("public_net");
         net.putObject("ipv4").put("ip", "203.0.113." + (id % 250));

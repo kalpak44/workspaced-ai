@@ -286,7 +286,9 @@ public interface WorkspaceApi {
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
   @ApiResponse(
       responseCode = "409",
-      description = "The workspace has no VM to reboot, as one created before VMs does not.",
+      description =
+          "The workspace has no VM to reboot, as one created before VMs does not, or it is"
+              + " PAUSED until the balance is topped up.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

@@ -89,6 +89,16 @@ public class VmController implements VmApi {
   }
 
   @Override
+  public ResponseEntity<VmDto> stop(UUID id) {
+    return ResponseEntity.accepted().body(mapper.toDto(service.stop(id)));
+  }
+
+  @Override
+  public ResponseEntity<VmDto> start(UUID id) {
+    return ResponseEntity.accepted().body(mapper.toDto(service.start(id)));
+  }
+
+  @Override
   public ResponseEntity<VmDto> ready(UUID id) {
     return ResponseEntity.ok(mapper.toDto(service.ready(id)));
   }

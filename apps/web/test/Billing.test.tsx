@@ -46,8 +46,8 @@ describe("billing", () => {
     api.billing.monthlySpendCents = 1780;
     api.billing.fundedUntil = new Date(Date.now() + (25 * 24 + 2) * 60 * 60 * 1000).toISOString();
     api.billing.workspaces = [
-      { id: "w1", name: "research-box", monthlyCents: 890 },
-      { id: "w2", name: "scraper", monthlyCents: 890 },
+      { id: "w1", name: "research-box", monthlyCents: 890, deletesAt: null },
+      { id: "w2", name: "scraper", monthlyCents: 890, deletesAt: null },
     ];
     api.billing.usage = [
       { date: "2026-11-16", amountCents: 59 },
@@ -64,6 +64,20 @@ describe("billing", () => {
     const days = within(screen.getByRole("table", { name: "Daily charges" }));
     expect(days.getByRole("row", { name: "Nov 16, 2026 €0.59" })).toBeInTheDocument();
     expect(days.getAllByRole("row")).toHaveLength(3);
+  });
+
+  it("shows a paused workspace with when it is deleted and the fee to start it again", async () => {
+    const api = installFakeApi();
+    api.billing.balanceCents = 3;
+    api.billing.workspaces = [{ id: "w1", name: "research-box", monthlyCents: 890, deletesAt: "2026-11-20T14:00:00Z" }];
+    globalThis.history.replaceState(null, "", "/billing");
+    render(<App />);
+    await screen.findByText("Current balance");
+
+    expect(balance().getByText("Your workspaces are paused until you add funds.")).toBeInTheDocument();
+    const row = within(screen.getByRole("table", { name: "Workspaces" })).getByRole("row", { name: /research-box/ });
+    expect(row).toHaveTextContent(/Paused · deleted Nov 20, \d+:00 [AP]M unless you add funds/);
+    expect(screen.getByText(/for a €5\.00 reactivation fee each/)).toBeInTheDocument();
   });
 
   it("says when nothing draws on the balance", async () => {

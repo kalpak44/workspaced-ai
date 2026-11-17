@@ -27,6 +27,15 @@ public interface WorkspaceRuntime {
   void stop(UUID workspaceId);
 
   /**
+   * Shuts it down, keeping its storage, until {@link #resume}; pausing a paused one does nothing.
+   * Fails with {@link IllegalStateException} when the workspace has nothing to pause.
+   */
+  void pause(UUID workspaceId);
+
+  /** Starts a paused one again; resuming one that is not paused does nothing. */
+  void resume(UUID workspaceId);
+
+  /**
    * Reboots it, keeping its storage, and returns before it is ready again. Fails with {@link
    * IllegalStateException} when the workspace has nothing to reboot.
    */

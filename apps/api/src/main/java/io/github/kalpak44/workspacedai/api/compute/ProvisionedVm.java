@@ -5,6 +5,6 @@ import java.util.UUID;
 /**
  * A VM the VM manager keeps for a workspace.
  *
- * @param status PROVISIONING until the VM reports ready, then READY, or RESTARTING
+ * @param status PROVISIONING until the VM reports ready, then READY, or RESTARTING, or STOPPED
  */
 public record ProvisionedVm(UUID id, UUID workspaceId, String serverType, String status) {}

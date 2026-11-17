@@ -120,13 +120,28 @@ public class HttpVmManager implements VmManager {
 
   @Override
   public void restartFor(UUID workspaceId) {
+    act(workspaceId, "restart");
+  }
+
+  @Override
+  public void stopFor(UUID workspaceId) {
+    act(workspaceId, "stop");
+  }
+
+  @Override
+  public void startFor(UUID workspaceId) {
+    act(workspaceId, "start");
+  }
+
+  // One of the VM's power actions, which the VM manager accepts with a 202.
+  private void act(UUID workspaceId, String action) {
     var vm =
         vmIdOf(workspaceId)
             .orElseThrow(
                 () -> new IllegalStateException("workspace " + workspaceId + " has no VM"));
-    var restarted =
-        send(request("/vms/" + vm + "/restart").POST(HttpRequest.BodyPublishers.noBody()));
-    expect(restarted, 202);
+    var response =
+        send(request("/vms/" + vm + "/" + action).POST(HttpRequest.BodyPublishers.noBody()));
+    expect(response, 202);
   }
 
   @Override

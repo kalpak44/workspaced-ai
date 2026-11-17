@@ -18,6 +18,7 @@ public class FakeHetznerClient implements HetznerClient {
   public final Map<Long, Server> servers = new ConcurrentHashMap<>();
   public final List<ServerSpec> created = new ArrayList<>();
   public final List<Long> deleted = new ArrayList<>();
+  public final List<String> powerActions = new ArrayList<>();
   public final Map<Long, Firewall> firewalls = new ConcurrentHashMap<>();
   public final List<Long> deletedFirewalls = new ArrayList<>();
   public volatile List<ServerType> types = List.of();
@@ -74,7 +75,8 @@ public class FakeHetznerClient implements HetznerClient {
             ip,
             ipv6,
             Instant.EPOCH,
-            Map.copyOf(spec.labels())));
+            Map.copyOf(spec.labels()),
+            "running"));
     return new CreatedServer(id, ip, ipv6);
   }
 
@@ -83,6 +85,25 @@ public class FakeHetznerClient implements HetznerClient {
     fail();
     deleted.add(id);
     servers.remove(id);
+  }
+
+  @Override
+  public void shutdownServer(long id) {
+    fail();
+    powerActions.add("shutdown " + id);
+    servers.computeIfPresent(id, (key, s) -> withStatus(s, Server.OFF));
+  }
+
+  @Override
+  public void powerOnServer(long id) {
+    fail();
+    powerActions.add("poweron " + id);
+    servers.computeIfPresent(id, (key, s) -> withStatus(s, "running"));
+  }
+
+  private static Server withStatus(Server s, String status) {
+    return new Server(
+        s.id(), s.name(), s.serverType(), s.ipv4(), s.ipv6(), s.created(), s.labels(), status);
   }
 
   @Override

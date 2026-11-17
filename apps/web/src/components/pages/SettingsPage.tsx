@@ -65,7 +65,7 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
         )}
         {section === "variables" && (
           <VariablesPanel key={workspace.id} workspace={workspace}
-            restartDisabled={workspace.status === "INITIALIZING"} onRestart={onRestart} onChanged={onChanged} />
+            restartDisabled={workspace.status === "INITIALIZING" || workspace.status === "PAUSED"} onRestart={onRestart} onChanged={onChanged} />
         )}
         {section === "tasks" && (
           <Suspense fallback={<Spinner label="Loading tasks" className="size-5 text-zinc-400" />}>
@@ -98,7 +98,7 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
             onAdd={secrets.add}
             onRemove={secrets.remove}
             restartRequired={workspace.restartRequired}
-            restartDisabled={workspace.status === "INITIALIZING"}
+            restartDisabled={workspace.status === "INITIALIZING" || workspace.status === "PAUSED"}
             onRestart={onRestart}
           />
         </div>

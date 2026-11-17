@@ -107,6 +107,14 @@ class VmControllerTest {
     assertThat(restart.statusCode()).isEqualTo(202);
     assertThat(JSON.readValue(restart.body(), VmDto.class).status()).isEqualTo("RESTARTING");
 
+    var stop = send("POST", "/" + vm.id() + "/stop", null);
+    assertThat(stop.statusCode()).isEqualTo(202);
+    assertThat(JSON.readValue(stop.body(), VmDto.class).status()).isEqualTo("STOPPED");
+    var start = send("POST", "/" + vm.id() + "/start", null);
+    assertThat(start.statusCode()).isEqualTo(202);
+    assertThat(JSON.readValue(start.body(), VmDto.class).status()).isEqualTo("PROVISIONING");
+    send("POST", "/" + vm.id() + "/restart", null);
+
     var heartbeat = send("POST", "/" + vm.id() + "/heartbeat", null);
     assertThat(heartbeat.statusCode()).isEqualTo(200);
     var beat = JSON.readValue(heartbeat.body(), VmDto.class);
@@ -151,6 +159,8 @@ class VmControllerTest {
     assertThat(send("DELETE", "/" + vm.id(), null).statusCode()).isEqualTo(404);
     assertThat(send("POST", "/" + vm.id() + "/ready", null).statusCode()).isEqualTo(404);
     assertThat(send("POST", "/" + vm.id() + "/restart", null).statusCode()).isEqualTo(404);
+    assertThat(send("POST", "/" + vm.id() + "/stop", null).statusCode()).isEqualTo(404);
+    assertThat(send("POST", "/" + vm.id() + "/start", null).statusCode()).isEqualTo(404);
     assertThat(send("POST", "/" + vm.id() + "/heartbeat", null).statusCode()).isEqualTo(404);
     assertThat(send("GET", "/" + vm.id() + "/harness", null).statusCode()).isEqualTo(404);
   }

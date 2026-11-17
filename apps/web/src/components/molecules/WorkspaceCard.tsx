@@ -15,6 +15,7 @@ interface Props extends Omit<WorkspaceActionHandlers, "onRename"> {
 const STATUS = {
   READY: { label: "Running", tone: "bg-emerald-50 text-emerald-700 ring-emerald-600/15 dark:bg-emerald-950/40 dark:text-emerald-400 dark:ring-emerald-400/20", dot: "bg-emerald-500" },
   INITIALIZING: { label: "Starting", tone: "bg-amber-50 text-amber-700 ring-amber-600/15 dark:bg-amber-950/40 dark:text-amber-400 dark:ring-amber-400/20", dot: "animate-pulse bg-amber-500" },
+  PAUSED: { label: "Paused", tone: "bg-zinc-100 text-zinc-700 ring-zinc-500/15 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10", dot: "bg-zinc-400" },
   FAILED: { label: "Stopped", tone: "bg-rose-50 text-rose-700 ring-rose-600/15 dark:bg-rose-950/40 dark:text-rose-400 dark:ring-rose-400/20", dot: "bg-rose-500" },
 } as const;
 
@@ -24,7 +25,7 @@ export function WorkspaceCard({ workspace, deleting, onOpen, onRename, ...handle
   const status = deleting
     ? { label: "Deleting", tone: "bg-zinc-100 text-zinc-600 ring-zinc-500/15 dark:bg-zinc-800 dark:text-zinc-300 dark:ring-white/10", dot: "animate-pulse bg-zinc-400" }
     : STATUS[workspace.status];
-  const starting = workspace.status === "INITIALIZING";
+  const starting = workspace.status === "INITIALIZING" || workspace.status === "PAUSED";
   const quick = [
     { label: "Sessions", icon: MessageSquare, run: onOpen, disabled: false },
     { label: "Terminal", icon: SquareTerminal, run: handlers.onTerminal, disabled: starting },

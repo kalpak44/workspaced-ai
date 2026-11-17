@@ -59,6 +59,16 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
     vmIds.remove(workspaceId);
   }
 
+  @Override
+  public void pause(UUID workspaceId) {
+    vmManager.stopFor(workspaceId);
+  }
+
+  @Override
+  public void resume(UUID workspaceId) {
+    vmManager.startFor(workspaceId);
+  }
+
   /** The VM turns RESTARTING, and its supervisor recreates the harness with fresh values. */
   @Override
   public void restart(UUID workspaceId) {
@@ -157,6 +167,10 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   private static WorkspaceStatus status(ProvisionedVm vm) {
-    return "READY".equals(vm.status()) ? WorkspaceStatus.READY : WorkspaceStatus.INITIALIZING;
+    return switch (vm.status()) {
+      case "READY" -> WorkspaceStatus.READY;
+      case "STOPPED" -> WorkspaceStatus.PAUSED;
+      default -> WorkspaceStatus.INITIALIZING;
+    };
   }
 }

@@ -34,6 +34,15 @@ public interface HetznerClient {
   /** A server already gone counts as deleted, so a retried delete succeeds. */
   void deleteServer(long id);
 
+  /**
+   * Asks the server's operating system to shut down, which keeps its disk; returns as soon as
+   * Hetzner accepts it. Hetzner bills a server that is off as one that is running.
+   */
+  void shutdownServer(long id);
+
+  /** Powers a server that is off back on; returns as soon as Hetzner accepts it. */
+  void powerOnServer(long id);
+
   /** A firewall with no rules, which lets nothing in; Hetzner refuses a name already taken. */
   long createFirewall(String name, Map<String, String> labels);
 

@@ -7,5 +7,7 @@ public enum VmStatus {
   /** Booted and reported ready. */
   READY,
   /** Being rebooted; reports ready again once it is back. */
-  RESTARTING
+  RESTARTING,
+  /** Shut down with its disk kept, until it is started again or deleted. */
+  STOPPED
 }

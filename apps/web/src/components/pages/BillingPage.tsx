@@ -10,6 +10,7 @@ import { AddFundsDialog } from "../organisms";
 const DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 const DAY = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
 const FUNDED_UNTIL = new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric" });
+const DELETES_AT = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 const PAGE_SIZE = 10;
 const DAY_MS = 24 * 60 * 60 * 1000;
 // The funds reminders start a week out, so the card warns from then too.
@@ -25,7 +26,10 @@ const STATUS: Record<TopUp["status"], { readonly label: string; readonly classNa
 /** "Lasts until Fri, Dec 12 · about 25 days": what the balance still pays for at the current spend. */
 function Runway({ billing }: { readonly billing: Billing }) {
   if (!billing.fundedUntil) {
-    return <p className="text-sm text-white/70">No workspace is drawing on it.</p>;
+    const paused = billing.workspaces.some((workspace) => workspace.deletesAt);
+    return paused
+      ? <p className="text-sm font-medium text-amber-300">Your workspaces are paused until you add funds.</p>
+      : <p className="text-sm text-white/70">No workspace is drawing on it.</p>;
   }
   const until = new Date(billing.fundedUntil);
   const days = Math.floor((until.getTime() - Date.now()) / DAY_MS);
@@ -114,7 +118,7 @@ export function BillingPage() {
           <div className="relative"><Button label="Add funds" icon={Plus} onClick={() => { setAdding(true); setNotice(""); }} /></div>
         </section>
 
-        <SettingsSection title="Spending" description="Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges.">
+        <SettingsSection title="Spending" description={`Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges. When the balance runs out, workspaces are paused rather than deleted: add funds and they start again, for a ${formatMoney(billing.reactivationFeeCents)} reactivation fee each.`}>
           {billing.workspaces.length === 0 && billing.usage.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-300 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
               <Receipt aria-hidden className="size-6" />
@@ -134,12 +138,19 @@ export function BillingPage() {
                     <tbody className="divide-y divide-zinc-200 dark:divide-zinc-800">
                       {billing.workspaces.map((workspace) => (
                         <tr key={workspace.id}>
-                          <td className="px-4 py-3 [overflow-wrap:anywhere] sm:pl-6">{workspace.name}</td>
-                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6">{formatMoney(workspace.monthlyCents)}</td>
+                          <td className="px-4 py-3 [overflow-wrap:anywhere] sm:pl-6">
+                            {workspace.name}
+                            {workspace.deletesAt && (
+                              <span className="mt-0.5 block text-xs font-medium text-amber-700 dark:text-amber-400">
+                                Paused · deleted {DELETES_AT.format(new Date(workspace.deletesAt))} unless you add funds
+                              </span>
+                            )}
+                          </td>
+                          <td className={`whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6 ${workspace.deletesAt ? "text-zinc-400 line-through dark:text-zinc-500" : ""}`}>{formatMoney(workspace.monthlyCents)}</td>
                         </tr>
                       ))}
                     </tbody>
-                    {billing.workspaces.length > 1 && (
+                    {billing.workspaces.filter((workspace) => !workspace.deletesAt).length > 1 && (
                       <tfoot className="border-t border-zinc-200 font-medium dark:border-zinc-800">
                         <tr>
                           <th scope="row" className="px-4 py-3 text-left font-medium sm:pl-6">Total</th>

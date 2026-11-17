@@ -23,7 +23,8 @@ class HetznerVmInventoryTest {
   final Instant created = Instant.parse("2026-11-01T08:00:00Z");
 
   Server server(long id, Map<String, String> labels) {
-    return new Server(id, "vm-" + id, "cx33", "203.0.113.7", "2001:db8::1", created, labels);
+    return new Server(
+        id, "vm-" + id, "cx33", "203.0.113.7", "2001:db8::1", created, labels, "running");
   }
 
   Map<String, String> labels(String vm, String workspace) {
@@ -58,6 +59,26 @@ class HetznerVmInventoryTest {
                 "2001:db8::1",
                 created,
                 null));
+  }
+
+  @Test
+  void knowsAServerThatIsOffAsStopped() {
+    var off = server(7, labels(vmId.toString(), workspaceId.toString()));
+    hetzner.servers.put(
+        7L,
+        new Server(
+            off.id(),
+            off.name(),
+            off.serverType(),
+            off.ipv4(),
+            off.ipv6(),
+            off.created(),
+            off.labels(),
+            Server.OFF));
+
+    inventory.load();
+
+    assertThat(vms.findById(vmId)).get().extracting(Vm::status).isEqualTo(VmStatus.STOPPED);
   }
 
   @Test

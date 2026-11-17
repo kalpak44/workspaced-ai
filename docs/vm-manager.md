@@ -11,7 +11,7 @@ and only the workspace API calls it. Every error body is an RFC 9457 problem det
 
 A VM is one Hetzner Cloud server running one workspace. It has an `id` (UUID, assigned by the server), the
 `workspaceId` it runs and the `userId` who owns that workspace, its `serverType`, the Hetzner `serverId`, a `status`
-(`PROVISIONING`, `READY`, `RESTARTING`), its public `ipv4`, and `createdAt` / `lastSeenAt`.
+(`PROVISIONING`, `READY`, `RESTARTING`, `STOPPED`), its public `ipv4`, and `createdAt` / `lastSeenAt`.
 
 | Method   | Path                          | Body                                                     | Answers                                         |
 |----------|-------------------------------|----------------------------------------------------------|-------------------------------------------------|
@@ -21,6 +21,8 @@ A VM is one Hetzner Cloud server running one workspace. It has an `id` (UUID, as
 | `POST`   | `/api/v1/vms`                 | `{"workspaceId": "…", "userId": "…", "serverType": "cx23", "openRouterApiKey": "…", "environment": {…}}` | `201`, the VM, and its URL in `Location`; `200` and the workspace's VM if it has one |
 | `DELETE` | `/api/v1/vms/{id}`            |                                                          | `204`, or `404`                                 |
 | `POST`   | `/api/v1/vms/{id}/restart`    |                                                          | `202` and the VM, or `404`                      |
+| `POST`   | `/api/v1/vms/{id}/stop`       |                                                          | `202` and the VM, `404`, or `502`               |
+| `POST`   | `/api/v1/vms/{id}/start`      |                                                          | `202` and the VM, `404`, or `502`               |
 | `POST`   | `/api/v1/vms/{id}/ready`      |                                                          | `200` and the VM, or `404`                      |
 | `POST`   | `/api/v1/vms/{id}/heartbeat`  | optional `{"memory": {"totalBytes": …, "availableBytes": …}}` | `200` and the VM, `400`, or `404`               |
 | `GET`    | `/api/v1/vms/{id}/harness`    |                                                          | `200` and the harness, `404`, or `503`          |
@@ -63,6 +65,12 @@ token and hands the VM a cloud-config writing `/etc/workspaced/agent.env` (root-
 public address (`WORKSPACED_AGENT_HUB_PUBLIC_URL`) and the token. The supervisor enrolls with it on first boot and
 reports ready and heartbeats through the agent hub, which relays them to `/vms/{id}/ready` and `/heartbeat` here; a
 heartbeat answers the VM, so its supervisor learns it is `RESTARTING` and recreates the harness.
+
+Stop shuts the server down through Hetzner's ACPI shutdown, keeping its disk, secrets and agent, and marks the VM
+`STOPPED`; Hetzner still bills a server that is off. Start powers it back on and marks it `PROVISIONING` until its
+supervisor reports ready again. Both do nothing to a VM already in that state, and a stopped VM ignores a restart or a
+late ready. The workspace API stops a workspace's VM when the owner's balance runs out and starts it after a top-up.
+A restarted VM manager reads a server that is off back as `STOPPED`.
 
 ### Metrics
 

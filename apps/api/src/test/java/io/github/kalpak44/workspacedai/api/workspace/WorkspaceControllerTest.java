@@ -217,6 +217,15 @@ class WorkspaceControllerTest {
   }
 
   @Test
+  void refusesToRestartAPausedWorkspace() throws Exception {
+    var id = create("Paused");
+    runtime.pause(id);
+
+    assertThat(send("POST", "/" + id + "/restart", null).statusCode()).isEqualTo(409);
+    verify(runtime, never()).restart(id);
+  }
+
+  @Test
   void answersNotFoundForAnUnknownIdAsAProblemDetail() throws Exception {
     var id = UUID.randomUUID();
     var renamed = send("PUT", "/" + id, "{\"name\":\"x\"}");

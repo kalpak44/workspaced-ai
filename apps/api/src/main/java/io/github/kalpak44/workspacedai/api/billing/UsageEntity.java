@@ -8,8 +8,9 @@ import java.time.Instant;
 import java.util.UUID;
 
 /**
- * What a workspace costs its owner an hour, fixed when it was created, and the end of the last hour
- * charged for. Gone with the workspace, so a deleted one stops costing at once.
+ * What a workspace costs its owner an hour, fixed when it was created, the end of the last hour
+ * charged for, and since when it is paused for want of funds. Gone with the workspace, so a deleted
+ * one stops costing at once.
  */
 @Entity
 @Table(name = "billing_usage")
@@ -27,6 +28,9 @@ class UsageEntity {
 
   @Column(name = "charged_until", nullable = false)
   private Instant chargedUntil;
+
+  @Column(name = "paused_at")
+  private Instant pausedAt;
 
   protected UsageEntity() {}
 
@@ -55,5 +59,20 @@ class UsageEntity {
 
   void chargedUntil(Instant until) {
     this.chargedUntil = until;
+  }
+
+  /** Null while it runs. */
+  Instant getPausedAt() {
+    return pausedAt;
+  }
+
+  void pause(Instant at) {
+    this.pausedAt = at;
+  }
+
+  /** Charged again from now on; the hours it was paused cost nothing. */
+  void resume(Instant now) {
+    this.pausedAt = null;
+    this.chargedUntil = now;
   }
 }

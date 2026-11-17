@@ -125,6 +125,16 @@ public class HttpHetznerClient implements HetznerClient {
   }
 
   @Override
+  public void shutdownServer(long id) {
+    send("/servers/" + id + "/actions/shutdown", HttpRequest.BodyPublishers.noBody(), "POST", 201);
+  }
+
+  @Override
+  public void powerOnServer(long id) {
+    send("/servers/" + id + "/actions/poweron", HttpRequest.BodyPublishers.noBody(), "POST", 201);
+  }
+
+  @Override
   public long createFirewall(String name, Map<String, String> labels) {
     var body = json.createObjectNode();
     body.put("name", name);
@@ -337,7 +347,8 @@ public class HttpHetznerClient implements HetznerClient {
         ipv4(server),
         ipv6(server),
         Instant.parse(server.path("created").asString()),
-        labels(server));
+        labels(server),
+        server.path("status").asString());
   }
 
   // Outbound rules are never set here, so only inbound ones are read back.

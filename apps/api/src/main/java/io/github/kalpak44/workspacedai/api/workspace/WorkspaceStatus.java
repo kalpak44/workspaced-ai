@@ -6,6 +6,8 @@ public enum WorkspaceStatus {
   INITIALIZING,
   /** Its VM has reported ready. */
   READY,
+  /** Its VM is shut down, with its disk kept, because the balance ran out. */
+  PAUSED,
   /** It has no VM, or one deleted outside the app. */
   FAILED
 }

@@ -13,6 +13,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -82,7 +83,7 @@ class NotificationsTest {
 
   @Test
   void sendsAKeyedReminderOnce() {
-    var message = Notifications.fundsRunningOut("box", 2);
+    var message = Notifications.fundsRunningOut("box", 2, Duration.ofDays(3));
 
     notifications.sendOnce(user, "key", message);
     notifications.sendOnce(user, "key", message);

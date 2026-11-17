@@ -7,18 +7,24 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.BiConsumer;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
 /**
  * Stands in for the VMs, so the API is tested without a VM manager: it starts nothing, reports
- * every workspace ready, and points every workspace at the one harness a test started.
+ * every workspace ready but those it was told to pause, and points every workspace at the one
+ * harness a test started.
  */
 public class FakeWorkspaceRuntime implements WorkspaceRuntime {
 
   private final Optional<HarnessEndpoint> harness;
+  private final Set<UUID> paused = ConcurrentHashMap.newKeySet();
+  private final List<BiConsumer<UUID, WorkspaceStatus>> listeners = new CopyOnWriteArrayList<>();
 
   /** Every workspace shares the one harness the test started, or has none. */
   public FakeWorkspaceRuntime(URI harnessUrl, String password) {
@@ -35,6 +41,20 @@ public class FakeWorkspaceRuntime implements WorkspaceRuntime {
   @Override
   public void stop(UUID workspaceId) {
     // Nothing was started, so there is nothing to stop.
+  }
+
+  @Override
+  public void pause(UUID workspaceId) {
+    if (paused.add(workspaceId)) {
+      listeners.forEach(listener -> listener.accept(workspaceId, WorkspaceStatus.PAUSED));
+    }
+  }
+
+  @Override
+  public void resume(UUID workspaceId) {
+    if (paused.remove(workspaceId)) {
+      listeners.forEach(listener -> listener.accept(workspaceId, WorkspaceStatus.READY));
+    }
   }
 
   @Override
@@ -77,11 +97,15 @@ public class FakeWorkspaceRuntime implements WorkspaceRuntime {
   @Override
   public Map<UUID, WorkspaceStatus> statuses(Collection<UUID> workspaceIds) {
     return workspaceIds.stream()
-        .collect(Collectors.toMap(Function.identity(), id -> WorkspaceStatus.READY));
+        .collect(
+            Collectors.toMap(
+                Function.identity(),
+                id -> paused.contains(id) ? WorkspaceStatus.PAUSED : WorkspaceStatus.READY));
   }
 
   @Override
   public void watch(BiConsumer<UUID, WorkspaceStatus> listener) {
-    // Every workspace is ready from the start, so no status ever changes.
+    // Every workspace is ready from the start; only a pause or a resume changes that.
+    listeners.add(listener);
   }
 }

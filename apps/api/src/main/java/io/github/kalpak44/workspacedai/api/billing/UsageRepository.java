@@ -12,8 +12,10 @@ interface UsageRepository extends JpaRepository<UsageEntity, UUID> {
 
   List<UsageEntity> findAllByUserId(UUID userId);
 
-  /** The workspaces whose next hour has started and is not paid for yet. */
-  List<UsageEntity> findAllByChargedUntilLessThanEqual(Instant now);
+  /** The running workspaces whose next hour has started and is not paid for yet. */
+  List<UsageEntity> findAllByChargedUntilLessThanEqualAndPausedAtIsNull(Instant now);
+
+  List<UsageEntity> findAllByPausedAtIsNotNull();
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   Optional<UsageEntity> findLockedByWorkspaceId(UUID workspaceId);

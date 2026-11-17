@@ -1,5 +1,10 @@
 package io.github.kalpak44.workspacedai.api.notification;
 
+import java.time.Duration;
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
+import java.util.Locale;
 import java.util.UUID;
 
 /** Every notification the app sends, in one place, so their wording stays alike. */
@@ -9,6 +14,10 @@ public final class Notifications {
       new NotificationAction("Go to billing", "/billing");
   private static final NotificationAction ADD_FUNDS =
       new NotificationAction("Add funds", "/billing");
+
+  private static final DateTimeFormatter WHEN =
+      DateTimeFormatter.ofPattern("MMM d 'at' HH:mm 'UTC'", Locale.ENGLISH)
+          .withZone(ZoneOffset.UTC);
 
   private Notifications() {}
 
@@ -91,10 +100,10 @@ public final class Notifications {
           NotificationTone.ERROR,
           "Workspace deleted",
           name + " was deleted: the balance ran out.",
-          "Your balance could no longer pay for the next hour of "
-              + name
-              + ", so it was permanently deleted with its files, sessions and secrets. Add funds"
-              + " before creating a new workspace.",
+          name
+              + " stayed paused without funds to start it again, so it was permanently deleted"
+              + " with its files, sessions and secrets. Add funds before creating a new"
+              + " workspace.",
           ADD_FUNDS);
     }
     return new NotificationMessage(
@@ -150,21 +159,90 @@ public final class Notifications {
    * For a workspace the balance will stop paying for soon.
    *
    * @param days whole days the balance still covers; 0 when less than one
+   * @param pausedFor how long it then stays paused before it is deleted
    */
-  public static NotificationMessage fundsRunningOut(String name, long days) {
+  public static NotificationMessage fundsRunningOut(String name, long days, Duration pausedFor) {
     var span = days == 0 ? "less than a day" : "about " + days + (days == 1 ? " day" : " days");
     var when = days == 0 ? "within a day" : "in " + span;
     return new NotificationMessage(
         NotificationKind.BILLING,
         days <= 1 ? NotificationTone.ERROR : NotificationTone.WARNING,
-        name + " will be deleted " + when,
-        "Your balance runs out " + when + ". Add funds to keep " + name + ".",
+        name + " will be paused " + when,
+        "Your balance runs out " + when + ". Add funds to keep " + name + " running.",
         "Your balance pays for your workspaces for "
             + span
             + " more. Once it cannot pay the next hour, "
             + name
-            + " is permanently deleted with its files, sessions and secrets. Add funds to keep"
-            + " it; we remind you each day until then.",
+            + " is paused, and permanently deleted with its files, sessions and secrets "
+            + span(pausedFor)
+            + " later unless you add funds. We remind you each day until then.",
         ADD_FUNDS);
+  }
+
+  /**
+   * For a workspace just paused because the balance cannot pay its next hour.
+   *
+   * @param fee what starting it again costs, e.g. 5.00 EUR
+   */
+  public static NotificationMessage workspacePaused(String name, Instant deletesAt, String fee) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.ERROR,
+        name + " is paused",
+        "The balance ran out. Add funds by " + WHEN.format(deletesAt) + " to keep it.",
+        "Your balance can no longer pay for the next hour of "
+            + name
+            + ", so its VM was shut down and it is no longer charged. Its files, sessions and"
+            + " secrets are kept until "
+            + WHEN.format(deletesAt)
+            + ". Add funds before then and it starts again within a few minutes, with a "
+            + fee
+            + " reactivation fee taken from the balance. Otherwise it is permanently deleted.",
+        ADD_FUNDS);
+  }
+
+  /** For a paused workspace, once a day until it is deleted. */
+  public static NotificationMessage pausedWorkspaceDeletion(
+      String name, Instant deletesAt, Instant now, String fee) {
+    var left = Duration.between(now, deletesAt);
+    var when = left.toDays() < 1 ? "within a day" : "in " + span(left);
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.ERROR,
+        name + " will be deleted " + when,
+        name + " is paused. Add funds by " + WHEN.format(deletesAt) + " to keep it.",
+        name
+            + " is paused because the balance ran out. On "
+            + WHEN.format(deletesAt)
+            + " it is permanently deleted with its files, sessions and secrets. Add funds before"
+            + " then and it starts again, with a "
+            + fee
+            + " reactivation fee taken from the balance.",
+        ADD_FUNDS);
+  }
+
+  /**
+   * For a paused workspace a top-up has started again.
+   *
+   * @param fee what was taken from the balance to start it, e.g. 5.00 EUR
+   */
+  public static NotificationMessage workspaceResumed(UUID id, String name, String fee) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.SUCCESS,
+        name + " is running again",
+        "Your top-up started it again.",
+        "Your balance can pay for "
+            + name
+            + " again, so its VM is starting with everything it had. A reactivation fee of "
+            + fee
+            + " was taken from the balance, and its hours are charged again from now.",
+        new NotificationAction("Open workspace", "/workspaces/" + id));
+  }
+
+  // "about 3 days", in whole days.
+  private static String span(Duration duration) {
+    var days = Math.max(duration.toDays(), 1);
+    return "about " + days + (days == 1 ? " day" : " days");
   }
 }

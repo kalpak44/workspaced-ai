@@ -1,5 +1,6 @@
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { ServerCrash } from "lucide-react";
+import { CirclePause, ServerCrash, Wallet } from "lucide-react";
+import { navigate } from "../../hooks/useRoute";
 import { EmptyState } from "../molecules";
 
 /**
@@ -23,6 +24,16 @@ export function WorkspaceStatusView({
         busy
         title="Starting the workspace"
         hint="Its agent is getting ready. This page opens on its own when it is."
+      />
+    );
+  }
+  if (workspace.status === "PAUSED") {
+    return (
+      <EmptyState
+        icon={CirclePause}
+        title="Workspace paused"
+        hint="Your balance ran out, so its VM is shut down with its files kept. Add funds and it starts again within a few minutes; otherwise it is deleted on the date the billing page shows."
+        action={{ label: "Add funds", icon: Wallet, onClick: () => navigate({ name: "billing" }) }}
       />
     );
   }

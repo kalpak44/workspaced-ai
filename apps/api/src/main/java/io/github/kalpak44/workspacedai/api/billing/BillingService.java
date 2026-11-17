@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
@@ -15,6 +16,7 @@ import java.time.temporal.ChronoUnit;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -93,27 +95,29 @@ public class BillingService {
   public Billing billing(UUID user) {
     var now = Instant.now();
     var balance = balanceMicros(user);
-    var hourly =
-        usage.findAllByUserId(user).stream()
-            .collect(Collectors.toMap(UsageEntity::getWorkspaceId, UsageEntity::getHourlyMicros));
-    var hourlyTotal = hourly.values().stream().mapToLong(Long::longValue).sum();
+    // An admin's workspaces are free, so nothing of theirs is shown as charged.
+    var rows =
+        (isFree(user) ? List.<UsageEntity>of() : usage.findAllByUserId(user))
+            .stream().collect(Collectors.toMap(UsageEntity::getWorkspaceId, row -> row));
+    // A paused workspace costs nothing until it starts again.
+    var hourlyTotal =
+        rows.values().stream()
+            .filter(row -> row.getPausedAt() == null)
+            .mapToLong(UsageEntity::getHourlyMicros)
+            .sum();
     return new Billing(
         Math.floorDiv(balance, Ledger.MICROS_PER_CENT),
         properties.currency(),
         properties.vatPercent(),
+        cents(reactivationFeeMicros()),
         cents(monthOf(hourlyTotal)),
         hourlyTotal == 0
             ? null
             : now.plus(hoursCovered(balance, hourlyTotal), ChronoUnit.HOURS)
                 .truncatedTo(ChronoUnit.HOURS),
         workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user).stream()
-            .filter(workspace -> hourly.containsKey(workspace.getId()))
-            .map(
-                workspace ->
-                    new WorkspaceSpend(
-                        workspace.getId(),
-                        workspace.getName(),
-                        cents(monthOf(hourly.get(workspace.getId())))))
+            .filter(workspace -> rows.containsKey(workspace.getId()))
+            .map(workspace -> spend(workspace.getId(), workspace.getName(), rows))
             .toList(),
         usageByDay(user, now),
         topUps.findAllByUserIdAndStatusNotOrderByCreatedAtDesc(user, TopUpStatus.EXPIRED).stream()
@@ -361,6 +365,15 @@ public class BillingService {
         .longValueExact();
   }
 
+  private WorkspaceSpend spend(UUID id, String name, Map<UUID, UsageEntity> rows) {
+    var row = rows.get(id);
+    return new WorkspaceSpend(
+        id,
+        name,
+        cents(monthOf(row.getHourlyMicros())),
+        row.getPausedAt() == null ? null : row.getPausedAt().plus(properties.pausedFor()));
+  }
+
   // Charges are posted as each hour starts, so what was posted on a day is what that day cost.
   private List<DailySpend> usageByDay(UUID user, Instant now) {
     var since = LocalDate.ofInstant(now, ZoneOffset.UTC).minusDays(USAGE_DAYS - 1L);
@@ -417,7 +430,21 @@ public class BillingService {
     return amount.multiply(MICROS).setScale(0, RoundingMode.CEILING).longValueExact();
   }
 
-  private String amount(long micros) {
+  /**
+   * Whether the user's workspaces cost nothing, as an admin's do. Checked as each hour is charged,
+   * so a user made an admin stops paying from then on.
+   */
+  boolean isFree(UUID user) {
+    return users.findById(user).map(u -> u.getRole() == Role.ADMIN).orElse(false);
+  }
+
+  /** What starting a workspace paused for want of funds again takes from the balance. */
+  long reactivationFeeMicros() {
+    return micros(properties.reactivationFee());
+  }
+
+  /** "12.40 EUR": rounded down to the cent. */
+  String amount(long micros) {
     return BigDecimal.valueOf(micros, 6).setScale(2, RoundingMode.FLOOR).toPlainString()
         + " "
         + properties.currency().toUpperCase(Locale.ROOT);

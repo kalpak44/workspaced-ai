@@ -2,7 +2,8 @@ import { send } from "./http";
 
 export { ApiError } from "./http";
 
-export type WorkspaceStatus = "INITIALIZING" | "READY" | "FAILED";
+/** PAUSED: its VM is shut down, with everything kept, because the balance ran out. */
+export type WorkspaceStatus = "INITIALIZING" | "READY" | "PAUSED" | "FAILED";
 
 export interface Workspace {
   readonly id: string;

@@ -54,6 +54,20 @@ public interface VmManager {
   void deleteFor(UUID workspaceId);
 
   /**
+   * Shuts the workspace's VM down, keeping its disk; stopping a stopped one does nothing.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   */
+  void stopFor(UUID workspaceId);
+
+  /**
+   * Powers the workspace's stopped VM back on; starting one that is not stopped does nothing.
+   *
+   * @throws IllegalStateException when the workspace has no VM
+   */
+  void startFor(UUID workspaceId);
+
+  /**
    * Marks the workspace's VM restarting, which has its supervisor recreate the harness with fresh
    * values.
    *

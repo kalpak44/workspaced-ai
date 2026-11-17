@@ -80,21 +80,29 @@ class VmWorkspaceRuntimeTest {
   void stopsAndRestartsThroughTheVmManager() {
     runtime.stop(workspace);
     runtime.restart(workspace);
+    runtime.pause(workspace);
+    runtime.resume(workspace);
 
     verify(vmManager).deleteFor(workspace);
     verify(vmManager).restartFor(workspace);
+    verify(vmManager).stopFor(workspace);
+    verify(vmManager).startFor(workspace);
   }
 
   @Test
   void readsStatusesFromTheVmsAndFailsAWorkspaceWithNone() {
     var ready = UUID.randomUUID();
     var gone = UUID.randomUUID();
-    when(vmManager.vms()).thenReturn(List.of(vm(workspace, "PROVISIONING"), vm(ready, "READY")));
+    var paused = UUID.randomUUID();
+    when(vmManager.vms())
+        .thenReturn(
+            List.of(vm(workspace, "PROVISIONING"), vm(ready, "READY"), vm(paused, "STOPPED")));
 
-    var statuses = runtime.statuses(List.of(workspace, ready, gone));
+    var statuses = runtime.statuses(List.of(workspace, ready, gone, paused));
 
     assertThat(statuses)
         .containsEntry(workspace, WorkspaceStatus.INITIALIZING)
+        .containsEntry(paused, WorkspaceStatus.PAUSED)
         .containsEntry(ready, WorkspaceStatus.READY)
         .containsEntry(gone, WorkspaceStatus.FAILED);
   }

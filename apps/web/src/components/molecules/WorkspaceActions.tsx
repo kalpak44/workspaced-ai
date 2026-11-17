@@ -33,8 +33,9 @@ export function WorkspaceActions({ workspace, deleting = false, className = "", 
   const ref = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(ref, open && !mobile, close);
-  // A VM that is still starting has no shell to open, nothing to measure and nothing to restart.
-  const starting = workspace.status === "INITIALIZING";
+  // A VM that is still starting, or paused, has no shell to open, nothing to measure and nothing
+  // to restart.
+  const starting = workspace.status === "INITIALIZING" || workspace.status === "PAUSED";
 
   const item = (label: string, Icon: LucideIcon, run: () => void, disabled = false, danger = false) => (
     <MenuItem className="gap-2 rounded-md px-3 py-2" danger={danger} disabled={disabled} onClick={() => { setOpen(false); run(); }}>

@@ -244,6 +244,21 @@ class HttpHetznerClientTest {
   }
 
   @Test
+  void shutsAServerDownAndPowersItBackOn() {
+    var client = client("t0ken");
+    var created =
+        client.createServer(
+            new ServerSpec(
+                "vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of("app", "a"), null, 7));
+
+    client.shutdownServer(created.id());
+    assertThat(client.servers("app=a").getFirst().status()).isEqualTo(Server.OFF);
+
+    client.powerOnServer(created.id());
+    assertThat(client.servers("app=a").getFirst().status()).isEqualTo("running");
+  }
+
+  @Test
   void deletesAServerAndTreatsOneAlreadyGoneAsDeleted() {
     var client = client("t0ken");
     var created =

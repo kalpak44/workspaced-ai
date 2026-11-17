@@ -27,6 +27,7 @@ interface Props {
 const STATUS = {
   READY: { label: "Running", dot: "bg-emerald-500", text: "text-emerald-700 dark:text-emerald-400" },
   INITIALIZING: { label: "Starting", dot: "animate-pulse bg-amber-500", text: "text-amber-700 dark:text-amber-400" },
+  PAUSED: { label: "Paused", dot: "bg-zinc-400", text: "text-zinc-600 dark:text-zinc-400" },
   FAILED: { label: "Stopped", dot: "bg-rose-500", text: "text-rose-700 dark:text-rose-400" },
 } as const;
 
@@ -47,7 +48,7 @@ export function WorkspaceHeader({ workspace, workspaces, current, deleting, onRe
     tabBar.current?.querySelector('[aria-current="page"]')?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
   }, [current]);
   // Nothing to open a shell on, or to measure, until the VM is up; the same rule as the menu.
-  const starting = workspace.status === "INITIALIZING";
+  const starting = workspace.status === "INITIALIZING" || workspace.status === "PAUSED";
   const tabs: ReadonlyArray<{ readonly view: WorkspaceView; readonly label: string; readonly icon: typeof Cpu; readonly route: Route; readonly disabled: boolean }> = [
     { view: "sessions", label: "Sessions", icon: MessageSquare, route: { name: "workspace", workspaceId: workspace.id }, disabled: false },
     { view: "terminal", label: "Terminal", icon: SquareTerminal, route: { name: "terminal", workspaceId: workspace.id }, disabled: starting },

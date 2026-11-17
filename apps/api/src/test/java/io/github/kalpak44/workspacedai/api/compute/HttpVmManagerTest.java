@@ -213,6 +213,18 @@ class HttpVmManagerTest {
   }
 
   @Test
+  void stopsAndStartsTheWorkspacesVmAndRefusesOneWithNone() {
+    var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
+
+    vmManager.stopFor(workspace);
+    vmManager.startFor(workspace);
+
+    assertThat(fake.powerActions).containsExactly("stop " + vm.id(), "start " + vm.id());
+    var none = UUID.randomUUID();
+    assertThatThrownBy(() -> vmManager.stopFor(none)).isInstanceOf(IllegalStateException.class);
+  }
+
+  @Test
   void hearsEachVmFromTheEventStream() throws Exception {
     var vm = vmManager.create(workspace, user, null, "sk-or-v1-test", Map.of());
     var heard = new LinkedBlockingQueue<ProvisionedVm>();
