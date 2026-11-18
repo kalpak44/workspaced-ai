@@ -51,7 +51,7 @@ public class MailjetMailer implements Mailer {
                     .getBytes(StandardCharsets.UTF_8));
     var request =
         HttpRequest.newBuilder(
-                URI.create(properties.url().toString().replaceAll("/+$", "") + "/v3.1/send"))
+                URI.create(withoutTrailingSlashes(properties.url().toString()) + "/v3.1/send"))
             .header("Authorization", "Basic " + credentials)
             .header("Content-Type", "application/json")
             .header("Accept", "application/json")
@@ -66,6 +66,14 @@ public class MailjetMailer implements Mailer {
       throw new MailFailedException("answered " + response.statusCode() + ": " + errors(response));
     }
     return sent.path("To").path(0).path("MessageID").asString("");
+  }
+
+  private static String withoutTrailingSlashes(String url) {
+    var end = url.length();
+    while (end > 0 && url.charAt(end - 1) == '/') {
+      end--;
+    }
+    return url.substring(0, end);
   }
 
   private static Map<String, String> address(Address address) {

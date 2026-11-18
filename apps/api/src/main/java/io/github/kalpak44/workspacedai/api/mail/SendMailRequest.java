@@ -18,7 +18,7 @@ public record SendMailRequest(
     @Schema(description = "The sender's address before the @", example = "support", maxLength = 64)
         @NotBlank
         @Size(max = 64)
-        @Pattern(regexp = "[A-Za-z0-9_%+-]+(\\.[A-Za-z0-9_%+-]+)*")
+        @Pattern(regexp = "[A-Za-z0-9_%+-]++(?:\\.[A-Za-z0-9_%+-]++)*+")
         String from,
     @Schema(
             description = "Shown beside the sender's address",
