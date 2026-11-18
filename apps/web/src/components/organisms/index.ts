@@ -3,6 +3,7 @@ export { ChatPanel } from "./ChatPanel";
 export { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 export { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
 export { RestartWorkspaceDialog } from "./RestartWorkspaceDialog";
+export { MailPanel } from "./MailPanel";
 export { McpPanel } from "./McpPanel";
 export { ModelPanel } from "./ModelPanel";
 export { SecretsPanel } from "./SecretsPanel";

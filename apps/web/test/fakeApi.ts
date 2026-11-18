@@ -9,6 +9,7 @@ import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
 import type { Variable } from "../src/api/variablesApi";
+import type { NewMail } from "../src/api/mailApi";
 import type { User } from "../src/api/usersApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
@@ -354,6 +355,29 @@ export function installFakeApi(
     return json(mine(recipes.rows[index]));
   }
 
+  // Every message sent, as sent; `refuse` answers the next send as Mailjet refusing it.
+  const mail = {
+    configured: true,
+    sent: [] as NewMail[],
+    refuse: null as string | null,
+  };
+
+  function mailResponse(url: string, init?: RequestInit): Response | null {
+    if (url.endsWith("/api/v1/mail") && !init?.method) {
+      return json({ domain: "workspaced.online", noReply: "noreply@workspaced.online", configured: mail.configured });
+    }
+    if (url.endsWith("/api/v1/mail/messages") && init?.method === "POST") {
+      if (mail.refuse) {
+        const detail = mail.refuse;
+        mail.refuse = null;
+        return new Response(JSON.stringify({ detail }), { status: 502 });
+      }
+      mail.sent.push(JSON.parse(String(init.body)));
+      return json({ id: String(mail.sent.length) });
+    }
+    return null;
+  }
+
   // Everyone else who can sign in; the signed-in account is always listed first.
   const users = {
     others: [{ id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper", avatar: null, role: "USER" }] as User[],
@@ -462,6 +486,10 @@ export function installFakeApi(
     const usersAnswer = usersResponse(url, init);
     if (usersAnswer) {
       return usersAnswer;
+    }
+    const mailAnswer = mailResponse(url, init);
+    if (mailAnswer) {
+      return mailAnswer;
     }
     const recipesAnswer = recipesResponse(url, init);
     if (recipesAnswer) {
@@ -882,5 +910,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { drafts, launched, billing, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

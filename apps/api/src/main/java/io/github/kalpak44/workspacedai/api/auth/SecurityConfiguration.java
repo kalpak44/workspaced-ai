@@ -109,7 +109,7 @@ public class SecurityConfiguration {
     "/error"
   };
 
-  private static final String[] ADMIN_ONLY = {"/users", "/users/**"};
+  private static final String[] ADMIN_ONLY = {"/users", "/users/**", "/mail", "/mail/**"};
 
   /**
    * Stripe's webhook is not a browser route: it carries no cookie, and the signature on each event

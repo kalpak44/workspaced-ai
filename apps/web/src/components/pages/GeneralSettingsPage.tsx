@@ -1,23 +1,24 @@
-import { Camera, UserRound, Users } from "lucide-react";
+import { Camera, Mail, UserRound, Users } from "lucide-react";
 import { type ReactNode, useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { navigate } from "../../hooks/useRoute";
 import { type UserSort, useUsers } from "../../hooks/useUsers";
 import { Avatar, Button, TextField } from "../atoms";
 import { PageHeader, SectionNav, Toast } from "../molecules";
-import { UsersPanel } from "../organisms";
+import { MailPanel, UsersPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
 const NOTES = {
   profile: "Your photo, name and preferences.",
   users: "Changes apply to everyone who signs in here.",
+  mail: "Mail sent from the platform's own addresses.",
 };
 
-type Section = "profile" | "users";
+type Section = "profile" | "users" | "mail";
 
 /** Account settings; the open section is in the URL, so a link can open Users directly. */
 export function GeneralSettingsPage({ section: requested }: { readonly section?: string }) {
-  const section: Section = requested === "users" ? "users" : "profile";
+  const section: Section = requested === "users" || requested === "mail" ? requested : "profile";
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: Section) => navigate({ name: "general-settings", section: id }, { replace: true });
   const { account, saveProfile, changePassword: savePassword } = useAccount();
@@ -35,7 +36,8 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const [notice, setNotice] = useState("");
   const [avatarError, setAvatarError] = useState("");
   const fileInput = useRef<HTMLInputElement>(null);
-  // Only an admin may manage users; the API refuses anyone else, so the tab is not offered.
+  // Only an admin may manage users or send mail; the API refuses anyone else, so the tabs are
+  // not offered.
   const isAdmin = account?.role === "ADMIN";
   const namesChanged = names.firstName !== saved.firstName || names.lastName !== saved.lastName;
 
@@ -111,7 +113,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
     <PageHeader title="General settings" description={NOTES[section]} />
     <ContextLayout contained sidebar={
       <SectionNav label="Settings sections" current={section} onSelect={(id) => { setSection(id); setNotice(""); }}
-        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }] as const : [])]} />
+        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, ...(isAdmin ? [{ id: "users", label: "Users", Icon: Users }, { id: "mail", label: "Mail", Icon: Mail }] as const : [])]} />
     }>
       <div className="w-full">
           <div className="min-w-0 flex-1">
@@ -181,6 +183,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
               </section>
             </div>
             {section === "users" && isAdmin && <UsersSection currentUserId={account?.id} />}
+            {section === "mail" && isAdmin && <MailPanel />}
             <Toast message={notice} />
           </div>
       </div>
