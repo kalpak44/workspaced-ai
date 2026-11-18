@@ -1,4 +1,4 @@
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it } from "vitest";
 import { App } from "../src/App";
@@ -17,7 +17,8 @@ async function write(user: ReturnType<typeof userEvent.setup>, to: string) {
   await user.type(screen.getByLabelText("Sender name"), "workspaced support");
   await user.type(screen.getByLabelText("To"), to);
   await user.type(screen.getByLabelText("Subject"), "Hello");
-  await user.type(screen.getByLabelText("Message"), "Hi Ada");
+  await user.click(screen.getByRole("button", { name: "Raw Markdown" }));
+  fireEvent.change(screen.getByRole("textbox", { name: "Message Markdown" }), { target: { value: "Hi **Ada**" } });
 }
 
 describe("mail", () => {
@@ -38,10 +39,11 @@ describe("mail", () => {
       to: ["ada@example.com", "grace@example.com"],
       replyTo: null,
       subject: "Hello",
-      text: "Hi Ada",
+      text: "Hi **Ada**",
     }]);
     expect(screen.getByLabelText("From")).toHaveValue("support");
     expect(screen.getByLabelText("Subject")).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "Message Markdown" })).toHaveValue("");
     expect(screen.getByRole("button", { name: "Send" })).toBeDisabled();
   });
 
@@ -55,7 +57,7 @@ describe("mail", () => {
     await user.click(screen.getByRole("button", { name: "Send" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("The sender is not verified");
-    expect(screen.getByLabelText("Message")).toHaveValue("Hi Ada");
+    expect(screen.getByRole("textbox", { name: "Message Markdown" })).toHaveValue("Hi **Ada**");
     expect(api.mail.sent).toEqual([]);
   });
 

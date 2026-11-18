@@ -14,10 +14,12 @@ public class MailService {
 
   private final Mailer mailer;
   private final MailProperties properties;
+  private final MailMarkdown markdown;
 
-  public MailService(Mailer mailer, MailProperties properties) {
+  public MailService(Mailer mailer, MailProperties properties, MailMarkdown markdown) {
     this.mailer = mailer;
     this.properties = properties;
+    this.markdown = markdown;
   }
 
   public MailSettings settings() {
@@ -39,6 +41,8 @@ public class MailService {
 
   /**
    * @param localPart the sender's address before the @, e.g. support
+   * @param text the body as Markdown, sent formatted and, for a client that shows no HTML, as it
+   *     was written
    * @return the id Mailjet gave the message
    */
   public String send(
@@ -55,6 +59,7 @@ public class MailService {
             to.stream().map(Address::of).toList(),
             replyTo == null || replyTo.isBlank() ? null : Address.of(replyTo),
             subject,
-            text));
+            text,
+            markdown.html(text)));
   }
 }

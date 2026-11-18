@@ -48,8 +48,9 @@ public interface MailApi {
       operationId = "sendMail",
       summary = "Send a message",
       description =
-          "Sends a plain-text message as the given address on the platform's domain, through "
-              + "Mailjet. Mailjet accepting it is not delivery: a bounce shows in Mailjet, not "
+          "Sends a message written in Markdown as the given address on the platform's domain, "
+              + "through Mailjet, formatted and as plain text. Raw HTML in it is shown as text. "
+              + "Mailjet accepting it is not delivery: a bounce shows in Mailjet, not "
               + "here.")
   @ApiResponse(
       responseCode = "200",

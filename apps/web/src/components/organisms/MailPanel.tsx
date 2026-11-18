@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useMail } from "../../hooks/useMail";
 import { Button, Spinner, TextField } from "../atoms";
 import { SettingsSection } from "../molecules";
+import { InstructionsEditor } from "../molecules/InstructionsEditor";
 
 const EMPTY = { from: "", fromName: "", to: "", replyTo: "", subject: "", text: "" };
 
@@ -11,7 +12,7 @@ function recipients(value: string): string[] {
   return value.split(/[\s,;]+/).filter(Boolean);
 }
 
-/** Writes and sends a plain-text message as any address on the platform's domain. */
+/** Writes a message in Markdown and sends it, formatted, as any address on the platform's domain. */
 export function MailPanel() {
   const { settings, loading, error, sending, send, retry } = useMail();
   const [draft, setDraft] = useState(EMPTY);
@@ -71,9 +72,9 @@ export function MailPanel() {
         </div>
         <TextField id="mail-subject" label="Subject" required maxLength={200} value={draft.subject} onChange={edit("subject")} />
         <div className="flex flex-col gap-1.5 text-sm">
-          <label htmlFor="mail-text" className="font-medium text-zinc-700 dark:text-zinc-300">Message</label>
-          <textarea id="mail-text" required maxLength={100000} rows={10} value={draft.text} onChange={edit("text")}
-            className="field block min-h-40 w-full resize-y px-3 py-2" />
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">Message</span>
+          <InstructionsEditor fileName="message.md" label="Message" value={draft.text}
+            onChange={(text) => { setDraft((current) => ({ ...current, text })); setNotice(""); }} />
         </div>
         {failure && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{failure}</p>}
         {notice && <p role="status" className="text-sm text-zinc-500 dark:text-zinc-400">{notice}</p>}

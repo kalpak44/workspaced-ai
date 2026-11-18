@@ -44,6 +44,9 @@ public class MailjetMailer implements Mailer {
     }
     message.put("Subject", mail.subject());
     message.put("TextPart", mail.text());
+    if (mail.html() != null) {
+      message.put("HTMLPart", mail.html());
+    }
     var credentials =
         Base64.getEncoder()
             .encodeToString(

@@ -42,7 +42,10 @@ public record SendMailRequest(
         @Size(max = 200)
         @Pattern(regexp = "[^\\r\\n]*")
         String subject,
-    @Schema(description = "The body, as plain text", maxLength = 100000)
+    @Schema(
+            description =
+                "The body, as Markdown; sent formatted, and as written for a client that shows no HTML",
+            maxLength = 100000)
         @NotBlank
         @Size(max = 100000)
         String text) {

@@ -24,7 +24,9 @@ public interface Mailer {
 
   /**
    * @param replyTo where replies go instead of the sender; null sends them to the sender
-   * @param text the body, as plain text
+   * @param text the body, as plain text, for a client that shows no HTML
+   * @param html the same body formatted; null sends plain text alone
    */
-  record Mail(Address from, List<Address> to, Address replyTo, String subject, String text) {}
+  record Mail(
+      Address from, List<Address> to, Address replyTo, String subject, String text, String html) {}
 }

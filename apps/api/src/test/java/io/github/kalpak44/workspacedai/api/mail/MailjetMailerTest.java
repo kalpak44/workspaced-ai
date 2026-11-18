@@ -28,7 +28,8 @@ class MailjetMailerTest {
           List.of(Address.of("ada@example.com")),
           Address.of("sales@workspaced.online"),
           "Hello",
-          "Hi Ada");
+          "Hi **Ada**",
+          "<p>Hi <strong>Ada</strong></p>");
 
   final List<String> bodies = new CopyOnWriteArrayList<>();
   final List<String> authorizations = new CopyOnWriteArrayList<>();
@@ -85,8 +86,20 @@ class MailjetMailerTest {
     assertThat(message.get("To").get(0).has("Name")).isFalse();
     assertThat(message.get("ReplyTo").get("Email").asString()).isEqualTo("sales@workspaced.online");
     assertThat(message.get("Subject").asString()).isEqualTo("Hello");
-    assertThat(message.get("TextPart").asString()).isEqualTo("Hi Ada");
+    assertThat(message.get("TextPart").asString()).isEqualTo("Hi **Ada**");
+    assertThat(message.get("HTMLPart").asString()).isEqualTo("<p>Hi <strong>Ada</strong></p>");
     assertThat(authorizations.getFirst()).isEqualTo("Basic cHVibGljOnByaXZhdGU=");
+  }
+
+  @Test
+  void sendsPlainTextAloneWhenThereIsNoHtml() throws Exception {
+    status = 200;
+    answer = "{\"Messages\":[{\"Status\":\"success\",\"To\":[{\"MessageID\":1}]}]}";
+    mailer("public")
+        .send(new Mail(MAIL.from(), MAIL.to(), null, MAIL.subject(), MAIL.text(), null));
+    var message = JSON.readTree(bodies.getFirst()).get("Messages").get(0);
+    assertThat(message.has("HTMLPart")).isFalse();
+    assertThat(message.has("ReplyTo")).isFalse();
   }
 
   @Test

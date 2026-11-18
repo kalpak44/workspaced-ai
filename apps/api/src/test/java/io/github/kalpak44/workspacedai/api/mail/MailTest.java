@@ -39,7 +39,7 @@ class MailTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final String MESSAGE =
       "{\"from\":\"support\",\"fromName\":\" workspaced support \",\"to\":[\"ada@example.com\"],"
-          + "\"replyTo\":\"sales@workspaced.online\",\"subject\":\"Hello\",\"text\":\"Hi Ada\"}";
+          + "\"replyTo\":\"sales@workspaced.online\",\"subject\":\"Hello\",\"text\":\"Hi **Ada**\"}";
 
   @LocalServerPort int port;
 
@@ -70,7 +70,9 @@ class MailTest {
                 List.of(Address.of("ada@example.com")),
                 Address.of("sales@workspaced.online"),
                 "Hello",
-                "Hi Ada"));
+                "Hi **Ada**",
+                new MailMarkdown().html("Hi **Ada**")));
+    assertThat(mail.getValue().html()).contains("<p>Hi <strong>Ada</strong></p>");
   }
 
   @Test
@@ -96,7 +98,8 @@ class MailTest {
                 List.of(Address.of("ada@example.com")),
                 null,
                 "Workspace ready",
-                "It is up."));
+                "It is up.",
+                new MailMarkdown().html("It is up.")));
   }
 
   @Test
@@ -108,7 +111,7 @@ class MailTest {
             MESSAGE.replace("[\"ada@example.com\"]", "[]"),
             MESSAGE.replace("ada@example.com", "not an address"),
             MESSAGE.replace("\"Hello\"", "\"Hello\\r\\nBcc: eve@example.com\""),
-            MESSAGE.replace("\"Hi Ada\"", "\" \""))) {
+            MESSAGE.replace("\"Hi **Ada**\"", "\" \""))) {
       assertThat(send("POST", "/mail/messages", bad).statusCode()).as(bad).isEqualTo(400);
     }
     verify(mailer, never()).send(any());
