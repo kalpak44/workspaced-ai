@@ -161,9 +161,11 @@
                             <!-- The calculator's default code cache is 240M, which left the heap
                                  about 50M under 512Mi and the API dying of OutOfMemoryError at
                                  startup. Appended rather than overridden, so the JVM buildpack's
-                                 own options stay; the calculator gives the rest to the heap. -->
+                                 own options stay; the calculator gives the rest to the heap.
+                                 The Base64 intrinsic overflows the heap on AVX-512 CPUs
+                                 (CVE-2026-114938), and a bearer JWT reaches it before login. -->
                             <BPE_DELIM_JAVA_TOOL_OPTIONS xml:space="preserve"> </BPE_DELIM_JAVA_TOOL_OPTIONS>
-                            <BPE_APPEND_JAVA_TOOL_OPTIONS>-XX:ReservedCodeCacheSize=64M</BPE_APPEND_JAVA_TOOL_OPTIONS>
+                            <BPE_APPEND_JAVA_TOOL_OPTIONS>-XX:ReservedCodeCacheSize=64M -XX:-UseBASE64Intrinsics</BPE_APPEND_JAVA_TOOL_OPTIONS>
                             <!-- Links the published package back to this repository. -->
                             <BP_OCI_SOURCE>https://github.com/kalpak44/workspaced-ai</BP_OCI_SOURCE>
                             <!-- GitHub's release-asset CDN intermittently takes longer than the
