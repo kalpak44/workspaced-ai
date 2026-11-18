@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.sun.net.httpserver.HttpServer;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.Address;
+import io.github.kalpak44.workspacedai.api.mail.Mailer.InlineImage;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import java.io.IOException;
 import java.net.InetSocketAddress;
@@ -29,7 +30,8 @@ class MailjetMailerTest {
           Address.of("sales@workspaced.online"),
           "Hello",
           "Hi **Ada**",
-          "<p>Hi <strong>Ada</strong></p>");
+          "<p>Hi <strong>Ada</strong></p>",
+          List.of(new InlineImage("logo", "image/png", "logo.png", new byte[] {1, 2, 3})));
 
   final List<String> bodies = new CopyOnWriteArrayList<>();
   final List<String> authorizations = new CopyOnWriteArrayList<>();
@@ -62,13 +64,7 @@ class MailjetMailerTest {
     var url = URI.create("http://localhost:" + server.getAddress().getPort());
     return new MailjetMailer(
         new MailProperties(
-            "workspaced.online",
-            "noreply",
-            "workspaced",
-            apiKey,
-            "private",
-            url,
-            Duration.ofSeconds(5)),
+            "workspaced.online", "noreply", apiKey, "private", url, Duration.ofSeconds(5)),
         JSON);
   }
 
@@ -88,6 +84,11 @@ class MailjetMailerTest {
     assertThat(message.get("Subject").asString()).isEqualTo("Hello");
     assertThat(message.get("TextPart").asString()).isEqualTo("Hi **Ada**");
     assertThat(message.get("HTMLPart").asString()).isEqualTo("<p>Hi <strong>Ada</strong></p>");
+    var logo = message.get("InlinedAttachments").get(0);
+    assertThat(logo.get("ContentID").asString()).isEqualTo("logo");
+    assertThat(logo.get("ContentType").asString()).isEqualTo("image/png");
+    assertThat(logo.get("Filename").asString()).isEqualTo("logo.png");
+    assertThat(logo.get("Base64Content").asString()).isEqualTo("AQID");
     assertThat(authorizations.getFirst()).isEqualTo("Basic cHVibGljOnByaXZhdGU=");
   }
 
@@ -96,10 +97,11 @@ class MailjetMailerTest {
     status = 200;
     answer = "{\"Messages\":[{\"Status\":\"success\",\"To\":[{\"MessageID\":1}]}]}";
     mailer("public")
-        .send(new Mail(MAIL.from(), MAIL.to(), null, MAIL.subject(), MAIL.text(), null));
+        .send(new Mail(MAIL.from(), MAIL.to(), null, MAIL.subject(), MAIL.text(), null, List.of()));
     var message = JSON.readTree(bodies.getFirst()).get("Messages").get(0);
     assertThat(message.has("HTMLPart")).isFalse();
     assertThat(message.has("ReplyTo")).isFalse();
+    assertThat(message.has("InlinedAttachments")).isFalse();
   }
 
   @Test

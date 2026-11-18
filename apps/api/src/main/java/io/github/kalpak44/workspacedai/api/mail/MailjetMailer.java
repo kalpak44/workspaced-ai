@@ -47,6 +47,19 @@ public class MailjetMailer implements Mailer {
     if (mail.html() != null) {
       message.put("HTMLPart", mail.html());
     }
+    if (!mail.images().isEmpty()) {
+      message.put(
+          "InlinedAttachments",
+          mail.images().stream()
+              .map(
+                  image ->
+                      Map.of(
+                          "ContentType", image.contentType(),
+                          "Filename", image.filename(),
+                          "ContentID", image.id(),
+                          "Base64Content", Base64.getEncoder().encodeToString(image.content())))
+              .toList());
+    }
     var credentials =
         Base64.getEncoder()
             .encodeToString(

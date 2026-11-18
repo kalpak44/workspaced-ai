@@ -7,9 +7,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 
 /**
  * @param domain the one domain mail is sent from; Mailjet accepts any address on it
- * @param noReply the address before the @ the platform's own notifications come from; nothing
- *     routes mail to it, so a reply bounces rather than reaching nobody
- * @param noReplyName shown beside that address
+ * @param noReply the sender the platform's own notifications come from, one of those listed;
+ *     nothing routes mail to it, so a reply bounces rather than reaching nobody
  * @param apiKey Mailjet's public API key; unset, as it is locally, nothing is sent and sending
  *     answers 503
  * @param secretKey Mailjet's private API key
@@ -20,7 +19,6 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
 public record MailProperties(
     @DefaultValue("workspaced.online") String domain,
     @DefaultValue("noreply") String noReply,
-    @DefaultValue("workspaced") String noReplyName,
     String apiKey,
     String secretKey,
     @DefaultValue("https://api.mailjet.com") URI url,

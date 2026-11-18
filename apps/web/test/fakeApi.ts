@@ -9,7 +9,7 @@ import type { Recipe, RecipeInput } from "../src/api/recipesApi";
 import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
 import type { Variable } from "../src/api/variablesApi";
-import type { NewMail } from "../src/api/mailApi";
+import type { MailSender, NewMail } from "../src/api/mailApi";
 import type { User } from "../src/api/usersApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
@@ -356,15 +356,24 @@ export function installFakeApi(
   }
 
   // Every message sent, as sent; `refuse` answers the next send as Mailjet refusing it.
+  // `previewed` is every preview asked for, and each preview echoes what it was given.
   const mail = {
     configured: true,
     sent: [] as NewMail[],
+    previewed: [] as unknown[],
     refuse: null as string | null,
+    senders: ["contact", "support", "noreply"].map((localPart) => ({
+      localPart,
+      address: `${localPart}@workspaced.online`,
+      name: "workspaced",
+      signature: `Best regards,\n${localPart}`,
+      footer: `You received this from ${localPart}@workspaced.online.`,
+    })) as MailSender[],
   };
 
   function mailResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/mail") && !init?.method) {
-      return json({ domain: "workspaced.online", noReply: "noreply@workspaced.online", configured: mail.configured });
+      return json({ domain: "workspaced.online", noReply: "noreply@workspaced.online", configured: mail.configured, senders: mail.senders });
     }
     if (url.endsWith("/api/v1/mail/messages") && init?.method === "POST") {
       if (mail.refuse) {
@@ -374,6 +383,18 @@ export function installFakeApi(
       }
       mail.sent.push(JSON.parse(String(init.body)));
       return json({ id: String(mail.sent.length) });
+    }
+    if (url.endsWith("/api/v1/mail/preview") && init?.method === "POST") {
+      const request = JSON.parse(String(init.body));
+      mail.previewed.push(request);
+      return json({ html: `<p>${request.text}</p><p>${request.template.signature}</p><p>${request.template.footer}</p>` });
+    }
+    const sender = /\/api\/v1\/mail\/senders\/([^/]+)$/.exec(url);
+    if (sender && init?.method === "PUT") {
+      const index = mail.senders.findIndex((s) => s.localPart === sender[1]);
+      if (index < 0) return json({}, 404);
+      mail.senders[index] = { ...mail.senders[index], ...JSON.parse(String(init.body)) };
+      return json(mail.senders[index]);
     }
     return null;
   }

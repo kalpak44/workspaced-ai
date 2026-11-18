@@ -10,23 +10,19 @@ import jakarta.validation.constraints.Size;
 import java.util.List;
 
 /**
- * The sender is a local part only, so no request can send as a domain Mailjet has not verified for
- * us. A line break in a header field is refused rather than passed on.
+ * The sender is one of the listed local parts, so no request can send as an address nobody receives
+ * replies for. A line break in the subject is refused rather than passed on.
  */
 @Schema(description = "A message to send")
 public record SendMailRequest(
-    @Schema(description = "The sender's address before the @", example = "support", maxLength = 64)
+    @Schema(
+            description =
+                "The sender's address before the @, one of the senders mail settings list",
+            example = "support",
+            maxLength = 64)
         @NotBlank
         @Size(max = 64)
-        @Pattern(regexp = "[A-Za-z0-9_%+-]++(?:\\.[A-Za-z0-9_%+-]++)*+")
         String from,
-    @Schema(
-            description = "Shown beside the sender's address",
-            example = "workspaced support",
-            maxLength = 100)
-        @Size(max = 100)
-        @Pattern(regexp = "[^\\r\\n]*")
-        String fromName,
     @ArraySchema(schema = @Schema(example = "ada@example.com"), minItems = 1, maxItems = 50)
         @NotEmpty
         @Size(max = 50)
@@ -40,17 +36,12 @@ public record SendMailRequest(
     @Schema(example = "Your workspace is ready", maxLength = 200)
         @NotBlank
         @Size(max = 200)
-        @Pattern(regexp = "[^\\r\\n]*")
+        @Pattern(regexp = "[^\\r\\n]*+")
         String subject,
     @Schema(
             description =
-                "The body, as Markdown; sent formatted, and as written for a client that shows no HTML",
+                "The body, as Markdown; sent formatted in the sender's template, and as written for a client that shows no HTML",
             maxLength = 100000)
         @NotBlank
         @Size(max = 100000)
-        String text) {
-
-  String trimmedFromName() {
-    return fromName == null ? null : fromName.strip();
-  }
-}
+        String text) {}
