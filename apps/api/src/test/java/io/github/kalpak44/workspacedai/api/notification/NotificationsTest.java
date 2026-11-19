@@ -6,6 +6,7 @@ import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.AuthService;
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -48,7 +49,9 @@ class NotificationsTest {
     var subject = "auth0|" + UUID.randomUUID();
     bearer =
         "Bearer "
-            + auth.signIn(subject, subject.substring(6) + "@example.com", true).token().value();
+            + auth.signIn(subject, subject.substring(6) + "@example.com", true, Role.USER)
+                .token()
+                .value();
     user = users.findByIdpSubject(subject).orElseThrow().getId();
   }
 

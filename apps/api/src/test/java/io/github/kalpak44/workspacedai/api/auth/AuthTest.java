@@ -20,9 +20,12 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Instant;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -32,6 +35,9 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.security.oauth2.core.oidc.OidcIdToken;
+import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
+import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -60,14 +66,6 @@ class AuthTest {
     when(keyCheck.accepts(any(), any())).thenReturn(true);
   }
 
-  /** Other test classes share the database and expect the default admin as V9 made it. */
-  @AfterEach
-  void unlinkTheDefaultAdmin() {
-    var admin = users.findById(TestUsers.ADMIN).orElseThrow();
-    admin.signedInAs(null, TestUsers.ADMIN_EMAIL);
-    users.save(admin);
-  }
-
   @Test
   void startsSigningInAtAuth0() throws Exception {
     var response = send("GET", "/oauth2/authorization/auth0", null, null);
@@ -78,6 +76,10 @@ class AuthTest {
         .contains("response_type=code", "client_id=test-client", "state=", "nonce=")
         .contains("redirect_uri=http://localhost:" + port + "/api/v1/login/oauth2/code/auth0")
         .doesNotContain("acr_values");
+    // The request in flight travels in a cookie, so no instance keeps a session for it.
+    assertThat(response.headers().allValues("Set-Cookie"))
+        .anySatisfy(c -> assertThat(c).startsWith("workspaced_sign_in="))
+        .noneSatisfy(c -> assertThat(c).startsWith("JSESSIONID="));
   }
 
   @Test
@@ -107,33 +109,34 @@ class AuthTest {
   }
 
   @Test
-  void linksAnAccountMadeBeforeAuth0ByItsVerifiedEmail() throws Exception {
-    var signIn = auth.signIn("auth0|pavel", "Pavel.Usanli@gmail.com", true);
-    assertThat(signIn.created()).isFalse();
-    var bearer = "Bearer " + signIn.token().value();
-    var account = JSON.readTree(send("GET", "/account", bearer, null).body());
-    assertThat(account.get("id").asString()).isEqualTo(TestUsers.ADMIN.toString());
-    assertThat(account.get("role").asString()).isEqualTo("ADMIN");
+  void matchesTheAccountByItsAuth0SubjectAndFollowsItsEmail() throws Exception {
+    var first = auth.signIn("auth0|ada", "Ada@Example.com", true, Role.USER);
+    assertThat(first.created()).isTrue();
+    var account =
+        JSON.readTree(send("GET", "/account", "Bearer " + first.token().value(), null).body());
+    assertThat(account.get("email").asString()).isEqualTo("ada@example.com");
 
-    // Matched by subject from then on, so a changed address follows the account.
-    auth.signIn("auth0|pavel", "pavel@example.com", true);
-    assertThat(users.findById(TestUsers.ADMIN))
-        .hasValueSatisfying(
-            u -> {
-              assertThat(u.getIdpSubject()).isEqualTo("auth0|pavel");
-              assertThat(u.getEmail()).isEqualTo("pavel@example.com");
-            });
+    var again = auth.signIn("auth0|ada", "lovelace@example.com", true, Role.USER);
+    assertThat(again.created()).isFalse();
+    assertThat(users.findByIdpSubject("auth0|ada"))
+        .hasValueSatisfying(u -> assertThat(u.getEmail()).isEqualTo("lovelace@example.com"));
   }
 
   @Test
-  void createsAnAccountOnFirstSignIn() {
-    assertThat(auth.signIn("auth0|ada", "ada@example.com", true).created()).isTrue();
-    assertThat(auth.signIn("auth0|ada", "ada@example.com", true).created()).isFalse();
-    auth.signIn("auth0|boss", "Boss@example.com", true);
+  void takesTheRoleAuth0AssignsAtEachSignIn() {
+    auth.signIn("auth0|ada", "ada@example.com", true, Role.ADMIN);
+    assertThat(users.findByIdpSubject("auth0|ada"))
+        .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.ADMIN));
+    auth.signIn("auth0|ada", "ada@example.com", true, Role.USER);
     assertThat(users.findByIdpSubject("auth0|ada"))
         .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.USER));
-    assertThat(users.findByIdpSubject("auth0|boss"))
-        .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.ADMIN));
+  }
+
+  @Test
+  void readsTheAdminRoleFromTheIdTokensRolesClaim() {
+    assertThat(Auth0SignIn.role(oidcUser(List.of("admin")))).isEqualTo(Role.ADMIN);
+    assertThat(Auth0SignIn.role(oidcUser(List.of("support")))).isEqualTo(Role.USER);
+    assertThat(Auth0SignIn.role(oidcUser(null))).isEqualTo(Role.USER);
   }
 
   @Test
@@ -156,15 +159,15 @@ class AuthTest {
 
   @Test
   void refusesAnEmailAuth0HasNotVerified() {
-    assertThatThrownBy(() -> auth.signIn("auth0|ada", "ada@example.com", false))
+    assertThatThrownBy(() -> auth.signIn("auth0|ada", "ada@example.com", false, Role.USER))
         .isInstanceOf(AuthService.UnverifiedEmailException.class);
     assertThat(users.findByEmail("ada@example.com")).isEmpty();
   }
 
   @Test
-  void neverHandsALinkedAccountToAnotherAuth0User() {
-    auth.signIn("auth0|ada", "ada@example.com", true);
-    assertThatThrownBy(() -> auth.signIn("auth0|mallory", "ada@example.com", true))
+  void refusesAnEmailAnotherAccountHolds() {
+    auth.signIn("auth0|ada", "ada@example.com", true, Role.USER);
+    assertThatThrownBy(() -> auth.signIn("auth0|mallory", "ada@example.com", true, Role.USER))
         .isInstanceOf(DataIntegrityViolationException.class);
     assertThat(users.findByIdpSubject("auth0|mallory")).isEmpty();
   }
@@ -180,7 +183,7 @@ class AuthTest {
 
   @Test
   void acceptsTheTokenAsACookie() throws Exception {
-    var token = TestUsers.token(TestUsers.ADMIN, 0);
+    var token = TestUsers.token(TestUsers.ADMIN);
     var account = sendWithCookie("/account", token);
     assertThat(account.statusCode()).isEqualTo(200);
     assertThat(JSON.readTree(account.body()).get("email").asString())
@@ -189,7 +192,7 @@ class AuthTest {
 
   @Test
   void requiresTheCsrfTokenForChangesMadeWithTheCookie() throws Exception {
-    var token = TestUsers.token(TestUsers.ADMIN, 0);
+    var token = TestUsers.token(TestUsers.ADMIN);
     var issued = sendWithCookie("/auth/csrf", token);
     assertThat(issued.statusCode()).isEqualTo(200);
     var csrf =
@@ -413,7 +416,16 @@ class AuthTest {
 
   private String bearerFor(String email) {
     return TestUsers.bearer(
-        users.findByEmail(email).orElseGet(() -> users.save(new UserEntity(email))));
+        users.findByEmail(email).orElseGet(() -> users.save(TestUsers.newUser(email))));
+  }
+
+  private static OidcUser oidcUser(List<String> roles) {
+    var claims = new HashMap<String, Object>(Map.of("sub", "auth0|ada"));
+    if (roles != null) {
+      claims.put(Auth0SignIn.ROLES_CLAIM, roles);
+    }
+    var token = new OidcIdToken("id-token", Instant.now(), Instant.now().plusSeconds(60), claims);
+    return new DefaultOidcUser(List.of(), token);
   }
 
   private URI url(String path) {

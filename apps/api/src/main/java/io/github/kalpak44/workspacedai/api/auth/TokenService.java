@@ -9,7 +9,10 @@ import org.springframework.security.oauth2.jwt.JwtEncoder;
 import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.stereotype.Service;
 
-/** Issues the JWTs the resource server validates; the subject is the user's id. */
+/**
+ * Issues the session JWTs the resource server validates once Auth0 has signed the user in. The
+ * subject, the user's id, is all they carry.
+ */
 @Service
 public class TokenService {
 
@@ -34,8 +37,6 @@ public class TokenService {
         JwtClaimsSet.builder()
             .issuer(ISSUER)
             .subject(user.getId().toString())
-            .claim(CurrentUser.EMAIL_CLAIM, user.getEmail())
-            .claim(CurrentUser.VERSION_CLAIM, user.getTokenVersion())
             .issuedAt(now)
             .expiresAt(expiresAt)
             .build();

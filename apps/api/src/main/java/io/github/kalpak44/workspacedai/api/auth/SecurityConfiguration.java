@@ -76,8 +76,8 @@ import tools.jackson.databind.json.JsonMapper;
  * ambient credential to forge, and a bearer request needs none, since a browser never adds that
  * header on its own.
  *
- * <p>Every request also looks the account up: a token outlives a deleted account or a changed
- * password otherwise, and the role is read from there so a change applies at once.
+ * <p>Every request also looks the account up: a token outlives a deleted account otherwise, and the
+ * role is read from there.
  */
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties(AuthProperties.class)
@@ -123,7 +123,8 @@ public class SecurityConfiguration {
       WorkspaceRepository workspaces,
       UserRepository users,
       ClientRegistrationRepository registrations,
-      AuthService auth)
+      AuthService auth,
+      AuthProperties properties)
       throws Exception {
     var publicPaths = publicPaths();
     var adminOnly = matcher(ADMIN_ONLY);
@@ -155,10 +156,13 @@ public class SecurityConfiguration {
             login ->
                 login
                     .loginPage(Auth0SignIn.AUTHORIZATION + "/" + Auth0SignIn.REGISTRATION)
+                    // In a cookie, so the callback can reach any instance.
                     .authorizationEndpoint(
                         a ->
                             a.authorizationRequestResolver(
-                                Auth0SignIn.authorizationRequests(registrations)))
+                                    Auth0SignIn.authorizationRequests(registrations))
+                                .authorizationRequestRepository(
+                                    new CookieAuthorizationRequests(properties.jwtSecret(), JSON)))
                     .successHandler(Auth0SignIn.signedIn(auth))
                     .failureHandler(Auth0SignIn.failed()))
         .oauth2ResourceServer(
@@ -218,18 +222,15 @@ public class SecurityConfiguration {
   }
 
   /**
-   * Turns away the token of an account deleted, or whose password changed, since it was issued, and
-   * grants the role the account has now. A token without a version predates them and is refused
-   * too.
+   * Turns away the token of an account deleted since it was issued, and grants the role the account
+   * has now, so a role Auth0 changed applies from the next sign-in on.
    */
   private static Converter<Jwt, AbstractAuthenticationToken> currentAccount(UserRepository users) {
     return jwt -> {
-      var version = jwt.getClaim(CurrentUser.VERSION_CLAIM) instanceof Number n ? n.intValue() : -1;
       var access =
           users
               .findAccessById(UUID.fromString(jwt.getSubject()))
-              .filter(a -> a.getTokenVersion() == version)
-              .orElseThrow(() -> new InvalidBearerTokenException("the token was revoked"));
+              .orElseThrow(() -> new InvalidBearerTokenException("the account no longer exists"));
       return new JwtAuthenticationToken(
           jwt, List.of(new SimpleGrantedAuthority(access.getRole().authority())), jwt.getSubject());
     };

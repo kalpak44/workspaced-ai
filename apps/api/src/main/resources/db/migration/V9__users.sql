@@ -11,15 +11,8 @@ CREATE TABLE app_user (
     created_at    TIMESTAMPTZ  NOT NULL DEFAULT now()
 );
 
--- The default account, admin/admin; its password is meant to be changed after the first sign-in.
-INSERT INTO app_user (id, username, password_hash)
-VALUES ('00000000-0000-0000-0000-000000000001', 'admin',
-        '{bcrypt}$2a$10$BakxDObqdCeh/EHgPpyXluazI0lBzdFPRLJaS0WTPbkcFqlfqopfm');
-
 -- Every workspace belongs to one user, and everything in it (sessions, secrets) follows from
--- the workspace. Workspaces made before accounts existed go to the default account.
-ALTER TABLE workspace ADD COLUMN owner_id UUID REFERENCES app_user (id) ON DELETE CASCADE;
-UPDATE workspace SET owner_id = '00000000-0000-0000-0000-000000000001';
-ALTER TABLE workspace ALTER COLUMN owner_id SET NOT NULL;
+-- the workspace.
+ALTER TABLE workspace ADD COLUMN owner_id UUID NOT NULL REFERENCES app_user (id) ON DELETE CASCADE;
 
 CREATE INDEX workspace_owner_id ON workspace (owner_id, created_at);

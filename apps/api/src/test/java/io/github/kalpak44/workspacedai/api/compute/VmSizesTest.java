@@ -6,7 +6,6 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
-import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import java.math.BigDecimal;
 import java.net.URI;
@@ -68,7 +67,7 @@ class VmSizesTest {
   void showsAnAdminTheCostAndEveryoneElseTheMarkedUpPrice() throws Exception {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     var name = "vera-" + UUID.randomUUID();
-    users.save(new UserEntity(name));
+    users.save(TestUsers.newUser(name));
 
     var admin = JSON.readTree(list(TestUsers.bearer(port)).body()).get(0);
     assertThat(admin.get("monthlyNet").decimalValue()).isEqualByComparingTo("5.49");

@@ -7,10 +7,12 @@ The whole app is served under the `/api/v1` context path, so the host root is fr
 
 Auth0 signs users in; the API keeps no passwords. A browser goes to `GET /oauth2/authorization/auth0` (add `?signup` to
 open Auth0's sign-up form, `?mfa=enroll` to set up two-factor authentication), signs in on Auth0's page, and comes back to
-`/login/oauth2/code/auth0`. There the API matches the account by Auth0 subject, links an account made before Auth0 by its
-email, or creates one, then redirects to `/` (`/?welcome` for a new account, which also gets a welcome notification and
-mail). An email Auth0 has not verified is refused with a redirect to `/login?error=unverified`; any other failure goes to
-`/login?error=failed`. A new account is an admin when its email is in `WORKSPACED_AUTH_ADMIN_EMAILS`.
+`/login/oauth2/code/auth0`. There the API finds the account by its Auth0 subject or creates one, takes the email and
+the role Auth0 has for the user now, and redirects to `/` (`/?welcome` for a new account, which also gets a welcome
+notification and mail). An email Auth0 has not verified is refused with a redirect to `/login?error=unverified`; any
+other failure goes to `/login?error=failed`. The user is an admin when Auth0 assigns them its `admin` role, which arrives
+in the ID token's `https://workspaced.online/roles` claim. The request in flight between the two legs is kept in an
+encrypted cookie rather than a server session, so the callback may reach any instance.
 
 Every other route needs a signed-in user, except `POST /auth/logout`, `GET /auth/end-session`, `GET /auth/csrf`, health
 and the API docs. After
@@ -32,16 +34,14 @@ password: `204`, or `502` when Auth0 cannot be reached. Accounts are managed in 
 The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
 show only the caller's, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
 against the owner before it runs. Another user's workspace answers `404`, exactly as one that does not exist.
-Workspaces created before accounts belong to admin.
 
 | Variable                | Default | Meaning                                                                       |
 |-------------------------|---------|-------------------------------------------------------------------------------|
-| `WORKSPACED_JWT_SECRET` | none    | HS256 signing key, at least 32 bytes, the same on every instance. Required: the API does not start without it. |
+| `WORKSPACED_JWT_SECRET` | none    | Signs the session tokens and download links, and keys the sign-in cookie; at least 32 bytes, the same on every instance. Required: the API does not start without it. |
 | `WORKSPACED_TOKEN_TTL`  | `12h`   | How long a sign-in lasts.                                                     |
 | `WORKSPACED_AUTH_CLIENT_SECRET` | none | The Auth0 application's secret. Required: the API does not start without it. |
-| `WORKSPACED_AUTH_CLIENT_ID` | the production application | The Auth0 application the API signs users in as. |
-| `WORKSPACED_AUTH_ISSUER` | `https://auth.workspaced.online/` | The Auth0 tenant. |
-| `WORKSPACED_AUTH_ADMIN_EMAILS` | none | Comma-separated emails that become admins on first sign-in. |
+| `WORKSPACED_AUTH_CLIENT_ID` | none | The Auth0 application the API signs users in as. Required. |
+| `WORKSPACED_AUTH_ISSUER` | none | The Auth0 tenant, ending in a slash, e.g. `https://auth.workspaced.online/`. Required. |
 
 ## OpenCode API reference
 
@@ -488,8 +488,12 @@ Docker, so `verify` needs a running Docker daemon.
 docker run -d --name workspaced-db -p 5432:5432 \
   -e POSTGRES_DB=workspaced -e POSTGRES_USER=workspaced -e POSTGRES_PASSWORD=workspaced postgres:18-alpine
 cd apps/api
+# Sign in through the web app on :5173; the Auth0 application allows that callback.
 WORKSPACED_DB_PASSWORD=workspaced WORKSPACED_JWT_SECRET=local-dev-signing-key-at-least-32-bytes \
-  mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui, admin password admin
+  WORKSPACED_AUTH_ISSUER=https://auth.workspaced.online/ \
+  WORKSPACED_AUTH_CLIENT_ID=dRdGOJHzotVdano2eR4VaQ2zSXnOltte \
+  WORKSPACED_AUTH_CLIENT_SECRET="$(vault kv get -field=auth0-client-secret secret/workspaced-secrets)" \
+  mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor
 mvn -DskipTests spring-boot:build-image                   # buildpacks image, no Dockerfile

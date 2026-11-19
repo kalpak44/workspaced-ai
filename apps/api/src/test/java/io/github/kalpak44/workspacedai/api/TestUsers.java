@@ -1,7 +1,7 @@
 package io.github.kalpak44.workspacedai.api;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
-import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
+import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.TokenService;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import java.nio.charset.StandardCharsets;
@@ -16,13 +16,14 @@ import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
 import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
 /**
- * The default admin account, and signed-in tokens. Signing in goes through Auth0, which no test
- * reaches, so a token is signed here the way the API signs one after a sign-in.
+ * The admin the tests sign in as (db/testdata seeds it), new accounts, and signed-in tokens.
+ * Signing in goes through Auth0, which no test reaches, so a token is signed here the way the API
+ * signs one after a sign-in.
  */
 public final class TestUsers {
 
-  public static final UUID ADMIN = UserEntity.DEFAULT_ADMIN_ID;
-  public static final String ADMIN_EMAIL = "pavel.usanli@gmail.com";
+  public static final UUID ADMIN = UUID.fromString("00000000-0000-0000-0000-000000000001");
+  public static final String ADMIN_EMAIL = "admin@example.com";
 
   // The key in the tests' application.properties.
   private static final String SECRET = "test-only-jwt-signing-key-not-for-production";
@@ -36,21 +37,31 @@ public final class TestUsers {
 
   /** The Authorization header value for admin, on whichever test server listens on that port. */
   public static String bearer(int port) {
-    return "Bearer " + token(ADMIN, 0);
+    return "Bearer " + token(ADMIN);
   }
 
-  /** The Authorization header value for that user as they are now. */
+  /** The Authorization header value for that user. */
   public static String bearer(UserEntity user) {
-    return "Bearer " + token(user.getId(), user.getTokenVersion());
+    return "Bearer " + token(user.getId());
   }
 
-  public static String token(UUID user, int version) {
+  /** An account as an Auth0 sign-in would make it, not yet saved. */
+  public static UserEntity newUser(String email) {
+    return new UserEntity("test|" + email, email, Role.USER);
+  }
+
+  public static UserEntity newUser(String email, String firstName, String lastName) {
+    var user = newUser(email);
+    user.setProfile(firstName, lastName, null);
+    return user;
+  }
+
+  public static String token(UUID user) {
     var now = Instant.now();
     var claims =
         JwtClaimsSet.builder()
             .issuer(TokenService.ISSUER)
             .subject(user.toString())
-            .claim(CurrentUser.VERSION_CLAIM, version)
             .issuedAt(now)
             .expiresAt(now.plus(Duration.ofHours(1)))
             .build();

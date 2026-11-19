@@ -24,21 +24,18 @@ public class AuthService {
   private final NotificationService notifications;
   private final PasswordResets passwordResets;
   private final MailService mail;
-  private final AuthProperties properties;
 
   public AuthService(
       UserRepository users,
       TokenService tokens,
       NotificationService notifications,
       PasswordResets passwordResets,
-      MailService mail,
-      AuthProperties properties) {
+      MailService mail) {
     this.users = users;
     this.tokens = tokens;
     this.notifications = notifications;
     this.passwordResets = passwordResets;
     this.mail = mail;
-    this.properties = properties;
   }
 
   /**
@@ -46,7 +43,7 @@ public class AuthService {
    */
   public record SignIn(TokenService.Token token, String email, boolean created) {}
 
-  /** The address Auth0 vouches for is the only thing an account is matched or created by. */
+  /** An account is only made for an address Auth0 has verified, since the app mails it. */
   public static class UnverifiedEmailException extends RuntimeException {
     UnverifiedEmailException() {
       super("the email address is not verified");
@@ -54,21 +51,18 @@ public class AuthService {
   }
 
   /**
-   * Finds the account the Auth0 user signs in as, linking an account made before Auth0 by its
-   * email, or creates one with a welcome among its notifications.
+   * Finds the account the Auth0 user signs in as, or creates one with a welcome among its
+   * notifications, and takes the email and role Auth0 has for them now.
    */
   @Transactional
-  public SignIn signIn(String subject, String email, boolean emailVerified) {
+  public SignIn signIn(String subject, String email, boolean emailVerified, Role role) {
     if (!emailVerified || email == null || email.isBlank()) {
       throw new UnverifiedEmailException();
     }
     var address = email.strip().toLowerCase(Locale.ROOT);
-    var existing =
-        users
-            .findByIdpSubject(subject)
-            .or(() -> users.findByEmail(address).filter(u -> u.getIdpSubject() == null));
-    var user = existing.orElseGet(() -> create(address));
-    user.signedInAs(subject, address);
+    var existing = users.findByIdpSubject(subject);
+    var user = existing.orElseGet(() -> create(subject, address, role));
+    user.signedIn(address, role);
     return new SignIn(tokens.issue(user), address, existing.isEmpty());
   }
 
@@ -112,10 +106,8 @@ public class AuthService {
     passwordResets.send(user(userId).getEmail());
   }
 
-  private UserEntity create(String email) {
-    var admin = properties.adminEmails().stream().anyMatch(email::equalsIgnoreCase);
-    var role = admin ? Role.ADMIN : Role.USER;
-    var user = users.saveAndFlush(new UserEntity(email, "", "", role));
+  private UserEntity create(String subject, String email, Role role) {
+    var user = users.saveAndFlush(new UserEntity(subject, email, role));
     notifications.send(user.getId(), Notifications.welcome(""));
     return user;
   }

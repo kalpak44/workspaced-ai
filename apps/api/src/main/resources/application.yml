@@ -67,18 +67,16 @@ workspaced:
     api-key: ${WORKSPACED_MAIL_API_KEY:}
     secret-key: ${WORKSPACED_MAIL_SECRET_KEY:}
   auth:
-    # Signs the login tokens (HS256), so it must be at least 32 bytes. No default, like the
-    # database password: every instance has to sign with the same key, or a token from one
-    # is a 401 at the next.
+    # Signs the session tokens issued after an Auth0 sign-in (HS256), and download links, so it
+    # must be at least 32 bytes. No default, like the database password: every instance has to
+    # sign with the same key, or a token from one is a 401 at the next.
     jwt-secret: ${WORKSPACED_JWT_SECRET}
     token-ttl: ${WORKSPACED_TOKEN_TTL:12h}
-    # Auth0 signs users in. The client id is public, but the secret has no default, so a
-    # missing one stops the start rather than every sign-in.
-    issuer: ${WORKSPACED_AUTH_ISSUER:https://auth.workspaced.online/}
-    client-id: ${WORKSPACED_AUTH_CLIENT_ID:dRdGOJHzotVdano2eR4VaQ2zSXnOltte}
+    # The Auth0 tenant and application users sign in with. No defaults, so an instance can only
+    # sign in against the tenant it was configured for.
+    issuer: ${WORKSPACED_AUTH_ISSUER}
+    client-id: ${WORKSPACED_AUTH_CLIENT_ID}
     client-secret: ${WORKSPACED_AUTH_CLIENT_SECRET}
-    # Comma-separated; each becomes an admin the first time it signs in.
-    admin-emails: ${WORKSPACED_AUTH_ADMIN_EMAILS:}
   # Top-ups through Stripe Checkout. Left unset, as it is locally, the balance and its history
   # still answer and starting a top-up answers 503.
   billing:

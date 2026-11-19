@@ -9,7 +9,6 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
-import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.Address;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.InlineImage;
@@ -198,7 +197,7 @@ class MailTest {
 
   @Test
   void refusesEveryoneButAnAdmin() throws Exception {
-    users.save(new UserEntity("ada@example.com"));
+    users.save(TestUsers.newUser("ada@example.com"));
     var ada = TestUsers.bearer(users.findByEmail("ada@example.com").orElseThrow());
     var template = "{\"signature\":\"\",\"footer\":\"\"}";
     assertThat(send("GET", "/mail", null, ada).statusCode()).isEqualTo(403);

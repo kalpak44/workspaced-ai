@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.tuple;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
-import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
@@ -52,7 +51,7 @@ class RecipesTest {
   void reset() {
     jdbc.update("DELETE FROM recipe");
     users.findAll().stream().filter(u -> !u.getId().equals(TestUsers.ADMIN)).forEach(users::delete);
-    users.save(new UserEntity("ada@example.com", "Ada", "Lovelace"));
+    users.save(TestUsers.newUser("ada@example.com", "Ada", "Lovelace"));
     admin = TestUsers.bearer(port);
     ada = TestUsers.bearer(users.findByEmail("ada@example.com").orElseThrow());
   }
@@ -165,7 +164,7 @@ class RecipesTest {
   @Test
   void ratesSomeoneElsesPublicRecipeOnceEach() throws Exception {
     var recipe = id(create("Shared", "PUBLIC", ada));
-    users.save(new UserEntity("grace@example.com"));
+    users.save(TestUsers.newUser("grace@example.com"));
     var grace = TestUsers.bearer(users.findByEmail("grace@example.com").orElseThrow());
 
     send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":5}", admin);

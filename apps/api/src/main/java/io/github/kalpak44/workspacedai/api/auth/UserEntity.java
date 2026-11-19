@@ -16,21 +16,17 @@ import java.util.UUID;
 @Table(name = "app_user")
 public class UserEntity {
 
-  /** The account V9 creates as admin, which owns every workspace made before accounts. */
-  public static final UUID DEFAULT_ADMIN_ID =
-      UUID.fromString("00000000-0000-0000-0000-000000000001");
-
   @Id
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
+  // The Auth0 user this account is; it never changes, while the email may.
+  @Column(name = "idp_subject", nullable = false, unique = true, updatable = false)
+  private String idpSubject;
+
   // Always lowercased, which the column checks.
   @Column(nullable = false, unique = true, length = 254)
   private String email;
-
-  // The Auth0 user this account signs in as; null until an account made before Auth0 is linked.
-  @Column(name = "idp_subject", unique = true)
-  private String idpSubject;
 
   @Column(name = "first_name", nullable = false, length = 100)
   private String firstName = "";
@@ -45,11 +41,7 @@ public class UserEntity {
   @Column(nullable = false, length = 20)
   private Role role = Role.USER;
 
-  // Every token carries the version it was issued at; a different one here means it is revoked.
-  @Column(name = "token_version", nullable = false)
-  private int tokenVersion;
-
-  // Set by the column default; read only to order the user list.
+  // Set by the column default.
   @Column(name = "created_at", insertable = false, updatable = false)
   private Instant createdAt;
 
@@ -57,18 +49,9 @@ public class UserEntity {
     // For JPA.
   }
 
-  public UserEntity(String email) {
+  public UserEntity(String idpSubject, String email, Role role) {
+    this.idpSubject = idpSubject;
     this.email = email;
-  }
-
-  public UserEntity(String email, String firstName, String lastName) {
-    this(email);
-    this.firstName = firstName;
-    this.lastName = lastName;
-  }
-
-  public UserEntity(String email, String firstName, String lastName, Role role) {
-    this(email, firstName, lastName);
     this.role = role;
   }
 
@@ -76,21 +59,12 @@ public class UserEntity {
     return id;
   }
 
-  public String getEmail() {
-    return email;
-  }
-
   public String getIdpSubject() {
     return idpSubject;
   }
 
-  /**
-   * Ties the account to the Auth0 user signing in, and takes the email Auth0 has verified, so a
-   * changed address reaches notifications too.
-   */
-  public void signedInAs(String idpSubject, String email) {
-    this.idpSubject = idpSubject;
-    this.email = email;
+  public String getEmail() {
+    return email;
   }
 
   public String getFirstName() {
@@ -109,16 +83,17 @@ public class UserEntity {
     return role;
   }
 
-  public void setRole(Role role) {
-    this.role = role;
-  }
-
-  public int getTokenVersion() {
-    return tokenVersion;
-  }
-
   public Instant getCreatedAt() {
     return createdAt;
+  }
+
+  /**
+   * Takes what Auth0 says about the user at this sign-in: the email it has verified, so a changed
+   * address reaches notifications too, and the role it assigns.
+   */
+  public void signedIn(String email, Role role) {
+    this.email = email;
+    this.role = role;
   }
 
   public void setProfile(String firstName, String lastName, String avatar) {

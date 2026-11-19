@@ -8,7 +8,6 @@ import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.Role;
-import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
@@ -95,7 +94,7 @@ class UsageChargingTest {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     var name = "payer-" + UUID.randomUUID();
-    user = users.save(new UserEntity(name)).getId();
+    user = users.save(TestUsers.newUser(name)).getId();
     bearer = TestUsers.bearer(users.findByEmail(name).orElseThrow());
   }
 
@@ -254,7 +253,8 @@ class UsageChargingTest {
     fund(MONTH);
     var workspace = created(create(bearer));
     var entity = users.findById(user).orElseThrow();
-    entity.setRole(Role.ADMIN);
+    // As the next sign-in does once Auth0 assigns the role.
+    entity.signedIn(entity.getEmail(), Role.ADMIN);
     users.save(entity);
     var before = balance();
 

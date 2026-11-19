@@ -15,7 +15,5 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
   interface Access {
     Role getRole();
-
-    int getTokenVersion();
   }
 }

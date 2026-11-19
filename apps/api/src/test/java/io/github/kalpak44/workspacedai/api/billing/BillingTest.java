@@ -6,7 +6,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
-import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
@@ -256,7 +255,7 @@ class BillingTest {
   @Test
   void showsNoOneElsesTopUp() throws Exception {
     var id = UUID.fromString(read(startTopUp(1000)).get("id").asString());
-    var other = users.save(new UserEntity("billing-other-" + UUID.randomUUID()));
+    var other = users.save(TestUsers.newUser("billing-other-" + UUID.randomUUID()));
 
     assertThatThrownBy(() -> billing.refresh(other.getId(), id))
         .isInstanceOf(ResponseStatusException.class)
@@ -402,7 +401,7 @@ class BillingTest {
 
   /** A user who is not an admin, with a saved card and automatic top-ups of 20 below 10. */
   private UUID payer() {
-    var user = users.save(new UserEntity("billing-payer-" + UUID.randomUUID())).getId();
+    var user = users.save(TestUsers.newUser("billing-payer-" + UUID.randomUUID())).getId();
     billing.startCardSetup(user);
     STRIPE.saveCard(STRIPE.lastSessionId(), "pm_payer", "visa", "4242");
     billing.confirmCard(user, STRIPE.lastSessionId());

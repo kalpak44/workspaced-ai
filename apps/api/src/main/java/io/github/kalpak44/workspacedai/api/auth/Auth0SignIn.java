@@ -21,9 +21,9 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
  * Signing in through Auth0. The browser goes to its hosted login and comes back to the callback,
- * where the API issues its own token as the sign-in cookie and sends the browser on to the app. The
- * authorization request in flight is the only thing kept in a session, and only for that round
- * trip.
+ * where the API issues its own token as the sign-in cookie and sends the browser on to the app.
+ * Nothing is kept on the server in between, so any instance can take the callback: see {@link
+ * CookieAuthorizationRequests}.
  */
 @Configuration(proxyBeanMethods = false)
 class Auth0SignIn {
@@ -31,6 +31,10 @@ class Auth0SignIn {
   static final String REGISTRATION = "auth0";
   static final String AUTHORIZATION = "/oauth2/authorization";
   static final String CALLBACK = "/login/oauth2/code/*";
+
+  // Auth0 only passes a custom claim through when it is namespaced to a URL of our own.
+  static final String ROLES_CLAIM = "https://workspaced.online/roles";
+  static final String ADMIN_ROLE = "admin";
 
   // Asks for MFA; the tenant's post-login Action enrolls a user who has not set it up yet.
   private static final String MFA = "http://schemas.openid.net/pape/policies/2007/06/multi-factor";
@@ -104,18 +108,19 @@ class Auth0SignIn {
 
   /**
    * Sends the browser to the app signed in, and greets a new account there and by mail. An email
-   * Auth0 has not verified is refused, since the account is matched by it; so is one another
-   * account already holds.
+   * Auth0 has not verified is refused, since the app mails it; so is one another account holds.
    */
   static AuthenticationSuccessHandler signedIn(AuthService auth) {
     return (request, response, authentication) -> {
-      endRoundTrip(request);
       var user = (OidcUser) authentication.getPrincipal();
       AuthService.SignIn signIn;
       try {
         signIn =
             auth.signIn(
-                user.getSubject(), user.getEmail(), Boolean.TRUE.equals(user.getEmailVerified()));
+                user.getSubject(),
+                user.getEmail(),
+                Boolean.TRUE.equals(user.getEmailVerified()),
+                role(user));
       } catch (AuthService.UnverifiedEmailException _) {
         response.sendRedirect("/login?error=unverified");
         return;
@@ -135,18 +140,14 @@ class Auth0SignIn {
     };
   }
 
-  /** Auth0 turned the user away, or the callback did not check out. */
-  static AuthenticationFailureHandler failed() {
-    return (request, response, exception) -> {
-      endRoundTrip(request);
-      response.sendRedirect("/login?error=failed");
-    };
+  /** The roles Auth0 assigned the user, which the tenant's post-login Action puts in this claim. */
+  static Role role(OidcUser user) {
+    var roles = user.getClaimAsStringList(ROLES_CLAIM);
+    return roles != null && roles.contains(ADMIN_ROLE) ? Role.ADMIN : Role.USER;
   }
 
-  private static void endRoundTrip(HttpServletRequest request) {
-    var session = request.getSession(false);
-    if (session != null) {
-      session.invalidate();
-    }
+  /** Auth0 turned the user away, or the callback did not check out. */
+  static AuthenticationFailureHandler failed() {
+    return (request, response, exception) -> response.sendRedirect("/login?error=failed");
   }
 }
