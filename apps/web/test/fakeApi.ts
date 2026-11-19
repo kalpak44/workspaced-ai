@@ -420,8 +420,8 @@ export function installFakeApi(
     if (!auth.signedIn) return json({}, 401);
     if (url.endsWith("/account/profile")) {
       if (auth.failProfile) return json({}, 500);
-      const { avatar, ...names } = JSON.parse(String(init?.body));
-      auth.account = { ...auth.account, ...names, avatar: avatar || null };
+      const { firstName, lastName } = JSON.parse(String(init?.body));
+      auth.account = { ...auth.account, firstName, lastName };
     } else if (url.endsWith("/account/password-reset")) {
       if (auth.failReset) return json({}, 500);
       auth.resetRequests++;

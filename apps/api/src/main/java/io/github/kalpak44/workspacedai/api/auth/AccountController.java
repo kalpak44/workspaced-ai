@@ -22,10 +22,7 @@ public class AccountController implements AccountApi {
   public ResponseEntity<Account> updateProfile(ProfileRequest request) {
     return ResponseEntity.ok(
         service.updateProfile(
-            CurrentUser.id(),
-            request.trimmedFirstName(),
-            request.trimmedLastName(),
-            request.avatarOrNull()));
+            CurrentUser.id(), request.trimmedFirstName(), request.trimmedLastName()));
   }
 
   @Override

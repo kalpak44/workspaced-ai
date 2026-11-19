@@ -4,8 +4,8 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import java.util.UUID;
 
 /**
- * No avatar: a picture of up to 2 MB per card would make a page of recipes heavy. No email: every
- * user sees the author, and an address is not theirs to share.
+ * The name is read from Auth0 as recipes are shown, and is Unknown when Auth0 has none. No email or
+ * picture: every user sees the author, and those are not theirs to share.
  */
 @Schema(description = "Who wrote a recipe")
 public record RecipeAuthor(

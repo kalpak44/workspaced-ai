@@ -1,5 +1,5 @@
-import { Camera, KeyRound, Mail, ShieldCheck, UserRound } from "lucide-react";
-import { type ReactNode, useRef, useState } from "react";
+import { KeyRound, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { navigate } from "../../hooks/useRoute";
 import { Avatar, Button, TextField } from "../atoms";
@@ -8,7 +8,7 @@ import { MailPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
 const NOTES = {
-  profile: "Your photo, name and preferences.",
+  profile: "Your photo and name.",
   mail: "Mail sent from the platform's own addresses.",
 };
 
@@ -23,29 +23,21 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "" };
   const [names, setNames] = useState(saved);
   const [savingProfile, setSavingProfile] = useState(false);
-  // The photo shown while its save is in flight; null shows the account's own.
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-  const [savingAvatar, setSavingAvatar] = useState(false);
-  const avatar = avatarPreview ?? account?.avatar ?? "";
   // The address a reset link went to; empty until one has been sent.
   const [resetSentTo, setResetSentTo] = useState("");
   const [resetError, setResetError] = useState("");
   const [sendingReset, setSendingReset] = useState(false);
   const [notice, setNotice] = useState("");
-  const [avatarError, setAvatarError] = useState("");
-  const fileInput = useRef<HTMLInputElement>(null);
   // Only an admin may send mail; the API refuses anyone else, so the tab is not offered.
   const isAdmin = account?.role === "ADMIN";
   const namesChanged = names.firstName !== saved.firstName || names.lastName !== saved.lastName;
 
-  // The photo saves on its own, sending the name as the account already has it, so an unsaved
-  // edit here never rides along with a new photo, or the other way round.
   async function submitProfile() {
     const trimmed = { firstName: names.firstName.trim(), lastName: names.lastName.trim() };
     setSavingProfile(true);
     try {
       if (namesChanged) {
-        await saveProfile({ ...trimmed, avatar: account?.avatar ?? null });
+        await saveProfile(trimmed);
         setNames(trimmed);
       }
       setNotice("Profile updated.");
@@ -53,22 +45,6 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
       setNotice("Could not save your profile. Please try again.");
     } finally {
       setSavingProfile(false);
-    }
-  }
-
-  async function saveAvatar(next: string | null) {
-    setSavingAvatar(true);
-    setAvatarPreview(next ?? "");
-    setAvatarError("");
-    setNotice("");
-    try {
-      await saveProfile({ ...saved, avatar: next });
-      setNotice(next ? "Photo updated." : "Photo removed.");
-    } catch {
-      setAvatarError("Could not save the photo. Please try again.");
-    } finally {
-      setAvatarPreview(null);
-      setSavingAvatar(false);
     }
   }
 
@@ -85,18 +61,6 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
     }
   }
 
-  function changeAvatar(file: File | undefined) {
-    if (!file) return;
-    if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type) || file.size > 2 * 1024 * 1024) {
-      setAvatarError("Choose a JPG, PNG, WebP, or GIF image smaller than 2 MB.");
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = () => void saveAvatar(String(reader.result));
-    reader.onerror = () => setAvatarError("This image could not be read. Please try another.");
-    reader.readAsDataURL(file);
-  }
-
   return (
     <>
     <PageHeader title="General settings" description={NOTES[section]} />
@@ -110,22 +74,10 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
               <section aria-label="Profile" className="card overflow-hidden">
                 <CardHeader title="Profile" description="How you appear to other people on this installation." />
                 <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
-                  <SettingRow title="Photo" hint="JPG, PNG, WebP or GIF, up to 2 MB. Saved as soon as you pick it.">
-                    <div className="flex flex-wrap items-center gap-4">
-                      <button type="button" aria-label={avatar ? "Change photo" : "Upload photo"} tabIndex={-1} onClick={() => fileInput.current?.click()}
-                        className={`group relative flex shrink-0 rounded-full ring-4 ring-zinc-100 transition-opacity dark:ring-zinc-800 ${savingAvatar ? "opacity-60" : ""}`}>
-                        <Avatar src={avatar || undefined} large />
-                        <span aria-hidden className="absolute inset-0 flex items-center justify-center rounded-full bg-zinc-950/50 text-white opacity-0 transition-opacity group-hover:opacity-100">
-                          <Camera className="size-5" />
-                        </span>
-                      </button>
-                      <div className="flex flex-wrap gap-2">
-                        <Button label={avatar ? "Change photo" : "Upload photo"} icon={Camera} variant="secondary" busy={savingAvatar} onClick={() => fileInput.current?.click()} />
-                        {avatar && !savingAvatar && <Button label="Remove" variant="secondary" onClick={() => void saveAvatar(null)} />}
-                      </div>
-                      <input ref={fileInput} type="file" accept="image/jpeg,image/png,image/webp,image/gif" aria-label="Upload avatar" className="hidden" onChange={(event) => { void changeAvatar(event.target.files?.[0]); event.target.value = ""; }} />
-                    </div>
-                    {avatarError && <p role="alert" className="mt-3 text-sm text-rose-600 dark:text-rose-400">{avatarError}</p>}
+                  <SettingRow title="Photo" hint="Your Gravatar for this email address, or your initials when there is none.">
+                    <span className="flex w-fit rounded-full ring-4 ring-zinc-100 dark:ring-zinc-800">
+                      <Avatar src={account?.avatar ?? undefined} large />
+                    </span>
                   </SettingRow>
                   <form aria-label="Details" className="divide-y divide-zinc-200 dark:divide-zinc-800" onSubmit={(event) => { event.preventDefault(); void submitProfile(); }}>
                     <SettingRow title="Name" hint="Shown in the account menu and on recipes you share.">
@@ -136,7 +88,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
                     </SettingRow>
                     <div className="flex flex-wrap items-center justify-between gap-3 bg-zinc-50/80 px-5 py-3 sm:px-6 dark:bg-zinc-950/40">
                       <p className="text-xs text-zinc-500 dark:text-zinc-400">
-                        {namesChanged ? <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden className="size-1.5 rounded-full bg-amber-500" />Unsaved changes</span> : "Your photo saves on its own; the rest saves here."}
+                        {namesChanged ? <span className="flex items-center gap-1.5 font-medium text-amber-700 dark:text-amber-400"><span aria-hidden className="size-1.5 rounded-full bg-amber-500" />Unsaved changes</span> : "Changes save here."}
                       </p>
                       <div className="flex items-center gap-2">
                         {namesChanged && !savingProfile && (

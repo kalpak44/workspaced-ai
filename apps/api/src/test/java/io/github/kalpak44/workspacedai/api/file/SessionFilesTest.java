@@ -176,7 +176,8 @@ class SessionFilesTest {
 
   @Test
   void signsTokensThatExpireAndCannotBeAltered() {
-    var auth = new AuthProperties("k".repeat(32), Duration.ofHours(1), null, null, null, null);
+    var auth =
+        new AuthProperties("k".repeat(32), Duration.ofHours(1), null, null, null, null, null);
     var now = Instant.parse("2026-11-12T10:00:00Z");
     var links = new FileLinks(auth, JSON, Clock.fixed(now, ZoneOffset.UTC));
     var token = links.sign(workspace, session, "a.txt", now.plusSeconds(60));
@@ -188,7 +189,8 @@ class SessionFilesTest {
         .isEmpty();
     var other =
         new FileLinks(
-            new AuthProperties("o".repeat(32), Duration.ofHours(1), null, null, null, null), JSON);
+            new AuthProperties("o".repeat(32), Duration.ofHours(1), null, null, null, null, null),
+            JSON);
     assertThat(other.verify(token)).isEmpty();
   }
 

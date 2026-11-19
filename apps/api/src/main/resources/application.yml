@@ -77,6 +77,9 @@ workspaced:
     issuer: ${WORKSPACED_AUTH_ISSUER}
     client-id: ${WORKSPACED_AUTH_CLIENT_ID}
     client-secret: ${WORKSPACED_AUTH_CLIENT_SECRET}
+    # Profiles are read and names saved here, on the tenant's own domain: the custom one does
+    # not serve the Management API.
+    management-api: ${WORKSPACED_AUTH_MANAGEMENT_API}
   # Top-ups through Stripe Checkout. Left unset, as it is locally, the balance and its history
   # still answer and starting a top-up answers 503.
   billing:

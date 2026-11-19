@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import type { Recipe } from "../src/api/recipesApi";
-import { applyPrompt, parseDraft, serializeDraft } from "../src/lib/recipes";
+import { applyPrompt, authorName, parseDraft, serializeDraft } from "../src/lib/recipes";
 import { installFakeApi } from "./fakeApi";
 
 vi.mock("@xterm/xterm", () => ({ Terminal: class {} }));
@@ -43,6 +43,11 @@ function open(path: string) {
 }
 
 describe("recipe store", () => {
+  it("names an author Auth0 knows no name for without a stray space", () => {
+    expect(authorName({ firstName: "Unknown", lastName: "" })).toBe("Unknown");
+    expect(authorName({ firstName: "Grace", lastName: "Hopper" })).toBe("Grace Hopper");
+  });
+
   it("shows public recipes as cards and keeps private ones in their own tab", async () => {
     api.recipes.rows.push(recipe(), recipe({ id: "notes", title: "My notes app", visibility: "PRIVATE", author: { ...GRACE, id: "admin-id" }, publishedAt: null }));
     const user = userEvent.setup();

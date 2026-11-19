@@ -187,8 +187,6 @@ public class RecipeStore {
                 recipe.get(RecipeEntity_.updatedAt).alias(RecipeEntity_.UPDATED_AT),
                 recipe.get(RecipeEntity_.publishedAt).alias(RecipeEntity_.PUBLISHED_AT),
                 author.get(UserEntity_.id).alias(AUTHOR_ID),
-                author.get(UserEntity_.firstName).alias(UserEntity_.FIRST_NAME),
-                author.get(UserEntity_.lastName).alias(UserEntity_.LAST_NAME),
                 average.alias(AVERAGE),
                 count.alias(COUNT),
                 own.alias(MY_RATING)));
@@ -244,10 +242,8 @@ public class RecipeStore {
         row.get(RecipeEntity_.CATEGORY, String.class),
         tags == null ? List.of() : List.copyOf(tags),
         row.get(RecipeEntity_.VISIBILITY, Visibility.class),
-        new RecipeAuthor(
-            author,
-            row.get(UserEntity_.FIRST_NAME, String.class),
-            row.get(UserEntity_.LAST_NAME, String.class)),
+        // The name is Auth0's; RecipeAuthors adds it once no transaction is open.
+        new RecipeAuthor(author, null, null),
         row.get(RecipeEntity_.CREATED_AT, Instant.class),
         row.get(RecipeEntity_.UPDATED_AT, Instant.class),
         row.get(RecipeEntity_.PUBLISHED_AT, Instant.class),

@@ -48,15 +48,15 @@ public interface AccountApi {
       operationId = "updateProfile",
       summary = "Update the profile",
       description =
-          "Replaces the first name, last name and avatar. Surrounding whitespace is trimmed from "
-              + "the names.")
+          "Replaces the first and last name in the user's Auth0 profile. Surrounding whitespace "
+              + "is trimmed.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",
       content = @Content(mediaType = JSON, schema = @Schema(implementation = Account.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "A name is too long, or the avatar is not a JPG, PNG, WebP or GIF of 2 MB.",
+      description = "A name is longer than 100 characters.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

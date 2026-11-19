@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { browser } from "../src/api/accountApi";
@@ -61,37 +61,39 @@ describe("general settings", () => {
     expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
   });
 
-  it("saves a photo as soon as it is picked, apart from an unsaved name, then removes it", async () => {
+  it("shows the account's picture from Auth0, and the default without one", async () => {
     const api = installFakeApi();
-    const user = userEvent.setup();
-    await renderSettings();
-    await user.type(screen.getByLabelText("First name"), "Draft");
-    const file = new File(["image"], "avatar.png", { type: "image/png" });
-    await user.upload(screen.getByLabelText("Upload avatar"), file);
-    expect(await screen.findByText("Photo updated.")).toBeInTheDocument();
-    // In the page and in the account menu.
-    await waitFor(() => expect(screen.getAllByAltText("Your avatar")).toHaveLength(2));
-    expect(api.auth.account.avatar).toMatch(/^data:image\/png;base64,/);
-    expect(api.auth.account.firstName).toBe("");
-    expect(screen.getByLabelText("First name")).toHaveValue("Draft");
+    api.auth.account = { ...api.auth.account, avatar: "https://s.gravatar.com/avatar/abc?s=480&d=mp" };
+    const view = await renderSettings();
+    const profile = screen.getByRole("region", { name: "Profile" });
+    expect(within(profile).getByAltText("Your avatar")).toHaveAttribute("src", "https://s.gravatar.com/avatar/abc?s=480&d=mp");
+    expect(within(profile).getByText(/Your Gravatar for this email address/)).toBeInTheDocument();
+    // Auth0 owns the picture, so there is nothing here to upload or remove.
+    expect(screen.queryByLabelText("Upload avatar")).not.toBeInTheDocument();
+    expect(within(profile).queryByRole("button", { name: /photo|Remove/ })).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Remove" }));
-    expect(await screen.findByText("Photo removed.")).toBeInTheDocument();
-    expect(screen.queryByAltText("Your avatar")).not.toBeInTheDocument();
-    expect(api.auth.account.avatar).toBeNull();
+    view.unmount();
+    resetAccount();
+    api.auth.account = { ...api.auth.account, avatar: null };
+    await renderSettings();
+    expect(within(screen.getByRole("region", { name: "Profile" })).getByRole("img", { name: "Default avatar" })).toBeInTheDocument();
   });
 
-  it("rejects oversized avatars and reports save failures honestly", async () => {
+  it("sends only the names, and reports a save failure honestly", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     await renderSettings();
-    await user.upload(screen.getByLabelText("Upload avatar"), new File([new Uint8Array(2 * 1024 * 1024 + 1)], "large.png", { type: "image/png" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("smaller than 2 MB");
     await user.type(screen.getByLabelText("First name"), "Ada");
     api.auth.failProfile = true;
     await user.click(screen.getByRole("button", { name: "Save changes" }));
     expect(await screen.findByText(/Could not save your profile/)).toBeInTheDocument();
     expect(screen.getByLabelText("First name")).toHaveValue("Ada");
+
+    api.auth.failProfile = false;
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(await screen.findByText("Profile updated.")).toBeInTheDocument();
+    const [, init] = api.fetchFn.mock.calls.findLast(([url]) => String(url).endsWith("/account/profile"))!;
+    expect(JSON.parse(String(init?.body))).toEqual({ firstName: "Ada", lastName: "" });
   });
 
   it("emails a password reset link and says where it went", async () => {

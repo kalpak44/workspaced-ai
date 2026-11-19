@@ -29,6 +29,24 @@ public record Recipe(
     @Schema(description = "Markdown", example = "1. Ask the user to add `DB_PASSWORD` as a secret.")
         String content) {
 
+  Recipe withAuthor(RecipeAuthor author) {
+    return new Recipe(
+        id,
+        title,
+        summary,
+        category,
+        tags,
+        visibility,
+        author,
+        createdAt,
+        updatedAt,
+        publishedAt,
+        rating,
+        myRating,
+        mine,
+        content);
+  }
+
   RecipeSummary toSummary() {
     return new RecipeSummary(
         id,

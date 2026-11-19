@@ -95,7 +95,7 @@ class UsageChargingTest {
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     var name = "payer-" + UUID.randomUUID();
     user = users.save(TestUsers.newUser(name)).getId();
-    bearer = TestUsers.bearer(users.findByEmail(name).orElseThrow());
+    bearer = TestUsers.bearer(users.findByIdpSubject(TestUsers.subject(name)).orElseThrow());
   }
 
   @Test
@@ -254,7 +254,7 @@ class UsageChargingTest {
     var workspace = created(create(bearer));
     var entity = users.findById(user).orElseThrow();
     // As the next sign-in does once Auth0 assigns the role.
-    entity.signedIn(entity.getEmail(), Role.ADMIN);
+    entity.signedIn(Role.ADMIN);
     users.save(entity);
     var before = balance();
 

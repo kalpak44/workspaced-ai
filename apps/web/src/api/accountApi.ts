@@ -8,7 +8,7 @@ export interface Account {
   readonly email: string;
   readonly firstName: string;
   readonly lastName: string;
-  /** A data: URL of the picture; null for the default. */
+  /** Auth0's picture of the user, Gravatar or their initials; null for the default. */
   readonly avatar: string | null;
   /** An admin also manages the platform's mail. */
   readonly role: Role;
@@ -16,10 +16,10 @@ export interface Account {
 
 export type Role = "USER" | "ADMIN";
 
+/** The names are all a user edits here; Auth0 owns the email and the picture. */
 export interface Profile {
   readonly firstName: string;
   readonly lastName: string;
-  readonly avatar: string | null;
 }
 
 /** Who is signed in, or null when no one is. */
@@ -71,7 +71,7 @@ export function endAuth0Session(): void {
 }
 
 export async function updateProfile(profile: Profile): Promise<Account> {
-  const body = JSON.stringify({ ...profile, avatar: profile.avatar ?? "" });
+  const body = JSON.stringify({ firstName: profile.firstName, lastName: profile.lastName });
   return (await send(`${ACCOUNT_URL}/profile`, { method: "PUT", body })).json();
 }
 

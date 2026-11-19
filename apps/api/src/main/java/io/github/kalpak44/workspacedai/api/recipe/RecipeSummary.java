@@ -25,4 +25,22 @@ public record RecipeSummary(
     RecipeRating rating,
     @Schema(description = "The stars the caller gave it; null when they have not rated it")
         Integer myRating,
-    @Schema(description = "Whether the caller wrote it") boolean mine) {}
+    @Schema(description = "Whether the caller wrote it") boolean mine) {
+
+  RecipeSummary withAuthor(RecipeAuthor author) {
+    return new RecipeSummary(
+        id,
+        title,
+        summary,
+        category,
+        tags,
+        visibility,
+        author,
+        createdAt,
+        updatedAt,
+        publishedAt,
+        rating,
+        myRating,
+        mine);
+  }
+}

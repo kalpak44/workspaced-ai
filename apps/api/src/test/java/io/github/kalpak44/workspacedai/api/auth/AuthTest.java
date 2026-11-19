@@ -34,7 +34,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -109,17 +108,17 @@ class AuthTest {
   }
 
   @Test
-  void matchesTheAccountByItsAuth0SubjectAndFollowsItsEmail() throws Exception {
-    var first = auth.signIn("auth0|ada", "Ada@Example.com", true, Role.USER);
+  void matchesTheAccountByItsAuth0SubjectAndKeepsNoProfile() throws Exception {
+    var first = auth.signIn("test|ada@example.com", "ada@example.com", true, Role.USER);
     assertThat(first.created()).isTrue();
-    var account =
-        JSON.readTree(send("GET", "/account", "Bearer " + first.token().value(), null).body());
-    assertThat(account.get("email").asString()).isEqualTo("ada@example.com");
-
-    var again = auth.signIn("auth0|ada", "lovelace@example.com", true, Role.USER);
+    var again = auth.signIn("test|ada@example.com", "ada@example.com", true, Role.USER);
     assertThat(again.created()).isFalse();
-    assertThat(users.findByIdpSubject("auth0|ada"))
-        .hasValueSatisfying(u -> assertThat(u.getEmail()).isEqualTo("lovelace@example.com"));
+
+    // The email shown is Auth0's, read as the account is asked for.
+    var account =
+        JSON.readTree(send("GET", "/account", "Bearer " + again.token().value(), null).body());
+    assertThat(account.get("email").asString()).isEqualTo("ada@example.com");
+    assertThat(account.get("avatar").asString()).isEqualTo("https://pictures.test/ada@example.com");
   }
 
   @Test
@@ -161,15 +160,7 @@ class AuthTest {
   void refusesAnEmailAuth0HasNotVerified() {
     assertThatThrownBy(() -> auth.signIn("auth0|ada", "ada@example.com", false, Role.USER))
         .isInstanceOf(AuthService.UnverifiedEmailException.class);
-    assertThat(users.findByEmail("ada@example.com")).isEmpty();
-  }
-
-  @Test
-  void refusesAnEmailAnotherAccountHolds() {
-    auth.signIn("auth0|ada", "ada@example.com", true, Role.USER);
-    assertThatThrownBy(() -> auth.signIn("auth0|mallory", "ada@example.com", true, Role.USER))
-        .isInstanceOf(DataIntegrityViolationException.class);
-    assertThat(users.findByIdpSubject("auth0|mallory")).isEmpty();
+    assertThat(users.findByIdpSubject(TestUsers.subject("ada@example.com"))).isEmpty();
   }
 
   @Test
@@ -255,40 +246,31 @@ class AuthTest {
   }
 
   @Test
-  void keepsTheProfileOnTheAccount() throws Exception {
+  void savesTheNamesToAuth0() throws Exception {
     var bearer = bearerFor("ada@example.com");
-    var avatar = "data:image/png;base64,iVBORw0KGgo=";
     var updated =
         send(
             "PUT",
             "/account/profile",
             bearer,
-            "{\"firstName\":\" Ada \",\"lastName\":\"Lovelace\",\"avatar\":\"" + avatar + "\"}");
+            "{\"firstName\":\" Ada \",\"lastName\":\"Lovelace\"}");
     assertThat(updated.statusCode()).isEqualTo(200);
 
     var account = JSON.readTree(send("GET", "/account", bearer, null).body());
     assertThat(account.get("firstName").asString()).isEqualTo("Ada");
     assertThat(account.get("lastName").asString()).isEqualTo("Lovelace");
-    assertThat(account.get("avatar").asString()).isEqualTo(avatar);
-
-    var removed =
-        send(
-            "PUT",
-            "/account/profile",
-            bearer,
-            "{\"firstName\":\"Ada\",\"lastName\":\"\",\"avatar\":\"\"}");
-    assertThat(JSON.readTree(removed.body()).get("avatar").isNull()).isTrue();
   }
 
   @Test
-  void refusesAnAvatarThatIsNotAnImage() throws Exception {
+  void refusesANameOverAHundredCharacters() throws Exception {
     var bearer = bearerFor("ada@example.com");
+    var long_ = "a".repeat(101);
     var response =
         send(
             "PUT",
             "/account/profile",
             bearer,
-            "{\"firstName\":\"\",\"lastName\":\"\",\"avatar\":\"data:text/html;base64,PGI+\"}");
+            "{\"firstName\":\"" + long_ + "\",\"lastName\":\"\"}");
     assertThat(response.statusCode()).isEqualTo(400);
   }
 
@@ -365,7 +347,7 @@ class AuthTest {
   void refusesTheTokenOfADeletedAccount() throws Exception {
     var ada = bearerFor("ada@example.com");
     assertThat(send("GET", "/workspaces", ada, null).statusCode()).isEqualTo(200);
-    users.delete(users.findByEmail("ada@example.com").orElseThrow());
+    users.delete(users.findByIdpSubject(TestUsers.subject("ada@example.com")).orElseThrow());
     assertThat(send("GET", "/workspaces", ada, null).statusCode()).isEqualTo(401);
     assertThat(send("GET", "/model-providers", ada, null).statusCode()).isEqualTo(401);
   }
@@ -416,7 +398,9 @@ class AuthTest {
 
   private String bearerFor(String email) {
     return TestUsers.bearer(
-        users.findByEmail(email).orElseGet(() -> users.save(TestUsers.newUser(email))));
+        users
+            .findByIdpSubject(TestUsers.subject(email))
+            .orElseGet(() -> users.save(TestUsers.newUser(email))));
   }
 
   private static OidcUser oidcUser(List<String> roles) {

@@ -7,8 +7,11 @@ import java.util.UUID;
 /** The calls billing makes to Stripe; {@link HttpStripe} makes them over its REST API. */
 public interface Stripe {
 
-  /** A new customer for the account, tagged with its user id. */
-  String createCustomer(UUID userId, String name);
+  /**
+   * A new customer for the account, tagged with its user id and nothing else: Checkout asks for the
+   * email and billing details it needs, so the app hands Stripe no personal data of its own.
+   */
+  String createCustomer(UUID userId);
 
   /**
    * A Checkout Session that charges the amount once, plus VAT at the configured rate, and has

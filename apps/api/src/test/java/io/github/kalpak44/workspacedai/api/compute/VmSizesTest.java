@@ -74,7 +74,11 @@ class VmSizesTest {
     assertThat(admin.get("monthlyGross").decimalValue()).isEqualByComparingTo("6.59");
 
     var user =
-        JSON.readTree(list(TestUsers.bearer(users.findByEmail(name).orElseThrow())).body()).get(0);
+        JSON.readTree(
+                list(TestUsers.bearer(
+                        users.findByIdpSubject(TestUsers.subject(name)).orElseThrow()))
+                    .body())
+            .get(0);
     assertThat(user.get("monthlyNet").decimalValue()).isEqualByComparingTo("7.41");
     assertThat(user.get("monthlyGross").decimalValue()).isEqualByComparingTo("8.90");
     assertThat(user.get("serverType").asString()).isEqualTo("cx23");

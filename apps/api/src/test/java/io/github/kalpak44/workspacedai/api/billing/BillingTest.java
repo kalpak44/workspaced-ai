@@ -107,7 +107,10 @@ class BillingTest {
         .containsEntry(
             "success_url", "https://ai.workspaced.test/billing?top_up=" + id + "&outcome=success");
     assertThat(STRIPE.idempotencyKeys.getLast()).isEqualTo(id);
-    assertThat(STRIPE.customers.getLast()).containsEntry("name", TestUsers.ADMIN_EMAIL);
+    // Stripe learns who the user is from Checkout, never from the app.
+    assertThat(STRIPE.customers.getLast())
+        .containsOnlyKeys("metadata[user_id]")
+        .containsEntry("metadata[user_id]", TestUsers.ADMIN.toString());
 
     var topUp = read(get("/billing")).get("topUps").get(0);
     assertThat(topUp.get("status").asString()).isEqualTo("PENDING");

@@ -21,7 +21,6 @@ import java.util.Objects;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
-import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -317,7 +316,7 @@ public class BillingService {
     return accounts
         .findById(user)
         .map(BillingAccountEntity::getStripeCustomerId)
-        .orElseGet(() -> claimCustomer(user, stripe.createCustomer(user, name(user))));
+        .orElseGet(() -> claimCustomer(user, stripe.createCustomer(user)));
   }
 
   /** Asks Stripe where a top-up stands, for the browser coming back from checkout. */
@@ -547,20 +546,6 @@ public class BillingService {
     return topUps
         .findByIdAndUserId(topUpId, user)
         .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no such top-up"));
-  }
-
-  private String name(UUID user) {
-    return users
-        .findById(user)
-        .map(
-            u -> {
-              var full =
-                  Stream.of(u.getFirstName(), u.getLastName())
-                      .filter(part -> part != null && !part.isBlank())
-                      .collect(Collectors.joining(" "));
-              return full.isEmpty() ? u.getEmail() : full;
-            })
-        .orElseThrow(() -> new IllegalStateException("no user " + user));
   }
 
   private static long micros(BigDecimal amount) {

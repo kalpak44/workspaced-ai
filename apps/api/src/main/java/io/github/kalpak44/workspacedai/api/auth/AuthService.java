@@ -4,7 +4,6 @@ import io.github.kalpak44.workspacedai.api.mail.MailService;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import java.util.List;
-import java.util.Locale;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -24,18 +23,21 @@ public class AuthService {
   private final NotificationService notifications;
   private final PasswordResets passwordResets;
   private final MailService mail;
+  private final Auth0Users auth0Users;
 
   public AuthService(
       UserRepository users,
       TokenService tokens,
       NotificationService notifications,
       PasswordResets passwordResets,
-      MailService mail) {
+      MailService mail,
+      Auth0Users auth0Users) {
     this.users = users;
     this.tokens = tokens;
     this.notifications = notifications;
     this.passwordResets = passwordResets;
     this.mail = mail;
+    this.auth0Users = auth0Users;
   }
 
   /**
@@ -59,11 +61,10 @@ public class AuthService {
     if (!emailVerified || email == null || email.isBlank()) {
       throw new UnverifiedEmailException();
     }
-    var address = email.strip().toLowerCase(Locale.ROOT);
     var existing = users.findByIdpSubject(subject);
-    var user = existing.orElseGet(() -> create(subject, address, role));
-    user.signedIn(address, role);
-    return new SignIn(tokens.issue(user), address, existing.isEmpty());
+    var user = existing.orElseGet(() -> create(subject, role));
+    user.signedIn(role);
+    return new SignIn(tokens.issue(user), email.strip(), existing.isEmpty());
   }
 
   /**
@@ -89,25 +90,31 @@ public class AuthService {
     }
   }
 
-  @Transactional(readOnly = true)
+  /** Not transactional, like everything here that asks Auth0: no connection waits on it. */
   public Account account(UUID userId) {
-    return Account.of(user(userId));
-  }
-
-  @Transactional
-  public Account updateProfile(UUID userId, String firstName, String lastName, String avatar) {
     var user = user(userId);
-    user.setProfile(firstName, lastName, avatar);
-    return Account.of(user);
+    return Account.of(user, profile(user));
   }
 
-  /** Not transactional: the mail is Auth0's call, which no open transaction should wait on. */
+  public Account updateProfile(UUID userId, String firstName, String lastName) {
+    var user = user(userId);
+    auth0Users.updateNames(user.getIdpSubject(), firstName, lastName);
+    return Account.of(user, profile(user));
+  }
+
   public void sendPasswordReset(UUID userId) {
-    passwordResets.send(user(userId).getEmail());
+    passwordResets.send(profile(user(userId)).email());
   }
 
-  private UserEntity create(String subject, String email, Role role) {
-    var user = users.saveAndFlush(new UserEntity(subject, email, role));
+  private Auth0Users.Profile profile(UserEntity user) {
+    return auth0Users
+        .profile(user.getIdpSubject())
+        .orElseThrow(
+            () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "the Auth0 user is gone"));
+  }
+
+  private UserEntity create(String subject, Role role) {
+    var user = users.saveAndFlush(new UserEntity(subject, role));
     notifications.send(user.getId(), Notifications.welcome(""));
     return user;
   }

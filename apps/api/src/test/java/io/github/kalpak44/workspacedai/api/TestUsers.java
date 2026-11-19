@@ -45,15 +45,21 @@ public final class TestUsers {
     return "Bearer " + token(user.getId());
   }
 
-  /** An account as an Auth0 sign-in would make it, not yet saved. */
+  /**
+   * An account as an Auth0 sign-in would make it, not yet saved; its subject is "test|" + email.
+   */
   public static UserEntity newUser(String email) {
-    return new UserEntity("test|" + email, email, Role.USER);
+    return new UserEntity(subject(email), Role.USER);
   }
 
+  /** The same, with the names its Auth0 profile has. */
   public static UserEntity newUser(String email, String firstName, String lastName) {
-    var user = newUser(email);
-    user.setProfile(firstName, lastName, null);
-    return user;
+    FakeAuth0Users.name(subject(email), firstName, lastName);
+    return newUser(email);
+  }
+
+  public static String subject(String email) {
+    return "test|" + email;
   }
 
   public static String token(UUID user) {

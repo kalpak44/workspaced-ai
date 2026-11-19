@@ -43,9 +43,8 @@ public class HttpStripe implements Stripe {
   }
 
   @Override
-  public String createCustomer(UUID userId, String name) {
+  public String createCustomer(UUID userId) {
     var form = new LinkedHashMap<String, String>();
-    form.put("name", name);
     form.put("metadata[user_id]", userId.toString());
     return read(send(post("/v1/customers", form, null))).path("id").asString();
   }

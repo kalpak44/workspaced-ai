@@ -12,26 +12,29 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 public class RecipesController implements RecipesApi {
 
   private final RecipeService service;
+  private final RecipeAuthors authors;
 
-  public RecipesController(RecipeService service) {
+  public RecipesController(RecipeService service, RecipeAuthors authors) {
     this.service = service;
+    this.authors = authors;
   }
 
   @Override
   public ResponseEntity<PagedModel<RecipeSummary>> list(
       String scope, String q, String category, String sort, int page, int size) {
     return ResponseEntity.ok(
-        new PagedModel<>(service.list(CurrentUser.id(), scope, q, category, sort, page, size)));
+        new PagedModel<>(
+            authors.named(service.list(CurrentUser.id(), scope, q, category, sort, page, size))));
   }
 
   @Override
   public ResponseEntity<Recipe> get(UUID id) {
-    return ResponseEntity.ok(service.get(id, CurrentUser.id()));
+    return ResponseEntity.ok(authors.named(service.get(id, CurrentUser.id())));
   }
 
   @Override
   public ResponseEntity<Recipe> create(RecipeRequest request) {
-    var recipe = service.create(CurrentUser.id(), request);
+    var recipe = authors.named(service.create(CurrentUser.id(), request));
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")
@@ -42,7 +45,7 @@ public class RecipesController implements RecipesApi {
 
   @Override
   public ResponseEntity<Recipe> update(UUID id, RecipeRequest request) {
-    return ResponseEntity.ok(service.update(id, CurrentUser.id(), request));
+    return ResponseEntity.ok(authors.named(service.update(id, CurrentUser.id(), request)));
   }
 
   @Override

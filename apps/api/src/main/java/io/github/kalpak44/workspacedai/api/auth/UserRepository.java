@@ -6,11 +6,9 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
-  Optional<UserEntity> findByEmail(String email);
-
   Optional<UserEntity> findByIdpSubject(String idpSubject);
 
-  /** What each request is checked against, without loading the avatar. */
+  /** What each request is checked against. */
   Optional<Access> findAccessById(UUID id);
 
   interface Access {

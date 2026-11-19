@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api;
 
+import io.github.kalpak44.workspacedai.api.auth.Auth0Users;
 import io.github.kalpak44.workspacedai.api.runtime.FakeWorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import java.net.URI;
@@ -9,8 +10,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 
 /**
- * Replaces the VM runtime, so no test needs a VM manager. A test that chats sets
- * workspaced.workspace.local-harness.url and .password to the fake harness it started.
+ * Replaces the VM runtime and Auth0's users, so no test needs a VM manager or Auth0. A test that
+ * chats sets workspaced.workspace.local-harness.url and .password to the fake harness it started.
  */
 @TestConfiguration(proxyBeanMethods = false)
 public class TestRuntime {
@@ -21,5 +22,11 @@ public class TestRuntime {
       @Value("${workspaced.workspace.local-harness.url:#{null}}") URI harnessUrl,
       @Value("${workspaced.workspace.local-harness.password:#{null}}") String password) {
     return new FakeWorkspaceRuntime(harnessUrl, password);
+  }
+
+  @Bean
+  @Primary
+  Auth0Users fakeAuth0Users() {
+    return new FakeAuth0Users();
   }
 }

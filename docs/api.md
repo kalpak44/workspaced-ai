@@ -26,9 +26,11 @@ need none. `POST /auth/logout` clears the cookie (`204`), and the browser then o
 to Auth0's logout so the next sign-in asks for a password again; tokens are stateless, so one kept elsewhere stays valid until it expires. A
 missing, invalid or expired token answers `401` as a problem detail.
 
-`GET /account` returns the signed-in user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`).
-`PUT /account/profile` replaces the names (at most 100 characters, trimmed) and the avatar, a JPG/PNG/WebP/GIF `data:`
-URL of at most 2 MB (empty removes it). `POST /account/password-reset` has Auth0 mail the user a link to choose a new
+The database keeps no personal data: an account is its Auth0 subject and its role. `GET /account` returns the signed-in
+user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`), its profile read from Auth0 as it is asked for; `avatar`
+is Auth0's picture URL, the Gravatar for the email or a picture of the initials. `PUT /account/profile` saves the first and
+last name (at most 100 characters each, trimmed) to the Auth0 profile. Recipe authors' names come from Auth0 the same way,
+and an author without one shows as `Unknown`. `POST /account/password-reset` has Auth0 mail the user a link to choose a new
 password: `204`, or `502` when Auth0 cannot be reached. Accounts are managed in Auth0; the API has no user administration.
 
 The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
@@ -42,6 +44,7 @@ against the owner before it runs. Another user's workspace answers `404`, exactl
 | `WORKSPACED_AUTH_CLIENT_SECRET` | none | The Auth0 application's secret. Required: the API does not start without it. |
 | `WORKSPACED_AUTH_CLIENT_ID` | none | The Auth0 application the API signs users in as. Required. |
 | `WORKSPACED_AUTH_ISSUER` | none | The Auth0 tenant, ending in a slash, e.g. `https://auth.workspaced.online/`. Required. |
+| `WORKSPACED_AUTH_MANAGEMENT_API` | none | Auth0's Management API on the tenant's own domain, e.g. `https://workspaced.eu.auth0.com/api/v2/`. Required. |
 
 ## OpenCode API reference
 
@@ -492,6 +495,7 @@ cd apps/api
 WORKSPACED_DB_PASSWORD=workspaced WORKSPACED_JWT_SECRET=local-dev-signing-key-at-least-32-bytes \
   WORKSPACED_AUTH_ISSUER=https://auth.workspaced.online/ \
   WORKSPACED_AUTH_CLIENT_ID=dRdGOJHzotVdano2eR4VaQ2zSXnOltte \
+  WORKSPACED_AUTH_MANAGEMENT_API=https://workspaced.eu.auth0.com/api/v2/ \
   WORKSPACED_AUTH_CLIENT_SECRET="$(vault kv get -field=auth0-client-secret secret/workspaced-secrets)" \
   mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
