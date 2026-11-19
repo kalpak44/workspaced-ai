@@ -8,5 +8,7 @@ USER root
 RUN apk upgrade --no-cache
 USER 101
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# Outside conf.d, which nginx loads whole: nginx.conf includes it in its server block.
+COPY security-headers.conf /etc/nginx/security-headers.conf
 COPY dist/ /usr/share/nginx/html/
 EXPOSE 8080

@@ -63,8 +63,11 @@ public final class TestUsers {
   }
 
   public static String token(UUID user, String idpSubject) {
+    return token(user, idpSubject, Instant.now());
+  }
+
+  public static String token(UUID user, String idpSubject, Instant now) {
     var profile = FakeAuth0Users.profile(idpSubject);
-    var now = Instant.now();
     var claims =
         JwtClaimsSet.builder()
             .issuer(TokenService.ISSUER)

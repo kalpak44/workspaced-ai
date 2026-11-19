@@ -11,6 +11,8 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -25,6 +27,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class HttpAuth0Users implements Auth0Users {
 
+  private static final Logger LOG = LoggerFactory.getLogger(HttpAuth0Users.class);
   private static final Duration TIMEOUT = Duration.ofSeconds(10);
 
   private final AuthProperties properties;
@@ -124,9 +127,14 @@ public class HttpAuth0Users implements Auth0Users {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
     var answer = read(send(request));
+    var lifetime = answer.path("expires_in").asLong(0);
+    // A token with no lifetime would never count as fresh, and every call would ask for another.
+    if (!answer.path("access_token").isString() || lifetime <= 0) {
+      LOG.warn("Auth0 answered a token request without a token or its lifetime");
+      throw unavailable(null);
+    }
     return new Auth0Tokens.Token(
-        answer.path("access_token").asString(),
-        Instant.now().plusSeconds(answer.path("expires_in").asLong(60)));
+        answer.path("access_token").asString(), Instant.now().plusSeconds(lifetime));
   }
 
   private HttpResponse<String> send(HttpRequest request) {
@@ -140,11 +148,31 @@ public class HttpAuth0Users implements Auth0Users {
     }
   }
 
+  /**
+   * Logs what Auth0 said when it refused: the status and its error code, never its message, which
+   * can repeat a user's address.
+   */
   private JsonNode read(HttpResponse<String> response) {
     if (response.statusCode() / 100 != 2) {
+      LOG.warn(
+          "Auth0 answered {} {} to {}",
+          response.statusCode(),
+          errorCode(response.body()),
+          response.request().uri().getPath());
       throw unavailable(null);
     }
     return response.body().isBlank() ? json.createObjectNode() : json.readTree(response.body());
+  }
+
+  private String errorCode(String body) {
+    try {
+      var answer = json.readTree(body);
+      var code =
+          answer.path("errorCode").isString() ? answer.path("errorCode") : answer.path("error");
+      return code.isString() ? code.asString() : "";
+    } catch (RuntimeException _) {
+      return "";
+    }
   }
 
   private static String encode(String value) {

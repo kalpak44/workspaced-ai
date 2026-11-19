@@ -38,6 +38,10 @@ public class AuthController implements AuthApi {
 
   @Override
   public ResponseEntity<Void> logout() {
+    var session = cookie(request, SecurityConfiguration.COOKIE);
+    if (session != null) {
+      auth.signOut(session);
+    }
     return ResponseEntity.noContent()
         .header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
         .build();
@@ -78,11 +82,15 @@ public class AuthController implements AuthApi {
   }
 
   private static String verificationCookie(HttpServletRequest request) {
+    return cookie(request, VERIFICATION_COOKIE);
+  }
+
+  private static String cookie(HttpServletRequest request, String name) {
     if (request.getCookies() == null) {
       return null;
     }
     return Arrays.stream(request.getCookies())
-        .filter(c -> VERIFICATION_COOKIE.equals(c.getName()) && !c.getValue().isBlank())
+        .filter(c -> name.equals(c.getName()) && !c.getValue().isBlank())
         .map(Cookie::getValue)
         .findFirst()
         .orElse(null);

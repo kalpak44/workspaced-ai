@@ -31,6 +31,7 @@ class HttpAuth0UsersTest {
   private final AtomicInteger tokens = new AtomicInteger();
   private final List<String> patches = new CopyOnWriteArrayList<>();
   private final List<String> resets = new CopyOnWriteArrayList<>();
+  private volatile int tokenLifetime = 86400;
   private final List<String> verificationJobs = new CopyOnWriteArrayList<>();
 
   private final String base = "http://localhost:" + server.getAddress().getPort() + "/";
@@ -133,6 +134,14 @@ class HttpAuth0UsersTest {
   }
 
   @Test
+  void refusesATokenAnswerWithoutALifetime() {
+    tokenLifetime = 0;
+    assertThatThrownBy(() -> users.updateNames("auth0|ada", "Ada", "Byron"))
+        .isInstanceOf(ResponseStatusException.class);
+    assertThat(stored.get()).isNull();
+  }
+
+  @Test
   void savesNamesIntoUserMetadata() {
     users.updateNames("auth0|ada", "Ada", "Byron");
     assertThat(patches)
@@ -199,7 +208,7 @@ class HttpAuth0UsersTest {
     switch (exchange.getRequestMethod() + " " + path) {
       case "POST /oauth/token" -> {
         tokens.incrementAndGet();
-        answer(exchange, 200, Map.of("access_token", "token", "expires_in", 86400));
+        answer(exchange, 200, Map.of("access_token", "token", "expires_in", tokenLifetime));
       }
       case "POST /api/v2/jobs/verification-email" -> {
         verificationJobs.add(body);

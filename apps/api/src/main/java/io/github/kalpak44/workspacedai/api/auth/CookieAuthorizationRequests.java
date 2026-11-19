@@ -1,20 +1,8 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
-import com.nimbusds.jose.EncryptionMethod;
-import com.nimbusds.jose.JOSEException;
-import com.nimbusds.jose.JWEAlgorithm;
-import com.nimbusds.jose.JWEHeader;
-import com.nimbusds.jose.JWEObject;
-import com.nimbusds.jose.Payload;
-import com.nimbusds.jose.crypto.DirectDecrypter;
-import com.nimbusds.jose.crypto.DirectEncrypter;
 import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.text.ParseException;
 import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -41,7 +29,7 @@ final class CookieAuthorizationRequests
   // Long enough to type a password and an MFA code at Auth0, short enough not to linger.
   private static final Duration LIFETIME = Duration.ofMinutes(10);
 
-  private final byte[] key;
+  private final SecretBox box;
   private final JsonMapper json;
 
   /**
@@ -49,7 +37,7 @@ final class CookieAuthorizationRequests
    *     key is never the one the session tokens are signed with
    */
   CookieAuthorizationRequests(String secret, JsonMapper json) {
-    this.key = sha256("workspaced-sign-in-request:" + secret);
+    this.box = new SecretBox(secret, "workspaced-sign-in-request");
     this.json = json;
   }
 
@@ -90,26 +78,19 @@ final class CookieAuthorizationRequests
             strings(authorization.getAdditionalParameters()),
             strings(authorization.getAttributes()),
             authorization.getAuthorizationRequestUri());
-    var jwe =
-        new JWEObject(
-            new JWEHeader(JWEAlgorithm.DIR, EncryptionMethod.A256GCM),
-            new Payload(json.writeValueAsString(stored)));
-    try {
-      jwe.encrypt(new DirectEncrypter(key));
-    } catch (JOSEException e) {
-      throw new IllegalStateException("cannot encrypt the sign-in request", e);
-    }
-    return jwe.serialize();
+    return box.seal(json.writeValueAsString(stored));
   }
 
   /** Null for anything this instance did not write, or that was altered: the sign-in fails. */
   private OAuth2AuthorizationRequest decrypt(String value) {
+    var opened = box.open(value);
+    if (opened.isEmpty()) {
+      return null;
+    }
     Stored stored;
     try {
-      var jwe = JWEObject.parse(value);
-      jwe.decrypt(new DirectDecrypter(key));
-      stored = json.readValue(jwe.getPayload().toString(), Stored.class);
-    } catch (ParseException | JOSEException | JacksonException _) {
+      stored = json.readValue(opened.get(), Stored.class);
+    } catch (JacksonException _) {
       return null;
     }
     return OAuth2AuthorizationRequest.authorizationCode()
@@ -161,14 +142,6 @@ final class CookieAuthorizationRequests
           copy.put(name, text);
         });
     return copy;
-  }
-
-  private static byte[] sha256(String text) {
-    try {
-      return MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8));
-    } catch (NoSuchAlgorithmException e) {
-      throw new IllegalStateException(e);
-    }
   }
 
   private record Stored(

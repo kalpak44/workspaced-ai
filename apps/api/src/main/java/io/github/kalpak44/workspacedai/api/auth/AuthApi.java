@@ -49,9 +49,9 @@ public interface AuthApi {
       operationId = "logout",
       summary = "Sign out",
       description =
-          "Clears the token cookie. A browser then opens /auth/end-session to end the Auth0 "
-              + "session too, which lands on the public site. A token kept elsewhere stays valid "
-              + "until it expires.")
+          "Clears the token cookie and revokes every session of its account, on every device. "
+              + "A browser then opens /auth/end-session to end the Auth0 session too, which lands "
+              + "on the public site.")
   @ApiResponse(responseCode = "204", description = "Signed out.")
   @PostMapping("/logout")
   ResponseEntity<Void> logout();

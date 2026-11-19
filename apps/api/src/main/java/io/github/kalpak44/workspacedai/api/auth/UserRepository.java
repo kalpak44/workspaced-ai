@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -13,5 +14,7 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
   interface Access {
     Role getRole();
+
+    Instant getSessionsValidAfter();
   }
 }

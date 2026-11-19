@@ -36,6 +36,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -58,6 +59,7 @@ class AuthTest {
   @Autowired Auth0Tokens tokens;
   @Autowired TokenService tokenService;
   @Autowired JwtDecoder decoder;
+  @Autowired JdbcTemplate jdbc;
   @MockitoBean ApiKeyCheck keyCheck;
   @MockitoBean PasswordResets passwordResets;
   @MockitoBean Mailer mailer;
@@ -69,6 +71,9 @@ class AuthTest {
     workspaces.deleteAll();
     users.findAll().stream().filter(u -> !u.getId().equals(TestUsers.ADMIN)).forEach(users::delete);
     when(keyCheck.accepts(any(), any())).thenReturn(true);
+    // The store keeps whichever token expires last, so one test's token would outlive into the
+    // next.
+    jdbc.update("DELETE FROM auth0_token");
   }
 
   @Test
@@ -273,6 +278,40 @@ class AuthTest {
                 + "&returnTo=https%3A%2F%2Fsite.example.test%2F");
     assertThat(response.headers().firstValue("Set-Cookie"))
         .hasValueSatisfying(c -> assertThat(c).startsWith("__Host-workspaced_token=;"));
+  }
+
+  @Test
+  void signingOutRevokesEverySessionIssuedBeforeIt() throws Exception {
+    var ada = users.save(TestUsers.newUser("ada@example.com"));
+    var earlier = TestUsers.token(ada.getId(), ada.getIdpSubject(), Instant.now().minusSeconds(5));
+    var elsewhere =
+        TestUsers.token(ada.getId(), ada.getIdpSubject(), Instant.now().minusSeconds(5));
+    assertThat(sendWithCookie("/account", earlier).statusCode()).isEqualTo(200);
+
+    var csrf = csrf();
+    var signOut =
+        HttpRequest.newBuilder(url("/auth/logout"))
+            .header("Cookie", "__Host-workspaced_token=" + earlier + "; " + csrf.cookie())
+            .header("X-XSRF-TOKEN", csrf.token())
+            .POST(BodyPublishers.noBody())
+            .build();
+    assertThat(http.send(signOut, BodyHandlers.ofString()).statusCode()).isEqualTo(204);
+
+    // On every device: a copy of any token from before the sign-out is refused.
+    assertThat(sendWithCookie("/account", earlier).statusCode()).isEqualTo(401);
+    assertThat(send("GET", "/account", "Bearer " + elsewhere, null).statusCode()).isEqualTo(401);
+    var later = TestUsers.token(ada.getId(), ada.getIdpSubject(), Instant.now().plusSeconds(1));
+    assertThat(sendWithCookie("/account", later).statusCode()).isEqualTo(200);
+  }
+
+  @Test
+  void keepsTheManagementTokenEncryptedAtRest() {
+    tokens.save(new Auth0Tokens.Token("management-token", Instant.now().plusSeconds(3600)));
+    var stored =
+        jdbc.queryForObject("SELECT access_token FROM auth0_token WHERE id = 1", String.class);
+    assertThat(stored).doesNotContain("management-token");
+    assertThat(tokens.current())
+        .hasValueSatisfying(t -> assertThat(t.value()).isEqualTo("management-token"));
   }
 
   @Test

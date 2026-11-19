@@ -40,7 +40,9 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
+import org.springframework.security.oauth2.client.OAuth2AuthorizedClient;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.oauth2.client.web.OAuth2AuthorizedClientRepository;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -175,6 +177,7 @@ public class SecurityConfiguration {
                                     Auth0SignIn.authorizationRequests(registrations))
                                 .authorizationRequestRepository(
                                     new CookieAuthorizationRequests(properties.jwtSecret(), JSON)))
+                    .authorizedClientRepository(new NoAuthorizedClients())
                     .successHandler(Auth0SignIn.signedIn(auth, properties))
                     .failureHandler(Auth0SignIn.failed()))
         .oauth2ResourceServer(
@@ -224,6 +227,37 @@ public class SecurityConfiguration {
     repository.setCookiePath("/");
     repository.setCookieCustomizer(cookie -> cookie.sameSite("Strict").secure(true));
     return repository;
+  }
+
+  /**
+   * Spring would keep each sign-in's Auth0 tokens, in memory, to call Auth0 as the user. The API
+   * never does, so they would only hold live credentials and grow with every user.
+   */
+  private static final class NoAuthorizedClients implements OAuth2AuthorizedClientRepository {
+
+    @Override
+    public <T extends OAuth2AuthorizedClient> T loadAuthorizedClient(
+        String registrationId, Authentication principal, HttpServletRequest request) {
+      return null;
+    }
+
+    @Override
+    public void saveAuthorizedClient(
+        OAuth2AuthorizedClient client,
+        Authentication principal,
+        HttpServletRequest request,
+        HttpServletResponse response) {
+      // Kept nowhere.
+    }
+
+    @Override
+    public void removeAuthorizedClient(
+        String registrationId,
+        Authentication principal,
+        HttpServletRequest request,
+        HttpServletResponse response) {
+      // Nothing was kept.
+    }
   }
 
   /**
@@ -295,8 +329,9 @@ public class SecurityConfiguration {
   }
 
   /**
-   * Turns away the token of an account deleted since it was issued, and grants the role the account
-   * has now, so a role Auth0 changed applies from the next sign-in on.
+   * Turns away the token of an account deleted since it was issued, or of a session its user signed
+   * out of, and grants the role the account has now, so a role Auth0 changed applies from the next
+   * sign-in on.
    */
   private static Converter<Jwt, AbstractAuthenticationToken> currentAccount(UserRepository users) {
     return jwt -> {
@@ -309,6 +344,9 @@ public class SecurityConfiguration {
           users
               .findAccessById(UUID.fromString(jwt.getSubject()))
               .orElseThrow(() -> new InvalidBearerTokenException("the account no longer exists"));
+      if (jwt.getIssuedAt() == null || jwt.getIssuedAt().isBefore(access.getSessionsValidAfter())) {
+        throw new InvalidBearerTokenException("the session was signed out");
+      }
       return new JwtAuthenticationToken(
           jwt, List.of(new SimpleGrantedAuthority(access.getRole().authority())), jwt.getSubject());
     };

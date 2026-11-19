@@ -36,7 +36,7 @@
     <main class="flex-1">
       <article class="mx-auto max-w-3xl px-4 py-14 sm:py-20">
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">Privacy policy</h1>
-        <p class="mt-3 text-sm text-zinc-500">Draft · Last updated 17 November 2026</p>
+        <p class="mt-3 text-sm text-zinc-500">Draft · Last updated 19 November 2026</p>
         <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
           <strong class="font-semibold">Draft, for information.</strong>
           This policy is a working draft published while Workspaced AI is in public beta, so you can see how we intend to
@@ -63,8 +63,16 @@
 
           <h2>2. What we collect</h2>
           <ul>
-            <li><strong>Account data</strong> - username, first and last name, optional avatar image, and a one-way hash of your
-              password (never the password itself).</li>
+            <li><strong>Account data</strong> - your email address, the first and last name you give when you sign up, a one-way
+              hash of your password (never the password itself) and any two-factor authentication factors you set up. These are
+              held by our sign-in provider, Auth0 (section 5). Our own database keeps no email address, name or picture: only an
+              internal account id, your Auth0 user id and your role.</li>
+            <li><strong>Profile picture</strong> - we do not store one. The picture shown for your account comes from Auth0: the
+              Gravatar for your email address if there is one, otherwise a picture of your initials. Showing it sends a hash of
+              your email address, and the IP address of whoever is viewing it, to Gravatar (section 5).</li>
+            <li><strong>Recipes</strong> - when you create a recipe, your first and last name as they are at that moment are
+              stored with it and shown to every user who can see that recipe. They are deleted with the recipe, and your recipes
+              are deleted with your account.</li>
             <li><strong>Billing data</strong> - your balance, top-ups, charges and invoices, and the identifier our payment
               provider gives your customer record. Card details are entered on our payment provider's pages and held by it; we never
               see or store your full card number.</li>
@@ -98,21 +106,31 @@
 
           <h2>4. Cookies</h2>
           <p>
-            We use only strictly necessary cookies: a sign-in cookie that keeps you logged in and a security cookie that protects
-            against cross-site request forgery. We use no analytics, advertising or tracking cookies, so no consent banner is
-            needed. This website, workspaced.online, sets no cookies at all; it only remembers in your browser's local storage that you
+            The app sets only strictly necessary cookies: a sign-in cookie that keeps you logged in for up to 12 hours, which
+            scripts on the page cannot read; a security cookie that protects against cross-site request forgery; a cookie kept
+            for 10 minutes while you sign in; and one kept for 30 minutes after you sign up without having verified your email
+            address yet. We use no analytics, advertising or tracking cookies, so no consent banner is needed. This website, workspaced.online, sets no cookies at all; it only remembers in your browser's local storage that you
             agreed to its privacy notice, so the notice is not shown again.
           </p>
 
           <h2>5. Who we share it with</h2>
           <p>We use these service providers (sub-processors), each bound by a data processing agreement:</p>
           <ul>
+            <li><strong>Auth0, by Okta</strong> (European Union region) - sign-in and accounts: it holds your email address,
+              hashed password, first and last name, and two-factor authentication factors.</li>
+            <li><strong>Mailjet</strong> - sending the Service's emails, including the verification and password-reset emails
+              Auth0 sends, from noreply@workspaced.online.</li>
             <li><strong>Hetzner Online GmbH</strong> (Germany) - virtual machines that run your Workspaces, in data centres in the
               European Union.</li>
             <li><strong>Cloudflare, Inc.</strong> (United States) - network delivery, DNS, security filtering and email
               forwarding.</li>
             <li><strong>Our payment provider</strong> (European Union) - payments, saved cards and invoices.</li>
           </ul>
+          <p>
+            <strong>Gravatar</strong>, a service of Automattic Inc. (United States), serves the profile pictures described in
+            section 2. Your browser loads the picture from it directly, sending a hash of the account's email address and your
+            IP address.
+          </p>
           <p>
             <strong>OpenRouter and AI model providers are not our sub-processors.</strong> Your Workspace sends prompts and context
             to them directly using your own API key, under your own agreement with them. What they do with that data is governed
@@ -126,7 +144,8 @@
 
           <h2>6. International transfers</h2>
           <p>
-            Where a provider processes data outside the European Economic Area, such as Cloudflare in the United States, the
+            Where a provider processes data outside the European Economic Area, such as Cloudflare or Gravatar in the United
+            States, the
             transfer is protected by the EU-U.S. Data Privacy Framework where the provider is certified, or by the European
             Commission's Standard Contractual Clauses.
           </p>
@@ -134,6 +153,7 @@
           <h2>7. How long we keep it</h2>
           <ul>
             <li>Account data and workspace metadata - while your account exists, and deleted when it is closed.</li>
+            <li>Recipes, with the author's name stored on them - until the recipe is deleted, or with your account.</li>
             <li>Workspace content and secrets - deleted with the Workspace. There are no backups, so deletion is permanent.</li>
             <li>Billing records and invoices - for as long as tax and accounting law requires.</li>
             <li>Technical logs - normally no longer than 90 days, unless needed to investigate a specific incident.</li>
@@ -143,8 +163,8 @@
           <h2>8. Security</h2>
           <p>
             Each Workspace runs on its own virtual machine with its own firewall, closed to the internet until you open a port.
-            Traffic to the Service is encrypted in transit, passwords are hashed, and secrets are kept encrypted in a dedicated
-            store. No system is perfectly secure, and you are responsible for the security of what you run and expose from your
+            Traffic to the Service is encrypted in transit, passwords are entered only on Auth0's sign-in pages and kept there
+            hashed, and secrets are kept encrypted in a dedicated store. No system is perfectly secure, and you are responsible for the security of what you run and expose from your
             Workspaces.
           </p>
 
@@ -195,19 +215,6 @@
         <button type="button" id="privacy-notice-dismiss" class="btn btn-secondary shrink-0">I agree</button>
       </div>
     </section>
-    <script>
-      // Storage can be blocked (private windows, site data off); the notice then shows on
-      // every visit and still closes for this one.
-      (() => {
-        const key = "workspaced.privacyNotice";
-        const notice = document.getElementById("privacy-notice");
-        try { if (localStorage.getItem(key) === "dismissed") return; } catch {}
-        notice.hidden = false;
-        document.getElementById("privacy-notice-dismiss").addEventListener("click", () => {
-          notice.hidden = true;
-          try { localStorage.setItem(key, "dismissed"); } catch {}
-        });
-      })();
-    </script>
+    <script src="/privacy-notice.js"></script>
   </body>
 </html>

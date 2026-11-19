@@ -27,10 +27,11 @@ authenticates, EventSource and the terminal WebSocket included, since neither ca
 which a sibling origin can neither set nor shadow, and a change (any method but GET) sent by a browser must come from this
 origin, by its `Sec-Fetch-Site` or `Origin`, else `403`. It must also carry the CSRF token in the `X-XSRF-TOKEN` header —
 never a form field — else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `__Host-XSRF-TOKEN` cookie it is
-checked against. Bearer requests need neither. `POST /auth/logout` clears the cookie (`204`), and the browser then opens
-`GET /auth/end-session`, which clears it too and redirects to Auth0's logout, so the next sign-in asks for a password
-again, and from there to the public site; tokens are stateless, so one kept elsewhere stays valid until it expires. A
-missing, invalid or expired token answers `401` as a problem detail.
+checked against. Bearer requests need neither. `POST /auth/logout` clears the cookie (`204`) and revokes every session
+of its account, on every device: a token issued before then answers `401`. The browser then opens `GET
+/auth/end-session`, which clears the cookie too and redirects to Auth0's logout, so the next sign-in asks for a password
+again, and from there to the public site. A missing, invalid, expired or revoked token answers `401` as a problem
+detail.
 
 The database keeps no personal data: an account is its Auth0 subject and its role. `GET /account` returns the signed-in
 user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`) from the session token and the role from the database;

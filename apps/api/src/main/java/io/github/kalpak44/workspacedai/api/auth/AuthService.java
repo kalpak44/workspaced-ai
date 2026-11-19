@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.auth;
 import io.github.kalpak44.workspacedai.api.mail.MailService;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
@@ -129,6 +130,24 @@ public class AuthService {
 
   public void sendPasswordReset(Auth0Users.Profile profile) {
     passwordResets.send(profile.email());
+  }
+
+  /**
+   * Revokes every session of the account the token belongs to, on every device. A token that is
+   * expired, altered or no sign-in at all revokes nothing; signing out still clears the cookie.
+   */
+  @Transactional
+  public void signOut(String sessionToken) {
+    try {
+      var jwt = decoder.decode(sessionToken);
+      if (!jwt.hasClaim(CurrentUser.USE)) {
+        users
+            .findById(UUID.fromString(jwt.getSubject()))
+            .ifPresent(user -> user.signOutEverywhere(Instant.now()));
+      }
+    } catch (JwtException | IllegalArgumentException _) {
+      // Nothing to revoke.
+    }
   }
 
   /** What an unverified sign-up carries to ask for the email again. */
