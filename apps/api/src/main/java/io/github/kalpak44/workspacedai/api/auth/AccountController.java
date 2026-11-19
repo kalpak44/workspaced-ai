@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -15,19 +16,26 @@ public class AccountController implements AccountApi {
 
   @Override
   public ResponseEntity<Account> get() {
-    return ResponseEntity.ok(service.account(CurrentUser.id()));
+    return ResponseEntity.ok(service.account(CurrentUser.id(), CurrentUser.profile()));
   }
 
+  /** Answers a fresh sign-in cookie with the new names, so every page shows them at once. */
   @Override
   public ResponseEntity<Account> updateProfile(ProfileRequest request) {
-    return ResponseEntity.ok(
+    var update =
         service.updateProfile(
-            CurrentUser.id(), request.trimmedFirstName(), request.trimmedLastName()));
+            CurrentUser.id(),
+            CurrentUser.profile(),
+            request.trimmedFirstName(),
+            request.trimmedLastName());
+    return ResponseEntity.ok()
+        .header(HttpHeaders.SET_COOKIE, AuthController.cookie(update.token()).toString())
+        .body(update.account());
   }
 
   @Override
   public ResponseEntity<Void> sendPasswordReset() {
-    service.sendPasswordReset(CurrentUser.id());
+    service.sendPasswordReset(CurrentUser.profile());
     return ResponseEntity.noContent().build();
   }
 }

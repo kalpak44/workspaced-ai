@@ -12,7 +12,7 @@ export function App() {
     );
   }
   if (state.status === "signed-out") {
-    return <LoginPage unreachable={state.unreachable} />;
+    return <LoginPage reason={state.reason} />;
   }
   return <WorkspacesPage />;
 }

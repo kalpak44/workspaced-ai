@@ -14,7 +14,6 @@ import java.util.Collection;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -50,15 +49,6 @@ public class HttpAuth0Users implements Auth0Users {
   }
 
   @Override
-  public Optional<Profile> profile(String subject) {
-    var response = call(get("users/" + encode(subject) + "?fields=email,picture,user_metadata"));
-    if (response.statusCode() == 404) {
-      return Optional.empty();
-    }
-    return Optional.of(profileOf(read(response)));
-  }
-
-  @Override
   public void updateNames(String subject, String givenName, String familyName) {
     var body =
         json.writeValueAsString(
@@ -68,6 +58,17 @@ public class HttpAuth0Users implements Auth0Users {
             authorized("users/" + encode(subject))
                 .header("Content-Type", "application/json")
                 .method("PATCH", HttpRequest.BodyPublishers.ofString(body))));
+  }
+
+  @Override
+  public void sendVerificationEmail(String subject) {
+    var body =
+        json.writeValueAsString(Map.of("user_id", subject, "client_id", properties.clientId()));
+    read(
+        call(
+            authorized("jobs/verification-email")
+                .header("Content-Type", "application/json")
+                .POST(HttpRequest.BodyPublishers.ofString(body))));
   }
 
   /** Never fails: a recipe list still shows when Auth0 does not answer, its authors unnamed. */

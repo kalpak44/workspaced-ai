@@ -37,12 +37,12 @@ public final class TestUsers {
 
   /** The Authorization header value for admin, on whichever test server listens on that port. */
   public static String bearer(int port) {
-    return "Bearer " + token(ADMIN);
+    return "Bearer " + token(ADMIN, subject(ADMIN_EMAIL));
   }
 
-  /** The Authorization header value for that user. */
+  /** The Authorization header value for that user, carrying the profile Auth0 has for them. */
   public static String bearer(UserEntity user) {
-    return "Bearer " + token(user.getId());
+    return "Bearer " + token(user.getId(), user.getIdpSubject());
   }
 
   /**
@@ -62,12 +62,17 @@ public final class TestUsers {
     return "test|" + email;
   }
 
-  public static String token(UUID user) {
+  public static String token(UUID user, String idpSubject) {
+    var profile = FakeAuth0Users.profile(idpSubject);
     var now = Instant.now();
     var claims =
         JwtClaimsSet.builder()
             .issuer(TokenService.ISSUER)
             .subject(user.toString())
+            .claim("email", profile.email())
+            .claim("given_name", profile.givenName())
+            .claim("family_name", profile.familyName())
+            .claim("picture", profile.picture())
             .issuedAt(now)
             .expiresAt(now.plus(Duration.ofHours(1)))
             .build();

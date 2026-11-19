@@ -57,6 +57,24 @@ export function enrollMfa(): void {
   browser.open(`${SIGN_IN_URL}?mfa=enroll`);
 }
 
+export type ResendResult = "sent" | "wait" | "expired";
+
+/**
+ * Sends the verification email again to the address that just signed up. "wait" is the API's
+ * rate limit; "expired" means its short-lived proof of who signed up is gone, so only a new
+ * sign-in can ask for another email.
+ */
+export async function resendVerificationEmail(): Promise<ResendResult> {
+  try {
+    await send("/api/v1/auth/verification-email", { method: "POST" });
+    return "sent";
+  } catch (error) {
+    if (error instanceof ApiError && error.status === 429) return "wait";
+    if (error instanceof ApiError && error.status === 401) return "expired";
+    throw error;
+  }
+}
+
 /** Ends the API session; Auth0's is ended by endAuth0Session. */
 export async function logout(): Promise<void> {
   await send("/api/v1/auth/logout", { method: "POST" });

@@ -1,6 +1,8 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -17,7 +19,6 @@ import org.springframework.security.oauth2.core.oidc.IdTokenClaimNames;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.security.web.authentication.AuthenticationSuccessHandler;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /**
  * Signing in through Auth0. The browser goes to its hosted login and comes back to the callback,
@@ -32,8 +33,11 @@ class Auth0SignIn {
   static final String AUTHORIZATION = "/oauth2/authorization";
   static final String CALLBACK = "/login/oauth2/code/*";
 
-  // Auth0 only passes a custom claim through when it is namespaced to a URL of our own.
+  // Auth0 only passes a custom claim through when it is namespaced to a URL of our own. The
+  // tenant's post-login Action sets these: the roles, and the names the sign-up form saved.
   static final String ROLES_CLAIM = "https://workspaced.online/roles";
+  static final String GIVEN_NAME_CLAIM = "https://workspaced.online/given_name";
+  static final String FAMILY_NAME_CLAIM = "https://workspaced.online/family_name";
   static final String ADMIN_ROLE = "admin";
 
   // Asks for MFA; the tenant's post-login Action enrolls a user who has not set it up yet.
@@ -41,7 +45,7 @@ class Auth0SignIn {
 
   /**
    * Built here rather than discovered, so starting the API makes no call to Auth0. The issuer is
-   * still checked on every ID token, and the email comes from that token, so no user-info call.
+   * still checked on every ID token, and the profile comes from that token, so no user-info call.
    */
   @Bean
   ClientRegistrationRepository clientRegistrations(AuthProperties properties) {
@@ -53,7 +57,7 @@ class Auth0SignIn {
             .clientAuthenticationMethod(ClientAuthenticationMethod.CLIENT_SECRET_BASIC)
             .authorizationGrantType(AuthorizationGrantType.AUTHORIZATION_CODE)
             .redirectUri("{baseUrl}/login/oauth2/code/{registrationId}")
-            .scope("openid", "email")
+            .scope("openid", "email", "profile")
             .issuerUri(issuer)
             .authorizationUri(issuer + "authorize")
             .tokenUri(issuer + "oauth/token")
@@ -108,36 +112,63 @@ class Auth0SignIn {
 
   /**
    * Sends the browser to the app signed in, and greets a new account there and by mail. An email
-   * Auth0 has not verified is refused, since the app mails it; so is one another account holds.
+   * Auth0 has not verified is refused, since the app mails it: the Auth0 session is ended, so the
+   * next sign-in asks again, and the browser lands on the app's page that explains it, carrying
+   * what it needs to ask for the email again.
    */
-  static AuthenticationSuccessHandler signedIn(AuthService auth) {
+  static AuthenticationSuccessHandler signedIn(AuthService auth, AuthProperties properties) {
     return (request, response, authentication) -> {
       var user = (OidcUser) authentication.getPrincipal();
       AuthService.SignIn signIn;
       try {
-        signIn =
-            auth.signIn(
-                user.getSubject(),
-                user.getEmail(),
-                Boolean.TRUE.equals(user.getEmailVerified()),
-                role(user));
+        signIn = signIn(auth, user);
       } catch (AuthService.UnverifiedEmailException _) {
-        response.sendRedirect("/login?error=unverified");
-        return;
-      } catch (DataIntegrityViolationException _) {
-        response.sendRedirect("/login?error=failed");
+        var proof = auth.verificationToken(user.getSubject());
+        response.addHeader(
+            HttpHeaders.SET_COOKIE, AuthController.verificationCookie(proof).toString());
+        response.sendRedirect(logoutUrl(properties, properties.appUrl() + "/verify-email"));
         return;
       }
-      response.addHeader(
-          HttpHeaders.SET_COOKIE, AuthController.cookie(request, signIn.token()).toString());
+      response.addHeader(HttpHeaders.SET_COOKIE, AuthController.cookie(signIn.token()).toString());
       if (!signIn.created()) {
         response.sendRedirect("/");
         return;
       }
-      var app = ServletUriComponentsBuilder.fromContextPath(request).replacePath("/").toUriString();
-      auth.sendWelcomeMail(signIn.email(), app);
+      auth.sendWelcomeMail(signIn.email());
       response.sendRedirect("/?welcome");
     };
+  }
+
+  /**
+   * A first sign-in finished twice at once, in two tabs, makes the account twice; the loser finds
+   * the winner's account on a second try.
+   */
+  private static AuthService.SignIn signIn(AuthService auth, OidcUser user) {
+    var profile =
+        new Auth0Users.Profile(
+            text(user.getEmail()),
+            text(user.getClaimAsString(GIVEN_NAME_CLAIM)),
+            text(user.getClaimAsString(FAMILY_NAME_CLAIM)),
+            text(user.getPicture()));
+    var verified = Boolean.TRUE.equals(user.getEmailVerified());
+    try {
+      return auth.signIn(user.getSubject(), profile, verified, role(user));
+    } catch (DataIntegrityViolationException _) {
+      return auth.signIn(user.getSubject(), profile, verified, role(user));
+    }
+  }
+
+  private static String text(String value) {
+    return value == null ? "" : value;
+  }
+
+  /** Auth0's logout, which ends its session and sends the browser on to an allowed address. */
+  static String logoutUrl(AuthProperties properties, String returnTo) {
+    return properties.issuer()
+        + "v2/logout?client_id="
+        + URLEncoder.encode(properties.clientId(), StandardCharsets.UTF_8)
+        + "&returnTo="
+        + URLEncoder.encode(returnTo, StandardCharsets.UTF_8);
   }
 
   /** The roles Auth0 assigned the user, which the tenant's post-login Action puts in this claim. */

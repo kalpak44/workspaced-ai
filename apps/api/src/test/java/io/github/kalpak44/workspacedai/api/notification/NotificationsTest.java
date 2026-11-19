@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import io.github.kalpak44.workspacedai.api.FakeAuth0Users;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
@@ -49,7 +50,7 @@ class NotificationsTest {
     var subject = "auth0|" + UUID.randomUUID();
     bearer =
         "Bearer "
-            + auth.signIn(subject, subject.substring(6) + "@example.com", true, Role.USER)
+            + auth.signIn(subject, FakeAuth0Users.profile(subject), true, Role.USER)
                 .token()
                 .value();
     user = users.findByIdpSubject(subject).orElseThrow().getId();

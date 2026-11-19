@@ -186,6 +186,9 @@ export function installFakeApi(
     failProfile: false,
     failReset: false,
     failLogout: false,
+    // What the next verification email resend answers, and how many were asked for.
+    resendStatus: 204,
+    resends: 0,
     account: { id: "admin-id", email: "admin@example.com", firstName: "", lastName: "", avatar: null, role: "ADMIN" } as Account,
   };
   // The store: every recipe, anyone's, and the drafts the agent left in each workspace.
@@ -415,6 +418,10 @@ export function installFakeApi(
       if (auth.failLogout) return json({}, 500);
       auth.signedIn = false;
       return new Response(null, { status: 204 });
+    }
+    if (url.endsWith("/api/v1/auth/verification-email") && init?.method === "POST") {
+      auth.resends++;
+      return auth.resendStatus === 204 ? new Response(null, { status: 204 }) : json({}, auth.resendStatus);
     }
     if (!/\/api\/v1\/account(\/|$)/.test(url)) return null;
     if (!auth.signedIn) return json({}, 401);

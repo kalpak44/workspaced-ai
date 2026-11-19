@@ -32,6 +32,7 @@ class HttpAuth0UsersTest {
   private final AtomicInteger tokens = new AtomicInteger();
   private final List<String> patches = new CopyOnWriteArrayList<>();
   private final List<String> resets = new CopyOnWriteArrayList<>();
+  private final List<String> verificationJobs = new CopyOnWriteArrayList<>();
   private volatile boolean searchFails;
 
   private final String base = "http://localhost:" + server.getAddress().getPort() + "/";
@@ -44,7 +45,9 @@ class HttpAuth0UsersTest {
           "client",
           "secret",
           "Username-Password-Authentication",
-          base + "api/v2/");
+          base + "api/v2/",
+          "https://app.test",
+          "https://site.test");
   // What the database does for the real thing: one token, shared by every instance.
   private final AtomicReference<Auth0Tokens.Token> stored = new AtomicReference<>();
   private final Auth0Tokens tokenStore =
@@ -72,24 +75,14 @@ class HttpAuth0UsersTest {
   }
 
   @Test
-  void readsTheProfileWithTheNamesTheSignUpFormSaved() {
-    var profile = users.profile("auth0|ada").orElseThrow();
-    assertThat(profile.email()).isEqualTo("ada@example.com");
-    assertThat(profile.givenName()).isEqualTo("Ada");
-    assertThat(profile.familyName()).isEqualTo("Lovelace");
-    assertThat(profile.picture()).isEqualTo("https://pictures.test/ada");
-    assertThat(users.profile("auth0|gone")).isEmpty();
-  }
-
-  @Test
   void sharesOneStoredTokenAcrossInstancesUntilItNearlyExpires() {
-    users.profile("auth0|ada");
-    new HttpAuth0Users(properties, tokenStore, JSON).profile("auth0|ada");
+    users.updateNames("auth0|ada", "Ada", "Lovelace");
+    new HttpAuth0Users(properties, tokenStore, JSON).updateNames("auth0|ada", "Ada", "L");
     users.updateNames("auth0|ada", "Ada", "Byron");
     assertThat(tokens).hasValue(1);
 
     stored.set(new Auth0Tokens.Token("token", Instant.now().plusSeconds(30)));
-    users.profile("auth0|ada");
+    users.updateNames("auth0|ada", "Ada", "Byron");
     assertThat(tokens).hasValue(2);
     assertThat(stored.get().expiresAt()).isAfter(Instant.now().plusSeconds(3600));
   }
@@ -113,18 +106,32 @@ class HttpAuth0UsersTest {
             // Nothing stored to drop.
           }
         };
-    var profile = new HttpAuth0Users(properties, collided, JSON).profile("auth0|ada");
-    assertThat(profile).hasValueSatisfying(p -> assertThat(p.givenName()).isEqualTo("Ada"));
+    new HttpAuth0Users(properties, collided, JSON).updateNames("auth0|ada", "Ada", "Byron");
+    assertThat(patches).hasSize(1);
   }
 
   @Test
   void replacesAStoredTokenAuth0RefusesAndTriesOnceMore() {
     stored.set(new Auth0Tokens.Token("rejected", Instant.now().plusSeconds(86400)));
 
-    assertThat(users.profile("auth0|ada")).isPresent();
+    users.updateNames("auth0|ada", "Ada", "Byron");
+    assertThat(patches).hasSize(1);
 
     assertThat(tokens).hasValue(1);
     assertThat(stored.get().value()).isEqualTo("token");
+  }
+
+  @Test
+  void hasAuth0SendTheVerificationEmailForTheApplicationsUser() {
+    users.sendVerificationEmail("auth0|ada");
+    assertThat(verificationJobs)
+        .singleElement()
+        .satisfies(
+            body -> {
+              var sent = JSON.readTree(body);
+              assertThat(sent.path("user_id").asString()).isEqualTo("auth0|ada");
+              assertThat(sent.path("client_id").asString()).isEqualTo("client");
+            });
   }
 
   @Test
@@ -166,7 +173,9 @@ class HttpAuth0UsersTest {
             "client",
             "secret",
             "Username-Password-Authentication",
-            base + "api/v2/");
+            base + "api/v2/",
+            "https://app.test",
+            "https://site.test");
     new Auth0PasswordResets(signIn, JSON).send("ada@example.com");
     assertThat(resets)
         .singleElement()
@@ -203,6 +212,10 @@ class HttpAuth0UsersTest {
       case "POST /oauth/token" -> {
         tokens.incrementAndGet();
         answer(exchange, 200, Map.of("access_token", "token", "expires_in", 86400));
+      }
+      case "POST /api/v2/jobs/verification-email" -> {
+        verificationJobs.add(body);
+        answer(exchange, 201, Map.of("id", "job_1", "status", "pending"));
       }
       case "POST /dbconnections/change_password" -> {
         resets.add(body);

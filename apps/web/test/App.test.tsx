@@ -1355,63 +1355,100 @@ describe("App", () => {
 });
 
 describe("signing in", () => {
-  it("hands sign-in to Auth0 with a full-page navigation", async () => {
+  /** Signed out at `path`, with every navigation to Auth0 recorded rather than followed. */
+  async function signedOutAt(path = "/") {
     api.auth.signedIn = false;
+    globalThis.history.replaceState(null, "", path);
     const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
-    const user = userEvent.setup();
     render(<App />);
-    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
-    await user.click(await screen.findByRole("button", { name: "Sign in" }));
-    expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0");
-    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Loading" })).not.toBeInTheDocument());
+    return opened;
+  }
+
+  it("goes straight on to Auth0 when no one is signed in", async () => {
+    const opened = await signedOutAt();
+    await waitFor(() => expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0"));
+    expect(screen.getByRole("status", { name: "Taking you to sign in" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Sign in" })).not.toBeInTheDocument();
   });
 
-  it("opens Auth0 on its sign-up form, and says a new account must verify its email first", async () => {
-    api.auth.signedIn = false;
-    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
+  it("offers a card instead of redirecting again when it comes straight back signed out", async () => {
+    localStorage.setItem("workspaced:sign-in-redirect", String(Date.now()));
+    const opened = await signedOutAt();
     const user = userEvent.setup();
-    render(<App />);
-    expect(await screen.findByText(/A new account gets a verification email/)).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Sign in" })).toBeInTheDocument();
+    expect(opened).not.toHaveBeenCalled();
+
     await user.click(screen.getByRole("button", { name: "Create account" }));
     expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?signup");
     expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
   });
 
-  it.each([
-    ["unverified", "email address is not verified yet"],
-    ["failed", "Sign-in failed"],
-    ["something-new", "Sign-in failed"],
-  ])("explains a sign-in that came back with error=%s, once", async (code, message) => {
-    api.auth.signedIn = false;
-    globalThis.history.replaceState(null, "", `/login?error=${code}`);
-    render(<App />);
-    expect(await screen.findByRole("alert")).toHaveTextContent(message);
-    // Dropped from the URL, so a reload does not repeat it.
+  it("explains a failed sign-in once, without redirecting, and signs in from there", async () => {
+    const opened = await signedOutAt("/login?error=failed");
+    const user = userEvent.setup();
+    expect(screen.getByRole("alert")).toHaveTextContent("Sign-in didn't work. Try again.");
+    // Dropped from the URL, so a reload does not repeat it; the card stays until the user acts.
     expect(globalThis.location.pathname + globalThis.location.search).toBe("/");
+    expect(opened).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "Sign in" }));
+    expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0");
   });
 
-  it("frees the sign-in button when the page comes back from the browser's cache", async () => {
-    api.auth.signedIn = false;
-    vi.spyOn(browser, "open").mockImplementation(() => {});
+  it("asks a new account to check its email, without redirecting", async () => {
+    const opened = await signedOutAt("/verify-email");
+    const card = screen.getByRole("region", { name: "Check your email" });
+    expect(card).toHaveTextContent("We sent a verification link to your email address");
+    expect(globalThis.location.pathname).toBe("/");
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ["Sign in", "/api/v1/oauth2/authorization/auth0"],
+    ["Use a different account", "/api/v1/oauth2/authorization/auth0?signup"],
+  ])("leaves the verification card with %s", async (label, url) => {
+    const opened = await signedOutAt("/verify-email");
+    await userEvent.setup().click(screen.getByRole("button", { name: label }));
+    expect(opened).toHaveBeenCalledWith(url);
+  });
+
+  it.each([
+    [204, "Sent again.", true],
+    [429, "Wait a minute before asking again.", true],
+    [401, "Sign in again to get a new email.", false],
+    [500, "Could not send the email", true],
+  ])("reports a verification email resend answered %i", async (status, message, canRetry) => {
+    await signedOutAt("/verify-email");
+    api.auth.resendStatus = status;
     const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Resend email" }));
+    expect(await screen.findByText(message, { exact: false })).toBeInTheDocument();
+    expect(api.auth.resends).toBe(1);
+    expect(api.fetchFn).toHaveBeenCalledWith("/api/v1/auth/verification-email", expect.objectContaining({ method: "POST", headers: expect.objectContaining({ "X-XSRF-TOKEN": "csrf-token" }) }));
+    // A 401 means only a new sign-in can send another, so that is all the card offers.
+    expect(screen.queryByRole("button", { name: "Resend email" }) !== null).toBe(canRetry);
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+  });
+
+  it("says when the API cannot be reached instead of redirecting", async () => {
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
+    api.fetchFn.mockImplementation(async () => {
+      throw new TypeError("Failed to fetch");
+    });
     render(<App />);
-    const button = await screen.findByRole("button", { name: "Sign in" });
-    await user.click(button);
-    expect(button).toBeDisabled();
+    expect(await screen.findByRole("alert")).toHaveTextContent("The API could not be reached");
+    expect(opened).not.toHaveBeenCalled();
+  });
+
+  it("shows a card when Back from Auth0 restores the page mid-redirect", async () => {
+    const opened = await signedOutAt();
+    await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
     act(() => {
       globalThis.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
     });
-    expect(button).toBeEnabled();
-  });
-
-  it("links the terms and privacy policy, each in a new tab", async () => {
-    api.auth.signedIn = false;
-    render(<App />);
-    const terms = await screen.findByRole("link", { name: "Terms of service" });
-    const privacy = screen.getByRole("link", { name: "Privacy policy" });
-    expect(terms).toHaveAttribute("href", "https://workspaced.online/terms");
-    expect(privacy).toHaveAttribute("href", "https://workspaced.online/privacy");
-    for (const link of [terms, privacy]) expect(link).toHaveAttribute("target", "_blank");
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeEnabled();
+    expect(opened).toHaveBeenCalledTimes(1);
   });
 
   it("signs out from the account menu, then ends the Auth0 session too", async () => {
@@ -1421,9 +1458,10 @@ describe("signing in", () => {
     await screen.findAllByRole("button", { name: "Starter" });
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(screen.getByRole("menuitem", { name: "Logout" }));
-    expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
+    expect(await screen.findByRole("status", { name: "Signing out" })).toBeInTheDocument();
     expect(api.auth.signedIn).toBe(false);
-    expect(opened).toHaveBeenCalledWith("/api/v1/auth/end-session");
+    // Only to Auth0's logout: a sign-in redirect as well would override it.
+    expect(opened.mock.calls).toEqual([["/api/v1/auth/end-session"]]);
   });
 
   it("signs out here even when the API cannot end the session", async () => {
@@ -1434,11 +1472,12 @@ describe("signing in", () => {
     api.auth.failLogout = true;
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(screen.getByRole("menuitem", { name: "Logout" }));
-    expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
+    expect(await screen.findByRole("alert")).toHaveTextContent("Sign-out didn't finish");
     expect(opened).not.toHaveBeenCalled();
   });
 
   it("returns to sign-in when the API stops accepting the session", async () => {
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     await user.click(await screen.findByRole("button", { name: "Starter" }));
@@ -1448,6 +1487,6 @@ describe("signing in", () => {
     api.state.fail = 401;
     await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
     await user.click(screen.getByRole("menuitem", { name: "Settings" }));
-    expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
+    await waitFor(() => expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0"));
   });
 });

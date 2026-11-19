@@ -80,6 +80,10 @@ workspaced:
     # Profiles are read and names saved here, on the tenant's own domain: the custom one does
     # not serve the Management API.
     management-api: ${WORKSPACED_AUTH_MANAGEMENT_API}
+    # Where mail links point and an unverified sign-up lands, and where signing out ends. Set
+    # here rather than read from the request, whose host a client can choose.
+    app-url: ${WORKSPACED_APP_URL:https://ai.workspaced.online}
+    site-url: ${WORKSPACED_SITE_URL:https://workspaced.online}
   # Top-ups through Stripe Checkout. Left unset, as it is locally, the balance and its history
   # still answer and starting a top-up answers 503.
   billing:

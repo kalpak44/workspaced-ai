@@ -5,8 +5,10 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import io.github.kalpak44.workspacedai.api.FakeAuth0Users;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
@@ -37,6 +39,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -53,6 +56,8 @@ class AuthTest {
   @Autowired WorkspaceRepository workspaces;
   @Autowired AuthService auth;
   @Autowired Auth0Tokens tokens;
+  @Autowired TokenService tokenService;
+  @Autowired JwtDecoder decoder;
   @MockitoBean ApiKeyCheck keyCheck;
   @MockitoBean PasswordResets passwordResets;
   @MockitoBean Mailer mailer;
@@ -78,7 +83,7 @@ class AuthTest {
         .doesNotContain("acr_values");
     // The request in flight travels in a cookie, so no instance keeps a session for it.
     assertThat(response.headers().allValues("Set-Cookie"))
-        .anySatisfy(c -> assertThat(c).startsWith("workspaced_sign_in="))
+        .anySatisfy(c -> assertThat(c).startsWith("__Host-workspaced_sign_in="))
         .noneSatisfy(c -> assertThat(c).startsWith("JSESSIONID="));
   }
 
@@ -110,12 +115,12 @@ class AuthTest {
 
   @Test
   void matchesTheAccountByItsAuth0SubjectAndKeepsNoProfile() throws Exception {
-    var first = auth.signIn("test|ada@example.com", "ada@example.com", true, Role.USER);
+    var first = auth.signIn("test|ada@example.com", profile("ada@example.com"), true, Role.USER);
     assertThat(first.created()).isTrue();
-    var again = auth.signIn("test|ada@example.com", "ada@example.com", true, Role.USER);
+    var again = auth.signIn("test|ada@example.com", profile("ada@example.com"), true, Role.USER);
     assertThat(again.created()).isFalse();
 
-    // The email shown is Auth0's, read as the account is asked for.
+    // The profile shown is the one Auth0 vouched for at sign-in, carried in the token.
     var account =
         JSON.readTree(send("GET", "/account", "Bearer " + again.token().value(), null).body());
     assertThat(account.get("email").asString()).isEqualTo("ada@example.com");
@@ -124,10 +129,10 @@ class AuthTest {
 
   @Test
   void takesTheRoleAuth0AssignsAtEachSignIn() {
-    auth.signIn("auth0|ada", "ada@example.com", true, Role.ADMIN);
+    auth.signIn("auth0|ada", profile("ada@example.com"), true, Role.ADMIN);
     assertThat(users.findByIdpSubject("auth0|ada"))
         .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.ADMIN));
-    auth.signIn("auth0|ada", "ada@example.com", true, Role.USER);
+    auth.signIn("auth0|ada", profile("ada@example.com"), true, Role.USER);
     assertThat(users.findByIdpSubject("auth0|ada"))
         .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.USER));
   }
@@ -162,7 +167,7 @@ class AuthTest {
 
   @Test
   void welcomesANewAccountByMailFromTheNoReplyAddress() {
-    auth.sendWelcomeMail("ada@example.com", "https://ai.example.test/");
+    auth.sendWelcomeMail("ada@example.com");
     var mail = ArgumentCaptor.forClass(Mail.class);
     verify(mailer).send(mail.capture());
     assertThat(mail.getValue().from().email()).startsWith("noreply@");
@@ -174,13 +179,12 @@ class AuthTest {
   @Test
   void signsInEvenWhenTheWelcomeMailCannotGoOut() {
     when(mailer.send(any())).thenThrow(new IllegalStateException("Mailjet is down"));
-    assertThatCode(() -> auth.sendWelcomeMail("ada@example.com", "https://ai.example.test/"))
-        .doesNotThrowAnyException();
+    assertThatCode(() -> auth.sendWelcomeMail("ada@example.com")).doesNotThrowAnyException();
   }
 
   @Test
   void refusesAnEmailAuth0HasNotVerified() {
-    assertThatThrownBy(() -> auth.signIn("auth0|ada", "ada@example.com", false, Role.USER))
+    assertThatThrownBy(() -> auth.signIn("auth0|ada", profile("ada@example.com"), false, Role.USER))
         .isInstanceOf(AuthService.UnverifiedEmailException.class);
     assertThat(users.findByIdpSubject(TestUsers.subject("ada@example.com"))).isEmpty();
   }
@@ -196,7 +200,7 @@ class AuthTest {
 
   @Test
   void acceptsTheTokenAsACookie() throws Exception {
-    var token = TestUsers.token(TestUsers.ADMIN);
+    var token = TestUsers.token(TestUsers.ADMIN, TestUsers.subject(TestUsers.ADMIN_EMAIL));
     var account = sendWithCookie("/account", token);
     assertThat(account.statusCode()).isEqualTo(200);
     assertThat(JSON.readTree(account.body()).get("email").asString())
@@ -205,12 +209,12 @@ class AuthTest {
 
   @Test
   void requiresTheCsrfTokenForChangesMadeWithTheCookie() throws Exception {
-    var token = TestUsers.token(TestUsers.ADMIN);
+    var token = TestUsers.token(TestUsers.ADMIN, TestUsers.subject(TestUsers.ADMIN_EMAIL));
     var issued = sendWithCookie("/auth/csrf", token);
     assertThat(issued.statusCode()).isEqualTo(200);
     var csrf =
         issued.headers().allValues("Set-Cookie").stream()
-            .filter(c -> c.startsWith("XSRF-TOKEN="))
+            .filter(c -> c.startsWith("__Host-XSRF-TOKEN="))
             .findFirst()
             .orElseThrow();
     assertThat(csrf).contains("HttpOnly", "SameSite=Strict");
@@ -220,7 +224,7 @@ class AuthTest {
 
     var forged =
         HttpRequest.newBuilder(url("/account/profile"))
-            .header("Cookie", "workspaced_token=" + token)
+            .header("Cookie", "__Host-workspaced_token=" + token)
             .header("Content-Type", "application/json")
             .PUT(BodyPublishers.ofString(body))
             .build();
@@ -230,7 +234,7 @@ class AuthTest {
 
     var genuine =
         HttpRequest.newBuilder(url("/account/profile"))
-            .header("Cookie", "workspaced_token=" + token + "; " + cookie)
+            .header("Cookie", "__Host-workspaced_token=" + token + "; " + cookie)
             .header("X-XSRF-TOKEN", value)
             .header("Content-Type", "application/json")
             .PUT(BodyPublishers.ofString(body))
@@ -252,19 +256,92 @@ class AuthTest {
     assertThat(response.statusCode()).isEqualTo(204);
     assertThat(response.headers().firstValue("Set-Cookie"))
         .hasValueSatisfying(
-            c -> assertThat(c).startsWith("workspaced_token=;").contains("Max-Age=0"));
+            c ->
+                assertThat(c)
+                    .startsWith("__Host-workspaced_token=;")
+                    .contains("Max-Age=0", "Path=/;", "Secure", "HttpOnly"));
   }
 
   @Test
-  void endsTheAuth0SessionAndComesBackToTheApp() throws Exception {
+  void endsTheAuth0SessionOnThePublicSiteAndClearsTheCookie() throws Exception {
     // Without it the next sign-in would pass without asking for a password.
     var response = send("GET", "/auth/end-session", null, null);
     assertThat(response.statusCode()).isEqualTo(302);
     assertThat(response.headers().firstValue("Location"))
         .hasValue(
-            "https://auth.example.test/v2/logout?client_id=test-client&returnTo=http%3A%2F%2Flocalhost%3A"
-                + port
-                + "%2F");
+            "https://auth.example.test/v2/logout?client_id=test-client"
+                + "&returnTo=https%3A%2F%2Fsite.example.test%2F");
+    assertThat(response.headers().firstValue("Set-Cookie"))
+        .hasValueSatisfying(c -> assertThat(c).startsWith("__Host-workspaced_token=;"));
+  }
+
+  @Test
+  void refusesAChangeABrowserSentFromAnotherOrigin() throws Exception {
+    var token = TestUsers.token(TestUsers.ADMIN, TestUsers.subject(TestUsers.ADMIN_EMAIL));
+    var csrf = csrf();
+    for (var header :
+        List.of(
+            new String[] {"Sec-Fetch-Site", "same-site"},
+            new String[] {"Sec-Fetch-Site", "cross-site"},
+            new String[] {"Origin", "https://abc.vm.workspaced.online"})) {
+      var request =
+          HttpRequest.newBuilder(url("/account/password-reset"))
+              .header("Cookie", "__Host-workspaced_token=" + token + "; " + csrf.cookie())
+              .header("X-XSRF-TOKEN", csrf.token())
+              .header(header[0], header[1])
+              .POST(BodyPublishers.noBody())
+              .build();
+      var refused = http.send(request, BodyHandlers.ofString());
+      assertThat(refused.statusCode()).as(header[1]).isEqualTo(403);
+      assertThat(JSON.readTree(refused.body()).get("detail").asString()).contains("this site");
+    }
+    verifyNoInteractions(passwordResets);
+  }
+
+  @Test
+  void takesTheCsrfTokenFromTheHeaderOnlyNeverAFormField() throws Exception {
+    var token = TestUsers.token(TestUsers.ADMIN, TestUsers.subject(TestUsers.ADMIN_EMAIL));
+    var csrf = csrf();
+    var request =
+        HttpRequest.newBuilder(url("/account/password-reset"))
+            .header("Cookie", "__Host-workspaced_token=" + token + "; " + csrf.cookie())
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .POST(BodyPublishers.ofString("_csrf=" + csrf.token()))
+            .build();
+    assertThat(http.send(request, BodyHandlers.ofString()).statusCode()).isEqualTo(403);
+    verifyNoInteractions(passwordResets);
+  }
+
+  @Test
+  void resendsTheVerificationEmailOnceAMinuteForTheSignUpTheCookieNames() throws Exception {
+    assertThat(resend(null).statusCode()).isEqualTo(401);
+
+    var proof = tokenService.issueVerification("auth0|unverified-" + UUID.randomUUID());
+    assertThat(resend(proof.value()).statusCode()).isEqualTo(204);
+    assertThat(FakeAuth0Users.VERIFICATION_EMAILS).contains(subjectOf(proof));
+    assertThat(resend(proof.value()).statusCode()).isEqualTo(429);
+
+    // A sign-in token is no proof of a sign-up, and a proof signs no one in.
+    var session = TestUsers.token(TestUsers.ADMIN, TestUsers.subject(TestUsers.ADMIN_EMAIL));
+    assertThat(resend(session).statusCode()).isEqualTo(401);
+    assertThat(send("GET", "/account", "Bearer " + proof.value(), null).statusCode())
+        .isEqualTo(401);
+  }
+
+  private String subjectOf(TokenService.Token token) {
+    return decoder.decode(token.value()).getSubject();
+  }
+
+  private HttpResponse<String> resend(String proof) throws Exception {
+    var csrf = csrf();
+    var cookies = csrf.cookie() + (proof == null ? "" : "; __Host-workspaced_verify=" + proof);
+    var request =
+        HttpRequest.newBuilder(url("/auth/verification-email"))
+            .header("Cookie", cookies)
+            .header("X-XSRF-TOKEN", csrf.token())
+            .POST(BodyPublishers.noBody())
+            .build();
+    return http.send(request, BodyHandlers.ofString());
   }
 
   @Test
@@ -277,8 +354,14 @@ class AuthTest {
             bearer,
             "{\"firstName\":\" Ada \",\"lastName\":\"Lovelace\"}");
     assertThat(updated.statusCode()).isEqualTo(200);
+    assertThat(FakeAuth0Users.profile(TestUsers.subject("ada@example.com")).givenName())
+        .isEqualTo("Ada");
 
-    var account = JSON.readTree(send("GET", "/account", bearer, null).body());
+    // The answer carries a session cookie with the new names, so every page shows them at once.
+    var cookie = updated.headers().firstValue("Set-Cookie").orElseThrow();
+    assertThat(cookie).startsWith("__Host-workspaced_token=");
+    var token = cookie.substring(cookie.indexOf('=') + 1, cookie.indexOf(';'));
+    var account = JSON.readTree(send("GET", "/account", "Bearer " + token, null).body());
     assertThat(account.get("firstName").asString()).isEqualTo("Ada");
     assertThat(account.get("lastName").asString()).isEqualTo("Lovelace");
   }
@@ -425,6 +508,10 @@ class AuthTest {
             .orElseGet(() -> users.save(TestUsers.newUser(email))));
   }
 
+  private static Auth0Users.Profile profile(String email) {
+    return new Auth0Users.Profile(email, "", "", "https://pictures.test/" + email);
+  }
+
   private static OidcUser oidcUser(List<String> roles) {
     var claims = new HashMap<String, Object>(Map.of("sub", "auth0|ada"));
     if (roles != null) {
@@ -440,7 +527,9 @@ class AuthTest {
 
   private HttpResponse<String> sendWithCookie(String path, String token) throws Exception {
     var request =
-        HttpRequest.newBuilder(url(path)).header("Cookie", "workspaced_token=" + token).build();
+        HttpRequest.newBuilder(url(path))
+            .header("Cookie", "__Host-workspaced_token=" + token)
+            .build();
     return http.send(request, BodyHandlers.ofString());
   }
 
@@ -468,7 +557,7 @@ class AuthTest {
     var response = http.send(request, BodyHandlers.ofString());
     var cookie =
         response.headers().allValues("Set-Cookie").stream()
-            .filter(value -> value.startsWith("XSRF-TOKEN="))
+            .filter(value -> value.startsWith("__Host-XSRF-TOKEN="))
             .map(value -> value.substring(0, value.indexOf(';')))
             .findFirst()
             .orElseThrow();

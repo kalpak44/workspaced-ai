@@ -36,7 +36,7 @@ import tools.jackson.databind.json.JsonMapper;
 final class CookieAuthorizationRequests
     implements AuthorizationRequestRepository<OAuth2AuthorizationRequest> {
 
-  static final String COOKIE = "workspaced_sign_in";
+  static final String COOKIE = "__Host-workspaced_sign_in";
 
   // Long enough to type a password and an MFA code at Auth0, short enough not to linger.
   private static final Duration LIFETIME = Duration.ofMinutes(10);
@@ -65,17 +65,17 @@ final class CookieAuthorizationRequests
       HttpServletRequest request,
       HttpServletResponse response) {
     if (authorization == null) {
-      response.addHeader(HttpHeaders.SET_COOKIE, cookie(request, "", Duration.ZERO));
+      response.addHeader(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO));
       return;
     }
-    response.addHeader(HttpHeaders.SET_COOKIE, cookie(request, encrypt(authorization), LIFETIME));
+    response.addHeader(HttpHeaders.SET_COOKIE, cookie(encrypt(authorization), LIFETIME));
   }
 
   @Override
   public OAuth2AuthorizationRequest removeAuthorizationRequest(
       HttpServletRequest request, HttpServletResponse response) {
     var authorization = loadAuthorizationRequest(request);
-    response.addHeader(HttpHeaders.SET_COOKIE, cookie(request, "", Duration.ZERO));
+    response.addHeader(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO));
     return authorization;
   }
 
@@ -124,14 +124,16 @@ final class CookieAuthorizationRequests
         .build();
   }
 
-  /** Scoped to the API's path; Lax so it rides along on the redirect back from Auth0. */
-  private static String cookie(HttpServletRequest request, String value, Duration maxAge) {
-    var path = request.getContextPath().isEmpty() ? "/" : request.getContextPath();
+  /**
+   * __Host-, so no sibling origin can plant one to sign a victim in as someone else; Lax so it
+   * rides along on the redirect back from Auth0.
+   */
+  private static String cookie(String value, Duration maxAge) {
     return ResponseCookie.from(COOKIE, value)
         .httpOnly(true)
-        .secure(request.isSecure())
+        .secure(true)
         .sameSite("Lax")
-        .path(path)
+        .path("/")
         .maxAge(maxAge)
         .build()
         .toString();

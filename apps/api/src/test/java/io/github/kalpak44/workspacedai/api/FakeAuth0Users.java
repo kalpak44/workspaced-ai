@@ -3,9 +3,10 @@ package io.github.kalpak44.workspacedai.api;
 import io.github.kalpak44.workspacedai.api.auth.Auth0Users;
 import java.util.Collection;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Auth0's users as the tests need them. A test user's subject is "test|" plus their email, so every
@@ -16,15 +17,18 @@ public class FakeAuth0Users implements Auth0Users {
   // Static so TestUsers can name an account as it makes one, before any context exists.
   private static final Map<String, String[]> NAMES = new ConcurrentHashMap<>();
 
+  // Every subject Auth0 was asked to send a verification email for.
+  public static final List<String> VERIFICATION_EMAILS = new CopyOnWriteArrayList<>();
+
   public static void name(String subject, String givenName, String familyName) {
     NAMES.put(subject, new String[] {givenName, familyName});
   }
 
-  @Override
-  public Optional<Profile> profile(String subject) {
+  /** The profile Auth0 would have for a test user: names as a test set them. */
+  public static Profile profile(String subject) {
     var names = NAMES.getOrDefault(subject, new String[] {"", ""});
     var email = subject.substring(subject.indexOf('|') + 1);
-    return Optional.of(new Profile(email, names[0], names[1], "https://pictures.test/" + email));
+    return new Profile(email, names[0], names[1], "https://pictures.test/" + email);
   }
 
   @Override
@@ -33,9 +37,14 @@ public class FakeAuth0Users implements Auth0Users {
   }
 
   @Override
+  public void sendVerificationEmail(String subject) {
+    VERIFICATION_EMAILS.add(subject);
+  }
+
+  @Override
   public Map<String, Profile> profiles(Collection<String> subjects) {
     var found = new HashMap<String, Profile>();
-    subjects.forEach(s -> profile(s).ifPresent(p -> found.put(s, p)));
+    subjects.forEach(s -> found.put(s, profile(s)));
     return found;
   }
 }

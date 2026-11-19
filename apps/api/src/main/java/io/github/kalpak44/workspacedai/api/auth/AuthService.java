@@ -7,12 +7,18 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-/** Turns an Auth0 sign-in into an account here; the tokens themselves come from TokenService. */
+/**
+ * Turns an Auth0 sign-in into an account here, and serves the account from the session token. The
+ * profile is Auth0's, carried in that token, so no page asks Auth0 for it.
+ */
 @Service
 public class AuthService {
 
@@ -20,24 +26,33 @@ public class AuthService {
 
   private final UserRepository users;
   private final TokenService tokens;
+  private final JwtDecoder decoder;
   private final NotificationService notifications;
   private final PasswordResets passwordResets;
   private final MailService mail;
   private final Auth0Users auth0Users;
+  private final VerificationEmails verificationEmails;
+  private final AuthProperties properties;
 
   public AuthService(
       UserRepository users,
       TokenService tokens,
+      JwtDecoder decoder,
       NotificationService notifications,
       PasswordResets passwordResets,
       MailService mail,
-      Auth0Users auth0Users) {
+      Auth0Users auth0Users,
+      VerificationEmails verificationEmails,
+      AuthProperties properties) {
     this.users = users;
     this.tokens = tokens;
+    this.decoder = decoder;
     this.notifications = notifications;
     this.passwordResets = passwordResets;
     this.mail = mail;
     this.auth0Users = auth0Users;
+    this.verificationEmails = verificationEmails;
+    this.properties = properties;
   }
 
   /**
@@ -54,24 +69,26 @@ public class AuthService {
 
   /**
    * Finds the account the Auth0 user signs in as, or creates one with a welcome among its
-   * notifications, and takes the email and role Auth0 has for them now.
+   * notifications, and takes the role Auth0 has for them now. The profile goes into the token,
+   * never into the database.
    */
   @Transactional
-  public SignIn signIn(String subject, String email, boolean emailVerified, Role role) {
-    if (!emailVerified || email == null || email.isBlank()) {
+  public SignIn signIn(
+      String subject, Auth0Users.Profile profile, boolean emailVerified, Role role) {
+    if (!emailVerified || profile.email().isBlank()) {
       throw new UnverifiedEmailException();
     }
     var existing = users.findByIdpSubject(subject);
     var user = existing.orElseGet(() -> create(subject, role));
     user.signedIn(role);
-    return new SignIn(tokens.issue(user), email.strip(), existing.isEmpty());
+    return new SignIn(tokens.issue(user, profile), profile.email(), existing.isEmpty());
   }
 
   /**
    * Greets a new account by mail as well. Sent after the sign-in has committed, and a mail that
    * cannot go out is logged rather than turning the sign-in away.
    */
-  public void sendWelcomeMail(String email, String appUrl) {
+  public void sendWelcomeMail(String email) {
     var text =
         """
         Welcome to workspaced!
@@ -82,35 +99,73 @@ public class AuthService {
 
         [Open workspaced](%s)
         """
-            .formatted(appUrl);
+            .formatted(properties.appUrl() + "/");
     try {
       mail.notify(List.of(email), "Welcome to workspaced", text);
     } catch (RuntimeException e) {
-      LOG.warn("the welcome mail to a new account could not be sent", e);
+      // The exception alone: a mail service's message can repeat the recipient's address.
+      LOG.warn("the welcome mail to a new account could not be sent: {}", e.getClass().getName());
     }
   }
 
-  /** Not transactional, like everything here that asks Auth0: no connection waits on it. */
-  public Account account(UUID userId) {
-    var user = user(userId);
-    return Account.of(user, profile(user));
+  /** The account, its profile from the session token and its role from the database. */
+  public Account account(UUID userId, Auth0Users.Profile profile) {
+    return Account.of(user(userId), profile);
   }
 
-  public Account updateProfile(UUID userId, String firstName, String lastName) {
+  public record ProfileUpdate(Account account, TokenService.Token token) {}
+
+  /**
+   * Saves the names to Auth0 and answers a session token carrying them, so the change shows at
+   * once. Not transactional: no connection waits on Auth0.
+   */
+  public ProfileUpdate updateProfile(
+      UUID userId, Auth0Users.Profile profile, String firstName, String lastName) {
     var user = user(userId);
     auth0Users.updateNames(user.getIdpSubject(), firstName, lastName);
-    return Account.of(user, profile(user));
+    var updated = new Auth0Users.Profile(profile.email(), firstName, lastName, profile.picture());
+    return new ProfileUpdate(Account.of(user, updated), tokens.issue(user, updated));
   }
 
-  public void sendPasswordReset(UUID userId) {
-    passwordResets.send(profile(user(userId)).email());
+  public void sendPasswordReset(Auth0Users.Profile profile) {
+    passwordResets.send(profile.email());
   }
 
-  private Auth0Users.Profile profile(UserEntity user) {
-    return auth0Users
-        .profile(user.getIdpSubject())
-        .orElseThrow(
-            () -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "the Auth0 user is gone"));
+  /** What an unverified sign-up carries to ask for the email again. */
+  public TokenService.Token verificationToken(String idpSubject) {
+    return tokens.issueVerification(idpSubject);
+  }
+
+  /**
+   * Has Auth0 send the verification email again for the sign-up the token names, at most once a
+   * minute. The claim commits before Auth0 is asked, so no connection waits on it.
+   */
+  public void resendVerificationEmail(String token) {
+    var subject = verifiedSubject(token);
+    boolean claimed;
+    try {
+      claimed = verificationEmails.claim(subject);
+    } catch (DataIntegrityViolationException _) {
+      // Another instance inserted the first send at the same moment.
+      claimed = false;
+    }
+    if (!claimed) {
+      throw new ResponseStatusException(
+          HttpStatus.TOO_MANY_REQUESTS, "wait a minute before asking again");
+    }
+    auth0Users.sendVerificationEmail(subject);
+  }
+
+  private String verifiedSubject(String token) {
+    try {
+      var jwt = decoder.decode(token);
+      if (CurrentUser.VERIFY_EMAIL.equals(jwt.getClaimAsString(CurrentUser.USE))) {
+        return jwt.getSubject();
+      }
+    } catch (JwtException _) {
+      // Expired, altered or not ours: the same answer as none at all.
+    }
+    throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "sign in again");
   }
 
   private UserEntity create(String subject, Role role) {

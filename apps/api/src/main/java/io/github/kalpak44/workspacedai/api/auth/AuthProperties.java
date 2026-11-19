@@ -14,6 +14,9 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param connection the Auth0 database the accounts live in, which password resets name
  * @param managementApi Auth0's Management API, on the tenant's own domain rather than the custom
  *     one, ending in a slash
+ * @param appUrl the web app, which mail links to and an unverified sign-up is sent back to;
+ *     configured rather than read from the request, whose host a client can set
+ * @param siteUrl the public site, where signing out ends
  */
 @ConfigurationProperties("workspaced.auth")
 public record AuthProperties(
@@ -23,4 +26,6 @@ public record AuthProperties(
     String clientId,
     String clientSecret,
     @DefaultValue("Username-Password-Authentication") String connection,
-    String managementApi) {}
+    String managementApi,
+    @DefaultValue("https://ai.workspaced.online") String appUrl,
+    @DefaultValue("https://workspaced.online") String siteUrl) {}

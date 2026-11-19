@@ -7,31 +7,38 @@ The whole app is served under the `/api/v1` context path, so the host root is fr
 
 Auth0 signs users in; the API keeps no passwords. A browser goes to `GET /oauth2/authorization/auth0` (add `?signup` to
 open Auth0's sign-up form, `?mfa=enroll` to set up two-factor authentication), signs in on Auth0's page, and comes back to
-`/login/oauth2/code/auth0`. There the API finds the account by its Auth0 subject or creates one, takes the email and
-the role Auth0 has for the user now, and redirects to `/` (`/?welcome` for a new account, which also gets a welcome
-notification and mail). An email Auth0 has not verified is refused with a redirect to `/login?error=unverified`; any
-other failure goes to `/login?error=failed`. The user is an admin when Auth0 assigns them its `admin` role, which arrives
-in the ID token's `https://workspaced.online/roles` claim. The request in flight between the two legs is kept in an
-encrypted cookie rather than a server session, so the callback may reach any instance.
+`/login/oauth2/code/auth0`. There the API finds the account by its Auth0 subject or creates one, takes the role Auth0
+has for the user now, and redirects to `/` (`/?welcome` for a new account, which also gets a welcome notification and
+mail). The user is an admin when Auth0 assigns them its `admin` role, which arrives in the ID token's
+`https://workspaced.online/roles` claim. The request in flight between the two legs is kept in an encrypted cookie rather
+than a server session, so the callback may reach any instance; any failure there goes to `/login?error=failed`.
+
+An email Auth0 has not verified is refused: the API ends the Auth0 session, so the next sign-in asks again, and sends the
+browser to the app's `/verify-email`, setting a 30-minute `__Host-workspaced_verify` cookie that names the sign-up.
+`POST /auth/verification-email` then has Auth0 send the verification email again: `204`, `429` within a minute of the
+last one, or `401` once the cookie has expired.
 
 Every other route needs a signed-in user, except `POST /auth/logout`, `GET /auth/end-session`, `GET /auth/csrf`, health
-and the API docs. After
-Auth0's sign-in the API issues its own HS256 JWT (Spring Security's OAuth2 resource server validates it); its subject is
-the user's id. It is set as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over
-HTTPS — which is how the browser authenticates, EventSource and the terminal WebSocket included, since neither can set a
-header. Other clients send `Authorization: Bearer <token>`. A change (any method but GET) sent with that cookie must also
-carry the CSRF token, else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `XSRF-TOKEN` cookie it is checked
-against, and the change sends it back in `X-XSRF-TOKEN`. Requests without the sign-in cookie, bearer requests included,
-need none. `POST /auth/logout` clears the cookie (`204`), and the browser then opens `GET /auth/end-session`, which redirects
-to Auth0's logout so the next sign-in asks for a password again; tokens are stateless, so one kept elsewhere stays valid until it expires. A
+and the API docs. After Auth0's sign-in the API issues its own HS256 JWT (Spring Security's OAuth2 resource server
+validates it): its subject is the user's id, and it carries the profile Auth0 vouched for, so no page asks Auth0 for it.
+It is set as the `__Host-workspaced_token` cookie — HttpOnly, Secure, SameSite=Strict, `Path=/` — which is how the browser
+authenticates, EventSource and the terminal WebSocket included, since neither can set a header. Other clients send
+`Authorization: Bearer <token>`. Users run what they like on VMs named under the same site, so every cookie is `__Host-`,
+which a sibling origin can neither set nor shadow, and a change (any method but GET) sent by a browser must come from this
+origin, by its `Sec-Fetch-Site` or `Origin`, else `403`. It must also carry the CSRF token in the `X-XSRF-TOKEN` header —
+never a form field — else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `__Host-XSRF-TOKEN` cookie it is
+checked against. Bearer requests need neither. `POST /auth/logout` clears the cookie (`204`), and the browser then opens
+`GET /auth/end-session`, which clears it too and redirects to Auth0's logout, so the next sign-in asks for a password
+again, and from there to the public site; tokens are stateless, so one kept elsewhere stays valid until it expires. A
 missing, invalid or expired token answers `401` as a problem detail.
 
 The database keeps no personal data: an account is its Auth0 subject and its role. `GET /account` returns the signed-in
-user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`), its profile read from Auth0 as it is asked for; `avatar`
-is Auth0's picture URL, the Gravatar for the email or a picture of the initials. `PUT /account/profile` saves the first and
-last name (at most 100 characters each, trimmed) to the Auth0 profile. Recipe authors' names come from Auth0 the same way,
-and an author without one shows as `Unknown`. `POST /account/password-reset` has Auth0 mail the user a link to choose a new
-password: `204`, or `502` when Auth0 cannot be reached. Accounts are managed in Auth0; the API has no user administration.
+user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`) from the session token and the role from the database;
+`avatar` is Auth0's picture URL, the Gravatar for the email or a picture of the initials. `PUT /account/profile` saves the
+first and last name (at most 100 characters each, trimmed) to the Auth0 profile and answers a new session cookie carrying
+them. Recipe authors' names are read from Auth0 as recipes are shown, and an author without one shows as `Unknown`.
+`POST /account/password-reset` has Auth0 mail the user a link to choose a new password: `204`, or `502` when Auth0 cannot
+be reached. Accounts are managed in Auth0; the API has no user administration.
 
 The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
 show only the caller's, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
@@ -45,6 +52,8 @@ against the owner before it runs. Another user's workspace answers `404`, exactl
 | `WORKSPACED_AUTH_CLIENT_ID` | none | The Auth0 application the API signs users in as. Required. |
 | `WORKSPACED_AUTH_ISSUER` | none | The Auth0 tenant, ending in a slash, e.g. `https://auth.workspaced.online/`. Required. |
 | `WORKSPACED_AUTH_MANAGEMENT_API` | none | Auth0's Management API on the tenant's own domain, e.g. `https://workspaced.eu.auth0.com/api/v2/`. Required. |
+| `WORKSPACED_APP_URL` | `https://ai.workspaced.online` | The web app: mail links and the page an unverified sign-up lands on. |
+| `WORKSPACED_SITE_URL` | `https://workspaced.online` | The public site, where signing out ends. |
 
 ## OpenCode API reference
 
@@ -491,12 +500,15 @@ Docker, so `verify` needs a running Docker daemon.
 docker run -d --name workspaced-db -p 5432:5432 \
   -e POSTGRES_DB=workspaced -e POSTGRES_USER=workspaced -e POSTGRES_PASSWORD=workspaced postgres:18-alpine
 cd apps/api
-# Sign in through the web app on :5173; the Auth0 application allows that callback.
+# Sign in through the web app on :5173 as the workspaced-ai-dev Auth0 application, never the
+# production one: it allows only localhost and has no Management API grant, so saving names and
+# recipe authors' names do not work locally.
 WORKSPACED_DB_PASSWORD=workspaced WORKSPACED_JWT_SECRET=local-dev-signing-key-at-least-32-bytes \
   WORKSPACED_AUTH_ISSUER=https://auth.workspaced.online/ \
-  WORKSPACED_AUTH_CLIENT_ID=dRdGOJHzotVdano2eR4VaQ2zSXnOltte \
+  WORKSPACED_AUTH_CLIENT_ID=ht8eqs4n2xyILL6Yzeo1ToMDHqEHiE97 \
   WORKSPACED_AUTH_MANAGEMENT_API=https://workspaced.eu.auth0.com/api/v2/ \
-  WORKSPACED_AUTH_CLIENT_SECRET="$(vault kv get -field=auth0-client-secret secret/workspaced-secrets)" \
+  WORKSPACED_AUTH_CLIENT_SECRET="$(vault kv get -field=auth0-client-secret secret/workspaced-dev-secrets)" \
+  WORKSPACED_APP_URL=http://localhost:5173 WORKSPACED_SITE_URL=http://localhost:5173 \
   mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor

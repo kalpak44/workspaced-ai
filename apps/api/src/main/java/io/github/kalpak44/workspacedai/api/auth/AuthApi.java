@@ -7,6 +7,7 @@ import io.swagger.v3.oas.annotations.media.Schema;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.security.SecurityRequirements;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -49,7 +50,8 @@ public interface AuthApi {
       summary = "Sign out",
       description =
           "Clears the token cookie. A browser then opens /auth/end-session to end the Auth0 "
-              + "session too. A token kept elsewhere stays valid until it expires.")
+              + "session too, which lands on the public site. A token kept elsewhere stays valid "
+              + "until it expires.")
   @ApiResponse(responseCode = "204", description = "Signed out.")
   @PostMapping("/logout")
   ResponseEntity<Void> logout();
@@ -63,4 +65,29 @@ public interface AuthApi {
   @ApiResponse(responseCode = "302", description = "On to Auth0.")
   @GetMapping("/end-session")
   ResponseEntity<Void> endSession();
+
+  @Operation(
+      operationId = "resendVerificationEmail",
+      summary = "Send the verification email again",
+      description =
+          "For someone who signed up and has not verified their email: the sign-in sets a "
+              + "short-lived cookie naming them, and this has Auth0 send its verification email "
+              + "again, at most once a minute.")
+  @ApiResponse(responseCode = "204", description = "Sent.")
+  @ApiResponse(
+      responseCode = "401",
+      description = "No cookie, or it expired: sign in again for a new one.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "429",
+      description = "One was sent less than a minute ago.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping("/verification-email")
+  ResponseEntity<Void> resendVerificationEmail();
 }

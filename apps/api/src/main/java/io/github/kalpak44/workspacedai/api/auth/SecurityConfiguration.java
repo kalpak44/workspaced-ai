@@ -18,6 +18,7 @@ import java.util.Enumeration;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.UUID;
+import java.util.function.Supplier;
 import javax.crypto.SecretKey;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -56,6 +57,10 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.access.intercept.RequestAuthorizationContext;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfException;
+import org.springframework.security.web.csrf.CsrfFilter;
+import org.springframework.security.web.csrf.CsrfToken;
+import org.springframework.security.web.csrf.CsrfTokenRequestHandler;
+import org.springframework.security.web.csrf.XorCsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.OrRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
@@ -69,12 +74,13 @@ import tools.jackson.databind.json.JsonMapper;
  *
  * <p>Auth0 signs users in (see {@link Auth0SignIn}); the token is a JWT the API then signs itself.
  * Browsers carry it in an HttpOnly cookie, because EventSource and WebSocket cannot set an
- * Authorization header; other clients send it as a bearer token. The cookie is SameSite=Strict, but
- * that does not cover a sibling subdomain on the same site, so a change sent with that cookie also
- * needs the CSRF token: the page reads it from GET /auth/csrf and echoes it in X-XSRF-TOKEN, and it
- * is checked against the HttpOnly XSRF-TOKEN cookie. A request without the sign-in cookie has no
- * ambient credential to forge, and a bearer request needs none, since a browser never adds that
- * header on its own.
+ * Authorization header; other clients send it as a bearer token.
+ *
+ * <p>Users run what they like on VMs named under the same site, so SameSite alone protects nothing
+ * here. Every cookie is __Host-, which a sibling origin cannot set or shadow; a change must come
+ * from this origin; and it must carry the CSRF token in X-XSRF-TOKEN, as GET /auth/csrf hands it
+ * out, checked against the HttpOnly __Host-XSRF-TOKEN cookie. A bearer request needs neither, since
+ * a browser never adds that header on its own.
  *
  * <p>Every request also looks the account up: a token outlives a deleted account otherwise, and the
  * role is read from there.
@@ -83,7 +89,7 @@ import tools.jackson.databind.json.JsonMapper;
 @EnableConfigurationProperties(AuthProperties.class)
 public class SecurityConfiguration {
 
-  static final String COOKIE = "workspaced_token";
+  static final String COOKIE = "__Host-workspaced_token";
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
   // The conversion Spring MVC binds a UUID path variable with, which trims surrounding whitespace.
@@ -93,6 +99,8 @@ public class SecurityConfiguration {
   private static final String[] PUBLIC = {
     Auth0SignIn.AUTHORIZATION + "/*",
     Auth0SignIn.CALLBACK,
+    // An unverified sign-up has no account; the short-lived cookie it carries is its proof.
+    "/auth/verification-email",
     "/auth/logout",
     "/auth/end-session",
     "/auth/csrf",
@@ -128,7 +136,11 @@ public class SecurityConfiguration {
       throws Exception {
     var publicPaths = publicPaths();
     var adminOnly = matcher(ADMIN_ONLY);
-    http.csrf(csrf -> csrf.csrfTokenRepository(csrfCookie()))
+    http.csrf(
+            csrf ->
+                csrf.csrfTokenRepository(csrfCookie())
+                    .csrfTokenRequestHandler(new HeaderOnlyCsrfTokens()))
+        .addFilterBefore(new SameOriginChanges(), CsrfFilter.class)
         .httpBasic(AbstractHttpConfigurer::disable)
         .formLogin(AbstractHttpConfigurer::disable)
         .logout(AbstractHttpConfigurer::disable)
@@ -163,7 +175,7 @@ public class SecurityConfiguration {
                                     Auth0SignIn.authorizationRequests(registrations))
                                 .authorizationRequestRepository(
                                     new CookieAuthorizationRequests(properties.jwtSecret(), JSON)))
-                    .successHandler(Auth0SignIn.signedIn(auth))
+                    .successHandler(Auth0SignIn.signedIn(auth, properties))
                     .failureHandler(Auth0SignIn.failed()))
         .oauth2ResourceServer(
             server ->
@@ -208,8 +220,69 @@ public class SecurityConfiguration {
   /** HttpOnly like the sign-in cookie; the page learns the token from GET /auth/csrf instead. */
   private static CookieCsrfTokenRepository csrfCookie() {
     var repository = new CookieCsrfTokenRepository();
-    repository.setCookieCustomizer(cookie -> cookie.sameSite("Strict"));
+    repository.setCookieName("__Host-XSRF-TOKEN");
+    repository.setCookiePath("/");
+    repository.setCookieCustomizer(cookie -> cookie.sameSite("Strict").secure(true));
     return repository;
+  }
+
+  /**
+   * The token from the header alone. Spring also reads a form field, which a plain HTML form on
+   * another origin can send; the header needs script running on this one.
+   */
+  private static final class HeaderOnlyCsrfTokens implements CsrfTokenRequestHandler {
+
+    private final XorCsrfTokenRequestAttributeHandler masked =
+        new XorCsrfTokenRequestAttributeHandler();
+
+    @Override
+    public void handle(
+        HttpServletRequest request, HttpServletResponse response, Supplier<CsrfToken> csrfToken) {
+      masked.handle(request, response, csrfToken);
+    }
+
+    @Override
+    public String resolveCsrfTokenValue(HttpServletRequest request, CsrfToken csrfToken) {
+      return request.getHeader(csrfToken.getHeaderName()) == null
+          ? null
+          : masked.resolveCsrfTokenValue(request, csrfToken);
+    }
+  }
+
+  /**
+   * Refuses a change a browser sent from any other origin, a user's VM under the same site
+   * included. Browsers say where a request comes from in Sec-Fetch-Site, and older ones in Origin;
+   * a request with neither, or with an Authorization header, comes from no browser page.
+   */
+  private static final class SameOriginChanges extends OncePerRequestFilter {
+
+    private static final java.util.Set<String> SAFE = java.util.Set.of("GET", "HEAD", "OPTIONS");
+
+    @Override
+    protected void doFilterInternal(
+        HttpServletRequest request, HttpServletResponse response, FilterChain chain)
+        throws ServletException, IOException {
+      if (SAFE.contains(request.getMethod())
+          || request.getHeader(HttpHeaders.AUTHORIZATION) != null
+          || sameOrigin(request)) {
+        chain.doFilter(request, response);
+        return;
+      }
+      problem(request, response, HttpStatus.FORBIDDEN, "changes are accepted from this site only");
+    }
+
+    private static boolean sameOrigin(HttpServletRequest request) {
+      var site = request.getHeader("Sec-Fetch-Site");
+      if (site != null) {
+        return "same-origin".equals(site) || "none".equals(site);
+      }
+      var origin = request.getHeader(HttpHeaders.ORIGIN);
+      if (origin == null) {
+        return true;
+      }
+      var own = request.getScheme() + "://" + request.getHeader(HttpHeaders.HOST);
+      return origin.equalsIgnoreCase(own);
+    }
   }
 
   private static RequestMatcher publicPaths() {
@@ -227,6 +300,11 @@ public class SecurityConfiguration {
    */
   private static Converter<Jwt, AbstractAuthenticationToken> currentAccount(UserRepository users) {
     return jwt -> {
+      // A token issued for one purpose, such as asking for the verification email again, is no
+      // sign-in.
+      if (jwt.hasClaim(CurrentUser.USE)) {
+        throw new InvalidBearerTokenException("the token signs no one in");
+      }
       var access =
           users
               .findAccessById(UUID.fromString(jwt.getSubject()))

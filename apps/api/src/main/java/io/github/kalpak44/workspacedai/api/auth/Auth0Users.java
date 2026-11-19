@@ -2,7 +2,6 @@ package io.github.kalpak44.workspacedai.api.auth;
 
 import java.util.Collection;
 import java.util.Map;
-import java.util.Optional;
 
 /**
  * A user's email, name and picture, which live in Auth0 alone; the app's database keeps only who a
@@ -15,9 +14,10 @@ public interface Auth0Users {
    */
   record Profile(String email, String givenName, String familyName, String picture) {}
 
-  Optional<Profile> profile(String subject);
-
   void updateNames(String subject, String givenName, String familyName);
+
+  /** Has Auth0 send the user its email-verification message again. */
+  void sendVerificationEmail(String subject);
 
   /** By subject; one Auth0 does not know, or does not answer for, is left out. */
   Map<String, Profile> profiles(Collection<String> subjects);

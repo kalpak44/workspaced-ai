@@ -1,28 +1,33 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import jakarta.servlet.http.Cookie;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URI;
-import java.net.URLEncoder;
-import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Arrays;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.RestController;
-import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
+import org.springframework.web.server.ResponseStatusException;
 
 /** Routes, validation and documentation are declared on {@link AuthApi}. */
 @RestController
 public class AuthController implements AuthApi {
 
+  // Proves which unverified sign-up is asking for its email again; see TokenService.
+  static final String VERIFICATION_COOKIE = "__Host-workspaced_verify";
+
   private final AuthProperties properties;
+  private final AuthService auth;
   private final HttpServletRequest request;
 
-  public AuthController(AuthProperties properties, HttpServletRequest request) {
+  public AuthController(AuthProperties properties, AuthService auth, HttpServletRequest request) {
     this.properties = properties;
+    this.auth = auth;
     this.request = request;
   }
 
@@ -34,47 +39,67 @@ public class AuthController implements AuthApi {
   @Override
   public ResponseEntity<Void> logout() {
     return ResponseEntity.noContent()
-        .header(HttpHeaders.SET_COOKIE, cookie(request, "", Duration.ZERO).toString())
+        .header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
         .build();
   }
 
   /**
    * The browser is sent to a path of the API's own rather than handed Auth0's URL, so the app never
-   * navigates to an address it was given.
+   * navigates to an address it was given. It clears the session cookie too, so signing out holds
+   * even when the POST before it failed.
    */
   @Override
   public ResponseEntity<Void> endSession() {
-    return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(logoutUrl())).build();
+    var returnTo = properties.siteUrl() + "/";
+    return ResponseEntity.status(HttpStatus.FOUND)
+        .header(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO).toString())
+        .location(URI.create(Auth0SignIn.logoutUrl(properties, returnTo)))
+        .build();
   }
 
-  private String logoutUrl() {
-    var app =
-        ServletUriComponentsBuilder.fromCurrentRequestUri()
-            .replacePath("/")
-            .replaceQuery(null)
-            .toUriString();
-    return properties.issuer()
-        + "v2/logout?client_id="
-        + URLEncoder.encode(properties.clientId(), StandardCharsets.UTF_8)
-        + "&returnTo="
-        + URLEncoder.encode(app, StandardCharsets.UTF_8);
+  @Override
+  public ResponseEntity<Void> resendVerificationEmail() {
+    var proof = verificationCookie(request);
+    if (proof == null) {
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "sign in again");
+    }
+    auth.resendVerificationEmail(proof);
+    return ResponseEntity.noContent().build();
   }
 
-  /**
-   * Scoped to the API's own path, so the frontend's pages never carry it, and Secure whenever the
-   * request arrived over HTTPS.
-   */
-  static ResponseCookie cookie(HttpServletRequest request, TokenService.Token token) {
-    return cookie(request, token.value(), Duration.between(Instant.now(), token.expiresAt()));
+  static ResponseCookie verificationCookie(TokenService.Token token) {
+    return ResponseCookie.from(VERIFICATION_COOKIE, token.value())
+        .httpOnly(true)
+        .secure(true)
+        .sameSite("Strict")
+        .path("/")
+        .maxAge(Duration.between(Instant.now(), token.expiresAt()))
+        .build();
   }
 
-  private static ResponseCookie cookie(HttpServletRequest request, String value, Duration maxAge) {
-    var path = request.getContextPath().isEmpty() ? "/" : request.getContextPath();
+  private static String verificationCookie(HttpServletRequest request) {
+    if (request.getCookies() == null) {
+      return null;
+    }
+    return Arrays.stream(request.getCookies())
+        .filter(c -> VERIFICATION_COOKIE.equals(c.getName()) && !c.getValue().isBlank())
+        .map(Cookie::getValue)
+        .findFirst()
+        .orElse(null);
+  }
+
+  /** The session cookie: HttpOnly, and __Host- like every cookie here. */
+  static ResponseCookie cookie(TokenService.Token token) {
+    return cookie(token.value(), Duration.between(Instant.now(), token.expiresAt()));
+  }
+
+  /** __Host-, so Secure, Path=/ and no Domain: no sibling origin can set or shadow it. */
+  private static ResponseCookie cookie(String value, Duration maxAge) {
     return ResponseCookie.from(SecurityConfiguration.COOKIE, value)
         .httpOnly(true)
-        .secure(request.isSecure())
+        .secure(true)
         .sameSite("Strict")
-        .path(path)
+        .path("/")
         .maxAge(maxAge)
         .build();
   }

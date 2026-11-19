@@ -2,11 +2,17 @@ import { useEffect, useSyncExternalStore } from "react";
 import * as api from "../api/accountApi";
 import { UNAUTHORIZED } from "../api/http";
 
-export type { Account, Profile } from "../api/accountApi";
+export type { Account, Profile, ResendResult } from "../api/accountApi";
+
+/**
+ * Why no one is signed in, when it is not simply a visitor arriving: the account check could
+ * not reach the API, or a sign-out is leaving for Auth0 or failed on the way.
+ */
+export type SignedOutReason = "unreachable" | "signing-out" | "sign-out-failed";
 
 export type AccountState =
   | { readonly status: "checking" }
-  | { readonly status: "signed-out"; readonly unreachable?: boolean }
+  | { readonly status: "signed-out"; readonly reason?: SignedOutReason }
   | { readonly status: "signed-in"; readonly account: api.Account };
 
 // One account for the whole page, so the menu, the settings and the app shell agree on it.
@@ -27,7 +33,7 @@ function subscribe(listener: () => void) {
 function load() {
   loading ??= api.fetchAccount().then(
     (account) => set(account ? { status: "signed-in", account } : { status: "signed-out" }),
-    () => set({ status: "signed-out", unreachable: true }),
+    () => set({ status: "signed-out", reason: "unreachable" }),
   );
   return loading;
 }
@@ -58,16 +64,17 @@ export function useAccount() {
     signUp: api.signUp,
     /**
      * Signed out here first, so nothing renders as signed in while Auth0's logout loads. A failed
-     * API call still signs out here, but leaves no logout URL to follow.
+     * API call still signs out here, but does not go on to end Auth0's session.
      */
     async signOut() {
       const ended = await api.logout().then(
         () => true,
         () => false,
       );
-      set({ status: "signed-out" });
+      set({ status: "signed-out", reason: ended ? "signing-out" : "sign-out-failed" });
       if (ended) api.endAuth0Session();
     },
+    resendVerificationEmail: api.resendVerificationEmail,
     async saveProfile(profile: api.Profile) {
       set({ status: "signed-in", account: await api.updateProfile(profile) });
     },
