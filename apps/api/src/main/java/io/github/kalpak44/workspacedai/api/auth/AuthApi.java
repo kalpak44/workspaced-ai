@@ -48,13 +48,19 @@ public interface AuthApi {
       operationId = "logout",
       summary = "Sign out",
       description =
-          "Clears the token cookie and answers where to send the browser next, which ends the "
-              + "Auth0 session too; otherwise the next sign-in would pass silently. A token kept "
-              + "elsewhere stays valid until it expires.")
-  @ApiResponse(
-      responseCode = "200",
-      description = "Signed out.",
-      content = @Content(mediaType = JSON, schema = @Schema(implementation = LogoutResponse.class)))
-  @PostMapping(path = "/logout", produces = JSON)
-  ResponseEntity<LogoutResponse> logout();
+          "Clears the token cookie. A browser then opens /auth/end-session to end the Auth0 "
+              + "session too. A token kept elsewhere stays valid until it expires.")
+  @ApiResponse(responseCode = "204", description = "Signed out.")
+  @PostMapping("/logout")
+  ResponseEntity<Void> logout();
+
+  @Operation(
+      operationId = "endSession",
+      summary = "End the Auth0 session",
+      description =
+          "Redirects the browser to Auth0's logout, which comes back to the app. Without it "
+              + "the next sign-in would pass without asking for a password.")
+  @ApiResponse(responseCode = "302", description = "On to Auth0.")
+  @GetMapping("/end-session")
+  ResponseEntity<Void> endSession();
 }

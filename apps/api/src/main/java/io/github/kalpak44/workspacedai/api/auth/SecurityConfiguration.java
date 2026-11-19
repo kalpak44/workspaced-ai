@@ -94,6 +94,7 @@ public class SecurityConfiguration {
     Auth0SignIn.AUTHORIZATION + "/*",
     Auth0SignIn.CALLBACK,
     "/auth/logout",
+    "/auth/end-session",
     "/auth/csrf",
     "/actuator/health/**",
     "/v3/api-docs/**",

@@ -61,9 +61,12 @@ export function useAccount() {
      * API call still signs out here, but leaves no logout URL to follow.
      */
     async signOut() {
-      const logoutUrl = await api.logout().catch(() => null);
+      const ended = await api.logout().then(
+        () => true,
+        () => false,
+      );
       set({ status: "signed-out" });
-      if (logoutUrl) api.browser.open(logoutUrl);
+      if (ended) api.endAuth0Session();
     },
     async saveProfile(profile: api.Profile) {
       set({ status: "signed-in", account: await api.updateProfile(profile) });

@@ -57,10 +57,17 @@ export function enrollMfa(): void {
   browser.open(`${SIGN_IN_URL}?mfa=enroll`);
 }
 
-/** Ends the API session, and answers where to send the browser to end Auth0's as well. */
-export async function logout(): Promise<string> {
-  const { logoutUrl } = (await (await send("/api/v1/auth/logout", { method: "POST" })).json()) as { logoutUrl: string };
-  return logoutUrl;
+/** Ends the API session; Auth0's is ended by endAuth0Session. */
+export async function logout(): Promise<void> {
+  await send("/api/v1/auth/logout", { method: "POST" });
+}
+
+/**
+ * The API redirects this fixed path to Auth0's logout, so the browser never navigates to an
+ * address it was handed. Without it the next sign-in would pass without a password.
+ */
+export function endAuth0Session(): void {
+  browser.open("/api/v1/auth/end-session");
 }
 
 export async function updateProfile(profile: Profile): Promise<Account> {

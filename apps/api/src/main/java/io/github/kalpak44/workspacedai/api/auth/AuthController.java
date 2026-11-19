@@ -1,11 +1,13 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URI;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.web.csrf.CsrfToken;
@@ -30,13 +32,21 @@ public class AuthController implements AuthApi {
   }
 
   @Override
-  public ResponseEntity<LogoutResponse> logout() {
-    return ResponseEntity.ok()
+  public ResponseEntity<Void> logout() {
+    return ResponseEntity.noContent()
         .header(HttpHeaders.SET_COOKIE, cookie(request, "", Duration.ZERO).toString())
-        .body(new LogoutResponse(logoutUrl()));
+        .build();
   }
 
-  /** Back to the app's own root, which the Auth0 application lists as an allowed return. */
+  /**
+   * The browser is sent to a path of the API's own rather than handed Auth0's URL, so the app never
+   * navigates to an address it was given.
+   */
+  @Override
+  public ResponseEntity<Void> endSession() {
+    return ResponseEntity.status(HttpStatus.FOUND).location(URI.create(logoutUrl())).build();
+  }
+
   private String logoutUrl() {
     var app =
         ServletUriComponentsBuilder.fromCurrentRequestUri()

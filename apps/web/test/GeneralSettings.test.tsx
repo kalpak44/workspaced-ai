@@ -114,11 +114,11 @@ describe("general settings", () => {
 
   it("sets up two-factor authentication through a sign-in", async () => {
     installFakeApi();
-    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     await renderSettings();
     const section = screen.getByRole("region", { name: "Two-factor authentication" });
     await user.click(within(section).getByRole("button", { name: "Set up" }));
-    expect(open).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?mfa=enroll");
+    expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?mfa=enroll");
   });
 });

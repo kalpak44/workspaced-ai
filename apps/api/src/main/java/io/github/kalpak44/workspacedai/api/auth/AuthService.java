@@ -107,8 +107,9 @@ public class AuthService {
     return Account.of(user);
   }
 
+  /** Not transactional: the mail is Auth0's call, which no open transaction should wait on. */
   public void sendPasswordReset(UUID userId) {
-    passwordResets.send(account(userId).email());
+    passwordResets.send(user(userId).getEmail());
   }
 
   private UserEntity create(String email) {

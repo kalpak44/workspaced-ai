@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
@@ -125,7 +126,7 @@ class AuthTest {
   }
 
   @Test
-  void createsAnAccountOnFirstSignIn() throws Exception {
+  void createsAnAccountOnFirstSignIn() {
     assertThat(auth.signIn("auth0|ada", "ada@example.com", true).created()).isTrue();
     assertThat(auth.signIn("auth0|ada", "ada@example.com", true).created()).isFalse();
     auth.signIn("auth0|boss", "Boss@example.com", true);
@@ -149,7 +150,8 @@ class AuthTest {
   @Test
   void signsInEvenWhenTheWelcomeMailCannotGoOut() {
     when(mailer.send(any())).thenThrow(new IllegalStateException("Mailjet is down"));
-    auth.sendWelcomeMail("ada@example.com", "https://ai.example.test/");
+    assertThatCode(() -> auth.sendWelcomeMail("ada@example.com", "https://ai.example.test/"))
+        .doesNotThrowAnyException();
   }
 
   @Test
@@ -231,16 +233,22 @@ class AuthTest {
   @Test
   void signingOutClearsTheCookie() throws Exception {
     var response = send("POST", "/auth/logout", null, null);
-    assertThat(response.statusCode()).isEqualTo(200);
-    // Auth0 ends its own session too, or the next sign-in would pass without a password.
-    assertThat(JSON.readTree(response.body()).get("logoutUrl").asString())
-        .isEqualTo(
-            "https://auth.example.test/v2/logout?client_id=test-client&returnTo=http%3A%2F%2Flocalhost%3A"
-                + port
-                + "%2F");
+    assertThat(response.statusCode()).isEqualTo(204);
     assertThat(response.headers().firstValue("Set-Cookie"))
         .hasValueSatisfying(
             c -> assertThat(c).startsWith("workspaced_token=;").contains("Max-Age=0"));
+  }
+
+  @Test
+  void endsTheAuth0SessionAndComesBackToTheApp() throws Exception {
+    // Without it the next sign-in would pass without asking for a password.
+    var response = send("GET", "/auth/end-session", null, null);
+    assertThat(response.statusCode()).isEqualTo(302);
+    assertThat(response.headers().firstValue("Location"))
+        .hasValue(
+            "https://auth.example.test/v2/logout?client_id=test-client&returnTo=http%3A%2F%2Flocalhost%3A"
+                + port
+                + "%2F");
   }
 
   @Test

@@ -38,6 +38,7 @@ class OpenApiTest {
             "\"operationId\":\"addWorkspaceSecret\"",
             "\"operationId\":\"removeWorkspaceSecret\"",
             "\"operationId\":\"sendPasswordReset\"",
+            "\"operationId\":\"endSession\"",
             "\"operationId\":\"getBilling\"",
             "\"operationId\":\"startTopUp\"",
             "\"operationId\":\"listWorkspaceDomains\"",

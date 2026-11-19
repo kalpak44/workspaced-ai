@@ -414,7 +414,7 @@ export function installFakeApi(
     if (url.endsWith("/api/v1/auth/logout")) {
       if (auth.failLogout) return json({}, 500);
       auth.signedIn = false;
-      return json({ logoutUrl: "https://auth.test/v2/logout?returnTo=https%3A%2F%2Fapp.test%2F" });
+      return new Response(null, { status: 204 });
     }
     if (!/\/api\/v1\/account(\/|$)/.test(url)) return null;
     if (!auth.signedIn) return json({}, 401);

@@ -12,15 +12,16 @@ email, or creates one, then redirects to `/` (`/?welcome` for a new account, whi
 mail). An email Auth0 has not verified is refused with a redirect to `/login?error=unverified`; any other failure goes to
 `/login?error=failed`. A new account is an admin when its email is in `WORKSPACED_AUTH_ADMIN_EMAILS`.
 
-Every other route needs a signed-in user, except `POST /auth/logout`, `GET /auth/csrf`, health and the API docs. After
+Every other route needs a signed-in user, except `POST /auth/logout`, `GET /auth/end-session`, `GET /auth/csrf`, health
+and the API docs. After
 Auth0's sign-in the API issues its own HS256 JWT (Spring Security's OAuth2 resource server validates it); its subject is
 the user's id. It is set as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over
 HTTPS — which is how the browser authenticates, EventSource and the terminal WebSocket included, since neither can set a
 header. Other clients send `Authorization: Bearer <token>`. A change (any method but GET) sent with that cookie must also
 carry the CSRF token, else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `XSRF-TOKEN` cookie it is checked
 against, and the change sends it back in `X-XSRF-TOKEN`. Requests without the sign-in cookie, bearer requests included,
-need none. `POST /auth/logout` clears the cookie and answers `{logoutUrl}`, Auth0's logout, which the browser follows so
-the next sign-in asks for a password again; tokens are stateless, so one kept elsewhere stays valid until it expires. A
+need none. `POST /auth/logout` clears the cookie (`204`), and the browser then opens `GET /auth/end-session`, which redirects
+to Auth0's logout so the next sign-in asks for a password again; tokens are stateless, so one kept elsewhere stays valid until it expires. A
 missing, invalid or expired token answers `401` as a problem detail.
 
 `GET /account` returns the signed-in user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`).

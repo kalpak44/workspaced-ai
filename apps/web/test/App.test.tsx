@@ -1357,23 +1357,23 @@ describe("App", () => {
 describe("signing in", () => {
   it("hands sign-in to Auth0 with a full-page navigation", async () => {
     api.auth.signedIn = false;
-    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
     await user.click(await screen.findByRole("button", { name: "Sign in" }));
-    expect(open).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0");
+    expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0");
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
 
   it("opens Auth0 on its sign-up form, and says a new account must verify its email first", async () => {
     api.auth.signedIn = false;
-    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     expect(await screen.findByText(/A new account gets a verification email/)).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create account" }));
-    expect(open).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?signup");
+    expect(opened).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?signup");
     expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
   });
 
@@ -1415,7 +1415,7 @@ describe("signing in", () => {
   });
 
   it("signs out from the account menu, then ends the Auth0 session too", async () => {
-    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     await screen.findAllByRole("button", { name: "Starter" });
@@ -1423,11 +1423,11 @@ describe("signing in", () => {
     await user.click(screen.getByRole("menuitem", { name: "Logout" }));
     expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
     expect(api.auth.signedIn).toBe(false);
-    expect(open).toHaveBeenCalledWith("https://auth.test/v2/logout?returnTo=https%3A%2F%2Fapp.test%2F");
+    expect(opened).toHaveBeenCalledWith("/api/v1/auth/end-session");
   });
 
   it("signs out here even when the API cannot end the session", async () => {
-    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const opened = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     await screen.findAllByRole("button", { name: "Starter" });
@@ -1435,7 +1435,7 @@ describe("signing in", () => {
     await user.click(screen.getByRole("button", { name: "Account menu" }));
     await user.click(screen.getByRole("menuitem", { name: "Logout" }));
     expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
-    expect(open).not.toHaveBeenCalled();
+    expect(opened).not.toHaveBeenCalled();
   });
 
   it("returns to sign-in when the API stops accepting the session", async () => {
