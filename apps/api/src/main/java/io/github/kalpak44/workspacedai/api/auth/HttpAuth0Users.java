@@ -42,7 +42,7 @@ public class HttpAuth0Users implements Auth0Users {
 
   // A credential cached per instance, not state: losing it costs one token request. Kept so each
   // call does not spend one of the tenant's monthly machine-to-machine tokens.
-  private volatile Token token;
+  private Token token;
 
   public HttpAuth0Users(AuthProperties properties, JsonMapper json) {
     this.properties = properties;
@@ -126,17 +126,11 @@ public class HttpAuth0Users implements Auth0Users {
         .timeout(TIMEOUT);
   }
 
-  private String token() {
-    var current = token;
-    if (current != null && current.expiresAt().isAfter(Instant.now().plusSeconds(60))) {
-      return current.value();
+  private synchronized String token() {
+    if (token == null || !token.expiresAt().isAfter(Instant.now().plusSeconds(60))) {
+      token = requestToken();
     }
-    synchronized (this) {
-      if (token == null || !token.expiresAt().isAfter(Instant.now().plusSeconds(60))) {
-        token = requestToken();
-      }
-      return token.value();
-    }
+    return token.value();
   }
 
   private Token requestToken() {
