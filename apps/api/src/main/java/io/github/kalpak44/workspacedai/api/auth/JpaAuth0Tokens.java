@@ -43,4 +43,16 @@ public class JpaAuth0Tokens implements Auth0Tokens {
       entityManager.persist(new Auth0TokenEntity(token.value(), token.expiresAt()));
     }
   }
+
+  @Override
+  @Transactional
+  public void discard(String value) {
+    var cb = entityManager.getCriteriaBuilder();
+    var delete = cb.createCriteriaDelete(Auth0TokenEntity.class);
+    var row = delete.from(Auth0TokenEntity.class);
+    delete.where(
+        cb.equal(row.get(Auth0TokenEntity_.id), Auth0TokenEntity.ID),
+        cb.equal(row.get(Auth0TokenEntity_.accessToken), value));
+    entityManager.createQuery(delete).executeUpdate();
+  }
 }

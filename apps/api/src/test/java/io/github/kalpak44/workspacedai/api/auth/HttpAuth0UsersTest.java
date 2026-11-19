@@ -58,6 +58,11 @@ class HttpAuth0UsersTest {
         public void save(Token token) {
           stored.set(token);
         }
+
+        @Override
+        public void discard(String value) {
+          stored.updateAndGet(t -> t != null && t.value().equals(value) ? null : t);
+        }
       };
   private final HttpAuth0Users users = new HttpAuth0Users(properties, tokenStore, JSON);
 
@@ -102,9 +107,24 @@ class HttpAuth0UsersTest {
           public void save(Token token) {
             throw new DataIntegrityViolationException("duplicate key auth0_token_pkey");
           }
+
+          @Override
+          public void discard(String value) {
+            // Nothing stored to drop.
+          }
         };
     var profile = new HttpAuth0Users(properties, collided, JSON).profile("auth0|ada");
     assertThat(profile).hasValueSatisfying(p -> assertThat(p.givenName()).isEqualTo("Ada"));
+  }
+
+  @Test
+  void replacesAStoredTokenAuth0RefusesAndTriesOnceMore() {
+    stored.set(new Auth0Tokens.Token("rejected", Instant.now().plusSeconds(86400)));
+
+    assertThat(users.profile("auth0|ada")).isPresent();
+
+    assertThat(tokens).hasValue(1);
+    assertThat(stored.get().value()).isEqualTo("token");
   }
 
   @Test
@@ -174,6 +194,10 @@ class HttpAuth0UsersTest {
 
   private void handle(HttpExchange exchange) throws IOException {
     var path = exchange.getRequestURI().getPath();
+    if ("Bearer rejected".equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+      answer(exchange, 401, Map.of("message", "Bad issuer"));
+      return;
+    }
     var body = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
     switch (exchange.getRequestMethod() + " " + path) {
       case "POST /oauth/token" -> {

@@ -51,7 +51,7 @@ public class HttpAuth0Users implements Auth0Users {
 
   @Override
   public Optional<Profile> profile(String subject) {
-    var response = send(get("users/" + encode(subject) + "?fields=email,picture,user_metadata"));
+    var response = call(get("users/" + encode(subject) + "?fields=email,picture,user_metadata"));
     if (response.statusCode() == 404) {
       return Optional.empty();
     }
@@ -63,12 +63,11 @@ public class HttpAuth0Users implements Auth0Users {
     var body =
         json.writeValueAsString(
             Map.of("user_metadata", Map.of("given_name", givenName, "family_name", familyName)));
-    var request =
-        authorized("users/" + encode(subject))
-            .header("Content-Type", "application/json")
-            .method("PATCH", HttpRequest.BodyPublishers.ofString(body))
-            .build();
-    read(send(request));
+    read(
+        call(
+            authorized("users/" + encode(subject))
+                .header("Content-Type", "application/json")
+                .method("PATCH", HttpRequest.BodyPublishers.ofString(body))));
   }
 
   /** Never fails: a recipe list still shows when Auth0 does not answer, its authors unnamed. */
@@ -85,7 +84,7 @@ public class HttpAuth0Users implements Auth0Users {
       try {
         var users =
             read(
-                send(
+                call(
                     get(
                         "users?search_engine=v3&per_page="
                             + BATCH
@@ -112,15 +111,29 @@ public class HttpAuth0Users implements Auth0Users {
     return node.isString() ? node.asString() : "";
   }
 
-  private HttpRequest get(String path) {
-    return authorized(path).GET().build();
+  private HttpRequest.Builder get(String path) {
+    return authorized(path).GET();
   }
 
   private HttpRequest.Builder authorized(String path) {
     return HttpRequest.newBuilder(URI.create(properties.managementApi() + path))
-        .header("Authorization", "Bearer " + token())
         .header("Accept", "application/json")
         .timeout(TIMEOUT);
+  }
+
+  /**
+   * Sends the request with the shared token. A token Auth0 turns away, revoked or issued wrongly,
+   * is dropped and the request tried once more with a new one; kept, it would fail every call on
+   * every instance until it expired.
+   */
+  private HttpResponse<String> call(HttpRequest.Builder request) {
+    var token = token();
+    var response = send(request.copy().header("Authorization", "Bearer " + token).build());
+    if (response.statusCode() != 401) {
+      return response;
+    }
+    tokens.discard(token);
+    return send(request.header("Authorization", "Bearer " + token()).build());
   }
 
   /**

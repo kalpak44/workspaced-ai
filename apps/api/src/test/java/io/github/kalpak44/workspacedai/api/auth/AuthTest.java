@@ -144,6 +144,16 @@ class AuthTest {
   }
 
   @Test
+  void dropsARefusedTokenOnlyWhileItIsStillTheStoredOne() {
+    tokens.save(new Auth0Tokens.Token("refused", Instant.now().plusSeconds(3600)));
+    tokens.discard("already-replaced");
+    assertThat(tokens.current()).isPresent();
+
+    tokens.discard("refused");
+    assertThat(tokens.current()).isEmpty();
+  }
+
+  @Test
   void readsTheAdminRoleFromTheIdTokensRolesClaim() {
     assertThat(Auth0SignIn.role(oidcUser(List.of("admin")))).isEqualTo(Role.ADMIN);
     assertThat(Auth0SignIn.role(oidcUser(List.of("support")))).isEqualTo(Role.USER);

@@ -12,4 +12,7 @@ public interface Auth0Tokens {
 
   /** Keeps whichever expires later, so two instances refreshing at once cannot go backwards. */
   void save(Token token);
+
+  /** Drops the token Auth0 refused, unless another instance has already replaced it. */
+  void discard(String value);
 }
