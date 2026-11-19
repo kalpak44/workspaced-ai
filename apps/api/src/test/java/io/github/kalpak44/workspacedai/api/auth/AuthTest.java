@@ -54,10 +54,14 @@ class AuthTest {
   @Test
   void signsInWithTheDefaultAccount() throws Exception {
     var response =
-        send("POST", "/auth/login", null, "{\"username\":\"admin\",\"password\":\"admin\"}");
+        send(
+            "POST",
+            "/auth/login",
+            null,
+            "{\"email\":\"pavel.usanli@gmail.com\",\"password\":\"admin\"}");
     assertThat(response.statusCode()).isEqualTo(200);
     var body = JSON.readTree(response.body());
-    assertThat(body.get("account").get("username").asString()).isEqualTo("admin");
+    assertThat(body.get("account").get("email").asString()).isEqualTo(TestUsers.ADMIN_EMAIL);
     assertThat(body.get("token").asString()).isNotBlank();
     assertThat(response.headers().firstValue("Set-Cookie"))
         .hasValueSatisfying(
@@ -72,7 +76,9 @@ class AuthTest {
     var request =
         HttpRequest.newBuilder(url("/auth/login"))
             .header("Content-Type", "application/json")
-            .POST(BodyPublishers.ofString("{\"username\":\"admin\",\"password\":\"admin\"}"))
+            .POST(
+                BodyPublishers.ofString(
+                    "{\"email\":\"pavel.usanli@gmail.com\",\"password\":\"admin\"}"))
             .build();
     var refused = http.send(request, BodyHandlers.ofString());
     assertThat(refused.statusCode()).isEqualTo(403);
@@ -81,8 +87,14 @@ class AuthTest {
 
   @Test
   void refusesAWrongPasswordAndAnUnknownUserAlike() throws Exception {
-    var wrong = send("POST", "/auth/login", null, "{\"username\":\"admin\",\"password\":\"nope\"}");
-    var unknown = send("POST", "/auth/login", null, "{\"username\":\"nobody\",\"password\":\"x\"}");
+    var wrong =
+        send(
+            "POST",
+            "/auth/login",
+            null,
+            "{\"email\":\"pavel.usanli@gmail.com\",\"password\":\"nope\"}");
+    var unknown =
+        send("POST", "/auth/login", null, "{\"email\":\"nobody@example.com\",\"password\":\"x\"}");
     assertThat(wrong.statusCode()).isEqualTo(401);
     assertThat(unknown.statusCode()).isEqualTo(401);
     assertThat(JSON.readTree(wrong.body()).get("detail").asString())
@@ -100,15 +112,16 @@ class AuthTest {
 
   @Test
   void acceptsTheTokenAsACookie() throws Exception {
-    var token = TestUsers.login(port, "admin", "admin");
+    var token = TestUsers.login(port, TestUsers.ADMIN_EMAIL, "admin");
     var account = sendWithCookie("/account", token);
     assertThat(account.statusCode()).isEqualTo(200);
-    assertThat(JSON.readTree(account.body()).get("username").asString()).isEqualTo("admin");
+    assertThat(JSON.readTree(account.body()).get("email").asString())
+        .isEqualTo(TestUsers.ADMIN_EMAIL);
   }
 
   @Test
   void requiresTheCsrfTokenForChangesMadeWithTheCookie() throws Exception {
-    var token = TestUsers.login(port, "admin", "admin");
+    var token = TestUsers.login(port, TestUsers.ADMIN_EMAIL, "admin");
     var issued = sendWithCookie("/auth/csrf", token);
     assertThat(issued.statusCode()).isEqualTo(200);
     var csrf =
@@ -157,7 +170,9 @@ class AuthTest {
             .header("Cookie", "workspaced_token=expired; " + csrf)
             .header("X-XSRF-TOKEN", JSON.readTree(issued.body()).get("token").asString())
             .header("Content-Type", "application/json")
-            .POST(BodyPublishers.ofString("{\"username\":\"admin\",\"password\":\"admin\"}"))
+            .POST(
+                BodyPublishers.ofString(
+                    "{\"email\":\"pavel.usanli@gmail.com\",\"password\":\"admin\"}"))
             .build();
     assertThat(http.send(request, BodyHandlers.ofString()).statusCode()).isEqualTo(200);
     assertThat(sendWithCookie("/actuator/health/readiness", "expired").statusCode()).isEqualTo(200);
@@ -174,7 +189,7 @@ class AuthTest {
 
   @Test
   void keepsTheProfileOnTheAccount() throws Exception {
-    var bearer = bearerFor("ada", "password1");
+    var bearer = bearerFor("ada@example.com", "password1");
     var avatar = "data:image/png;base64,iVBORw0KGgo=";
     var updated =
         send(
@@ -200,7 +215,7 @@ class AuthTest {
 
   @Test
   void refusesAnAvatarThatIsNotAnImage() throws Exception {
-    var bearer = bearerFor("ada", "password1");
+    var bearer = bearerFor("ada@example.com", "password1");
     var response =
         send(
             "PUT",
@@ -212,7 +227,7 @@ class AuthTest {
 
   @Test
   void changesThePasswordOnlyWithTheCurrentOne() throws Exception {
-    var bearer = bearerFor("ada", "password1");
+    var bearer = bearerFor("ada@example.com", "password1");
     assertThat(
             send(
                     "PUT",
@@ -237,13 +252,13 @@ class AuthTest {
                     "{\"currentPassword\":\"password1\",\"newPassword\":\"password2\"}")
                 .statusCode())
         .isEqualTo(204);
-    assertThat(TestUsers.login(port, "ada", "password2")).isNotBlank();
+    assertThat(TestUsers.login(port, "ada@example.com", "password2")).isNotBlank();
   }
 
   @Test
   void keepsEachUsersWorkspacesToThemselves() throws Exception {
     var admin = TestUsers.bearer(port);
-    var other = bearerFor("ada", "password1");
+    var other = bearerFor("ada@example.com", "password1");
     var created =
         send(
             "POST",
@@ -274,7 +289,7 @@ class AuthTest {
   @Test
   void aPaddedIdDoesNotSlipPastTheOwnerCheck() throws Exception {
     var admin = TestUsers.bearer(port);
-    var other = bearerFor("ada", "password1");
+    var other = bearerFor("ada@example.com", "password1");
     var created =
         send(
             "POST",
@@ -304,17 +319,17 @@ class AuthTest {
 
   @Test
   void refusesTheTokenOfADeletedAccount() throws Exception {
-    var ada = bearerFor("ada", "password1");
+    var ada = bearerFor("ada@example.com", "password1");
     assertThat(send("GET", "/workspaces", ada, null).statusCode()).isEqualTo(200);
-    users.delete(users.findByUsername("ada").orElseThrow());
+    users.delete(users.findByEmail("ada@example.com").orElseThrow());
     assertThat(send("GET", "/workspaces", ada, null).statusCode()).isEqualTo(401);
     assertThat(send("GET", "/model-providers", ada, null).statusCode()).isEqualTo(401);
   }
 
   @Test
   void changingThePasswordRevokesEveryEarlierToken() throws Exception {
-    var ada = bearerFor("ada", "password1");
-    var elsewhere = "Bearer " + TestUsers.login(port, "ada", "password1");
+    var ada = bearerFor("ada@example.com", "password1");
+    var elsewhere = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
     var changed =
         send(
             "PUT",
@@ -336,7 +351,9 @@ class AuthTest {
   void reportsTheRoleOnTheAccount() throws Exception {
     var admin = JSON.readTree(send("GET", "/account", TestUsers.bearer(port), null).body());
     assertThat(admin.get("role").asString()).isEqualTo("ADMIN");
-    var ada = JSON.readTree(send("GET", "/account", bearerFor("ada", "password1"), null).body());
+    var ada =
+        JSON.readTree(
+            send("GET", "/account", bearerFor("ada@example.com", "password1"), null).body());
     assertThat(ada.get("role").asString()).isEqualTo("USER");
   }
 
@@ -353,7 +370,7 @@ class AuthTest {
     var path = "/workspaces/" + id + "/terminals/pty_1/connect";
 
     assertThat(handshake(path, null)).isEqualTo(401);
-    assertThat(handshake(path, bearerFor("ada", "password1"))).isEqualTo(404);
+    assertThat(handshake(path, bearerFor("ada@example.com", "password1"))).isEqualTo(404);
     // The owner gets through to the handler; there is no harness here, so it closes at once.
     assertThat(handshake(path, admin)).isEqualTo(101);
   }
@@ -376,11 +393,11 @@ class AuthTest {
     }
   }
 
-  private String bearerFor(String username, String password) {
-    if (users.findByUsername(username).isEmpty()) {
-      users.save(new UserEntity(username, passwords.encode(password)));
+  private String bearerFor(String email, String password) {
+    if (users.findByEmail(email).isEmpty()) {
+      users.save(new UserEntity(email, passwords.encode(password)));
     }
-    return "Bearer " + TestUsers.login(port, username, password);
+    return "Bearer " + TestUsers.login(port, email, password);
   }
 
   private URI url(String path) {

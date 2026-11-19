@@ -40,7 +40,7 @@ public interface UserApi {
       operationId = "listUsers",
       summary = "List users",
       description =
-          "One page of users, newest first unless sorted otherwise. Sort by username, firstName, "
+          "One page of users, newest first unless sorted otherwise. Sort by email, firstName, "
               + "lastName or createdAt, e.g. sort=firstName,asc&sort=lastName,asc; the id breaks "
               + "ties. A page holds at most 100.")
   @ApiResponse(
@@ -71,8 +71,9 @@ public interface UserApi {
       operationId = "createUser",
       summary = "Create a user",
       description =
-          "Creates a user who signs in with this username and password, as a USER unless the "
-              + "role says ADMIN. Surrounding whitespace is trimmed from the username and names.")
+          "Creates a user who signs in with this email and password, as a USER unless the "
+              + "role says ADMIN. The email is lowercased, and surrounding whitespace is "
+              + "trimmed from the names.")
   @ApiResponse(
       responseCode = "201",
       description = "Created.",
@@ -80,7 +81,7 @@ public interface UserApi {
   @ApiResponse(
       responseCode = "400",
       description =
-          "The username is blank, a name is longer than 100 characters, or the password is "
+          "The email is blank or not an address, a name is longer than 100 characters, or the password is "
               + "shorter than 8 or longer than 72 characters.",
       content =
           @Content(
@@ -88,7 +89,7 @@ public interface UserApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @ApiResponse(
       responseCode = "409",
-      description = "Another user has that username; nothing was created.",
+      description = "Another user has that email; nothing was created.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

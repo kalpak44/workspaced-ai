@@ -45,37 +45,37 @@ describe("user management", () => {
   it("lists everyone, without a delete action for yourself", async () => {
     installFakeApi();
     const list = await openUsers();
-    expect(within(list).getByText("admin")).toBeInTheDocument();
+    expect(within(list).getByText("admin@example.com")).toBeInTheDocument();
     expect(within(list).getByText("You")).toBeInTheDocument();
     expect(within(list).getByText("Grace Hopper")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Delete admin" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Delete grace" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete grace@example.com" })).toBeInTheDocument();
   });
 
-  it("creates a user in a dialog, and refuses a taken username or a short password", async () => {
+  it("creates a user in a dialog, and refuses a taken email or a short password", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     const list = await openUsers();
     await user.click(screen.getByRole("button", { name: "Add user" }));
     const dialog = screen.getByRole("dialog", { name: "New user" });
     expect(within(dialog).getByLabelText("First name")).toHaveFocus();
-    await user.type(within(dialog).getByLabelText("Username"), "grace");
+    await user.type(within(dialog).getByLabelText("Email"), "grace@example.com");
     await user.type(within(dialog).getByLabelText("Password"), "short");
     await user.click(within(dialog).getByRole("button", { name: "Create user" }));
     expect(within(dialog).getByText("Use at least 8 characters.")).toBeInTheDocument();
 
     await user.type(within(dialog).getByLabelText("Password"), "-but-long-now");
     await user.click(within(dialog).getByRole("button", { name: "Create user" }));
-    expect(await within(dialog).findByText("grace is already taken.")).toBeInTheDocument();
+    expect(await within(dialog).findByText("grace@example.com is already taken.")).toBeInTheDocument();
 
-    await user.clear(within(dialog).getByLabelText("Username"));
-    await user.type(within(dialog).getByLabelText("Username"), "ada");
+    await user.clear(within(dialog).getByLabelText("Email"));
+    await user.type(within(dialog).getByLabelText("Email"), "ada@example.com");
     await user.type(within(dialog).getByLabelText("First name"), "Ada");
     await user.type(within(dialog).getByLabelText("Last name"), "Lovelace");
     await user.click(within(dialog).getByRole("button", { name: "Create user" }));
     expect(await within(list).findByText("Ada Lovelace")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    expect(api.users.others.map((u) => u.username)).toEqual(["grace", "ada"]);
+    expect(api.users.others.map((u) => u.email)).toEqual(["grace@example.com", "ada@example.com"]);
   });
 
   it("creates nobody when the dialog is cancelled", async () => {
@@ -83,7 +83,7 @@ describe("user management", () => {
     const user = userEvent.setup();
     await openUsers();
     await user.click(screen.getByRole("button", { name: "Add user" }));
-    await user.type(screen.getByLabelText("Username"), "ada");
+    await user.type(screen.getByLabelText("Email"), "ada@example.com");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(api.users.others).toHaveLength(1);
@@ -93,12 +93,12 @@ describe("user management", () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     const list = await openUsers();
-    await user.click(screen.getByRole("button", { name: "Delete grace" }));
-    expect(screen.getByRole("dialog", { name: "Delete user?" })).toHaveTextContent("grace");
+    await user.click(screen.getByRole("button", { name: "Delete grace@example.com" }));
+    expect(screen.getByRole("dialog", { name: "Delete user?" })).toHaveTextContent("grace@example.com");
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(api.users.others).toHaveLength(1);
 
-    await user.click(screen.getByRole("button", { name: "Delete grace" }));
+    await user.click(screen.getByRole("button", { name: "Delete grace@example.com" }));
     await user.click(screen.getByRole("button", { name: "Delete user" }));
     await waitFor(() => expect(within(list).queryByText("Grace Hopper")).not.toBeInTheDocument());
     expect(api.users.others).toEqual([]);
@@ -109,31 +109,31 @@ describe("user management", () => {
     api.users.failDelete = true;
     const user = userEvent.setup();
     const list = await openUsers();
-    await user.click(screen.getByRole("button", { name: "Delete grace" }));
+    await user.click(screen.getByRole("button", { name: "Delete grace@example.com" }));
     await user.click(screen.getByRole("button", { name: "Delete user" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not delete grace");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not delete grace@example.com");
     expect(within(list).getByText("Grace Hopper")).toBeInTheDocument();
   });
 
   it("sorts the list in the order chosen, newest first by default", async () => {
     const api = installFakeApi();
-    api.users.others.push({ id: "alan-id", username: "turing", firstName: "Alan", lastName: "Turing", avatar: null, role: "USER" });
+    api.users.others.push({ id: "alan-id", email: "turing@example.com", firstName: "Alan", lastName: "Turing", avatar: null, role: "USER" });
     const user = userEvent.setup();
     const list = await openUsers();
-    expect(names(list)).toEqual(["Alan Turing", "Grace Hopper", "admin"]);
+    expect(names(list)).toEqual(["Alan Turing", "Grace Hopper", "admin@example.com"]);
     expect(api.users.listed.at(-1)).toContain("sort=createdAt%2Cdesc");
 
     await user.selectOptions(screen.getByLabelText("Sort by"), "Name A–Z");
-    await waitFor(() => expect(names(screen.getByRole("list", { name: "Users" }))).toEqual(["admin", "Alan Turing", "Grace Hopper"]));
+    await waitFor(() => expect(names(screen.getByRole("list", { name: "Users" }))).toEqual(["admin@example.com", "Alan Turing", "Grace Hopper"]));
     expect(api.users.listed.at(-1)).toContain("sort=firstName%2Casc&sort=lastName%2Casc");
 
-    await user.selectOptions(screen.getByLabelText("Sort by"), "Username Z–A");
-    await waitFor(() => expect(names(screen.getByRole("list", { name: "Users" }))).toEqual(["Alan Turing", "Grace Hopper", "admin"]));
+    await user.selectOptions(screen.getByLabelText("Sort by"), "Email Z–A");
+    await waitFor(() => expect(names(screen.getByRole("list", { name: "Users" }))).toEqual(["Alan Turing", "Grace Hopper", "admin@example.com"]));
   });
 
   it("loads the next page as the end of the list scrolls into view", async () => {
     const api = installFakeApi();
-    api.users.others = Array.from({ length: 44 }, (_, i) => ({ id: `u${i}`, username: `user${String(i).padStart(2, "0")}`, firstName: "", lastName: "", avatar: null, role: "USER" }));
+    api.users.others = Array.from({ length: 44 }, (_, i) => ({ id: `u${i}`, email: `user${String(i).padStart(2, "0")}@example.com`, firstName: "", lastName: "", avatar: null, role: "USER" }));
     const { scrollToEnd } = stubIntersections();
     const user = userEvent.setup();
     const list = await openUsers();
@@ -144,7 +144,7 @@ describe("user management", () => {
     await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(40));
 
     // A user deleted meanwhile shifts the rest up a place; the next page still misses none.
-    await user.click(screen.getByRole("button", { name: "Delete user43" }));
+    await user.click(screen.getByRole("button", { name: "Delete user43@example.com" }));
     await user.click(screen.getByRole("button", { name: "Delete user" }));
     await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(39));
     await scrollToEnd();
@@ -153,7 +153,7 @@ describe("user management", () => {
     await waitFor(() => expect(screen.getByText("Showing 44 of 44")).toBeInTheDocument());
     const shown = names(list);
     expect(new Set(shown).size).toBe(44);
-    expect(shown.at(-1)).toBe("admin");
+    expect(shown.at(-1)).toBe("admin@example.com");
     expect(api.users.listed.filter((url) => url.includes("page=1"))).toHaveLength(2);
   });
 
@@ -163,13 +163,13 @@ describe("user management", () => {
     const list = await openUsers();
     await user.click(screen.getByRole("button", { name: "Add user" }));
     const dialog = screen.getByRole("dialog", { name: "New user" });
-    await user.type(within(dialog).getByLabelText("Username"), "ada");
+    await user.type(within(dialog).getByLabelText("Email"), "ada@example.com");
     await user.type(within(dialog).getByLabelText("Password"), "password1");
     await user.click(within(dialog).getByLabelText("Admin"));
     await user.click(within(dialog).getByRole("button", { name: "Create user" }));
-    const ada = (await within(list).findByText("ada")).closest("li") as HTMLElement;
+    const ada = (await within(list).findByText("ada@example.com")).closest("li") as HTMLElement;
     expect(within(ada).getByText("Admin")).toBeInTheDocument();
-    expect(api.users.others.find((u) => u.username === "ada")?.role).toBe("ADMIN");
+    expect(api.users.others.find((u) => u.email === "ada@example.com")?.role).toBe("ADMIN");
   });
 
   it("does not offer the Users tab to someone who is not an admin", async () => {
@@ -187,13 +187,13 @@ describe("user management", () => {
     const user = userEvent.setup();
     const list = await openUsers();
     expect(screen.queryByRole("button", { name: /Make admin/ })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Make grace an admin" }));
+    await user.click(screen.getByRole("button", { name: "Make grace@example.com an admin" }));
     await waitFor(() => expect(api.users.others[0].role).toBe("ADMIN"));
     const grace = within(list).getByText("Grace Hopper").closest("li") as HTMLElement;
-    expect(within(grace).getByText("grace · Admin")).toBeInTheDocument();
+    expect(within(grace).getByText("grace@example.com · Admin")).toBeInTheDocument();
 
-    await user.click(await screen.findByRole("button", { name: "Make grace a user" }));
+    await user.click(await screen.findByRole("button", { name: "Make grace@example.com a user" }));
     await waitFor(() => expect(api.users.others[0].role).toBe("USER"));
-    expect(await screen.findByRole("button", { name: "Make grace an admin" })).toBeInTheDocument();
+    expect(await screen.findByRole("button", { name: "Make grace@example.com an admin" })).toBeInTheDocument();
   });
 });

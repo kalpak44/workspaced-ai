@@ -185,7 +185,7 @@ export function installFakeApi(
     signedIn: true,
     password: "admin",
     failProfile: false,
-    account: { id: "admin-id", username: "admin", firstName: "", lastName: "", avatar: null, role: "ADMIN" } as Account,
+    account: { id: "admin-id", email: "admin@example.com", firstName: "", lastName: "", avatar: null, role: "ADMIN" } as Account,
   };
   // The store: every recipe, anyone's, and the drafts the agent left in each workspace.
   const recipes = {
@@ -312,7 +312,7 @@ export function installFakeApi(
       const recipe: Recipe = {
         ...input,
         id: `recipe-${recipes.nextId++}`,
-        author: { id: auth.account.id, username: auth.account.username, firstName: auth.account.firstName, lastName: auth.account.lastName },
+        author: { id: auth.account.id, firstName: auth.account.firstName, lastName: auth.account.lastName },
         createdAt: now,
         updatedAt: now,
         publishedAt: input.visibility === "PUBLIC" ? now : null,
@@ -401,7 +401,7 @@ export function installFakeApi(
 
   // Everyone else who can sign in; the signed-in account is always listed first.
   const users = {
-    others: [{ id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper", avatar: null, role: "USER" }] as User[],
+    others: [{ id: "grace-id", email: "grace@example.com", firstName: "Grace", lastName: "Hopper", avatar: null, role: "USER" }] as User[],
     nextId: 1,
     failDelete: false,
     // Every list URL asked for, to see which pages and orders were fetched.
@@ -423,9 +423,9 @@ export function installFakeApi(
     if (!auth.signedIn) return json({}, 401);
     const [, id, query] = route;
     if (init?.method === "POST") {
-      const { username, firstName, lastName, role } = JSON.parse(String(init.body));
-      if (username === auth.account.username || users.others.some((u) => u.username === username)) return json({}, 409);
-      const user: User = { id: `user-${users.nextId++}`, username, firstName, lastName, avatar: null, role };
+      const { email, firstName, lastName, role } = JSON.parse(String(init.body));
+      if (email === auth.account.email || users.others.some((u) => u.email === email)) return json({}, 409);
+      const user: User = { id: `user-${users.nextId++}`, email, firstName, lastName, avatar: null, role };
       users.others.push(user);
       return json(user, 201);
     }
@@ -471,8 +471,8 @@ export function installFakeApi(
       return json({ headerName: "X-XSRF-TOKEN", token: "csrf-token" });
     }
     if (url.endsWith("/api/v1/auth/login")) {
-      const { username, password } = JSON.parse(String(init?.body));
-      if (username !== auth.account.username || password !== auth.password) return json({}, 401);
+      const { email, password } = JSON.parse(String(init?.body));
+      if (email !== auth.account.email || password !== auth.password) return json({}, 401);
       auth.signedIn = true;
       return json({ account: auth.account, token: "jwt", expiresAt: "2099-01-01T00:00:00Z" });
     }

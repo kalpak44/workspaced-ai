@@ -33,23 +33,23 @@ public interface AuthApi {
       operationId = "login",
       summary = "Sign in",
       description =
-          "Checks the username and password and answers with a JWT. The same token is set as an "
+          "Checks the email and password and answers with a JWT. The same token is set as an "
               + "HttpOnly, SameSite=Strict cookie, which is all a browser needs; other clients "
-              + "send it as `Authorization: Bearer …`. A fresh installation has admin/admin.")
+              + "send it as `Authorization: Bearer …`. The email is matched in any capitalization.")
   @ApiResponse(
       responseCode = "200",
       description = "Signed in.",
       content = @Content(mediaType = JSON, schema = @Schema(implementation = LoginResponse.class)))
   @ApiResponse(
       responseCode = "400",
-      description = "The username or password is blank.",
+      description = "The email or password is blank.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @ApiResponse(
       responseCode = "401",
-      description = "No user has that username and password.",
+      description = "No user has that email and password.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

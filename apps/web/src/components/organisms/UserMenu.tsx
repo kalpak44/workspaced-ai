@@ -32,8 +32,8 @@ export function UserMenu({ theme, onThemeChange }: Props) {
           <div className={`${ROW} ${SEPARATED} justify-start gap-3`}>
             <Avatar src={account?.avatar ?? undefined} />
             <div className="min-w-0">
-              <p className="truncate font-medium">{name || account?.username}</p>
-              {name && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.username}</p>}
+              <p className="truncate font-medium">{name || account?.email}</p>
+              {name && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.email}</p>}
             </div>
           </div>
           <div className={ROW}>

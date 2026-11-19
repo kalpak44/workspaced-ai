@@ -187,7 +187,6 @@ public class RecipeStore {
                 recipe.get(RecipeEntity_.updatedAt).alias(RecipeEntity_.UPDATED_AT),
                 recipe.get(RecipeEntity_.publishedAt).alias(RecipeEntity_.PUBLISHED_AT),
                 author.get(UserEntity_.id).alias(AUTHOR_ID),
-                author.get(UserEntity_.username).alias(UserEntity_.USERNAME),
                 author.get(UserEntity_.firstName).alias(UserEntity_.FIRST_NAME),
                 author.get(UserEntity_.lastName).alias(UserEntity_.LAST_NAME),
                 average.alias(AVERAGE),
@@ -247,7 +246,6 @@ public class RecipeStore {
         row.get(RecipeEntity_.VISIBILITY, Visibility.class),
         new RecipeAuthor(
             author,
-            row.get(UserEntity_.USERNAME, String.class),
             row.get(UserEntity_.FIRST_NAME, String.class),
             row.get(UserEntity_.LAST_NAME, String.class)),
         row.get(RecipeEntity_.CREATED_AT, Instant.class),

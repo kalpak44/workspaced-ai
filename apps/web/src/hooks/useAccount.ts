@@ -52,10 +52,10 @@ export function useAccount() {
   return {
     state: current,
     account: current.status === "signed-in" ? current.account : null,
-    /** False for a wrong username or password; any other failure throws. */
-    async signIn(username: string, password: string): Promise<boolean> {
+    /** False for a wrong email or password; any other failure throws. */
+    async signIn(email: string, password: string): Promise<boolean> {
       try {
-        set({ status: "signed-in", account: await api.login(username, password) });
+        set({ status: "signed-in", account: await api.login(email, password) });
         return true;
       } catch (error) {
         if (error instanceof ApiError && error.status === 401) return false;

@@ -29,7 +29,7 @@ import org.springframework.web.server.ResponseStatusException;
 public class UserService {
 
   /** The fields a page may be sorted by; anything else is refused rather than guessed at. */
-  static final Set<String> SORTABLE = Set.of("username", "firstName", "lastName", "createdAt");
+  static final Set<String> SORTABLE = Set.of("email", "firstName", "lastName", "createdAt");
 
   private final UserRepository users;
   private final WorkspaceRepository workspaceRows;
@@ -71,25 +71,23 @@ public class UserService {
   }
 
   /**
-   * Conflict when the username is taken, by an earlier user or one created at the same time. The
-   * new user finds a welcome among their notifications.
+   * Conflict when the email is taken, by an earlier user or one created at the same time. The new
+   * user finds a welcome among their notifications.
    */
-  public User create(
-      String username, String password, String firstName, String lastName, Role role) {
+  public User create(String email, String password, String firstName, String lastName, Role role) {
     var hash = passwords.encode(password);
     try {
       return transactions.execute(
           _ -> {
-            if (users.existsByUsername(username)) {
-              throw taken(username);
+            if (users.existsByEmail(email)) {
+              throw taken(email);
             }
-            var user =
-                users.saveAndFlush(new UserEntity(username, hash, firstName, lastName, role));
+            var user = users.saveAndFlush(new UserEntity(email, hash, firstName, lastName, role));
             notifications.send(user.getId(), Notifications.welcome(firstName));
             return User.of(user);
           });
     } catch (DataIntegrityViolationException e) {
-      throw taken(username);
+      throw taken(email);
     }
   }
 
@@ -125,7 +123,7 @@ public class UserService {
     return true;
   }
 
-  private static ResponseStatusException taken(String username) {
-    return new ResponseStatusException(HttpStatus.CONFLICT, "username " + username + " is taken");
+  private static ResponseStatusException taken(String email) {
+    return new ResponseStatusException(HttpStatus.CONFLICT, "email " + email + " is taken");
   }
 }

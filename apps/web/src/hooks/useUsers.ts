@@ -6,7 +6,7 @@ import { changeUserRole, createUser, deleteUser, listUsers, type NewUser, type U
 export type { Role } from "../api/accountApi";
 export type { NewUser, User } from "../api/usersApi";
 
-/** "conflict" is a username someone already has. */
+/** "conflict" is an email someone already has. */
 export type CreateResult = "created" | "conflict" | "failed";
 
 /** The orders the list offers, each as the API's sort parameters. */
@@ -15,8 +15,8 @@ export const USER_SORTS = {
   oldest: { label: "Oldest first", sort: ["createdAt,asc"] },
   "name-asc": { label: "Name A–Z", sort: ["firstName,asc", "lastName,asc"] },
   "name-desc": { label: "Name Z–A", sort: ["firstName,desc", "lastName,desc"] },
-  "username-asc": { label: "Username A–Z", sort: ["username,asc"] },
-  "username-desc": { label: "Username Z–A", sort: ["username,desc"] },
+  "email-asc": { label: "Email A–Z", sort: ["email,asc"] },
+  "email-desc": { label: "Email Z–A", sort: ["email,desc"] },
 } as const;
 
 export type UserSort = keyof typeof USER_SORTS;
@@ -108,7 +108,7 @@ export function useUsers(sort: UserSort) {
   const changeRole = (user: User, role: Role) => {
     changeUserRole(user.id, role).then(
       (changed) => show(loaded.current.map((u) => (u.id === changed.id ? changed : u))),
-      () => setError(`Could not change the role of ${user.username}`),
+      () => setError(`Could not change the role of ${user.email}`),
     );
   };
 
@@ -128,7 +128,7 @@ export function useUsers(sort: UserSort) {
       },
       () => {
         settle();
-        setError(`Could not delete ${user.username}`);
+        setError(`Could not delete ${user.email}`);
       },
     );
   };

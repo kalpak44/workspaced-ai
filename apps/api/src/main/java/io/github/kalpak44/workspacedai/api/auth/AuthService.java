@@ -33,16 +33,16 @@ public class AuthService {
 
   public record SignIn(Account account, TokenService.Token token) {}
 
-  /** One answer for an unknown user and a wrong password, so usernames cannot be probed. */
+  /** One answer for an unknown user and a wrong password, so emails cannot be probed. */
   @Transactional(readOnly = true)
-  public SignIn login(String username, String password) {
+  public SignIn login(String email, String password) {
     try {
       authentication.authenticate(
-          UsernamePasswordAuthenticationToken.unauthenticated(username, password));
+          UsernamePasswordAuthenticationToken.unauthenticated(email, password));
     } catch (AuthenticationException e) {
-      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "wrong username or password", e);
+      throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "wrong email or password", e);
     }
-    var user = users.findByUsername(username).orElseThrow();
+    var user = users.findByEmail(email).orElseThrow();
     return new SignIn(Account.of(user), tokens.issue(user));
   }
 

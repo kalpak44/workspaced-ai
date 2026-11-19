@@ -23,7 +23,7 @@ public class AuthController implements AuthApi {
 
   @Override
   public ResponseEntity<LoginResponse> login(LoginRequest body) {
-    var signIn = service.login(body.username(), body.password());
+    var signIn = service.login(body.normalizedEmail(), body.password());
     var token = signIn.token();
     return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookie(request, token).toString())

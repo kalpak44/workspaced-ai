@@ -27,8 +27,8 @@ src/
 | Only `hooks/` imports `api/`                       | Every request has one owner, and components stay mockable |
 | Each layer exports through its `index.ts`          | Moving a file inside a layer changes no imports elsewhere  |
 
-The app first asks the API who is signed in (`GET /api/v1/account`) and shows a sign-in page until someone is; a fresh
-install accepts admin/admin. The session itself is an HttpOnly cookie the code never reads. Any `401` from the API
+The app first asks the API who is signed in (`GET /api/v1/account`) and shows a sign-in page until someone is; signing in
+takes an email and password. The session itself is an HttpOnly cookie the code never reads. Any `401` from the API
 returns the app to the sign-in page, and Logout in the account menu clears the cookie. The profile on the settings page
 (names and avatar) and the password change are saved to the account. Its Users tab lists everyone who can sign in,
 sorted as chosen (newest first by default) and loaded 20 at a time as the end of the list scrolls into view; it adds a

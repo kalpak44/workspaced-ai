@@ -1357,10 +1357,10 @@ describe("signing in", () => {
     api.auth.signedIn = false;
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText("Username"), "admin");
+    await user.type(await screen.findByLabelText("Email"), "admin@example.com");
     await user.type(screen.getByLabelText("Password"), "wrong");
     await user.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong username or password");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong email or password");
 
     await user.clear(screen.getByLabelText("Password"));
     await user.type(screen.getByLabelText("Password"), "admin");

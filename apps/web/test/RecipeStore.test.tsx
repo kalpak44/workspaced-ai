@@ -11,7 +11,7 @@ vi.mock("@xterm/addon-fit", () => ({ FitAddon: class {} }));
 
 let api: ReturnType<typeof installFakeApi>;
 
-const GRACE = { id: "grace-id", username: "grace", firstName: "Grace", lastName: "Hopper" };
+const GRACE = { id: "grace-id", firstName: "Grace", lastName: "Hopper" };
 
 function recipe(overrides: Partial<Recipe> = {}): Recipe {
   return {
@@ -44,7 +44,7 @@ function open(path: string) {
 
 describe("recipe store", () => {
   it("shows public recipes as cards and keeps private ones in their own tab", async () => {
-    api.recipes.rows.push(recipe(), recipe({ id: "notes", title: "My notes app", visibility: "PRIVATE", author: { ...GRACE, id: "admin-id", username: "admin" }, publishedAt: null }));
+    api.recipes.rows.push(recipe(), recipe({ id: "notes", title: "My notes app", visibility: "PRIVATE", author: { ...GRACE, id: "admin-id" }, publishedAt: null }));
     const user = userEvent.setup();
     open("/store");
 
@@ -134,7 +134,7 @@ describe("recipe store", () => {
   });
 
   it("lets the author revise with the agent through a draft in the workspace", async () => {
-    api.recipes.rows.push(recipe({ author: { ...GRACE, id: "admin-id", username: "admin" }, mine: true }));
+    api.recipes.rows.push(recipe({ author: { ...GRACE, id: "admin-id" }, mine: true }));
     const user = userEvent.setup();
     open("/store/wp");
     await user.click(await screen.findByRole("button", { name: "Edit with the agent" }));

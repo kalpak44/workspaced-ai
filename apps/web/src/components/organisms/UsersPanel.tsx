@@ -100,7 +100,7 @@ export function UsersPanel({
       {creating && <CreateUserDialog onCreate={onCreate} onClose={() => setCreating(false)} />}
       {confirming && (
         <DeleteUserDialog
-          username={confirming.username}
+          email={confirming.email}
           onClose={() => setConfirming(null)}
           onConfirm={() => {
             onRemove(confirming);

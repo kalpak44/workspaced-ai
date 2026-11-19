@@ -6,7 +6,7 @@ const USERS_URL = "/api/v1/users";
 /** Someone who can sign in to this installation. Only an admin may list, create or delete them. */
 export interface User {
   readonly id: string;
-  readonly username: string;
+  readonly email: string;
   readonly firstName: string;
   readonly lastName: string;
   readonly avatar: string | null;
@@ -14,7 +14,7 @@ export interface User {
 }
 
 export interface NewUser {
-  readonly username: string;
+  readonly email: string;
   readonly password: string;
   readonly firstName: string;
   readonly lastName: string;

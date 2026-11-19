@@ -7,7 +7,7 @@ import org.springframework.security.oauth2.server.resource.authentication.JwtAut
 /** Who the current request was authenticated as: the subject of its token. */
 public final class CurrentUser {
 
-  static final String USERNAME_CLAIM = "username";
+  static final String EMAIL_CLAIM = "email";
   static final String VERSION_CLAIM = "ver";
 
   private CurrentUser() {}

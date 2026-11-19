@@ -6,10 +6,10 @@ The whole app is served under the `/api/v1` context path, so the host root is fr
 ## Authentication and tenancy
 
 Every route needs a signed-in user except `POST /auth/login`, `POST /auth/logout`, health and the API docs. A fresh
-database has one account, **admin / admin** (created by `V9__users.sql`); change its password from the settings page or
-`PUT /account/password` after the first sign-in.
+database has one admin account, password **admin**, whose email `V32__user_email.sql` sets; change the password from the
+settings page or `PUT /account/password` after the first sign-in. Emails are stored lowercased and match in any case.
 
-`POST /auth/login` with `{"username","password"}` answers `{account, token, expiresAt}`. The token is an HS256 JWT signed
+`POST /auth/login` with `{"email","password"}` answers `{account, token, expiresAt}`. The token is an HS256 JWT signed
 by the API (Spring Security's OAuth2 resource server validates it); its subject is the user's id. The same token is set
 as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over HTTPS — which is how the
 browser authenticates, EventSource and the terminal WebSocket included, since neither can set a header. Other clients
@@ -18,17 +18,17 @@ token, else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `XSRF-TOKEN
 change sends it back in `X-XSRF-TOKEN`. Requests without the sign-in cookie, bearer requests included, need none. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
 stays valid until it expires. A missing, invalid or expired token answers `401` as a problem detail.
 
-`GET /account` returns the signed-in user (`id`, `username`, `firstName`, `lastName`, `avatar`).
+`GET /account` returns the signed-in user (`id`, `email`, `firstName`, `lastName`, `avatar`).
 `PUT /account/profile` replaces the names (at most 100 characters, trimmed) and the avatar, a JPG/PNG/WebP/GIF `data:`
 URL of at most 2 MB (empty removes it). `PUT /account/password` takes `currentPassword` and `newPassword` (8–72
 characters): `204`, or `422` when the current password is wrong.
 
 `GET /users` lists everyone who can sign in, a page at a time, as Spring Data's paged model:
-`{"content": [{id, username, firstName, lastName, avatar}], "page": {size, number, totalElements, totalPages}}`. It
-takes `page` (from 0), `size` (default 20, at most 100) and `sort` as `field,direction`, repeatable, over `username`,
+`{"content": [{id, email, firstName, lastName, avatar}], "page": {size, number, totalElements, totalPages}}`. It
+takes `page` (from 0), `size` (default 20, at most 100) and `sort` as `field,direction`, repeatable, over `email`,
 `firstName`, `lastName` and `createdAt` (default `createdAt,desc`); any other field is a `400`. The id breaks ties, so
-pages never overlap. `POST /users` takes `{username, password, firstName, lastName}` (names at most 100 characters,
-trimmed; password 8–72) and answers `201`, or `409` when the username is taken. `DELETE /users/{id}` stops and deletes
+pages never overlap. `POST /users` takes `{email, password, firstName, lastName}` (email lowercased, names at most 100 characters,
+trimmed; password 8–72) and answers `201`, or `409` when the email is taken. `DELETE /users/{id}` stops and deletes
 each of the user's workspaces, then the user: `204`, `404` for no such user, or `409` for the signed-in user, who cannot
 delete themselves. Any signed-in user may manage users; there are no roles yet.
 
@@ -344,7 +344,7 @@ frontend's job: it starts a session in the chosen workspace and sends the recipe
 The fields are `title` (1–100 characters), `summary` (up to 300, may be empty), `category` (`apps`, `websites`,
 `automation`, `data`, `ai`, `devops` or `other`), `tags` (up to 8, each 1–30 lowercase letters, digits and `-`; trimmed,
 lowercased and deduplicated), `visibility` and `content` (Markdown, 1–100,000 characters); anything else is a `400`.
-Each recipe answers with its `author` (`id`, `username`, `firstName`, `lastName`), `createdAt`, `updatedAt`,
+Each recipe answers with its `author` (`id`, `firstName`, `lastName`; never the email), `createdAt`, `updatedAt`,
 `publishedAt` (set the first time it turns public, then kept), `rating` (`average` to one decimal, `count`), the
 caller's own `myRating` or null, and `mine`.
 
@@ -488,7 +488,7 @@ docker run -d --name workspaced-db -p 5432:5432 \
   -e POSTGRES_DB=workspaced -e POSTGRES_USER=workspaced -e POSTGRES_PASSWORD=workspaced postgres:18-alpine
 cd apps/api
 WORKSPACED_DB_PASSWORD=workspaced WORKSPACED_JWT_SECRET=local-dev-signing-key-at-least-32-bytes \
-  mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui, admin/admin
+  mvn spring-boot:run                                     # http://localhost:8080/api/v1/swagger-ui, admin password admin
 mvn fmt:format                                            # fixes what the fmt:check gate rejects
 mvn verify                                                # tests plus the 80% line-coverage floor
 mvn -DskipTests spring-boot:build-image                   # buildpacks image, no Dockerfile

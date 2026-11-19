@@ -13,7 +13,6 @@ export type RecipeCategory = (typeof RECIPE_CATEGORIES)[number];
 
 export interface RecipeAuthor {
   readonly id: string;
-  readonly username: string;
   readonly firstName: string;
   readonly lastName: string;
 }

@@ -29,7 +29,7 @@ public class UserController implements UserApi {
   public ResponseEntity<User> create(CreateUserRequest request) {
     var user =
         service.create(
-            request.trimmedUsername(),
+            request.normalizedEmail(),
             request.password(),
             request.trimmedFirstName(),
             request.trimmedLastName(),

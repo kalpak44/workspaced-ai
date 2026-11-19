@@ -200,8 +200,8 @@ class MailTest {
 
   @Test
   void refusesEveryoneButAnAdmin() throws Exception {
-    users.save(new UserEntity("ada", passwords.encode("password1")));
-    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    users.save(new UserEntity("ada@example.com", passwords.encode("password1")));
+    var ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
     var template = "{\"signature\":\"\",\"footer\":\"\"}";
     assertThat(send("GET", "/mail", null, ada).statusCode()).isEqualTo(403);
     assertThat(send("POST", "/mail/messages", MESSAGE, ada).statusCode()).isEqualTo(403);

@@ -558,7 +558,7 @@ public class BillingService {
                   Stream.of(u.getFirstName(), u.getLastName())
                       .filter(part -> part != null && !part.isBlank())
                       .collect(Collectors.joining(" "));
-              return full.isEmpty() ? u.getUsername() : full;
+              return full.isEmpty() ? u.getEmail() : full;
             })
         .orElseThrow(() -> new IllegalStateException("no user " + user));
   }

@@ -16,7 +16,7 @@ import java.util.UUID;
 @Table(name = "app_user")
 public class UserEntity {
 
-  /** The account V9 creates as admin/admin, which owns every workspace made before accounts. */
+  /** The account V9 creates as admin, which owns every workspace made before accounts. */
   public static final UUID DEFAULT_ADMIN_ID =
       UUID.fromString("00000000-0000-0000-0000-000000000001");
 
@@ -24,8 +24,9 @@ public class UserEntity {
   @GeneratedValue(strategy = GenerationType.UUID)
   private UUID id;
 
-  @Column(nullable = false, unique = true, length = 100)
-  private String username;
+  // Always lowercased, which the column checks.
+  @Column(nullable = false, unique = true, length = 254)
+  private String email;
 
   // Encoded by the PasswordEncoder, prefix included; the password itself is never stored.
   @Column(name = "password_hash", nullable = false, length = 200)
@@ -56,20 +57,20 @@ public class UserEntity {
     // For JPA.
   }
 
-  public UserEntity(String username, String passwordHash) {
-    this.username = username;
+  public UserEntity(String email, String passwordHash) {
+    this.email = email;
     this.passwordHash = passwordHash;
   }
 
-  public UserEntity(String username, String passwordHash, String firstName, String lastName) {
-    this(username, passwordHash);
+  public UserEntity(String email, String passwordHash, String firstName, String lastName) {
+    this(email, passwordHash);
     this.firstName = firstName;
     this.lastName = lastName;
   }
 
   public UserEntity(
-      String username, String passwordHash, String firstName, String lastName, Role role) {
-    this(username, passwordHash, firstName, lastName);
+      String email, String passwordHash, String firstName, String lastName, Role role) {
+    this(email, passwordHash, firstName, lastName);
     this.role = role;
   }
 
@@ -77,8 +78,8 @@ public class UserEntity {
     return id;
   }
 
-  public String getUsername() {
-    return username;
+  public String getEmail() {
+    return email;
   }
 
   public String getPasswordHash() {

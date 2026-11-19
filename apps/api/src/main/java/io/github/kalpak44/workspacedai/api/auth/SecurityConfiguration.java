@@ -175,8 +175,8 @@ public class SecurityConfiguration {
   UserDetailsService userDetailsService(UserRepository users) {
     return username ->
         users
-            .findByUsername(username)
-            .map(u -> User.withUsername(u.getUsername()).password(u.getPasswordHash()).build())
+            .findByEmail(username)
+            .map(u -> User.withUsername(u.getEmail()).password(u.getPasswordHash()).build())
             .orElseThrow(() -> new UsernameNotFoundException("no user " + username));
   }
 

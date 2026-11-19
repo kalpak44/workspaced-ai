@@ -108,7 +108,7 @@ class BillingTest {
         .containsEntry(
             "success_url", "https://ai.workspaced.test/billing?top_up=" + id + "&outcome=success");
     assertThat(STRIPE.idempotencyKeys.getLast()).isEqualTo(id);
-    assertThat(STRIPE.customers.getLast()).containsEntry("name", "admin");
+    assertThat(STRIPE.customers.getLast()).containsEntry("name", TestUsers.ADMIN_EMAIL);
 
     var topUp = read(get("/billing")).get("topUps").get(0);
     assertThat(topUp.get("status").asString()).isEqualTo("PENDING");

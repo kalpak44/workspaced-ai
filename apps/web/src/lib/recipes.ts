@@ -128,7 +128,7 @@ export function revisePrompt(name: string, title: string, change: string): strin
   ].join("\n");
 }
 
-/** "Ada Lovelace", or the username for someone who gave no name. */
-export function authorName(author: { readonly username: string; readonly firstName: string; readonly lastName: string }): string {
-  return [author.firstName, author.lastName].filter(Boolean).join(" ") || author.username;
+/** "Ada Lovelace", or "Anonymous" for someone who gave no name; their email is not shown to others. */
+export function authorName(author: { readonly firstName: string; readonly lastName: string }): string {
+  return [author.firstName, author.lastName].filter(Boolean).join(" ") || "Anonymous";
 }

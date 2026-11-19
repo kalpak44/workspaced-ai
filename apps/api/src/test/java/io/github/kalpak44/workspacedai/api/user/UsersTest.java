@@ -62,25 +62,28 @@ class UsersTest {
 
   @Test
   void listsUsersAPageAtATimeNewestFirst() throws Exception {
-    for (var name : new String[] {"ada", "grace", "linus"}) {
+    for (var name : new String[] {"ada@example.com", "grace@example.com", "linus@example.com"}) {
       users.saveAndFlush(new UserEntity(name, "{noop}x"));
     }
     var first = list("?size=2");
-    assertThat(usernames(first)).containsExactly("linus", "grace");
+    assertThat(emails(first)).containsExactly("linus@example.com", "grace@example.com");
     assertThat(first.get("page").get("totalElements").asInt()).isEqualTo(4);
     assertThat(first.get("page").get("totalPages").asInt()).isEqualTo(2);
-    assertThat(usernames(list("?size=2&page=1"))).containsExactly("ada", "admin");
+    assertThat(emails(list("?size=2&page=1")))
+        .containsExactly("ada@example.com", TestUsers.ADMIN_EMAIL);
   }
 
   @Test
   void sortsByTheFieldsAUserHas() throws Exception {
-    users.save(new UserEntity("zed", "{noop}x", "Ada", "Byron"));
-    users.save(new UserEntity("ada", "{noop}x", "Ada", "Lovelace"));
-    users.save(new UserEntity("grace", "{noop}x", "Grace", "Hopper"));
-    assertThat(usernames(list("?sort=username,desc")))
-        .containsExactly("zed", "grace", "admin", "ada");
-    assertThat(usernames(list("?sort=firstName,asc&sort=lastName,asc")))
-        .containsExactly("admin", "zed", "ada", "grace");
+    users.save(new UserEntity("zed@example.com", "{noop}x", "Ada", "Byron"));
+    users.save(new UserEntity("ada@example.com", "{noop}x", "Ada", "Lovelace"));
+    users.save(new UserEntity("grace@example.com", "{noop}x", "Grace", "Hopper"));
+    assertThat(emails(list("?sort=email,desc")))
+        .containsExactly(
+            "zed@example.com", TestUsers.ADMIN_EMAIL, "grace@example.com", "ada@example.com");
+    assertThat(emails(list("?sort=firstName,asc&sort=lastName,asc")))
+        .containsExactly(
+            TestUsers.ADMIN_EMAIL, "zed@example.com", "ada@example.com", "grace@example.com");
     assertThat(send("GET", "/users?sort=passwordHash,asc", null).statusCode()).isEqualTo(400);
   }
 
@@ -95,34 +98,37 @@ class UsersTest {
         send(
             "POST",
             "/users",
-            "{\"username\":\" ada \",\"password\":\"password1\",\"firstName\":\"Ada\",\"lastName\":\" Lovelace\"}");
+            "{\"email\":\"Ada@Example.com\",\"password\":\"password1\",\"firstName\":\"Ada\",\"lastName\":\" Lovelace\"}");
     assertThat(created.statusCode()).isEqualTo(201);
     var body = JSON.readTree(created.body());
-    assertThat(body.get("username").asString()).isEqualTo("ada");
+    assertThat(body.get("email").asString()).isEqualTo("ada@example.com");
     assertThat(body.get("lastName").asString()).isEqualTo("Lovelace");
     assertThat(body.get("role").asString()).isEqualTo("USER");
     assertThat(body.has("passwordHash")).isFalse();
     assertThat(created.headers().firstValue("Location"))
         .hasValueSatisfying(l -> assertThat(l).endsWith("/users/" + body.get("id").asString()));
-    assertThat(TestUsers.login(port, "ada", "password1")).isNotBlank();
+    assertThat(TestUsers.login(port, "ADA@example.com", "password1")).isNotBlank();
   }
 
   @Test
-  void refusesATakenUsernameOrABadPassword() throws Exception {
+  void refusesATakenOrMalformedEmailOrABadPassword() throws Exception {
     var taken =
-        "{\"username\":\"admin\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\"}";
+        "{\"email\":\"pavel.usanli@gmail.com\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\"}";
     assertThat(send("POST", "/users", taken).statusCode()).isEqualTo(409);
     var shortPassword =
-        "{\"username\":\"ada\",\"password\":\"short\",\"firstName\":\"\",\"lastName\":\"\"}";
+        "{\"email\":\"ada@example.com\",\"password\":\"short\",\"firstName\":\"\",\"lastName\":\"\"}";
     assertThat(send("POST", "/users", shortPassword).statusCode()).isEqualTo(400);
-    assertThat(users.findByUsername("ada")).isEmpty();
+    var notAnAddress =
+        "{\"email\":\"ada\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\"}";
+    assertThat(send("POST", "/users", notAnAddress).statusCode()).isEqualTo(400);
+    assertThat(users.findByEmail("ada@example.com")).isEmpty();
   }
 
   @Test
   void deletesAnotherUserWithTheirWorkspaces() throws Exception {
     when(pricing.monthlyPrice(any())).thenReturn(Optional.of(BigDecimal.ONE));
-    users.save(new UserEntity("ada", passwords.encode("password1")));
-    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    users.save(new UserEntity("ada@example.com", passwords.encode("password1")));
+    var ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
     var workspace =
         send(
             "POST",
@@ -130,7 +136,7 @@ class UsersTest {
             "{\"name\":\"Ada's\",\"modelProvider\":\"openrouter\",\"apiKey\":\"sk-or-1\"}",
             ada);
     assertThat(workspace.statusCode()).isEqualTo(201);
-    var id = users.findByUsername("ada").orElseThrow().getId();
+    var id = users.findByEmail("ada@example.com").orElseThrow().getId();
 
     assertThat(send("DELETE", "/users/" + id, null).statusCode()).isEqualTo(204);
     assertThat(users.findById(id)).isEmpty();
@@ -147,17 +153,17 @@ class UsersTest {
 
   @Test
   void refusesEveryoneButAnAdmin() throws Exception {
-    users.save(new UserEntity("ada", passwords.encode("password1")));
-    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    users.save(new UserEntity("ada@example.com", passwords.encode("password1")));
+    var ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
     var created =
-        "{\"username\":\"grace\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\"}";
+        "{\"email\":\"grace@example.com\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\"}";
 
     var listed = send("GET", "/users", null, ada);
     assertThat(listed.statusCode()).isEqualTo(403);
     assertThat(listed.headers().firstValue("Content-Type")).hasValue("application/problem+json");
     assertThat(send("POST", "/users", created, ada).statusCode()).isEqualTo(403);
     assertThat(send("DELETE", "/users/" + TestUsers.ADMIN, null, ada).statusCode()).isEqualTo(403);
-    assertThat(users.findByUsername("grace")).isEmpty();
+    assertThat(users.findByEmail("grace@example.com")).isEmpty();
     assertThat(users.findById(TestUsers.ADMIN)).isPresent();
   }
 
@@ -167,21 +173,21 @@ class UsersTest {
         send(
             "POST",
             "/users",
-            "{\"username\":\"grace\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\",\"role\":\"ADMIN\"}");
+            "{\"email\":\"grace@example.com\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\",\"role\":\"ADMIN\"}");
     assertThat(created.statusCode()).isEqualTo(201);
     assertThat(JSON.readTree(created.body()).get("role").asString()).isEqualTo("ADMIN");
-    var grace = "Bearer " + TestUsers.login(port, "grace", "password1");
+    var grace = "Bearer " + TestUsers.login(port, "grace@example.com", "password1");
     assertThat(send("GET", "/users", null, grace).statusCode()).isEqualTo(200);
 
     var unknownRole =
-        "{\"username\":\"linus\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\",\"role\":\"ROOT\"}";
+        "{\"email\":\"linus@example.com\",\"password\":\"password1\",\"firstName\":\"\",\"lastName\":\"\",\"role\":\"ROOT\"}";
     assertThat(send("POST", "/users", unknownRole).statusCode()).isEqualTo(400);
   }
 
   @Test
   void changesARoleWhichAppliesWithoutSigningIn() throws Exception {
-    var id = users.save(new UserEntity("ada", passwords.encode("password1"))).getId();
-    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    var id = users.save(new UserEntity("ada@example.com", passwords.encode("password1"))).getId();
+    var ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
     assertThat(send("GET", "/users", null, ada).statusCode()).isEqualTo(403);
 
     var promoted = send("PUT", "/users/" + id + "/role", "{\"role\":\"ADMIN\"}");
@@ -204,8 +210,8 @@ class UsersTest {
     assertThat(send("PUT", "/users/" + TestUsers.ADMIN + "/role", "{}").statusCode())
         .isEqualTo(400);
 
-    var id = users.save(new UserEntity("ada", passwords.encode("password1"))).getId();
-    var ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    var id = users.save(new UserEntity("ada@example.com", passwords.encode("password1"))).getId();
+    var ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
     assertThat(send("PUT", "/users/" + id + "/role", "{\"role\":\"ADMIN\"}", ada).statusCode())
         .isEqualTo(403);
     assertThat(users.findById(id).orElseThrow().getRole()).isEqualTo(Role.USER);
@@ -223,9 +229,9 @@ class UsersTest {
     return JSON.readTree(response.body());
   }
 
-  private static ArrayList<String> usernames(JsonNode page) {
+  private static ArrayList<String> emails(JsonNode page) {
     var names = new ArrayList<String>();
-    page.get("content").forEach(u -> names.add(u.get("username").asString()));
+    page.get("content").forEach(u -> names.add(u.get("email").asString()));
     return names;
   }
 

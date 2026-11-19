@@ -11,7 +11,7 @@ const LEGAL_SITE = "https://workspaced.online";
 export function LoginPage({ unreachable = false }: { readonly unreachable?: boolean }) {
   useTheme();
   const { signIn } = useAccount();
-  const [username, setUsername] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState(unreachable ? "The API could not be reached. Try again in a moment." : "");
@@ -20,8 +20,8 @@ export function LoginPage({ unreachable = false }: { readonly unreachable?: bool
     setBusy(true);
     setError("");
     try {
-      if (!(await signIn(username.trim(), password))) {
-        setError("Wrong username or password.");
+      if (!(await signIn(email.trim(), password))) {
+        setError("Wrong email or password.");
         setBusy(false);
       }
     } catch {
@@ -46,11 +46,11 @@ export function LoginPage({ unreachable = false }: { readonly unreachable?: bool
           <h1 className="text-xl font-semibold tracking-tight">Sign in</h1>
           <p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Welcome back. Pick up where your agents left off.</p>
         </div>
-        <TextField id="username" label="Username" autoComplete="username" autoFocus required maxLength={100} value={username} onChange={(event) => setUsername(event.target.value)} />
+        <TextField id="email" label="Email" type="email" autoComplete="email" autoFocus required maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} />
         <TextField id="password" label="Password" type="password" autoComplete="current-password" required maxLength={200} value={password} onChange={(event) => setPassword(event.target.value)} />
         {error && <p role="alert" className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700 dark:border-rose-900/70 dark:bg-rose-950/40 dark:text-rose-300">{error}</p>}
         <div className="flex flex-col [&>button]:w-full">
-          <Button label="Sign in" type="submit" icon={LogIn} busy={busy} disabled={!username.trim() || !password} />
+          <Button label="Sign in" type="submit" icon={LogIn} busy={busy} disabled={!email.trim() || !password} />
         </div>
         {/* A new tab, so following a link never discards the credentials already typed. */}
         <p className="text-center text-xs text-zinc-500 dark:text-zinc-400">

@@ -5,7 +5,7 @@ const ACCOUNT_URL = "/api/v1/account";
 /** The signed-in user. The sign-in itself is an HttpOnly cookie this code never sees. */
 export interface Account {
   readonly id: string;
-  readonly username: string;
+  readonly email: string;
   readonly firstName: string;
   readonly lastName: string;
   /** A data: URL of the picture; null for the default. */
@@ -33,8 +33,8 @@ export async function fetchAccount(): Promise<Account | null> {
 }
 
 /** The API sets the cookie; the token in the body is for clients without one. */
-export async function login(username: string, password: string): Promise<Account> {
-  const body = JSON.stringify({ username, password });
+export async function login(email: string, password: string): Promise<Account> {
+  const body = JSON.stringify({ email, password });
   return (await (await send("/api/v1/auth/login", { method: "POST", body })).json()).account;
 }
 

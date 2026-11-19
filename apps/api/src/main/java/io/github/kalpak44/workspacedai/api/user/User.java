@@ -8,7 +8,7 @@ import java.util.UUID;
 @Schema(description = "Someone who can sign in")
 public record User(
     @Schema(example = "00000000-0000-0000-0000-000000000001") UUID id,
-    @Schema(example = "admin") String username,
+    @Schema(example = "ada@example.com") String email,
     @Schema(example = "Ada") String firstName,
     @Schema(example = "Lovelace") String lastName,
     @Schema(
@@ -20,7 +20,7 @@ public record User(
   static User of(UserEntity user) {
     return new User(
         user.getId(),
-        user.getUsername(),
+        user.getEmail(),
         user.getFirstName(),
         user.getLastName(),
         user.getAvatar(),

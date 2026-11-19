@@ -11,10 +11,11 @@ import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import tools.jackson.databind.json.JsonMapper;
 
-/** The default admin/admin account, and a signed-in token for it on each test server. */
+/** The default admin account, and a signed-in token for it on each test server. */
 public final class TestUsers {
 
   public static final UUID ADMIN = UserEntity.DEFAULT_ADMIN_ID;
+  public static final String ADMIN_EMAIL = "pavel.usanli@gmail.com";
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final Map<Integer, String> TOKENS = new ConcurrentHashMap<>();
@@ -23,10 +24,10 @@ public final class TestUsers {
 
   /** The Authorization header value for admin on the server listening on that port. */
   public static String bearer(int port) {
-    return "Bearer " + TOKENS.computeIfAbsent(port, p -> login(p, "admin", "admin"));
+    return "Bearer " + TOKENS.computeIfAbsent(port, p -> login(p, ADMIN_EMAIL, "admin"));
   }
 
-  public static String login(int port, String username, String password) {
+  public static String login(int port, String email, String password) {
     var client = HttpClient.newHttpClient();
     try {
       var issued =
@@ -49,7 +50,7 @@ public final class TestUsers {
               .header("X-XSRF-TOKEN", token)
               .POST(
                   BodyPublishers.ofString(
-                      JSON.writeValueAsString(Map.of("username", username, "password", password))))
+                      JSON.writeValueAsString(Map.of("email", email, "password", password))))
               .build();
       var response = client.send(request, BodyHandlers.ofString());
       if (response.statusCode() != 200) {

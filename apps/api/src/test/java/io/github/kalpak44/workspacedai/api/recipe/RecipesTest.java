@@ -54,9 +54,9 @@ class RecipesTest {
   void reset() {
     jdbc.update("DELETE FROM recipe");
     users.findAll().stream().filter(u -> !u.getId().equals(TestUsers.ADMIN)).forEach(users::delete);
-    users.save(new UserEntity("ada", passwords.encode("password1"), "Ada", "Lovelace"));
+    users.save(new UserEntity("ada@example.com", passwords.encode("password1"), "Ada", "Lovelace"));
     admin = TestUsers.bearer(port);
-    ada = "Bearer " + TestUsers.login(port, "ada", "password1");
+    ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
   }
 
   @Test
@@ -73,7 +73,7 @@ class RecipesTest {
         .endsWith("/api/v1/recipes/" + recipe.get("id").asString());
     assertThat(recipe.get("title").asString()).isEqualTo("WordPress");
     assertThat(strings(recipe.get("tags"))).containsExactly("wordpress", "docker");
-    assertThat(recipe.get("author").get("username").asString()).isEqualTo("ada");
+    assertThat(recipe.get("author").has("email")).isFalse();
     assertThat(recipe.get("author").get("firstName").asString()).isEqualTo("Ada");
     assertThat(recipe.get("mine").asBoolean()).isTrue();
     assertThat(recipe.get("publishedAt").isNull()).isFalse();
@@ -167,8 +167,8 @@ class RecipesTest {
   @Test
   void ratesSomeoneElsesPublicRecipeOnceEach() throws Exception {
     var recipe = id(create("Shared", "PUBLIC", ada));
-    users.save(new UserEntity("grace", passwords.encode("password1")));
-    var grace = "Bearer " + TestUsers.login(port, "grace", "password1");
+    users.save(new UserEntity("grace@example.com", passwords.encode("password1")));
+    var grace = "Bearer " + TestUsers.login(port, "grace@example.com", "password1");
 
     send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":5}", admin);
     var rated = send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":3}", admin);
@@ -198,7 +198,7 @@ class RecipesTest {
 
   @Test
   void tellsTheAuthorWhenTheRecipeIsFirstPublishedAndWhenItIsRated() throws Exception {
-    var author = users.findByUsername("ada").orElseThrow().getId();
+    var author = users.findByEmail("ada@example.com").orElseThrow().getId();
     var recipe = id(create("Shared", "PRIVATE", ada));
     assertThat(notifications.list(author)).isEmpty();
 
@@ -248,7 +248,7 @@ class RecipesTest {
   @Test
   void deletingTheAuthorDeletesTheirRecipes() throws Exception {
     create("Shared", "PUBLIC", ada);
-    users.delete(users.findByUsername("ada").orElseThrow());
+    users.delete(users.findByEmail("ada@example.com").orElseThrow());
     assertThat(list("", admin).get("content")).isEmpty();
   }
 
