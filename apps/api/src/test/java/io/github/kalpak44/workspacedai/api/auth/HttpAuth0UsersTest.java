@@ -10,12 +10,16 @@ import java.net.InetSocketAddress;
 import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -40,7 +44,21 @@ class HttpAuth0UsersTest {
           "secret",
           "Username-Password-Authentication",
           base + "api/v2/");
-  private final HttpAuth0Users users = new HttpAuth0Users(properties, JSON);
+  // What the database does for the real thing: one token, shared by every instance.
+  private final AtomicReference<Auth0Tokens.Token> stored = new AtomicReference<>();
+  private final Auth0Tokens tokenStore =
+      new Auth0Tokens() {
+        @Override
+        public Optional<Token> current() {
+          return Optional.ofNullable(stored.get());
+        }
+
+        @Override
+        public void save(Token token) {
+          stored.set(token);
+        }
+      };
+  private final HttpAuth0Users users = new HttpAuth0Users(properties, tokenStore, JSON);
 
   @AfterEach
   void stop() {
@@ -58,11 +76,34 @@ class HttpAuth0UsersTest {
   }
 
   @Test
-  void asksForOneTokenAndReusesItUntilItNearlyExpires() {
+  void sharesOneStoredTokenAcrossInstancesUntilItNearlyExpires() {
     users.profile("auth0|ada");
-    users.profile("auth0|ada");
+    new HttpAuth0Users(properties, tokenStore, JSON).profile("auth0|ada");
     users.updateNames("auth0|ada", "Ada", "Byron");
     assertThat(tokens).hasValue(1);
+
+    stored.set(new Auth0Tokens.Token("token", Instant.now().plusSeconds(30)));
+    users.profile("auth0|ada");
+    assertThat(tokens).hasValue(2);
+    assertThat(stored.get().expiresAt()).isAfter(Instant.now().plusSeconds(3600));
+  }
+
+  @Test
+  void usesItsOwnTokenWhenAnotherInstanceStoredTheFirstOneAtTheSameMoment() {
+    var collided =
+        new Auth0Tokens() {
+          @Override
+          public Optional<Token> current() {
+            return Optional.empty();
+          }
+
+          @Override
+          public void save(Token token) {
+            throw new DataIntegrityViolationException("duplicate key auth0_token_pkey");
+          }
+        };
+    var profile = new HttpAuth0Users(properties, collided, JSON).profile("auth0|ada");
+    assertThat(profile).hasValueSatisfying(p -> assertThat(p.givenName()).isEqualTo("Ada"));
   }
 
   @Test

@@ -52,6 +52,7 @@ class AuthTest {
   @Autowired UserRepository users;
   @Autowired WorkspaceRepository workspaces;
   @Autowired AuthService auth;
+  @Autowired Auth0Tokens tokens;
   @MockitoBean ApiKeyCheck keyCheck;
   @MockitoBean PasswordResets passwordResets;
   @MockitoBean Mailer mailer;
@@ -129,6 +130,17 @@ class AuthTest {
     auth.signIn("auth0|ada", "ada@example.com", true, Role.USER);
     assertThat(users.findByIdpSubject("auth0|ada"))
         .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.USER));
+  }
+
+  @Test
+  void keepsTheManagementTokenThatExpiresLast() {
+    var later = Instant.now().plusSeconds(7200);
+    tokens.save(new Auth0Tokens.Token("later", later));
+    tokens.save(new Auth0Tokens.Token("sooner", Instant.now().plusSeconds(3600)));
+    assertThat(tokens.current()).hasValueSatisfying(t -> assertThat(t.value()).isEqualTo("later"));
+
+    tokens.save(new Auth0Tokens.Token("latest", later.plusSeconds(60)));
+    assertThat(tokens.current()).hasValueSatisfying(t -> assertThat(t.value()).isEqualTo("latest"));
   }
 
   @Test

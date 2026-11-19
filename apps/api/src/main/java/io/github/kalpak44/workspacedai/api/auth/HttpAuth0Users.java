@@ -18,6 +18,7 @@ import java.util.Optional;
 import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
 import org.springframework.web.server.ResponseStatusException;
@@ -37,20 +38,16 @@ public class HttpAuth0Users implements Auth0Users {
   private static final int BATCH = 50;
 
   private final AuthProperties properties;
+  private final Auth0Tokens tokens;
   private final JsonMapper json;
   private final HttpClient http;
 
-  // A credential cached per instance, not state: losing it costs one token request. Kept so each
-  // call does not spend one of the tenant's monthly machine-to-machine tokens.
-  private Token token;
-
-  public HttpAuth0Users(AuthProperties properties, JsonMapper json) {
+  public HttpAuth0Users(AuthProperties properties, Auth0Tokens tokens, JsonMapper json) {
     this.properties = properties;
+    this.tokens = tokens;
     this.json = json;
     this.http = HttpClient.newBuilder().connectTimeout(TIMEOUT).build();
   }
-
-  private record Token(String value, Instant expiresAt) {}
 
   @Override
   public Optional<Profile> profile(String subject) {
@@ -126,14 +123,31 @@ public class HttpAuth0Users implements Auth0Users {
         .timeout(TIMEOUT);
   }
 
-  private synchronized String token() {
-    if (token == null || !token.expiresAt().isAfter(Instant.now().plusSeconds(60))) {
-      token = requestToken();
+  /**
+   * The shared token, or a new one when it is missing or about to expire. No lock is held across
+   * the call to Auth0: instances refreshing at once each spend a token, which costs less than a
+   * database connection held while Auth0 answers.
+   */
+  private String token() {
+    var current = tokens.current().filter(HttpAuth0Users::fresh);
+    if (current.isPresent()) {
+      return current.get().value();
     }
-    return token.value();
+    var fetched = requestToken();
+    try {
+      tokens.save(fetched);
+    } catch (DataIntegrityViolationException _) {
+      // Another instance stored the first token at the same moment; this one is valid too.
+    }
+    return fetched.value();
   }
 
-  private Token requestToken() {
+  // A minute of slack, so a token never expires between this check and Auth0 reading it.
+  private static boolean fresh(Auth0Tokens.Token token) {
+    return token.expiresAt().isAfter(Instant.now().plusSeconds(60));
+  }
+
+  private Auth0Tokens.Token requestToken() {
     var body =
         json.writeValueAsString(
             Map.of(
@@ -148,7 +162,7 @@ public class HttpAuth0Users implements Auth0Users {
             .POST(HttpRequest.BodyPublishers.ofString(body))
             .build();
     var answer = read(send(request));
-    return new Token(
+    return new Auth0Tokens.Token(
         answer.path("access_token").asString(),
         Instant.now().plusSeconds(answer.path("expires_in").asLong(60)));
   }
