@@ -5,7 +5,7 @@ const RECIPES_URL = "/api/v1/recipes";
 
 export type RecipeVisibility = "PUBLIC" | "PRIVATE";
 export type RecipeScope = "public" | "private";
-export type RecipeSort = "top" | "newest" | "updated";
+export type RecipeSort = "top" | "newest";
 
 /** The API's fixed list; anything else is refused. */
 export const RECIPE_CATEGORIES = ["apps", "websites", "automation", "data", "ai", "devops", "other"] as const;
@@ -32,14 +32,13 @@ export interface RecipeSummary {
   readonly tags: readonly string[];
   readonly visibility: RecipeVisibility;
   readonly author: RecipeAuthor;
-  /** ISO 8601. */
+  /** ISO 8601. A recipe never changes once created, so there is no later date to show. */
   readonly createdAt: string;
-  readonly updatedAt: string;
-  /** When it first became public; null while it never has been. */
+  /** When it became public: at creation for a public recipe, null for a private one. */
   readonly publishedAt: string | null;
   readonly rating: RecipeRating;
   readonly myRating: number | null;
-  /** Whether the signed-in user wrote it, and so may edit it. */
+  /** Whether the signed-in user wrote it, and so may delete it. */
   readonly mine: boolean;
 }
 
@@ -116,10 +115,6 @@ export async function fetchRecipe(id: string): Promise<Recipe> {
 
 export async function createRecipe(input: RecipeInput): Promise<Recipe> {
   return (await send(RECIPES_URL, { method: "POST", body: JSON.stringify(input) })).json();
-}
-
-export async function updateRecipe(id: string, input: RecipeInput): Promise<Recipe> {
-  return (await send(recipeUrl(id), { method: "PUT", body: JSON.stringify(input) })).json();
 }
 
 export async function deleteRecipe(id: string): Promise<void> {

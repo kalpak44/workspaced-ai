@@ -33,33 +33,39 @@ public class RecipeEntity {
   @JoinColumn(name = "author_id", nullable = false, updatable = false)
   private UserEntity author;
 
-  @Column(nullable = false, length = 100)
+  // Every column below is written once: a recipe never changes after it is created, so a rating
+  // always refers to exactly what was published.
+  @Column(nullable = false, length = 100, updatable = false)
   private String title;
 
-  @Column(nullable = false, length = 300)
+  @Column(nullable = false, length = 300, updatable = false)
   private String summary;
 
-  @Column(nullable = false, length = 20)
+  @Column(nullable = false, length = 20, updatable = false)
   private String category;
 
   @JdbcTypeCode(SqlTypes.ARRAY)
-  @Column(nullable = false, columnDefinition = "text[]")
+  @Column(nullable = false, columnDefinition = "text[]", updatable = false)
   private List<String> tags = new ArrayList<>();
 
-  @Column(nullable = false, columnDefinition = "text")
+  @Column(nullable = false, columnDefinition = "text", updatable = false)
   private String content;
 
   @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 10)
+  @Column(nullable = false, length = 10, updatable = false)
   private Visibility visibility;
+
+  // The author's name as it was when they created it: the byline other users see.
+  @Column(name = "author_first_name", nullable = false, length = 100, updatable = false)
+  private String authorFirstName;
+
+  @Column(name = "author_last_name", nullable = false, length = 100, updatable = false)
+  private String authorLastName;
 
   @Column(name = "created_at", nullable = false, updatable = false)
   private Instant createdAt;
 
-  @Column(name = "updated_at", nullable = false)
-  private Instant updatedAt;
-
-  @Column(name = "published_at")
+  @Column(name = "published_at", updatable = false)
   private Instant publishedAt;
 
   // Mapped only so queries can join it; the database cascade deletes these with the recipe.
@@ -70,28 +76,22 @@ public class RecipeEntity {
     // For JPA.
   }
 
-  public RecipeEntity(UserEntity author, RecipeRequest.Fields fields) {
+  public RecipeEntity(
+      UserEntity author,
+      String authorFirstName,
+      String authorLastName,
+      RecipeRequest.Fields fields) {
     this.author = author;
+    this.authorFirstName = authorFirstName;
+    this.authorLastName = authorLastName;
     this.createdAt = Instant.now();
-    apply(fields, createdAt);
-  }
-
-  /** Replaces every field; published_at is set the first time it turns public and kept after. */
-  public void update(RecipeRequest.Fields fields) {
-    apply(fields, Instant.now());
-  }
-
-  private void apply(RecipeRequest.Fields fields, Instant now) {
-    title = fields.title();
-    summary = fields.summary();
-    category = fields.category();
-    tags = new ArrayList<>(fields.tags());
-    content = fields.content();
-    visibility = fields.visibility();
-    updatedAt = now;
-    if (publishedAt == null && visibility == Visibility.PUBLIC) {
-      publishedAt = now;
-    }
+    this.title = fields.title();
+    this.summary = fields.summary();
+    this.category = fields.category();
+    this.tags = new ArrayList<>(fields.tags());
+    this.content = fields.content();
+    this.visibility = fields.visibility();
+    this.publishedAt = visibility == Visibility.PUBLIC ? createdAt : null;
   }
 
   public UUID getId() {

@@ -349,7 +349,6 @@ frontend's job: it starts a session in the chosen workspace and sends the recipe
 | `GET`    | `/api/v1/recipes`                 |                          | `200` and a page of recipes, without their Markdown        |
 | `GET`    | `/api/v1/recipes/{id}`            |                          | `200` and the recipe with its `content`, or `404`          |
 | `POST`   | `/api/v1/recipes`                 | the recipe's fields      | `201`, the recipe, and its URL in `Location`               |
-| `PUT`    | `/api/v1/recipes/{id}`            | the recipe's fields      | `200`; `403` when someone else wrote it                    |
 | `DELETE` | `/api/v1/recipes/{id}`            |                          | `204`; `403` unless the author or an admin                 |
 | `PUT`    | `/api/v1/recipes/{id}/rating`     | `{"stars": 1–5}`         | `200` and `{average, count, myRating}`; `409` for one's own |
 | `DELETE` | `/api/v1/recipes/{id}/rating`     |                          | `204`, rated or not                                        |
@@ -357,21 +356,24 @@ frontend's job: it starts a session in the chosen workspace and sends the recipe
 The fields are `title` (1–100 characters), `summary` (up to 300, may be empty), `category` (`apps`, `websites`,
 `automation`, `data`, `ai`, `devops` or `other`), `tags` (up to 8, each 1–30 lowercase letters, digits and `-`; trimmed,
 lowercased and deduplicated), `visibility` and `content` (Markdown, 1–100,000 characters); anything else is a `400`.
-Each recipe answers with its `author` (`id`, `firstName`, `lastName`; never the email), `createdAt`, `updatedAt`,
-`publishedAt` (set the first time it turns public, then kept), `rating` (`average` to one decimal, `count`), the
+A recipe never changes once created, so its ratings always refer to what was published; to change one, its author
+publishes a new one and deletes the old. Each recipe answers with its `author` (`id`, and the `firstName` and `lastName` the
+author had when they created it, `Unknown` and empty when they had none; never the email), `createdAt`, `publishedAt`
+(when it was created public, null for a private one), `rating` (`average` to one decimal, `count`), the
 caller's own `myRating` or null, and `mine`.
 
 The list takes `scope` (`public`, the default, for every public recipe, the caller's included; `private` for the
 caller's own private ones), `q` (matches title, summary or a tag, ignoring case), `category`, `sort` (`top`, the default:
-average rating, then number of ratings; `newest`: when each turned public; `updated`: the last change), `page` and
+average rating, then number of ratings; `newest`: when each turned public), `page` and
 `size` (default 24, at most 100), and answers Spring Data's paged model, `{"content": […], "page": {…}}`.
 
 ### Recipe drafts
 
 The agent writes a recipe it is asked for as a draft in the workspace, `~/.config/workspaced/recipes/<name>.md`: front
 matter (`title`, `summary`, `category`, `tags`, `visibility`, and `recipe`, the id of the recipe it revises) and then
-the Markdown. The harness never calls the API, so a draft reaches the store only when the user imports and publishes
-it; to have the agent revise a published recipe, the app writes it here first.
+the Markdown. The harness never calls the API, so a draft reaches the store only when the user imports and publishes it;
+to have the agent revise a published recipe, the app writes it here first. Importing a revision publishes a new recipe,
+and `recipe` only tells the app which of the user's recipes to offer to delete.
 
 | Method   | Path                                           | Body             | Answers                                |
 |----------|------------------------------------------------|------------------|----------------------------------------|

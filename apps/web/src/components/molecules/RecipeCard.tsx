@@ -43,7 +43,7 @@ export function RecipeCard({ recipe, onOpen }: Props) {
         )}
         <span className="mt-auto flex items-center justify-between gap-2 border-t border-zinc-100 pt-3 text-xs text-zinc-500 dark:border-zinc-800 dark:text-zinc-400">
           <span className="min-w-0 truncate">
-            {authorName(recipe.author)} · {timeAgo(recipe.updatedAt)}
+            {authorName(recipe.author)} · {recipe.publishedAt ? "published" : "created"} {timeAgo(recipe.publishedAt ?? recipe.createdAt)}
           </span>
           {recipe.visibility === "PUBLIC" && (
             <span className="flex shrink-0 items-center gap-1">

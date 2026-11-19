@@ -8,7 +8,10 @@ export interface DraftFields {
   readonly category?: string;
   readonly tags: readonly string[];
   readonly visibility?: "PUBLIC" | "PRIVATE";
-  /** Set when the draft revises a recipe that is already in the store. */
+  /**
+   * The recipe this draft revises, set when the app copied it into the workspace. Only a reference:
+   * importing still creates a new recipe, and this names the one to offer for deletion.
+   */
   readonly recipe?: string;
 }
 
@@ -124,7 +127,7 @@ export function revisePrompt(name: string, title: string, change: string): strin
     "",
     what,
     "",
-    "Tell me when it is ready to import from the store.",
+    "Tell me when it is ready to import from the store, where it is published as a new recipe.",
   ].join("\n");
 }
 

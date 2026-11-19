@@ -128,9 +128,9 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
   category: websites   # apps, websites, automation, data, ai, devops or other
   tags: [wordpress, docker]
   visibility: private  # or public
-  recipe: <id>         # keep it when it is already there: it marks a revision of a published recipe
+  recipe: <id>         # keep it when it is already there: it names the recipe this revises
   ---
   ```
 
 - Then the steps. A good recipe first names every secret it needs, asks the user to add them under Secrets and restart, and checks each is set without printing it; asks for the public address, or which existing one to use, before publishing; installs; checks that it works; and ends by adding an instruction file saying how to reach and maintain what was set up, or a task when something should run regularly. Write it for a fresh workspace: no paths, names or secrets from this one.
-- You never publish: tell the user the draft is ready and that they publish it from the Store with Import. When asked to revise a recipe, the app has already written it there; edit that file in place and keep its `recipe:` line.
+- You never publish: tell the user the draft is ready and that they publish it from the Store with Import. A published recipe never changes, so its ratings keep meaning what was rated: when asked to revise one, the app has already written it there as a draft; edit that file in place, keep its `recipe:` line, and tell the user that importing it publishes a new recipe, after which the app offers to delete the old one.

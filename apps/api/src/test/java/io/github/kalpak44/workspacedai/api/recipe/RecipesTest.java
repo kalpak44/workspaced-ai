@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.recipe;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.tuple;
 
+import io.github.kalpak44.workspacedai.api.FakeAuth0Users;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
@@ -82,6 +83,20 @@ class RecipesTest {
   }
 
   @Test
+  void keepsTheBylineTheAuthorHadWhenTheyCreatedIt() throws Exception {
+    var recipe = id(create("Byline", "PUBLIC", ada));
+    FakeAuth0Users.name(TestUsers.subject("ada@example.com"), "Augusta", "King");
+    var adaNow =
+        TestUsers.bearer(
+            users.findByIdpSubject(TestUsers.subject("ada@example.com")).orElseThrow());
+
+    var author =
+        JSON.readTree(send("GET", "/recipes/" + recipe, null, adaNow).body()).get("author");
+    assertThat(author.get("firstName").asString()).isEqualTo("Ada");
+    assertThat(author.get("lastName").asString()).isEqualTo("Lovelace");
+  }
+
+  @Test
   void namesAnAuthorAuth0HasNoNameForUnknown() throws Exception {
     var created = send("POST", "/recipes", body("Nameless", "PUBLIC", "other", List.of()), admin);
     var author = JSON.readTree(created.body()).get("author");
@@ -139,7 +154,7 @@ class RecipesTest {
   }
 
   @Test
-  void ordersByRatingNewestOrLastUpdate() throws Exception {
+  void ordersByRatingOrNewest() throws Exception {
     var first = id(create("First", "PUBLIC", admin));
     var second = id(create("Second", "PUBLIC", admin));
     send("PUT", "/recipes/" + first + "/rating", "{\"stars\":4}", ada);
@@ -147,25 +162,26 @@ class RecipesTest {
 
     assertThat(titles(list("?sort=top", ada))).containsExactly("First", "Second");
     assertThat(titles(list("?sort=newest", ada))).containsExactly("Second", "First");
-    send("PUT", "/recipes/" + first, body("First", "PUBLIC", "apps", List.of()), admin);
-    assertThat(titles(list("?sort=updated", ada))).containsExactly("First", "Second");
-    assertThat(list("?sort=random", ada)).isNull();
+    assertThat(list("?sort=updated", ada)).isNull();
   }
 
   @Test
-  void onlyTheAuthorChangesARecipeAndAnAdminMayDeleteIt() throws Exception {
+  void neverChangesARecipeAndOnlyItsAuthorOrAnAdminDeletesIt() throws Exception {
     var shared = id(create("Shared", "PUBLIC", ada));
     var secret = id(create("Secret", "PRIVATE", ada));
-    var change = body("Changed", "PUBLIC", "data", List.of());
 
-    assertThat(send("PUT", "/recipes/" + shared, change, admin).statusCode()).isEqualTo(403);
-    assertThat(send("PUT", "/recipes/" + secret, change, admin).statusCode()).isEqualTo(404);
-    var changed = send("PUT", "/recipes/" + secret, change, ada);
-    assertThat(changed.statusCode()).isEqualTo(200);
-    assertThat(JSON.readTree(changed.body()).get("publishedAt").isNull()).isFalse();
+    // Ratings always refer to what was published, so not even its author can change it.
+    var change = body("Changed", "PUBLIC", "data", List.of());
+    assertThat(send("PUT", "/recipes/" + shared, change, ada).statusCode()).isEqualTo(405);
+    assertThat(
+            JSON.readTree(send("GET", "/recipes/" + shared, null, ada).body())
+                .get("title")
+                .asString())
+        .isEqualTo("Shared");
 
     var adminsOwn = id(create("Admin's", "PUBLIC", admin));
     assertThat(send("DELETE", "/recipes/" + adminsOwn, null, ada).statusCode()).isEqualTo(403);
+    assertThat(send("DELETE", "/recipes/" + secret, null, admin).statusCode()).isEqualTo(404);
     assertThat(send("DELETE", "/recipes/" + shared, null, admin).statusCode()).isEqualTo(204);
     assertThat(send("DELETE", "/recipes/" + secret, null, ada).statusCode()).isEqualTo(204);
     assertThat(send("GET", "/recipes/" + secret, null, ada).statusCode()).isEqualTo(404);
@@ -206,14 +222,12 @@ class RecipesTest {
   }
 
   @Test
-  void tellsTheAuthorWhenTheRecipeIsFirstPublishedAndWhenItIsRated() throws Exception {
+  void tellsTheAuthorWhenTheRecipeIsPublishedAndWhenItIsRated() throws Exception {
     var author = users.findByIdpSubject(TestUsers.subject("ada@example.com")).orElseThrow().getId();
-    var recipe = id(create("Shared", "PRIVATE", ada));
+    id(create("Draft", "PRIVATE", ada));
     assertThat(notifications.list(author)).isEmpty();
 
-    send("PUT", "/recipes/" + recipe, body("Shared", "PUBLIC", "apps", List.of()), ada);
-    send("PUT", "/recipes/" + recipe, body("Shared", "PRIVATE", "apps", List.of()), ada);
-    send("PUT", "/recipes/" + recipe, body("Shared", "PUBLIC", "apps", List.of()), ada);
+    var recipe = id(create("Shared", "PUBLIC", ada));
     send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":4}", admin);
 
     assertThat(notifications.list(author))

@@ -19,7 +19,6 @@ public record Recipe(
     Visibility visibility,
     RecipeAuthor author,
     Instant createdAt,
-    Instant updatedAt,
     @Schema(description = "When it first turned public; null while it never has")
         Instant publishedAt,
     RecipeRating rating,
@@ -28,24 +27,6 @@ public record Recipe(
     @Schema(description = "Whether the caller wrote it") boolean mine,
     @Schema(description = "Markdown", example = "1. Ask the user to add `DB_PASSWORD` as a secret.")
         String content) {
-
-  Recipe withAuthor(RecipeAuthor author) {
-    return new Recipe(
-        id,
-        title,
-        summary,
-        category,
-        tags,
-        visibility,
-        author,
-        createdAt,
-        updatedAt,
-        publishedAt,
-        rating,
-        myRating,
-        mine,
-        content);
-  }
 
   RecipeSummary toSummary() {
     return new RecipeSummary(
@@ -57,7 +38,6 @@ public record Recipe(
         visibility,
         author,
         createdAt,
-        updatedAt,
         publishedAt,
         rating,
         myRating,

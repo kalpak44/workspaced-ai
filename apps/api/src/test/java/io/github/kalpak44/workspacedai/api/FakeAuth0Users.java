@@ -1,8 +1,6 @@
 package io.github.kalpak44.workspacedai.api;
 
 import io.github.kalpak44.workspacedai.api.auth.Auth0Users;
-import java.util.Collection;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -39,12 +37,5 @@ public class FakeAuth0Users implements Auth0Users {
   @Override
   public void sendVerificationEmail(String subject) {
     VERIFICATION_EMAILS.add(subject);
-  }
-
-  @Override
-  public Map<String, Profile> profiles(Collection<String> subjects) {
-    var found = new HashMap<String, Profile>();
-    subjects.forEach(s -> found.put(s, profile(s)));
-    return found;
   }
 }

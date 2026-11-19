@@ -68,7 +68,8 @@ public interface RecipeDraftsApi {
       operationId = "saveRecipeDraft",
       summary = "Create or replace a recipe draft",
       description =
-          "Writes the file whole, e.g. a published recipe for the agent to revise in place.")
+          "Writes the file whole, e.g. a published recipe for the agent to revise; importing "
+              + "the revision publishes a new recipe.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",

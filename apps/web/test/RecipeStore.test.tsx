@@ -23,7 +23,6 @@ function recipe(overrides: Partial<Recipe> = {}): Recipe {
     visibility: "PUBLIC",
     author: GRACE,
     createdAt: "2026-11-01T10:00:00Z",
-    updatedAt: "2026-11-02T10:00:00Z",
     publishedAt: "2026-11-01T10:00:00Z",
     rating: { average: 4.5, count: 2 },
     myRating: null,
@@ -40,6 +39,12 @@ beforeEach(() => {
 function open(path: string) {
   globalThis.history.replaceState(null, "", path);
   render(<App />);
+}
+
+async function importFile(user: ReturnType<typeof userEvent.setup>, text: string) {
+  await user.click(await screen.findByRole("button", { name: /New recipe/ }));
+  await user.click(screen.getByRole("menuitem", { name: /Import a file/ }));
+  await user.upload(screen.getByLabelText("Recipe file to import"), new File([text], "recipe.md", { type: "text/markdown" }));
 }
 
 describe("recipe store", () => {
@@ -88,6 +93,9 @@ describe("recipe store", () => {
     await user.click(screen.getByRole("menuitem", { name: /Write it yourself/ }));
 
     const form = screen.getByRole("form", { name: "New recipe" });
+    // Said before saving, since nothing about it can change afterwards.
+    expect(within(form).getByText(/can't be edited once it is saved/)).toBeInTheDocument();
+    expect(within(form).getByText(/You choose this once/)).toBeInTheDocument();
     await user.type(within(form).getByLabelText("Title"), "Uptime Kuma");
     await user.type(within(form).getByLabelText("Tags"), "Monitoring, docker");
     await user.click(within(form).getByRole("button", { name: "Raw Markdown" }));
@@ -97,6 +105,25 @@ describe("recipe store", () => {
     expect(await screen.findByRole("heading", { name: "Uptime Kuma", level: 2 })).toBeInTheDocument();
     expect(api.recipes.rows[0]).toMatchObject({ title: "Uptime Kuma", tags: ["monitoring", "docker"], visibility: "PRIVATE", content: "1. Install it." });
     expect(screen.getByText(/Only you can see this recipe/)).toBeInTheDocument();
+    // Private, so it was created rather than published; and the author cannot edit it.
+    expect(screen.getByText("Created")).toBeInTheDocument();
+    expect(screen.queryByText("Published")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Delete" })).toBeInTheDocument();
+  });
+
+  it("dates a public recipe by when it was published, and sorts only by rating or age", async () => {
+    api.recipes.rows.push(recipe({ createdAt: "2026-10-01T10:00:00Z", publishedAt: "2026-11-01T10:00:00Z" }));
+    const user = userEvent.setup();
+    open("/store");
+    const list = await screen.findByRole("list", { name: "Public recipes" });
+    expect(within(list).getByText(/Grace Hopper · published/)).toBeInTheDocument();
+    expect([...(screen.getByLabelText("Sort by") as HTMLSelectElement).options].map((o) => o.text)).toEqual(["Top rated", "Newest"]);
+
+    await user.click(within(list).getByRole("button", { name: /WordPress/ }));
+    const published = await screen.findByText("Published");
+    expect(published.nextElementSibling).toHaveTextContent("Nov 1, 2026");
+    expect(screen.queryByText("Updated")).not.toBeInTheDocument();
   });
 
   it("refuses tags the API would refuse before sending them", async () => {
@@ -142,8 +169,8 @@ describe("recipe store", () => {
     api.recipes.rows.push(recipe({ author: { ...GRACE, id: "admin-id" }, mine: true }));
     const user = userEvent.setup();
     open("/store/wp");
-    await user.click(await screen.findByRole("button", { name: "Edit with the agent" }));
-    const dialog = screen.getByRole("form", { name: "Edit with the agent" });
+    await user.click(await screen.findByRole("button", { name: "Revise with the agent" }));
+    const dialog = screen.getByRole("form", { name: "Revise with the agent" });
     await user.type(within(dialog).getByLabelText("What should change?"), "Use PostgreSQL");
     await user.click(within(dialog).getByRole("button", { name: "Start session" }));
 
@@ -164,6 +191,57 @@ describe("recipe store", () => {
 
     expect(await screen.findByRole("heading", { name: "Uptime Kuma", level: 2 })).toBeInTheDocument();
     expect(api.recipes.rows[0]).toMatchObject({ title: "Uptime Kuma", visibility: "PUBLIC", category: "devops", tags: ["monitoring"], content: "1. Install it." });
+  });
+
+  it("imports a revision as a new recipe, and deletes exactly the original it names once asked", async () => {
+    api.recipes.rows.push(
+      recipe({ author: { ...GRACE, id: "admin-id" }, mine: true, rating: { average: 4, count: 3 } }),
+      recipe({ id: "other", title: "Another of mine", author: { ...GRACE, id: "admin-id" }, mine: true }),
+    );
+    const user = userEvent.setup();
+    open("/store");
+    // Renamed by the revision: the id, not the title, names the original.
+    await importFile(user, "---\ntitle: WordPress on PostgreSQL\nvisibility: public\nrecipe: wp\n---\n\n1. Use PostgreSQL.");
+
+    const dialog = await screen.findByRole("dialog", { name: "Published as a new recipe" });
+    expect(dialog).toHaveTextContent("This revises your recipe “WordPress with a public address”");
+    expect(api.fetchFn).not.toHaveBeenCalledWith(expect.stringMatching(/\/recipes\/wp$/), expect.objectContaining({ method: "PUT" }));
+    expect(api.recipes.rows.map((r) => r.id)).toEqual(["wp", "other", "recipe-1"]);
+    await user.click(within(dialog).getByRole("button", { name: "Delete old recipe" }));
+
+    expect(await screen.findByRole("heading", { name: "WordPress on PostgreSQL", level: 2 })).toBeInTheDocument();
+    expect(globalThis.location.pathname).toBe("/store/recipe-1");
+    expect(api.recipes.rows.map((r) => r.id)).toEqual(["other", "recipe-1"]);
+  });
+
+  it("keeps the original when asked, and says when it cannot be deleted", async () => {
+    api.recipes.rows.push(recipe({ author: { ...GRACE, id: "admin-id" }, mine: true }));
+    const user = userEvent.setup();
+    open("/store");
+    await importFile(user, "---\ntitle: WordPress, revised\nvisibility: public\nrecipe: wp\n---\n\n1. Use PostgreSQL.");
+    const dialog = await screen.findByRole("dialog", { name: "Published as a new recipe" });
+    api.recipes.failDelete = true;
+    await user.click(within(dialog).getByRole("button", { name: "Delete old recipe" }));
+    expect(await within(dialog).findByRole("alert")).toHaveTextContent("Could not delete the old recipe");
+
+    await user.click(within(dialog).getByRole("button", { name: "Keep both" }));
+    await waitFor(() => expect(globalThis.location.pathname).toBe("/store/recipe-1"));
+    expect(api.recipes.rows).toHaveLength(2);
+  });
+
+  it.each([
+    ["someone else's recipe", "recipe: wp\n"],
+    ["a recipe that no longer exists", "recipe: gone\n"],
+    ["no recipe at all", ""],
+  ])("offers nothing to delete when the draft names %s", async (_, line) => {
+    // Grace's, with the same title: only the id could make it the original, and it is not hers to delete here.
+    api.recipes.rows.push(recipe());
+    const user = userEvent.setup();
+    open("/store");
+    await importFile(user, `---\ntitle: WordPress with a public address\nvisibility: public\n${line}---\n\n1. Mine.`);
+    await waitFor(() => expect(globalThis.location.pathname).toBe("/store/recipe-1"));
+    expect(screen.queryByRole("dialog", { name: "Published as a new recipe" })).not.toBeInTheDocument();
+    expect(api.recipes.rows.map((r) => r.id)).toEqual(["wp", "recipe-1"]);
   });
 
   it("refuses a file with no title and says why", async () => {

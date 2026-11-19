@@ -1,14 +1,13 @@
-import { Bot, Globe, Lock, Pencil, Play, Trash2 } from "lucide-react";
+import { Bot, Globe, Lock, Play, Trash2 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
-import { saveRecipe, startRecipeSession, useRecipe } from "../../hooks/useRecipes";
+import { startRecipeSession, useRecipe } from "../../hooks/useRecipes";
 import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { applyPrompt, authorName, draftName, revisePrompt, serializeDraft } from "../../lib/recipes";
 import { Button, CategoryTile, Stars, Tag, categoryLabel } from "../atoms";
 import { EmptyState, Markdown, Modal, ModalBody, ModalFooter, PageHeader, RatingInput } from "../molecules";
 import { WorkspacePickerDialog } from "../organisms";
-import { RecipeEditorDialog } from "../organisms/RecipeEditorDialog";
 
 interface Props {
   readonly recipeId: string;
@@ -18,11 +17,11 @@ interface Props {
 
 const DATE = new Intl.DateTimeFormat("en", { dateStyle: "medium" });
 
-type Dialog = "apply" | "edit" | "revise" | "delete" | null;
+type Dialog = "apply" | "revise" | "delete" | null;
 
 /** One recipe: its steps, who wrote it, its rating, and Apply. */
 export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
-  const { recipe, missing, error, loading, rate, remove, replace } = useRecipe(recipeId);
+  const { recipe, missing, error, loading, rate, remove } = useRecipe(recipeId);
   const { account } = useAccount();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [rating, setRating] = useState(false);
@@ -70,8 +69,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
             <dl className="flex flex-wrap gap-x-6 gap-y-2 text-sm">
               <Meta label="Author">{authorName(recipe.author)}</Meta>
               <Meta label="Category">{categoryLabel(recipe.category)}</Meta>
-              {recipe.publishedAt && <Meta label="Published">{DATE.format(new Date(recipe.publishedAt))}</Meta>}
-              <Meta label="Updated">{DATE.format(new Date(recipe.updatedAt))}</Meta>
+              <Meta label={recipe.publishedAt ? "Published" : "Created"}>{DATE.format(new Date(recipe.publishedAt ?? recipe.createdAt))}</Meta>
               <Meta label="Visibility">
                 <span className="inline-flex items-center gap-1">
                   {isPublic ? <Globe aria-hidden className="size-3.5" /> : <Lock aria-hidden className="size-3.5" />}
@@ -118,13 +116,12 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
             ) : (
               <p className="flex items-center gap-2 text-sm text-zinc-500 dark:text-zinc-400">
                 <Lock aria-hidden className="size-4" />
-                Only you can see this recipe. Make it public to share it and collect ratings.
+                Only you can see this recipe. To share it, create it again as a public one.
               </p>
             )}
             {recipe.mine || canDelete ? (
               <div className="flex w-full flex-wrap gap-2 border-t border-zinc-100 pt-4 dark:border-zinc-800">
-                {recipe.mine && <Button label="Edit" icon={Pencil} variant="secondary" onClick={() => setDialog("edit")} />}
-                {recipe.mine && <Button label="Edit with the agent" icon={Bot} variant="secondary" onClick={() => setDialog("revise")} />}
+                {recipe.mine && <Button label="Revise with the agent" icon={Bot} variant="secondary" onClick={() => setDialog("revise")} />}
                 {canDelete && <Button label="Delete" icon={Trash2} variant="secondary" onClick={() => setDialog("delete")} />}
               </div>
             ) : null}
@@ -153,8 +150,8 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
       )}
       {dialog === "revise" && (
         <WorkspacePickerDialog
-          title="Edit with the agent"
-          description="The recipe is copied into the workspace as a draft, and a new session opens to revise it. Import it from the store when it is ready."
+          title="Revise with the agent"
+          description="The recipe is copied into the workspace as a draft, and a new session opens to revise it. Import it from the store when it is ready: it is published as a new recipe, and you can delete this one then."
           workspaces={workspaces}
           actionLabel="Start session"
           actionIcon={Bot}
@@ -167,21 +164,6 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
               recipe.content,
             );
             return startRecipeSession(workspaceId, revisePrompt(name, recipe.title, change), { name, content });
-          }}
-        />
-      )}
-      {dialog === "edit" && (
-        <RecipeEditorDialog
-          title="Edit recipe"
-          description="Changes apply to everyone who opens it from now on."
-          initial={recipe}
-          onClose={() => setDialog(null)}
-          onSave={async (input) => {
-            const saved = await saveRecipe(recipe.id, input);
-            if (typeof saved === "string") return saved;
-            replace(saved);
-            setDialog(null);
-            return true;
           }}
         />
       )}

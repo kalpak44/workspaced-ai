@@ -14,7 +14,8 @@ import org.springframework.web.server.ResponseStatusException;
 /**
  * Recipe drafts: files in a workspace's home that its agent writes when asked for a recipe, and the
  * app writes when the user asks the agent to revise one. Publishing one is the user's step, through
- * the recipe routes. Each needs the workspace running.
+ * the recipe routes, and always makes a new recipe: a published one never changes. Each needs the
+ * workspace running.
  */
 @Service
 public class RecipeDraftsService {

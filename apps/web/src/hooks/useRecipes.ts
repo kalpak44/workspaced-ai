@@ -123,43 +123,36 @@ export function useRecipe(id: string) {
     }
   }
 
-  async function remove(): Promise<boolean> {
-    try {
-      await api.deleteRecipe(id);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-
-  return { recipe, missing, error, loading: recipe === null && !missing && error === null, rate, remove, replace: setRecipe };
+  return { recipe, missing, error, loading: recipe === null && !missing && error === null, rate, remove: () => deleteRecipe(id) };
 }
 
-/**
- * Creates a recipe, or replaces the one `id` names. Resolves the saved recipe, or the API's reason
- * for refusing it.
- */
-export async function saveRecipe(id: string | null, input: api.RecipeInput): Promise<api.Recipe | string> {
+/** Creates a recipe. Resolves it, or the API's reason for refusing it. */
+export async function createRecipe(input: api.RecipeInput): Promise<api.Recipe | string> {
   try {
-    return id ? await api.updateRecipe(id, input) : await api.createRecipe(input);
+    return await api.createRecipe(input);
   } catch (failure) {
-    if (failure instanceof ApiError && failure.status === 403) return "Only its author can change this recipe.";
-    if (failure instanceof ApiError && failure.status === 404) return "This recipe no longer exists.";
     if (failure instanceof ApiError && failure.detail) return failure.detail;
     return "Could not save the recipe.";
   }
 }
 
+/** An imported recipe, and the user's own recipe it revises, if its draft named one that still exists. */
+export interface Imported {
+  readonly created: api.Recipe;
+  readonly original: api.Recipe | null;
+}
+
 /**
- * Publishes a recipe from a Markdown file in the recipe format: front matter, then the steps. A
- * `recipe:` id in it updates that recipe instead. Resolves the saved recipe, or why it was refused.
+ * Publishes a recipe from a Markdown file in the recipe format: front matter, then the steps. It
+ * always creates a new recipe, since none can be changed once saved; a `recipe:` id only names the
+ * original. Resolves the new recipe, or why it was refused.
  */
-export async function importRecipe(text: string): Promise<api.Recipe | string> {
+export async function importRecipe(text: string): Promise<Imported | string> {
   const { fields, body } = parseDraft(text);
   if (!fields.title) return "The file has no title in its front matter.";
   if (body === "") return "The file has no steps after its front matter.";
   const category = api.RECIPE_CATEGORIES.find((value) => value === fields.category) ?? "other";
-  return saveRecipe(fields.recipe ?? null, {
+  const created = await createRecipe({
     title: fields.title,
     summary: fields.summary ?? "",
     category,
@@ -167,6 +160,28 @@ export async function importRecipe(text: string): Promise<api.Recipe | string> {
     visibility: fields.visibility ?? "PRIVATE",
     content: body,
   });
+  if (typeof created === "string") return created;
+  return { created, original: fields.recipe ? await ownRecipe(fields.recipe) : null };
+}
+
+// Someone else's recipe, a deleted one or a malformed id is no original to offer for deletion.
+async function ownRecipe(id: string): Promise<api.Recipe | null> {
+  try {
+    const recipe = await api.fetchRecipe(id);
+    return recipe.mine ? recipe : null;
+  } catch {
+    return null;
+  }
+}
+
+/** False when the API refused it. */
+export async function deleteRecipe(id: string): Promise<boolean> {
+  try {
+    await api.deleteRecipe(id);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /**

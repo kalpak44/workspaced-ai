@@ -1,22 +1,15 @@
-import { Globe, Lock, SearchX, Store } from "lucide-react";
+import { Globe, Lock, SearchX, Store, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { importRecipe, type RecipeCategory, type RecipeScope, type RecipeSort, saveRecipe, useRecipes } from "../../hooks/useRecipes";
+import { createRecipe, deleteRecipe, importRecipe, type Recipe, type RecipeCategory, type RecipeScope, type RecipeSort, useRecipes } from "../../hooks/useRecipes";
 import { navigate } from "../../hooks/useRoute";
 import { Button, CATEGORIES, Select, Skeleton } from "../atoms";
-import { EmptyState, FilterChips, PageHeader, Pagination, RecipeCard, SearchField, Tabs } from "../molecules";
+import { EmptyState, FilterChips, Modal, ModalBody, ModalFooter, PageHeader, Pagination, RecipeCard, SearchField, Tabs } from "../molecules";
 import { NewRecipeMenu } from "../organisms";
 import { EMPTY_RECIPE, RecipeEditorDialog, type RecipeFormValues } from "../organisms/RecipeEditorDialog";
-
-/** An open editor: what it starts from, and the recipe it replaces. */
-interface Editing {
-  readonly initial: RecipeFormValues;
-  readonly recipeId: string | null;
-}
 
 const SORTS: ReadonlyArray<{ readonly value: RecipeSort; readonly label: string }> = [
   { value: "top", label: "Top rated" },
   { value: "newest", label: "Newest" },
-  { value: "updated", label: "Recently updated" },
 ];
 
 /** A card's outline while its page loads, so the grid keeps its shape. */
@@ -46,8 +39,13 @@ export function StorePage() {
   const [sort, setSort] = useState<RecipeSort>("top");
   const { recipes, total, loading, error, page, pageCount, pageSize, goTo, retry } = useRecipes({ scope, q, category, sort });
   const top = useRef<HTMLDivElement>(null);
-  const [editing, setEditing] = useState<Editing | null>(null);
+  // The form's starting values while it is open.
+  const [editing, setEditing] = useState<RecipeFormValues | null>(null);
   const [importError, setImportError] = useState<string | null>(null);
+  // An imported revision whose original is still the user's to delete.
+  const [superseded, setSuperseded] = useState<{ readonly created: Recipe; readonly original: Recipe } | null>(null);
+  const [deletingOlder, setDeletingOlder] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   // Searching waits for a pause in typing, so each keystroke is not a request.
   useEffect(() => {
@@ -58,8 +56,28 @@ export function StorePage() {
   const importFile = async (file: File) => {
     setImportError(null);
     const saved = await importRecipe(await file.text());
-    if (typeof saved === "string") setImportError(`Could not import ${file.name}: ${saved}`);
-    else navigate({ name: "recipe", recipeId: saved.id });
+    if (typeof saved === "string") {
+      setImportError(`Could not import ${file.name}: ${saved}`);
+      return;
+    }
+    // A revision cannot replace its original, so the original is offered for deletion instead.
+    const { created, original } = saved;
+    if (original) setSuperseded({ created, original });
+    else navigate({ name: "recipe", recipeId: created.id });
+  };
+
+  const openCreated = () => {
+    if (superseded) navigate({ name: "recipe", recipeId: superseded.created.id });
+  };
+
+  const deleteOlder = async () => {
+    if (!superseded) return;
+    setDeletingOlder(true);
+    setDeleteError(null);
+    const deleted = await deleteRecipe(superseded.original.id);
+    setDeletingOlder(false);
+    if (deleted) openCreated();
+    else setDeleteError("Could not delete the old recipe.");
   };
 
   const filtered = q.trim() !== "" || category !== null;
@@ -75,7 +93,7 @@ export function StorePage() {
       <PageHeader
         title="Recipe store"
         description="Step-by-step instructions the agent follows to set something up in your workspace. Apply one, or share your own."
-        actions={<NewRecipeMenu onWrite={() => setEditing({ initial: EMPTY_RECIPE, recipeId: null })} onImport={(file) => void importFile(file)} />}
+        actions={<NewRecipeMenu onWrite={() => setEditing(EMPTY_RECIPE)} onImport={(file) => void importFile(file)} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <div ref={top} className="mx-auto flex w-full max-w-5xl scroll-mt-4 flex-col gap-5 px-4 pt-6 pb-10 sm:px-6">
@@ -120,9 +138,9 @@ export function StorePage() {
               {filtered ? (
                 <EmptyState icon={SearchX} title="Nothing matches" hint="Try another search or category." secondaryAction={{ label: "Clear filters", onClick: clearFilters }} />
               ) : scope === "public" ? (
-                <EmptyState icon={Store} title="No public recipes yet" hint="Be the first: write one, or import it from a Markdown file." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: { ...EMPTY_RECIPE, visibility: "PUBLIC" }, recipeId: null }) }} />
+                <EmptyState icon={Store} title="No public recipes yet" hint="Be the first: write one, or import it from a Markdown file." action={{ label: "Write a recipe", onClick: () => setEditing({ ...EMPTY_RECIPE, visibility: "PUBLIC" }) }} />
               ) : (
-                <EmptyState icon={Lock} title="No private recipes" hint="Private recipes are yours alone: keep your own setups here and apply them to any workspace." action={{ label: "Write a recipe", onClick: () => setEditing({ initial: EMPTY_RECIPE, recipeId: null }) }} />
+                <EmptyState icon={Lock} title="No private recipes" hint="Private recipes are yours alone: keep your own setups here and apply them to any workspace." action={{ label: "Write a recipe", onClick: () => setEditing(EMPTY_RECIPE) }} />
               )}
             </div>
           )}
@@ -154,18 +172,32 @@ export function StorePage() {
 
       {editing && (
         <RecipeEditorDialog
-          title={editing.recipeId ? "Update recipe" : "New recipe"}
+          title="New recipe"
           description="Recipes are instructions the agent follows step by step."
-          initial={editing.initial}
+          initial={editing}
           onClose={() => setEditing(null)}
           onSave={async (input) => {
-            const saved = await saveRecipe(editing.recipeId, input);
+            const saved = await createRecipe(input);
             if (typeof saved === "string") return saved;
             setEditing(null);
             navigate({ name: "recipe", recipeId: saved.id });
             return true;
           }}
         />
+      )}
+      {superseded && (
+        <Modal title="Published as a new recipe" description="Recipes can't be changed once saved, so the revision did not replace the original." onClose={openCreated}>
+          <ModalBody>
+            <p className="text-sm text-zinc-600 dark:text-zinc-400">
+              This revises your recipe “{superseded.original.title}”. Delete the original, with its ratings, so only the new one is in the store?
+            </p>
+            {deleteError && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{deleteError}</p>}
+          </ModalBody>
+          <ModalFooter>
+            <Button label="Keep both" variant="secondary" disabled={deletingOlder} onClick={openCreated} autoFocus />
+            <Button label="Delete old recipe" variant="danger" icon={Trash2} busy={deletingOlder} onClick={() => void deleteOlder()} />
+          </ModalFooter>
+        </Modal>
       )}
     </>
   );

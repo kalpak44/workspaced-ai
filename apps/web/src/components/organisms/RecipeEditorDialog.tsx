@@ -7,7 +7,7 @@ import { Modal, ModalBody, ModalFooter } from "../molecules";
 // Imported directly, not through the index: the editor is large and only loaded with the store.
 import { InstructionsEditor } from "../molecules/InstructionsEditor";
 
-/** What the form starts from: a recipe being edited, a draft the agent wrote, or nothing. */
+/** What the form starts from: an empty recipe, private or public. */
 export interface RecipeFormValues {
   readonly title: string;
   readonly summary: string;
@@ -43,7 +43,10 @@ const EXAMPLE = `## Before you start
 ## When it is done
 Save an instruction file saying how to reach it.`;
 
-/** Writes a recipe, or changes one, with what the store card and the agent both need. */
+/**
+ * Writes a new recipe, with what the store card and the agent both need. It cannot be changed
+ * once saved, so the form says so before it is.
+ */
 export function RecipeEditorDialog({ title, description, initial, onSave, onClose }: Props) {
   const [name, setName] = useState(initial.title);
   const [summary, setSummary] = useState(initial.summary);
@@ -102,6 +105,9 @@ export function RecipeEditorDialog({ title, description, initial, onSave, onClos
               <ChoiceCard name="visibility" value="PRIVATE" label="Private" detail="Only you can see and apply it" icon={Lock} checked={visibility === "PRIVATE"} onChange={() => setVisibility("PRIVATE")} />
               <ChoiceCard name="visibility" value="PUBLIC" label="Public" detail="Everyone can find, apply and rate it" icon={Globe} checked={visibility === "PUBLIC"} onChange={() => setVisibility("PUBLIC")} />
             </div>
+            <span className="text-xs text-zinc-500 dark:text-zinc-400">
+              You choose this once: a private recipe can't be published later, and a public one can't be made private.
+            </span>
           </fieldset>
           <div className="flex flex-col gap-1.5 text-sm">
             <span className="font-medium text-zinc-700 dark:text-zinc-300">Steps</span>
@@ -111,6 +117,10 @@ export function RecipeEditorDialog({ title, description, initial, onSave, onClos
             </span>
           </div>
           {error && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{error}</p>}
+          {/* Ratings always describe what was published, so a saved recipe stays as it is. */}
+          <p className="text-xs text-zinc-500 dark:text-zinc-400">
+            A recipe can't be edited once it is saved. To change it later, delete it and create a new one.
+          </p>
         </ModalBody>
         <ModalFooter>
           <Button label="Cancel" variant="secondary" onClick={onClose} />

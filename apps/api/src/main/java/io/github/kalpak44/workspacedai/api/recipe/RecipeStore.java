@@ -30,8 +30,7 @@ public class RecipeStore {
   /** How a page of recipes is ordered; the id breaks ties, so no recipe shows on two pages. */
   public enum Order {
     TOP,
-    NEWEST,
-    UPDATED
+    NEWEST
   }
 
   /** Which recipes a listing covers, and how it narrows them. */
@@ -62,7 +61,7 @@ public class RecipeStore {
     var recipe = query.from(RecipeEntity.class);
     var columns = select(cb, query, recipe, filter.viewer(), false);
     var id = recipe.get(RecipeEntity_.id);
-    var updated = recipe.get(RecipeEntity_.updatedAt);
+    var created = recipe.get(RecipeEntity_.createdAt);
     query
         .where(matching(cb, recipe, filter))
         .orderBy(
@@ -71,16 +70,12 @@ public class RecipeStore {
                   List.of(
                       cb.desc(columns.average()),
                       cb.desc(columns.count()),
-                      cb.desc(updated),
+                      cb.desc(created),
                       cb.asc(id));
               case NEWEST ->
                   List.of(
-                      cb.desc(
-                          cb.coalesce(
-                              recipe.get(RecipeEntity_.publishedAt),
-                              recipe.get(RecipeEntity_.createdAt))),
+                      cb.desc(cb.coalesce(recipe.get(RecipeEntity_.publishedAt), created)),
                       cb.asc(id));
-              case UPDATED -> List.of(cb.desc(updated), cb.asc(id));
             });
     return entities
         .createQuery(query)
@@ -113,14 +108,15 @@ public class RecipeStore {
         .map(row -> recipe(row, viewer, true));
   }
 
-  public UUID create(UUID author, RecipeRequest.Fields fields) {
-    return recipes
-        .save(new RecipeEntity(entities.getReference(UserEntity.class, author), fields))
-        .getId();
-  }
-
-  public void update(UUID id, RecipeRequest.Fields fields) {
-    recipes.findById(id).ifPresent(recipe -> recipe.update(fields));
+  public UUID create(
+      UUID author, String authorFirstName, String authorLastName, RecipeRequest.Fields fields) {
+    var entity =
+        new RecipeEntity(
+            entities.getReference(UserEntity.class, author),
+            authorFirstName,
+            authorLastName,
+            fields);
+    return recipes.save(entity).getId();
   }
 
   public void delete(UUID id) {
@@ -184,7 +180,8 @@ public class RecipeStore {
                 recipe.get(RecipeEntity_.tags).alias(RecipeEntity_.TAGS),
                 recipe.get(RecipeEntity_.visibility).alias(RecipeEntity_.VISIBILITY),
                 recipe.get(RecipeEntity_.createdAt).alias(RecipeEntity_.CREATED_AT),
-                recipe.get(RecipeEntity_.updatedAt).alias(RecipeEntity_.UPDATED_AT),
+                recipe.get(RecipeEntity_.authorFirstName).alias(RecipeEntity_.AUTHOR_FIRST_NAME),
+                recipe.get(RecipeEntity_.authorLastName).alias(RecipeEntity_.AUTHOR_LAST_NAME),
                 recipe.get(RecipeEntity_.publishedAt).alias(RecipeEntity_.PUBLISHED_AT),
                 author.get(UserEntity_.id).alias(AUTHOR_ID),
                 average.alias(AVERAGE),
@@ -242,10 +239,11 @@ public class RecipeStore {
         row.get(RecipeEntity_.CATEGORY, String.class),
         tags == null ? List.of() : List.copyOf(tags),
         row.get(RecipeEntity_.VISIBILITY, Visibility.class),
-        // The name is Auth0's; RecipeAuthors adds it once no transaction is open.
-        new RecipeAuthor(author, null, null),
+        RecipeAuthor.of(
+            author,
+            row.get(RecipeEntity_.AUTHOR_FIRST_NAME, String.class),
+            row.get(RecipeEntity_.AUTHOR_LAST_NAME, String.class)),
         row.get(RecipeEntity_.CREATED_AT, Instant.class),
-        row.get(RecipeEntity_.UPDATED_AT, Instant.class),
         row.get(RecipeEntity_.PUBLISHED_AT, Instant.class),
         RecipeRating.of(
             row.get(AVERAGE, Double.class), Math.toIntExact(row.get(COUNT, Long.class))),

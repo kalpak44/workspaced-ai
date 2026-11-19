@@ -7,7 +7,6 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import java.io.IOException;
 import java.net.InetSocketAddress;
-import java.net.URLDecoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
@@ -33,7 +32,6 @@ class HttpAuth0UsersTest {
   private final List<String> patches = new CopyOnWriteArrayList<>();
   private final List<String> resets = new CopyOnWriteArrayList<>();
   private final List<String> verificationJobs = new CopyOnWriteArrayList<>();
-  private volatile boolean searchFails;
 
   private final String base = "http://localhost:" + server.getAddress().getPort() + "/";
   private final AuthProperties properties =
@@ -146,16 +144,6 @@ class HttpAuth0UsersTest {
   }
 
   @Test
-  void looksUpAPageOfAuthorsAtOnceAndToleratesAnOutage() {
-    var found = users.profiles(List.of("auth0|ada", "auth0|grace"));
-    assertThat(found).containsOnlyKeys("auth0|ada", "auth0|grace");
-    assertThat(found.get("auth0|grace").givenName()).isEqualTo("Grace");
-
-    searchFails = true;
-    assertThat(users.profiles(List.of("auth0|ada"))).isEmpty();
-  }
-
-  @Test
   void answersBadGatewayWhenAuth0RefusesAChange() {
     assertThatThrownBy(() -> users.updateNames("auth0|refused", "A", "B"))
         .isInstanceOf(ResponseStatusException.class)
@@ -220,20 +208,6 @@ class HttpAuth0UsersTest {
       case "POST /dbconnections/change_password" -> {
         resets.add(body);
         answer(exchange, body.contains("refused") ? 400 : 200, Map.of());
-      }
-      case "GET /api/v2/users" -> {
-        if (searchFails) {
-          answer(exchange, 503, Map.of());
-          return;
-        }
-        var query =
-            URLDecoder.decode(exchange.getRequestURI().getRawQuery(), StandardCharsets.UTF_8);
-        answer(
-            exchange,
-            200,
-            List.of(user("auth0|ada", "Ada"), user("auth0|grace", "Grace")).stream()
-                .filter(u -> query.contains((String) u.get("user_id")))
-                .toList());
       }
       case "GET /api/v2/users/auth0%7Cada", "GET /api/v2/users/auth0|ada" ->
           answer(exchange, 200, user("auth0|ada", "Ada"));

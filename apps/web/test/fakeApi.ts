@@ -196,6 +196,7 @@ export function installFakeApi(
     rows: [] as Recipe[],
     drafts: new Map<string, Map<string, string>>(),
     nextId: 1,
+    failDelete: false,
     listed: [] as string[],
   };
 
@@ -318,7 +319,6 @@ export function installFakeApi(
         id: `recipe-${recipes.nextId++}`,
         author: { id: auth.account.id, firstName: auth.account.firstName, lastName: auth.account.lastName },
         createdAt: now,
-        updatedAt: now,
         publishedAt: input.visibility === "PUBLIC" ? now : null,
         rating: { average: 0, count: 0 },
         myRating: null,
@@ -348,13 +348,13 @@ export function installFakeApi(
       recipes.rows[index] = { ...recipe, myRating: stars, rating: stars === null ? { average: 0, count: 0 } : { average: stars, count: 1 } };
       return stars === null ? new Response(null, { status: 204 }) : json({ ...recipes.rows[index].rating, myRating: stars });
     }
-    if (init?.method === "PUT" || init?.method === "DELETE") {
-      if (recipe.author.id !== auth.account.id && !(init.method === "DELETE" && auth.account.role === "ADMIN")) return json({}, 403);
-      if (init.method === "DELETE") {
-        recipes.rows.splice(index, 1);
-        return new Response(null, { status: 204 });
-      }
-      recipes.rows[index] = { ...recipe, ...(JSON.parse(String(init.body)) as RecipeInput), updatedAt: new Date().toISOString() };
+    // A recipe is final once created: only deleting it changes anything.
+    if (init?.method === "PUT") return json({}, 405);
+    if (init?.method === "DELETE") {
+      if (recipe.author.id !== auth.account.id && auth.account.role !== "ADMIN") return json({}, 403);
+      if (recipes.failDelete) return json({}, 500);
+      recipes.rows.splice(index, 1);
+      return new Response(null, { status: 204 });
     }
     return json(mine(recipes.rows[index]));
   }

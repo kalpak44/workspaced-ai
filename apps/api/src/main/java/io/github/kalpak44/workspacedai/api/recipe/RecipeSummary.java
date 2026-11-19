@@ -19,28 +19,9 @@ public record RecipeSummary(
     Visibility visibility,
     RecipeAuthor author,
     Instant createdAt,
-    Instant updatedAt,
     @Schema(description = "When it first turned public; null while it never has")
         Instant publishedAt,
     RecipeRating rating,
     @Schema(description = "The stars the caller gave it; null when they have not rated it")
         Integer myRating,
-    @Schema(description = "Whether the caller wrote it") boolean mine) {
-
-  RecipeSummary withAuthor(RecipeAuthor author) {
-    return new RecipeSummary(
-        id,
-        title,
-        summary,
-        category,
-        tags,
-        visibility,
-        author,
-        createdAt,
-        updatedAt,
-        publishedAt,
-        rating,
-        myRating,
-        mine);
-  }
-}
+    @Schema(description = "Whether the caller wrote it") boolean mine) {}

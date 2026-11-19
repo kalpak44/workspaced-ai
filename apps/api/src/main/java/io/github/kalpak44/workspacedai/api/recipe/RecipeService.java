@@ -44,8 +44,7 @@ public class RecipeService {
         switch (sort.toLowerCase(Locale.ROOT)) {
           case "top" -> RecipeStore.Order.TOP;
           case "newest" -> RecipeStore.Order.NEWEST;
-          case "updated" -> RecipeStore.Order.UPDATED;
-          default -> throw invalid("the sort is top, newest or updated");
+          default -> throw invalid("the sort is top or newest");
         };
     if (category != null && !category.isBlank() && !RecipeRequest.CATEGORIES.contains(category)) {
       throw invalid("no category " + category);
@@ -76,28 +75,15 @@ public class RecipeService {
     return visible(id, viewer);
   }
 
+  /** Final once made: the byline is the author's name now, and nothing is changed later. */
   @Transactional
-  public Recipe create(UUID author, RecipeRequest request) {
-    var id = store.create(author, request.normalized());
+  public Recipe create(UUID author, String firstName, String lastName, RecipeRequest request) {
+    var id = store.create(author, firstName, lastName, request.normalized());
     var created = visible(id, author);
     if (created.publishedAt() != null) {
       notifications.send(author, Notifications.recipePublished(id, created.title()));
     }
     return created;
-  }
-
-  /** Only by its author; a public recipe someone else wrote is forbidden rather than hidden. */
-  @Transactional
-  public Recipe update(UUID id, UUID viewer, RecipeRequest request) {
-    var fields = request.normalized();
-    var before = visible(id, viewer);
-    authored(before, "only its author can change a recipe");
-    store.update(id, fields);
-    var updated = visible(id, viewer);
-    if (before.publishedAt() == null && updated.publishedAt() != null) {
-      notifications.send(viewer, Notifications.recipePublished(id, updated.title()));
-    }
-    return updated;
   }
 
   /** By its author, or by an admin removing a public recipe. */

@@ -10,13 +10,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
-import java.util.stream.Collectors;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Component;
@@ -31,10 +25,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Component
 public class HttpAuth0Users implements Auth0Users {
 
-  private static final Logger LOG = LoggerFactory.getLogger(HttpAuth0Users.class);
   private static final Duration TIMEOUT = Duration.ofSeconds(10);
-  // Auth0's search answers at most this many users a page.
-  private static final int BATCH = 50;
 
   private final AuthProperties properties;
   private final Auth0Tokens tokens;
@@ -69,51 +60,6 @@ public class HttpAuth0Users implements Auth0Users {
             authorized("jobs/verification-email")
                 .header("Content-Type", "application/json")
                 .POST(HttpRequest.BodyPublishers.ofString(body))));
-  }
-
-  /** Never fails: a recipe list still shows when Auth0 does not answer, its authors unnamed. */
-  @Override
-  public Map<String, Profile> profiles(Collection<String> subjects) {
-    var found = new HashMap<String, Profile>();
-    var all = List.copyOf(subjects);
-    for (var start = 0; start < all.size(); start += BATCH) {
-      var batch = all.subList(start, Math.min(start + BATCH, all.size()));
-      var query =
-          batch.stream()
-              .map(s -> "\"" + s.replace("\\", "\\\\").replace("\"", "\\\"") + "\"")
-              .collect(Collectors.joining(" OR ", "user_id:(", ")"));
-      try {
-        var users =
-            read(
-                call(
-                    get(
-                        "users?search_engine=v3&per_page="
-                            + BATCH
-                            + "&fields=user_id,email,picture,user_metadata&q="
-                            + encode(query))));
-        users.forEach(user -> found.put(user.path("user_id").asString(), profileOf(user)));
-      } catch (ResponseStatusException e) {
-        LOG.warn("Auth0 did not answer for {} users' names", batch.size(), e);
-      }
-    }
-    return found;
-  }
-
-  private static Profile profileOf(JsonNode user) {
-    var metadata = user.path("user_metadata");
-    return new Profile(
-        text(user.path("email")),
-        text(metadata.path("given_name")),
-        text(metadata.path("family_name")),
-        text(user.path("picture")));
-  }
-
-  private static String text(JsonNode node) {
-    return node.isString() ? node.asString() : "";
-  }
-
-  private HttpRequest.Builder get(String path) {
-    return authorized(path).GET();
   }
 
   private HttpRequest.Builder authorized(String path) {

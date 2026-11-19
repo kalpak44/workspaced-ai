@@ -43,7 +43,7 @@ public interface RecipesApi {
       description =
           "One page of recipes, without their Markdown: every public one, the caller's included,"
               + " or the caller's own private ones. top orders by average rating then number of"
-              + " ratings, newest by when each turned public, updated by the last change; the id"
+              + " ratings, newest by when each turned public; the id"
               + " breaks ties. A page holds at most 100.")
   @ApiResponse(
       responseCode = "200",
@@ -67,8 +67,7 @@ public interface RecipesApi {
       @Parameter(description = "Only recipes in this category", example = "websites")
           @RequestParam(required = false)
           String category,
-      @Parameter(description = "top, newest or updated", example = "top")
-          @RequestParam(defaultValue = "top")
+      @Parameter(description = "top or newest", example = "top") @RequestParam(defaultValue = "top")
           String sort,
       @Parameter(description = "From 0") @RequestParam(defaultValue = "0") int page,
       @Parameter(description = "At most 100") @RequestParam(defaultValue = "24") int size);
@@ -113,42 +112,6 @@ public interface RecipesApi {
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(consumes = JSON, produces = JSON)
   ResponseEntity<Recipe> create(@Valid @RequestBody RecipeRequest request);
-
-  @Operation(
-      operationId = "updateRecipe",
-      summary = "Replace a recipe",
-      description =
-          "Replaces every field. Only its author may; turning it public for the first time sets"
-              + " publishedAt.")
-  @ApiResponse(
-      responseCode = "200",
-      description = "OK.",
-      content = @Content(mediaType = JSON, schema = @Schema(implementation = Recipe.class)))
-  @ApiResponse(
-      responseCode = "400",
-      description = "A field is invalid, as for create.",
-      content =
-          @Content(
-              mediaType = PROBLEM_JSON,
-              schema = @Schema(implementation = ProblemDetail.class)))
-  @ApiResponse(
-      responseCode = "403",
-      description = "Someone else wrote it.",
-      content =
-          @Content(
-              mediaType = PROBLEM_JSON,
-              schema = @Schema(implementation = ProblemDetail.class)))
-  @ApiResponse(
-      responseCode = "404",
-      description = "No recipe has that id, or it is someone else's private one.",
-      content =
-          @Content(
-              mediaType = PROBLEM_JSON,
-              schema = @Schema(implementation = ProblemDetail.class)))
-  @PutMapping(path = "/{id}", consumes = JSON, produces = JSON)
-  ResponseEntity<Recipe> update(
-      @Parameter(description = "The recipe's id") @PathVariable UUID id,
-      @Valid @RequestBody RecipeRequest request);
 
   @Operation(
       operationId = "deleteRecipe",
