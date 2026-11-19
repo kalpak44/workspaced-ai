@@ -156,7 +156,9 @@ public class HttpAuth0Users implements Auth0Users {
                 "client_secret", properties.clientSecret(),
                 "audience", properties.managementApi()));
     var request =
-        HttpRequest.newBuilder(URI.create(properties.issuer() + "oauth/token"))
+        // From the tenant's own domain: the Management API refuses a token the custom domain
+        // issued, as having the wrong issuer.
+        HttpRequest.newBuilder(URI.create(properties.managementApi()).resolve("/oauth/token"))
             .header("Content-Type", "application/json")
             .timeout(TIMEOUT)
             .POST(HttpRequest.BodyPublishers.ofString(body))

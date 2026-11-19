@@ -39,7 +39,8 @@ class HttpAuth0UsersTest {
       new AuthProperties(
           "k".repeat(32),
           Duration.ofHours(1),
-          base,
+          // Never reached: the Management API token comes from its own domain, not the issuer.
+          "http://custom-domain.invalid/",
           "client",
           "secret",
           "Username-Password-Authentication",
@@ -136,7 +137,17 @@ class HttpAuth0UsersTest {
 
   @Test
   void hasAuth0MailThePasswordResetToTheAccountsConnection() {
-    new Auth0PasswordResets(properties, JSON).send("ada@example.com");
+    // Unlike the Management API, the change-password endpoint is served on the issuer's domain.
+    var signIn =
+        new AuthProperties(
+            "k".repeat(32),
+            Duration.ofHours(1),
+            base,
+            "client",
+            "secret",
+            "Username-Password-Authentication",
+            base + "api/v2/");
+    new Auth0PasswordResets(signIn, JSON).send("ada@example.com");
     assertThat(resets)
         .singleElement()
         .satisfies(
@@ -146,7 +157,7 @@ class HttpAuth0UsersTest {
               assertThat(sent.path("connection").asString())
                   .isEqualTo("Username-Password-Authentication");
             });
-    assertThatThrownBy(() -> new Auth0PasswordResets(properties, JSON).send("refused@example.com"))
+    assertThatThrownBy(() -> new Auth0PasswordResets(signIn, JSON).send("refused@example.com"))
         .isInstanceOf(ResponseStatusException.class);
   }
 
