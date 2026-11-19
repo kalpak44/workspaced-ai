@@ -4,7 +4,7 @@ import { useTheme } from "../../hooks/useTheme";
 import { useWorkspaces } from "../../hooks/useWorkspaces";
 import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
-import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
+import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, TopBar, WelcomeDialog, WorkspaceHeader, type WorkspaceView } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -49,6 +49,8 @@ export function WorkspacesPage() {
   const [restartId, setRestartId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The API sends a new account's first sign-in to `/?welcome`; read before any redirect drops it.
+  const [welcome, setWelcome] = useState(() => new URLSearchParams(globalThis.location.search).has("welcome"));
   const openNew = () => setNewName(suggestName());
 
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
@@ -63,6 +65,13 @@ export function WorkspacesPage() {
       navigate({ name: "home" }, { replace: true });
     }
   }, [loading, workspaceId, workspace]);
+
+  // Dropped once read, so a reload does not welcome the user again.
+  useEffect(() => {
+    if (new URLSearchParams(globalThis.location.search).has("welcome")) {
+      globalThis.history.replaceState(globalThis.history.state, "", globalThis.location.pathname);
+    }
+  }, []);
 
   const onSessionTitle = useCallback((title: string) => setPageTitle(title), []);
 
@@ -183,6 +192,10 @@ export function WorkspacesPage() {
           onDiscard={discardDraft}
           onClose={() => setNewName(null)}
         />
+      )}
+      {welcome && (
+        <WelcomeDialog onClose={() => setWelcome(false)}
+          onAddFunds={() => { setWelcome(false); navigate({ name: "billing" }); }} />
       )}
       {restartTarget && (
         <RestartWorkspaceDialog

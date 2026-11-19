@@ -13,7 +13,7 @@ import org.springframework.stereotype.Service;
 @Service
 public class TokenService {
 
-  static final String ISSUER = "workspaced-ai";
+  public static final String ISSUER = "workspaced-ai";
 
   private final JwtEncoder encoder;
   private final AuthProperties properties;

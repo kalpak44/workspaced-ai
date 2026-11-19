@@ -9,6 +9,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.ProblemDetail;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -18,7 +19,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
  *
  * @see AccountController
  */
-@Tag(name = "Account", description = "The signed-in user's profile and password")
+@Tag(name = "Account", description = "The signed-in user's profile and password reset")
 @RequestMapping("/account")
 public interface AccountApi {
 
@@ -64,27 +65,19 @@ public interface AccountApi {
   ResponseEntity<Account> updateProfile(@Valid @RequestBody ProfileRequest request);
 
   @Operation(
-      operationId = "changePassword",
-      summary = "Change the password",
+      operationId = "sendPasswordReset",
+      summary = "Send a password reset email",
       description =
-          "Replaces the password once the current one is confirmed. Every token issued before "
-              + "stops working; the response sets the sign-in cookie to a new one, and a bearer "
-              + "client signs in again.")
-  @ApiResponse(responseCode = "204", description = "Changed.")
+          "Auth0 mails the signed-in user a link to choose a new password. The password is never "
+              + "sent to this API.")
+  @ApiResponse(responseCode = "204", description = "Sent.")
   @ApiResponse(
-      responseCode = "400",
-      description = "The new password is shorter than 8 or longer than 72 characters.",
+      responseCode = "502",
+      description = "Auth0 could not be reached, or refused to send it.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
-  @ApiResponse(
-      responseCode = "422",
-      description = "The current password is wrong; nothing was changed.",
-      content =
-          @Content(
-              mediaType = PROBLEM_JSON,
-              schema = @Schema(implementation = ProblemDetail.class)))
-  @PutMapping(path = "/password", consumes = JSON)
-  ResponseEntity<Void> changePassword(@Valid @RequestBody PasswordRequest request);
+  @PostMapping("/password-reset")
+  ResponseEntity<Void> sendPasswordReset();
 }

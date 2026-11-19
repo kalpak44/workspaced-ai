@@ -30,7 +30,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -46,7 +45,6 @@ class MailTest {
   @LocalServerPort int port;
 
   @Autowired UserRepository users;
-  @Autowired PasswordEncoder passwords;
   @Autowired MailService service;
   @MockitoBean Mailer mailer;
 
@@ -200,8 +198,8 @@ class MailTest {
 
   @Test
   void refusesEveryoneButAnAdmin() throws Exception {
-    users.save(new UserEntity("ada@example.com", passwords.encode("password1")));
-    var ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
+    users.save(new UserEntity("ada@example.com"));
+    var ada = TestUsers.bearer(users.findByEmail("ada@example.com").orElseThrow());
     var template = "{\"signature\":\"\",\"footer\":\"\"}";
     assertThat(send("GET", "/mail", null, ada).statusCode()).isEqualTo(403);
     assertThat(send("POST", "/mail/messages", MESSAGE, ada).statusCode()).isEqualTo(403);

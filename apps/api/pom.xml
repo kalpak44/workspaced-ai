@@ -68,6 +68,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-security-oauth2-resource-server</artifactId>
         </dependency>
+        <!-- Signing in is Auth0's: the API runs the authorization-code flow itself, then issues
+             its own token as before. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security-oauth2-client</artifactId>
+        </dependency>
         <!-- JPA for the entities; Flyway still owns the schema, and Hibernate only
              validates it against the mappings. -->
         <dependency>

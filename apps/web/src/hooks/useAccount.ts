@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 import * as api from "../api/accountApi";
-import { ApiError, UNAUTHORIZED } from "../api/http";
+import { UNAUTHORIZED } from "../api/http";
 
 export type { Account, Profile } from "../api/accountApi";
 
@@ -52,35 +52,23 @@ export function useAccount() {
   return {
     state: current,
     account: current.status === "signed-in" ? current.account : null,
-    /** False for a wrong email or password; any other failure throws. */
-    async signIn(email: string, password: string): Promise<boolean> {
-      try {
-        set({ status: "signed-in", account: await api.login(email, password) });
-        return true;
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 401) return false;
-        throw error;
-      }
-    },
+    /** Leaves for Auth0's login page; the API brings the browser back signed in. */
+    signIn: api.signIn,
+    /** Leaves for Auth0's sign-up form; the account can sign in once its email is verified. */
+    signUp: api.signUp,
+    /**
+     * Signed out here first, so nothing renders as signed in while Auth0's logout loads. A failed
+     * API call still signs out here, but leaves no logout URL to follow.
+     */
     async signOut() {
-      try {
-        await api.logout();
-      } finally {
-        set({ status: "signed-out" });
-      }
+      const logoutUrl = await api.logout().catch(() => null);
+      set({ status: "signed-out" });
+      if (logoutUrl) api.browser.open(logoutUrl);
     },
     async saveProfile(profile: api.Profile) {
       set({ status: "signed-in", account: await api.updateProfile(profile) });
     },
-    /** False when the current password is wrong; any other failure throws. */
-    async changePassword(currentPassword: string, newPassword: string): Promise<boolean> {
-      try {
-        await api.changePassword(currentPassword, newPassword);
-        return true;
-      } catch (error) {
-        if (error instanceof ApiError && error.status === 422) return false;
-        throw error;
-      }
-    },
+    requestPasswordReset: api.requestPasswordReset,
+    enrollMfa: api.enrollMfa,
   };
 }

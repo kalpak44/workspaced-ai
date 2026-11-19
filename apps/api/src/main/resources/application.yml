@@ -3,6 +3,9 @@
 server:
   servlet:
     context-path: /api/v1
+  # TLS ends at the ingress, so the scheme and host come from its X-Forwarded headers: the
+  # Auth0 callback must be the https URL the application allows, and the cookie Secure.
+  forward-headers-strategy: native
 
 spring:
   application:
@@ -69,6 +72,13 @@ workspaced:
     # is a 401 at the next.
     jwt-secret: ${WORKSPACED_JWT_SECRET}
     token-ttl: ${WORKSPACED_TOKEN_TTL:12h}
+    # Auth0 signs users in. The client id is public, but the secret has no default, so a
+    # missing one stops the start rather than every sign-in.
+    issuer: ${WORKSPACED_AUTH_ISSUER:https://auth.workspaced.online/}
+    client-id: ${WORKSPACED_AUTH_CLIENT_ID:dRdGOJHzotVdano2eR4VaQ2zSXnOltte}
+    client-secret: ${WORKSPACED_AUTH_CLIENT_SECRET}
+    # Comma-separated; each becomes an admin the first time it signs in.
+    admin-emails: ${WORKSPACED_AUTH_ADMIN_EMAILS:}
   # Top-ups through Stripe Checkout. Left unset, as it is locally, the balance and its history
   # still answer and starting a top-up answers 503.
   billing:

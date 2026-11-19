@@ -22,7 +22,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -49,7 +48,6 @@ class VmSizesTest {
   @LocalServerPort int port;
   @MockitoBean VmManager vmManager;
   @Autowired UserRepository users;
-  @Autowired PasswordEncoder passwords;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -70,14 +68,14 @@ class VmSizesTest {
   void showsAnAdminTheCostAndEveryoneElseTheMarkedUpPrice() throws Exception {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     var name = "vera-" + UUID.randomUUID();
-    users.save(new UserEntity(name, passwords.encode("password1")));
+    users.save(new UserEntity(name));
 
     var admin = JSON.readTree(list(TestUsers.bearer(port)).body()).get(0);
     assertThat(admin.get("monthlyNet").decimalValue()).isEqualByComparingTo("5.49");
     assertThat(admin.get("monthlyGross").decimalValue()).isEqualByComparingTo("6.59");
 
     var user =
-        JSON.readTree(list("Bearer " + TestUsers.login(port, name, "password1")).body()).get(0);
+        JSON.readTree(list(TestUsers.bearer(users.findByEmail(name).orElseThrow())).body()).get(0);
     assertThat(user.get("monthlyNet").decimalValue()).isEqualByComparingTo("7.41");
     assertThat(user.get("monthlyGross").decimalValue()).isEqualByComparingTo("8.90");
     assertThat(user.get("serverType").asString()).isEqualTo("cx23");

@@ -28,9 +28,9 @@ public class UserEntity {
   @Column(nullable = false, unique = true, length = 254)
   private String email;
 
-  // Encoded by the PasswordEncoder, prefix included; the password itself is never stored.
-  @Column(name = "password_hash", nullable = false, length = 200)
-  private String passwordHash;
+  // The Auth0 user this account signs in as; null until an account made before Auth0 is linked.
+  @Column(name = "idp_subject", unique = true)
+  private String idpSubject;
 
   @Column(name = "first_name", nullable = false, length = 100)
   private String firstName = "";
@@ -57,20 +57,18 @@ public class UserEntity {
     // For JPA.
   }
 
-  public UserEntity(String email, String passwordHash) {
+  public UserEntity(String email) {
     this.email = email;
-    this.passwordHash = passwordHash;
   }
 
-  public UserEntity(String email, String passwordHash, String firstName, String lastName) {
-    this(email, passwordHash);
+  public UserEntity(String email, String firstName, String lastName) {
+    this(email);
     this.firstName = firstName;
     this.lastName = lastName;
   }
 
-  public UserEntity(
-      String email, String passwordHash, String firstName, String lastName, Role role) {
-    this(email, passwordHash, firstName, lastName);
+  public UserEntity(String email, String firstName, String lastName, Role role) {
+    this(email, firstName, lastName);
     this.role = role;
   }
 
@@ -82,14 +80,17 @@ public class UserEntity {
     return email;
   }
 
-  public String getPasswordHash() {
-    return passwordHash;
+  public String getIdpSubject() {
+    return idpSubject;
   }
 
-  /** Revokes every token issued before, since they were signed in with the old password. */
-  public void setPasswordHash(String passwordHash) {
-    this.passwordHash = passwordHash;
-    tokenVersion++;
+  /**
+   * Ties the account to the Auth0 user signing in, and takes the email Auth0 has verified, so a
+   * changed address reaches notifications too.
+   */
+  public void signedInAs(String idpSubject, String email) {
+    this.idpSubject = idpSubject;
+    this.email = email;
   }
 
   public String getFirstName() {

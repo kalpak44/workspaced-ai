@@ -5,32 +5,28 @@ The whole app is served under the `/api/v1` context path, so the host root is fr
 
 ## Authentication and tenancy
 
-Every route needs a signed-in user except `POST /auth/login`, `POST /auth/logout`, health and the API docs. A fresh
-database has one admin account, password **admin**, whose email `V32__user_email.sql` sets; change the password from the
-settings page or `PUT /account/password` after the first sign-in. Emails are stored lowercased and match in any case.
+Auth0 signs users in; the API keeps no passwords. A browser goes to `GET /oauth2/authorization/auth0` (add `?signup` to
+open Auth0's sign-up form, `?mfa=enroll` to set up two-factor authentication), signs in on Auth0's page, and comes back to
+`/login/oauth2/code/auth0`. There the API matches the account by Auth0 subject, links an account made before Auth0 by its
+email, or creates one, then redirects to `/` (`/?welcome` for a new account, which also gets a welcome notification and
+mail). An email Auth0 has not verified is refused with a redirect to `/login?error=unverified`; any other failure goes to
+`/login?error=failed`. A new account is an admin when its email is in `WORKSPACED_AUTH_ADMIN_EMAILS`.
 
-`POST /auth/login` with `{"email","password"}` answers `{account, token, expiresAt}`. The token is an HS256 JWT signed
-by the API (Spring Security's OAuth2 resource server validates it); its subject is the user's id. The same token is set
-as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over HTTPS — which is how the
-browser authenticates, EventSource and the terminal WebSocket included, since neither can set a header. Other clients
-send `Authorization: Bearer <token>`. A change (any method but GET) sent with that cookie must also carry the CSRF
-token, else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `XSRF-TOKEN` cookie it is checked against, and the
-change sends it back in `X-XSRF-TOKEN`. Requests without the sign-in cookie, bearer requests included, need none. `POST /auth/logout` clears the cookie; tokens are stateless, so one kept elsewhere
-stays valid until it expires. A missing, invalid or expired token answers `401` as a problem detail.
+Every other route needs a signed-in user, except `POST /auth/logout`, `GET /auth/csrf`, health and the API docs. After
+Auth0's sign-in the API issues its own HS256 JWT (Spring Security's OAuth2 resource server validates it); its subject is
+the user's id. It is set as the `workspaced_token` cookie — HttpOnly, SameSite=Strict, scoped to `/api/v1`, Secure over
+HTTPS — which is how the browser authenticates, EventSource and the terminal WebSocket included, since neither can set a
+header. Other clients send `Authorization: Bearer <token>`. A change (any method but GET) sent with that cookie must also
+carry the CSRF token, else `403`: `GET /auth/csrf` answers it and sets the HttpOnly `XSRF-TOKEN` cookie it is checked
+against, and the change sends it back in `X-XSRF-TOKEN`. Requests without the sign-in cookie, bearer requests included,
+need none. `POST /auth/logout` clears the cookie and answers `{logoutUrl}`, Auth0's logout, which the browser follows so
+the next sign-in asks for a password again; tokens are stateless, so one kept elsewhere stays valid until it expires. A
+missing, invalid or expired token answers `401` as a problem detail.
 
-`GET /account` returns the signed-in user (`id`, `email`, `firstName`, `lastName`, `avatar`).
+`GET /account` returns the signed-in user (`id`, `email`, `firstName`, `lastName`, `avatar`, `role`).
 `PUT /account/profile` replaces the names (at most 100 characters, trimmed) and the avatar, a JPG/PNG/WebP/GIF `data:`
-URL of at most 2 MB (empty removes it). `PUT /account/password` takes `currentPassword` and `newPassword` (8–72
-characters): `204`, or `422` when the current password is wrong.
-
-`GET /users` lists everyone who can sign in, a page at a time, as Spring Data's paged model:
-`{"content": [{id, email, firstName, lastName, avatar}], "page": {size, number, totalElements, totalPages}}`. It
-takes `page` (from 0), `size` (default 20, at most 100) and `sort` as `field,direction`, repeatable, over `email`,
-`firstName`, `lastName` and `createdAt` (default `createdAt,desc`); any other field is a `400`. The id breaks ties, so
-pages never overlap. `POST /users` takes `{email, password, firstName, lastName}` (email lowercased, names at most 100 characters,
-trimmed; password 8–72) and answers `201`, or `409` when the email is taken. `DELETE /users/{id}` stops and deletes
-each of the user's workspaces, then the user: `204`, `404` for no such user, or `409` for the signed-in user, who cannot
-delete themselves. Any signed-in user may manage users; there are no roles yet.
+URL of at most 2 MB (empty removes it). `POST /account/password-reset` has Auth0 mail the user a link to choose a new
+password: `204`, or `502` when Auth0 cannot be reached. Accounts are managed in Auth0; the API has no user administration.
 
 The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
 show only the caller's, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
@@ -41,6 +37,10 @@ Workspaces created before accounts belong to admin.
 |-------------------------|---------|-------------------------------------------------------------------------------|
 | `WORKSPACED_JWT_SECRET` | none    | HS256 signing key, at least 32 bytes, the same on every instance. Required: the API does not start without it. |
 | `WORKSPACED_TOKEN_TTL`  | `12h`   | How long a sign-in lasts.                                                     |
+| `WORKSPACED_AUTH_CLIENT_SECRET` | none | The Auth0 application's secret. Required: the API does not start without it. |
+| `WORKSPACED_AUTH_CLIENT_ID` | the production application | The Auth0 application the API signs users in as. |
+| `WORKSPACED_AUTH_ISSUER` | `https://auth.workspaced.online/` | The Auth0 tenant. |
+| `WORKSPACED_AUTH_ADMIN_EMAILS` | none | Comma-separated emails that become admins on first sign-in. |
 
 ## OpenCode API reference
 

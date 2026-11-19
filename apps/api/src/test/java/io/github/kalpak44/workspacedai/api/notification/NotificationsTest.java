@@ -5,8 +5,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
-import io.github.kalpak44.workspacedai.api.auth.Role;
-import io.github.kalpak44.workspacedai.api.user.UserService;
+import io.github.kalpak44.workspacedai.api.auth.AuthService;
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -35,7 +35,8 @@ class NotificationsTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
 
   @LocalServerPort int port;
-  @Autowired UserService users;
+  @Autowired AuthService auth;
+  @Autowired UserRepository users;
   @Autowired NotificationService notifications;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -44,9 +45,11 @@ class NotificationsTest {
 
   @BeforeEach
   void signIn() {
-    var name = "reader-" + UUID.randomUUID();
-    user = users.create(name, "password1", "Ada", "Lovelace", Role.USER).id();
-    bearer = "Bearer " + TestUsers.login(port, name, "password1");
+    var subject = "auth0|" + UUID.randomUUID();
+    bearer =
+        "Bearer "
+            + auth.signIn(subject, subject.substring(6) + "@example.com", true).token().value();
+    user = users.findByIdpSubject(subject).orElseThrow().getId();
   }
 
   @Test
@@ -57,7 +60,7 @@ class NotificationsTest {
     var welcome = list.get(0);
     assertThat(welcome.get("title").asString()).isEqualTo("Welcome to workspaced");
     assertThat(welcome.get("kind").asString()).isEqualTo("SYSTEM");
-    assertThat(welcome.get("body").asString()).startsWith("Welcome, Ada!");
+    assertThat(welcome.get("body").asString()).startsWith("Welcome!");
     assertThat(welcome.get("read").asBoolean()).isFalse();
     assertThat(welcome.get("action").get("path").asString()).isEqualTo("/billing");
   }

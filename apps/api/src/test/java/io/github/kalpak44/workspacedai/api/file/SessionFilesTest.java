@@ -26,6 +26,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
@@ -176,7 +177,8 @@ class SessionFilesTest {
 
   @Test
   void signsTokensThatExpireAndCannotBeAltered() {
-    var auth = new AuthProperties("k".repeat(32), Duration.ofHours(1));
+    var auth =
+        new AuthProperties("k".repeat(32), Duration.ofHours(1), null, null, null, null, Set.of());
     var now = Instant.parse("2026-11-12T10:00:00Z");
     var links = new FileLinks(auth, JSON, Clock.fixed(now, ZoneOffset.UTC));
     var token = links.sign(workspace, session, "a.txt", now.plusSeconds(60));
@@ -186,7 +188,11 @@ class SessionFilesTest {
     assertThat(links.verify("x" + token)).isEmpty();
     assertThat(links.verify(links.sign(workspace, session, "a.txt", now.minusSeconds(1))))
         .isEmpty();
-    var other = new FileLinks(new AuthProperties("o".repeat(32), Duration.ofHours(1)), JSON);
+    var other =
+        new FileLinks(
+            new AuthProperties(
+                "o".repeat(32), Duration.ofHours(1), null, null, null, null, Set.of()),
+            JSON);
     assertThat(other.verify(token)).isEmpty();
   }
 

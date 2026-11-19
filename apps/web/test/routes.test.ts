@@ -7,7 +7,7 @@ describe("routes", () => {
   const routes: Route[] = [
     { name: "home" },
     { name: "general-settings" },
-    { name: "general-settings", section: "users" },
+    { name: "general-settings", section: "mail" },
     { name: "billing" },
     { name: "notifications" },
     { name: "notification", notificationId: "n1" },

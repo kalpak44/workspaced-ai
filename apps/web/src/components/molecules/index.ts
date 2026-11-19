@@ -10,7 +10,6 @@ export { SecretItem } from "./SecretItem";
 export { SessionCard } from "./SessionCard";
 export { SettingsSection } from "./SettingsSection";
 export { ThemeSwitch } from "./ThemeSwitch";
-export { UserItem } from "./UserItem";
 export { WorkspaceActions, type WorkspaceActionHandlers, WorkspaceNameInput } from "./WorkspaceActions";
 export { WorkspaceCard } from "./WorkspaceCard";
 export { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";

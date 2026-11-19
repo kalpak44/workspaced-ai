@@ -1,67 +1,60 @@
 package io.github.kalpak44.workspacedai.api;
 
+import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
+import io.github.kalpak44.workspacedai.api.auth.TokenService;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
-import java.net.URI;
-import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
-import java.net.http.HttpRequest.BodyPublishers;
-import java.net.http.HttpResponse.BodyHandlers;
-import java.util.Map;
+import java.nio.charset.StandardCharsets;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import tools.jackson.databind.json.JsonMapper;
+import javax.crypto.spec.SecretKeySpec;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 
-/** The default admin account, and a signed-in token for it on each test server. */
+/**
+ * The default admin account, and signed-in tokens. Signing in goes through Auth0, which no test
+ * reaches, so a token is signed here the way the API signs one after a sign-in.
+ */
 public final class TestUsers {
 
   public static final UUID ADMIN = UserEntity.DEFAULT_ADMIN_ID;
   public static final String ADMIN_EMAIL = "pavel.usanli@gmail.com";
 
-  private static final JsonMapper JSON = JsonMapper.builder().build();
-  private static final Map<Integer, String> TOKENS = new ConcurrentHashMap<>();
+  // The key in the tests' application.properties.
+  private static final String SECRET = "test-only-jwt-signing-key-not-for-production";
+
+  private static final NimbusJwtEncoder ENCODER =
+      new NimbusJwtEncoder(
+          new ImmutableSecret<>(
+              new SecretKeySpec(SECRET.getBytes(StandardCharsets.UTF_8), "HmacSHA256")));
 
   private TestUsers() {}
 
-  /** The Authorization header value for admin on the server listening on that port. */
+  /** The Authorization header value for admin, on whichever test server listens on that port. */
   public static String bearer(int port) {
-    return "Bearer " + TOKENS.computeIfAbsent(port, p -> login(p, ADMIN_EMAIL, "admin"));
+    return "Bearer " + token(ADMIN, 0);
   }
 
-  public static String login(int port, String email, String password) {
-    var client = HttpClient.newHttpClient();
-    try {
-      var issued =
-          client.send(
-              HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/csrf"))
-                  .GET()
-                  .build(),
-              BodyHandlers.ofString());
-      var csrf =
-          issued.headers().allValues("Set-Cookie").stream()
-              .filter(cookie -> cookie.startsWith("XSRF-TOKEN="))
-              .map(cookie -> cookie.substring(0, cookie.indexOf(';')))
-              .findFirst()
-              .orElseThrow();
-      var token = JSON.readTree(issued.body()).get("token").asString();
-      var request =
-          HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1/auth/login"))
-              .header("Content-Type", "application/json")
-              .header("Cookie", csrf)
-              .header("X-XSRF-TOKEN", token)
-              .POST(
-                  BodyPublishers.ofString(
-                      JSON.writeValueAsString(Map.of("email", email, "password", password))))
-              .build();
-      var response = client.send(request, BodyHandlers.ofString());
-      if (response.statusCode() != 200) {
-        throw new IllegalStateException("login answered " + response.statusCode());
-      }
-      return JSON.readTree(response.body()).get("token").asString();
-    } catch (java.io.IOException e) {
-      throw new IllegalStateException(e);
-    } catch (InterruptedException e) {
-      Thread.currentThread().interrupt();
-      throw new IllegalStateException(e);
-    }
+  /** The Authorization header value for that user as they are now. */
+  public static String bearer(UserEntity user) {
+    return "Bearer " + token(user.getId(), user.getTokenVersion());
+  }
+
+  public static String token(UUID user, int version) {
+    var now = Instant.now();
+    var claims =
+        JwtClaimsSet.builder()
+            .issuer(TokenService.ISSUER)
+            .subject(user.toString())
+            .claim(CurrentUser.VERSION_CLAIM, version)
+            .issuedAt(now)
+            .expiresAt(now.plus(Duration.ofHours(1)))
+            .build();
+    var header = JwsHeader.with(MacAlgorithm.HS256).build();
+    return ENCODER.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
   }
 }

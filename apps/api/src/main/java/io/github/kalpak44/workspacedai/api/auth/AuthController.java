@@ -1,6 +1,8 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import jakarta.servlet.http.HttpServletRequest;
+import java.net.URLEncoder;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.http.HttpHeaders;
@@ -8,26 +10,18 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.web.csrf.CsrfToken;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
 
 /** Routes, validation and documentation are declared on {@link AuthApi}. */
 @RestController
 public class AuthController implements AuthApi {
 
-  private final AuthService service;
+  private final AuthProperties properties;
   private final HttpServletRequest request;
 
-  public AuthController(AuthService service, HttpServletRequest request) {
-    this.service = service;
+  public AuthController(AuthProperties properties, HttpServletRequest request) {
+    this.properties = properties;
     this.request = request;
-  }
-
-  @Override
-  public ResponseEntity<LoginResponse> login(LoginRequest body) {
-    var signIn = service.login(body.normalizedEmail(), body.password());
-    var token = signIn.token();
-    return ResponseEntity.ok()
-        .header(HttpHeaders.SET_COOKIE, cookie(request, token).toString())
-        .body(new LoginResponse(signIn.account(), token.value(), token.expiresAt()));
   }
 
   @Override
@@ -36,10 +30,24 @@ public class AuthController implements AuthApi {
   }
 
   @Override
-  public ResponseEntity<Void> logout() {
-    return ResponseEntity.noContent()
+  public ResponseEntity<LogoutResponse> logout() {
+    return ResponseEntity.ok()
         .header(HttpHeaders.SET_COOKIE, cookie(request, "", Duration.ZERO).toString())
-        .build();
+        .body(new LogoutResponse(logoutUrl()));
+  }
+
+  /** Back to the app's own root, which the Auth0 application lists as an allowed return. */
+  private String logoutUrl() {
+    var app =
+        ServletUriComponentsBuilder.fromCurrentRequestUri()
+            .replacePath("/")
+            .replaceQuery(null)
+            .toUriString();
+    return properties.issuer()
+        + "v2/logout?client_id="
+        + URLEncoder.encode(properties.clientId(), StandardCharsets.UTF_8)
+        + "&returnTo="
+        + URLEncoder.encode(app, StandardCharsets.UTF_8);
   }
 
   /**

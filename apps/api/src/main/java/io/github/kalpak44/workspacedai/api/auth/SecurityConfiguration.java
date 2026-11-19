@@ -31,9 +31,6 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.AbstractAuthenticationToken;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.ProviderManager;
-import org.springframework.security.authentication.dao.DaoAuthenticationProvider;
 import org.springframework.security.authorization.AuthorizationDecision;
 import org.springframework.security.authorization.AuthorizationManager;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -42,11 +39,7 @@ import org.springframework.security.config.annotation.web.configurers.AbstractHt
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
-import org.springframework.security.core.userdetails.User;
-import org.springframework.security.core.userdetails.UserDetailsService;
-import org.springframework.security.core.userdetails.UsernameNotFoundException;
-import org.springframework.security.crypto.factory.PasswordEncoderFactories;
-import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
@@ -74,13 +67,14 @@ import tools.jackson.databind.json.JsonMapper;
  * workspace, and everything under it (sessions, secrets, settings, terminals), only if they own it;
  * anyone else is told it does not exist, so ids cannot be probed.
  *
- * <p>The token is a JWT the API signs itself. Browsers carry it in an HttpOnly cookie, because
- * EventSource and WebSocket cannot set an Authorization header; other clients send it as a bearer
- * token. The cookie is SameSite=Strict, but that does not cover a sibling subdomain on the same
- * site, so a change sent with that cookie also needs the CSRF token: the page reads it from GET
- * /auth/csrf and echoes it in X-XSRF-TOKEN, and it is checked against the HttpOnly XSRF-TOKEN
- * cookie. A request without the sign-in cookie has no ambient credential to forge, and a bearer
- * request needs none, since a browser never adds that header on its own.
+ * <p>Auth0 signs users in (see {@link Auth0SignIn}); the token is a JWT the API then signs itself.
+ * Browsers carry it in an HttpOnly cookie, because EventSource and WebSocket cannot set an
+ * Authorization header; other clients send it as a bearer token. The cookie is SameSite=Strict, but
+ * that does not cover a sibling subdomain on the same site, so a change sent with that cookie also
+ * needs the CSRF token: the page reads it from GET /auth/csrf and echoes it in X-XSRF-TOKEN, and it
+ * is checked against the HttpOnly XSRF-TOKEN cookie. A request without the sign-in cookie has no
+ * ambient credential to forge, and a bearer request needs none, since a browser never adds that
+ * header on its own.
  *
  * <p>Every request also looks the account up: a token outlives a deleted account or a changed
  * password otherwise, and the role is read from there so a change applies at once.
@@ -97,7 +91,8 @@ public class SecurityConfiguration {
   private static final int MIN_SECRET_BYTES = 32;
 
   private static final String[] PUBLIC = {
-    "/auth/login",
+    Auth0SignIn.AUTHORIZATION + "/*",
+    Auth0SignIn.CALLBACK,
     "/auth/logout",
     "/auth/csrf",
     "/actuator/health/**",
@@ -109,7 +104,7 @@ public class SecurityConfiguration {
     "/error"
   };
 
-  private static final String[] ADMIN_ONLY = {"/users", "/users/**", "/mail", "/mail/**"};
+  private static final String[] ADMIN_ONLY = {"/mail", "/mail/**"};
 
   /**
    * Stripe's webhook is not a browser route: it carries no cookie, and the signature on each event
@@ -122,7 +117,12 @@ public class SecurityConfiguration {
   }
 
   @Bean
-  SecurityFilterChain api(HttpSecurity http, WorkspaceRepository workspaces, UserRepository users)
+  SecurityFilterChain api(
+      HttpSecurity http,
+      WorkspaceRepository workspaces,
+      UserRepository users,
+      ClientRegistrationRepository registrations,
+      AuthService auth)
       throws Exception {
     var publicPaths = publicPaths();
     var adminOnly = matcher(ADMIN_ONLY);
@@ -149,6 +149,17 @@ public class SecurityConfiguration {
                     .hasRole(Role.ADMIN.name())
                     .anyRequest()
                     .authenticated())
+        // The login page is Auth0's, so Spring's generated one is never served.
+        .oauth2Login(
+            login ->
+                login
+                    .loginPage(Auth0SignIn.AUTHORIZATION + "/" + Auth0SignIn.REGISTRATION)
+                    .authorizationEndpoint(
+                        a ->
+                            a.authorizationRequestResolver(
+                                Auth0SignIn.authorizationRequests(registrations)))
+                    .successHandler(Auth0SignIn.signedIn(auth))
+                    .failureHandler(Auth0SignIn.failed()))
         .oauth2ResourceServer(
             server ->
                 server
@@ -164,28 +175,6 @@ public class SecurityConfiguration {
                         (request, response, denied) ->
                             denied(request, response, denied, adminOnly)));
     return http.build();
-  }
-
-  @Bean
-  PasswordEncoder passwordEncoder() {
-    return PasswordEncoderFactories.createDelegatingPasswordEncoder();
-  }
-
-  @Bean
-  UserDetailsService userDetailsService(UserRepository users) {
-    return username ->
-        users
-            .findByEmail(username)
-            .map(u -> User.withUsername(u.getEmail()).password(u.getPasswordHash()).build())
-            .orElseThrow(() -> new UsernameNotFoundException("no user " + username));
-  }
-
-  @Bean
-  AuthenticationManager authenticationManager(
-      UserDetailsService userDetailsService, PasswordEncoder passwordEncoder) {
-    var provider = new DaoAuthenticationProvider(userDetailsService);
-    provider.setPasswordEncoder(passwordEncoder);
-    return new ProviderManager(provider);
   }
 
   @Bean

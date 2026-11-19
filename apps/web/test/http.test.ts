@@ -11,7 +11,7 @@ describe("send", () => {
     );
     vi.stubGlobal("fetch", fetchFn);
 
-    await send("/api/v1/account/password", { method: "PUT", body: "{}" });
+    await send("/api/v1/account/profile", { method: "PUT", body: "{}" });
     await send("/api/v1/auth/logout", { method: "POST" });
     await send("/api/v1/account");
 

@@ -1,6 +1,7 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { browser } from "../src/api/accountApi";
 import { UserMenu } from "../src/components/organisms/UserMenu";
 import { App } from "../src/App";
 import { resetAccount } from "../src/hooks/useAccount";
@@ -93,35 +94,31 @@ describe("general settings", () => {
     expect(screen.getByLabelText("First name")).toHaveValue("Ada");
   });
 
-  it("changes the password only with the current one", async () => {
+  it("emails a password reset link and says where it went", async () => {
     const api = installFakeApi();
     const user = userEvent.setup();
     await renderSettings();
-    await user.click(screen.getByRole("switch", { name: "Change password" }));
-    await user.type(screen.getByLabelText("Current password"), "wrong");
-    await user.type(screen.getByLabelText("New password", { exact: true }), "short");
-    await user.type(screen.getByLabelText("Confirm new password"), "short");
-    await user.click(screen.getByRole("button", { name: "Change password" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("at least 8 characters");
+    api.auth.failReset = true;
+    await user.click(screen.getByRole("button", { name: "Send reset email" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not send the email");
+    expect(api.auth.resetRequests).toBe(0);
 
-    await user.clear(screen.getByLabelText("New password", { exact: true }));
-    await user.type(screen.getByLabelText("New password", { exact: true }), "long-enough");
-    await user.click(screen.getByRole("button", { name: "Change password" }));
-    expect(screen.getByRole("alert")).toHaveTextContent("do not match");
+    api.auth.failReset = false;
+    await user.click(screen.getByRole("button", { name: "Send reset email" }));
+    expect(await screen.findByText(/A reset link is on its way to admin@example.com/)).toBeInTheDocument();
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    expect(api.auth.resetRequests).toBe(1);
+    expect(api.fetchFn).toHaveBeenCalledWith("/api/v1/account/password-reset", expect.objectContaining({ method: "POST" }));
+    expect(screen.getByRole("button", { name: "Send again" })).toBeInTheDocument();
+  });
 
-    await user.clear(screen.getByLabelText("Confirm new password"));
-    await user.type(screen.getByLabelText("Confirm new password"), "long-enough");
-    await user.click(screen.getByRole("button", { name: "Change password" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("current password is wrong");
-    expect(api.auth.password).toBe("admin");
-
-    await user.clear(screen.getByLabelText("Current password"));
-    await user.type(screen.getByLabelText("Current password"), "admin");
-    await user.click(screen.getByRole("button", { name: "Change password" }));
-    expect(await screen.findByText("Password changed.")).toBeInTheDocument();
-    expect(api.auth.password).toBe("long-enough");
-    expect(localStorage.getItem("workspaced:general-settings")).toBeNull();
-    // Closed and emptied once it has done its job.
-    expect(screen.queryByLabelText("New password", { exact: true })).not.toBeInTheDocument();
+  it("sets up two-factor authentication through a sign-in", async () => {
+    installFakeApi();
+    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const user = userEvent.setup();
+    await renderSettings();
+    const section = screen.getByRole("region", { name: "Two-factor authentication" });
+    await user.click(within(section).getByRole("button", { name: "Set up" }));
+    expect(open).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?mfa=enroll");
   });
 });

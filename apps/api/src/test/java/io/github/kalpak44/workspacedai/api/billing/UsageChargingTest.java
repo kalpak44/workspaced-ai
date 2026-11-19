@@ -39,7 +39,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
@@ -77,7 +76,6 @@ class UsageChargingTest {
   @MockitoBean VmManager vmManager;
   @MockitoBean ApiKeyCheck keyCheck;
   @Autowired UserRepository users;
-  @Autowired PasswordEncoder passwords;
   @Autowired WorkspaceRepository workspaces;
   @Autowired UsageRepository usage;
   @Autowired BillingAccountRepository accounts;
@@ -97,8 +95,8 @@ class UsageChargingTest {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     var name = "payer-" + UUID.randomUUID();
-    user = users.save(new UserEntity(name, passwords.encode("password1"))).getId();
-    bearer = "Bearer " + TestUsers.login(port, name, "password1");
+    user = users.save(new UserEntity(name)).getId();
+    bearer = TestUsers.bearer(users.findByEmail(name).orElseThrow());
   }
 
   @Test

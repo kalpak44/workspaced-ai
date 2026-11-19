@@ -10,7 +10,6 @@ import type { Secret } from "../src/api/secretsApi";
 import type { TaskContent } from "../src/api/tasksApi";
 import type { Variable } from "../src/api/variablesApi";
 import type { MailSender, NewMail } from "../src/api/mailApi";
-import type { User } from "../src/api/usersApi";
 import type { AgentForm, FormAnswer, ChatMessage, Session, SessionEvents } from "../src/api/sessionsApi";
 import type { McpServer, ModelCatalogue, NewMcpServer } from "../src/api/settingsApi";
 import type { Workspace, WorkspaceStatus } from "../src/api/workspacesApi";
@@ -180,11 +179,13 @@ export function installFakeApi(
     harnessDown: false,
   };
   FakeEventSource.instances.length = 0;
-  // admin/admin, signed in unless a test signs out first; `password` is what changes it.
+  // Signed in unless a test signs out first; `resetRequests` counts the password reset emails asked for.
   const auth = {
     signedIn: true,
-    password: "admin",
+    resetRequests: 0,
     failProfile: false,
+    failReset: false,
+    failLogout: false,
     account: { id: "admin-id", email: "admin@example.com", firstName: "", lastName: "", avatar: null, role: "ADMIN" } as Account,
   };
   // The store: every recipe, anyone's, and the drafts the agent left in each workspace.
@@ -399,15 +400,6 @@ export function installFakeApi(
     return null;
   }
 
-  // Everyone else who can sign in; the signed-in account is always listed first.
-  const users = {
-    others: [{ id: "grace-id", email: "grace@example.com", firstName: "Grace", lastName: "Hopper", avatar: null, role: "USER" }] as User[],
-    nextId: 1,
-    failDelete: false,
-    // Every list URL asked for, to see which pages and orders were fetched.
-    listed: [] as string[],
-  };
-
   // Every file in a session's folder, as "<session>/<path>"; `linked` is each path a link was made for.
   const sessionFiles = Object.assign(new Set<string>(), {
     linked: [] as string[],
@@ -415,70 +407,14 @@ export function installFakeApi(
     holdUpload: null as Promise<void> | null,
   });
 
-  // Spring's paging: `sort` is "field,direction", repeated, most significant first. The list
-  // order stands in for creation order, oldest first, with the signed-in account the oldest.
-  function usersResponse(url: string, init?: RequestInit): Response | null {
-    const route = /\/api\/v1\/users(?:\/([^/?]+))?(?:\/role)?(?:\?(.*))?$/.exec(url);
-    if (!route) return null;
-    if (!auth.signedIn) return json({}, 401);
-    const [, id, query] = route;
-    if (init?.method === "POST") {
-      const { email, firstName, lastName, role } = JSON.parse(String(init.body));
-      if (email === auth.account.email || users.others.some((u) => u.email === email)) return json({}, 409);
-      const user: User = { id: `user-${users.nextId++}`, email, firstName, lastName, avatar: null, role };
-      users.others.push(user);
-      return json(user, 201);
-    }
-    if (init?.method === "PUT") {
-      if (id === auth.account.id) return json({}, 409);
-      const index = users.others.findIndex((u) => u.id === id);
-      if (index < 0) return json({}, 404);
-      users.others[index] = { ...users.others[index], role: JSON.parse(String(init.body)).role };
-      return json(users.others[index]);
-    }
-    if (init?.method === "DELETE") {
-      if (id === auth.account.id) return json({}, 409);
-      if (users.failDelete) return json({}, 500);
-      if (!users.others.some((u) => u.id === id)) return json({}, 404);
-      users.others = users.others.filter((u) => u.id !== id);
-      return new Response(null, { status: 204 });
-    }
-    users.listed.push(url);
-    const params = new URLSearchParams(query);
-    const page = Number(params.get("page") ?? 0);
-    const size = Number(params.get("size") ?? 20);
-    const all: User[] = [auth.account, ...users.others];
-    const created = new Map(all.map((u, index) => [u.id, index]));
-    const orders = params.getAll("sort").map((order) => order.split(","));
-    const sorted = [...all].sort((a, b) => {
-      for (const [field, direction] of orders) {
-        const sign = direction === "desc" ? -1 : 1;
-        const diff = field === "createdAt"
-          ? created.get(a.id)! - created.get(b.id)!
-          : String(a[field as keyof User]).localeCompare(String(b[field as keyof User]));
-        if (diff !== 0) return sign * diff;
-      }
-      return 0;
-    });
-    return json({
-      content: sorted.slice(page * size, (page + 1) * size),
-      page: { size, number: page, totalElements: all.length, totalPages: Math.ceil(all.length / size) },
-    });
-  }
-
   function accountResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/auth/csrf")) {
       return json({ headerName: "X-XSRF-TOKEN", token: "csrf-token" });
     }
-    if (url.endsWith("/api/v1/auth/login")) {
-      const { email, password } = JSON.parse(String(init?.body));
-      if (email !== auth.account.email || password !== auth.password) return json({}, 401);
-      auth.signedIn = true;
-      return json({ account: auth.account, token: "jwt", expiresAt: "2099-01-01T00:00:00Z" });
-    }
     if (url.endsWith("/api/v1/auth/logout")) {
+      if (auth.failLogout) return json({}, 500);
       auth.signedIn = false;
-      return new Response(null, { status: 204 });
+      return json({ logoutUrl: "https://auth.test/v2/logout?returnTo=https%3A%2F%2Fapp.test%2F" });
     }
     if (!/\/api\/v1\/account(\/|$)/.test(url)) return null;
     if (!auth.signedIn) return json({}, 401);
@@ -486,10 +422,9 @@ export function installFakeApi(
       if (auth.failProfile) return json({}, 500);
       const { avatar, ...names } = JSON.parse(String(init?.body));
       auth.account = { ...auth.account, ...names, avatar: avatar || null };
-    } else if (url.endsWith("/account/password")) {
-      const { currentPassword, newPassword } = JSON.parse(String(init?.body));
-      if (currentPassword !== auth.password) return json({}, 422);
-      auth.password = newPassword;
+    } else if (url.endsWith("/account/password-reset")) {
+      if (auth.failReset) return json({}, 500);
+      auth.resetRequests++;
       return new Response(null, { status: 204 });
     }
     return json(auth.account);
@@ -503,10 +438,6 @@ export function installFakeApi(
     const accountAnswer = accountResponse(url, init);
     if (accountAnswer) {
       return accountAnswer;
-    }
-    const usersAnswer = usersResponse(url, init);
-    if (usersAnswer) {
-      return usersAnswer;
     }
     const mailAnswer = mailResponse(url, init);
     if (mailAnswer) {
@@ -931,5 +862,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, users, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

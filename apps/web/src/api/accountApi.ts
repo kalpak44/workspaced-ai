@@ -10,7 +10,7 @@ export interface Account {
   readonly lastName: string;
   /** A data: URL of the picture; null for the default. */
   readonly avatar: string | null;
-  /** An admin also manages the other users. */
+  /** An admin also manages the platform's mail. */
   readonly role: Role;
 }
 
@@ -32,14 +32,35 @@ export async function fetchAccount(): Promise<Account | null> {
   }
 }
 
-/** The API sets the cookie; the token in the body is for clients without one. */
-export async function login(email: string, password: string): Promise<Account> {
-  const body = JSON.stringify({ email, password });
-  return (await (await send("/api/v1/auth/login", { method: "POST", body })).json()).account;
+// Spring's OAuth2 login entry point: it sends the browser on to Auth0 and back to / with the cookie set.
+const SIGN_IN_URL = "/api/v1/oauth2/authorization/auth0";
+
+/** Leaves the app for Auth0; an object so tests can stub it, since jsdom cannot navigate. */
+export const browser = {
+  open(url: string): void {
+    globalThis.location.assign(url);
+  },
+};
+
+/** A full-page navigation, not a fetch: Auth0's login page has to be on screen. */
+export function signIn(): void {
+  browser.open(SIGN_IN_URL);
 }
 
-export async function logout(): Promise<void> {
-  await send("/api/v1/auth/logout", { method: "POST" });
+/** The same entry point, opened on Auth0's sign-up form instead of its login form. */
+export function signUp(): void {
+  browser.open(`${SIGN_IN_URL}?signup`);
+}
+
+/** A sign-in that sets up a second factor first; every later sign-in asks for it. */
+export function enrollMfa(): void {
+  browser.open(`${SIGN_IN_URL}?mfa=enroll`);
+}
+
+/** Ends the API session, and answers where to send the browser to end Auth0's as well. */
+export async function logout(): Promise<string> {
+  const { logoutUrl } = (await (await send("/api/v1/auth/logout", { method: "POST" })).json()) as { logoutUrl: string };
+  return logoutUrl;
 }
 
 export async function updateProfile(profile: Profile): Promise<Account> {
@@ -47,7 +68,7 @@ export async function updateProfile(profile: Profile): Promise<Account> {
   return (await send(`${ACCOUNT_URL}/profile`, { method: "PUT", body })).json();
 }
 
-export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
-  const body = JSON.stringify({ currentPassword, newPassword });
-  await send(`${ACCOUNT_URL}/password`, { method: "PUT", body });
+/** Auth0 emails the signed-in user a link to set a new password. */
+export async function requestPasswordReset(): Promise<void> {
+  await send(`${ACCOUNT_URL}/password-reset`, { method: "POST" });
 }

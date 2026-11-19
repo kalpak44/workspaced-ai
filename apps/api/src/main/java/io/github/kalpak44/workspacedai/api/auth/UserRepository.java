@@ -8,7 +8,7 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
   Optional<UserEntity> findByEmail(String email);
 
-  boolean existsByEmail(String email);
+  Optional<UserEntity> findByIdpSubject(String idpSubject);
 
   /** What each request is checked against, without loading the avatar. */
   Optional<Access> findAccessById(UUID id);

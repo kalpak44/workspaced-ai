@@ -29,7 +29,6 @@ import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -42,7 +41,6 @@ class RecipesTest {
   @LocalServerPort int port;
 
   @Autowired UserRepository users;
-  @Autowired PasswordEncoder passwords;
   @Autowired JdbcTemplate jdbc;
   @Autowired NotificationService notifications;
 
@@ -54,9 +52,9 @@ class RecipesTest {
   void reset() {
     jdbc.update("DELETE FROM recipe");
     users.findAll().stream().filter(u -> !u.getId().equals(TestUsers.ADMIN)).forEach(users::delete);
-    users.save(new UserEntity("ada@example.com", passwords.encode("password1"), "Ada", "Lovelace"));
+    users.save(new UserEntity("ada@example.com", "Ada", "Lovelace"));
     admin = TestUsers.bearer(port);
-    ada = "Bearer " + TestUsers.login(port, "ada@example.com", "password1");
+    ada = TestUsers.bearer(users.findByEmail("ada@example.com").orElseThrow());
   }
 
   @Test
@@ -167,8 +165,8 @@ class RecipesTest {
   @Test
   void ratesSomeoneElsesPublicRecipeOnceEach() throws Exception {
     var recipe = id(create("Shared", "PUBLIC", ada));
-    users.save(new UserEntity("grace@example.com", passwords.encode("password1")));
-    var grace = "Bearer " + TestUsers.login(port, "grace@example.com", "password1");
+    users.save(new UserEntity("grace@example.com"));
+    var grace = TestUsers.bearer(users.findByEmail("grace@example.com").orElseThrow());
 
     send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":5}", admin);
     var rated = send("PUT", "/recipes/" + recipe + "/rating", "{\"stars\":3}", admin);

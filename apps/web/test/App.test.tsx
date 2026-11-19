@@ -1,6 +1,7 @@
 import { act, cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { browser } from "../src/api/accountApi";
 import { App } from "../src/App";
 import { FakeEventSource, installFakeApi, REJECTED_KEY } from "./fakeApi";
 
@@ -505,6 +506,7 @@ describe("App", () => {
   });
 
   it("closes the account menu on Escape and from Logout", async () => {
+    vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "Account menu" }));
@@ -1353,19 +1355,53 @@ describe("App", () => {
 });
 
 describe("signing in", () => {
-  it("asks for credentials, refuses wrong ones, and opens the app with right ones", async () => {
+  it("hands sign-in to Auth0 with a full-page navigation", async () => {
     api.auth.signedIn = false;
+    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
-    await user.type(await screen.findByLabelText("Email"), "admin@example.com");
-    await user.type(screen.getByLabelText("Password"), "wrong");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(await screen.findByRole("alert")).toHaveTextContent("Wrong email or password");
+    expect(screen.queryByLabelText("Password")).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Sign in" }));
+    expect(open).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0");
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+  });
 
-    await user.clear(screen.getByLabelText("Password"));
-    await user.type(screen.getByLabelText("Password"), "admin");
-    await user.click(screen.getByRole("button", { name: "Sign in" }));
-    expect(await screen.findAllByRole("button", { name: "Starter" })).not.toHaveLength(0);
+  it("opens Auth0 on its sign-up form, and says a new account must verify its email first", async () => {
+    api.auth.signedIn = false;
+    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<App />);
+    expect(await screen.findByText(/A new account gets a verification email/)).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Create account" }));
+    expect(open).toHaveBeenCalledWith("/api/v1/oauth2/authorization/auth0?signup");
+    expect(screen.getByRole("button", { name: "Sign in" })).toBeDisabled();
+  });
+
+  it.each([
+    ["unverified", "email address is not verified yet"],
+    ["failed", "Sign-in failed"],
+    ["something-new", "Sign-in failed"],
+  ])("explains a sign-in that came back with error=%s, once", async (code, message) => {
+    api.auth.signedIn = false;
+    globalThis.history.replaceState(null, "", `/login?error=${code}`);
+    render(<App />);
+    expect(await screen.findByRole("alert")).toHaveTextContent(message);
+    // Dropped from the URL, so a reload does not repeat it.
+    expect(globalThis.location.pathname + globalThis.location.search).toBe("/");
+  });
+
+  it("frees the sign-in button when the page comes back from the browser's cache", async () => {
+    api.auth.signedIn = false;
+    vi.spyOn(browser, "open").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<App />);
+    const button = await screen.findByRole("button", { name: "Sign in" });
+    await user.click(button);
+    expect(button).toBeDisabled();
+    act(() => {
+      globalThis.dispatchEvent(new PageTransitionEvent("pageshow", { persisted: true }));
+    });
+    expect(button).toBeEnabled();
   });
 
   it("links the terms and privacy policy, each in a new tab", async () => {
@@ -1378,7 +1414,8 @@ describe("signing in", () => {
     for (const link of [terms, privacy]) expect(link).toHaveAttribute("target", "_blank");
   });
 
-  it("signs out from the account menu", async () => {
+  it("signs out from the account menu, then ends the Auth0 session too", async () => {
+    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
     const user = userEvent.setup();
     render(<App />);
     await screen.findAllByRole("button", { name: "Starter" });
@@ -1386,6 +1423,19 @@ describe("signing in", () => {
     await user.click(screen.getByRole("menuitem", { name: "Logout" }));
     expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
     expect(api.auth.signedIn).toBe(false);
+    expect(open).toHaveBeenCalledWith("https://auth.test/v2/logout?returnTo=https%3A%2F%2Fapp.test%2F");
+  });
+
+  it("signs out here even when the API cannot end the session", async () => {
+    const open = vi.spyOn(browser, "open").mockImplementation(() => {});
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findAllByRole("button", { name: "Starter" });
+    api.auth.failLogout = true;
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    await user.click(screen.getByRole("menuitem", { name: "Logout" }));
+    expect(await screen.findByRole("form", { name: "Sign in" })).toBeInTheDocument();
+    expect(open).not.toHaveBeenCalled();
   });
 
   it("returns to sign-in when the API stops accepting the session", async () => {

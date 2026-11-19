@@ -9,7 +9,7 @@ import org.springframework.context.annotation.Configuration;
 
 /**
  * Documents both ways a token can arrive. Swagger UI on the same host is already signed in through
- * the cookie; the bearer scheme is for pasting a token from /auth/login.
+ * the cookie; the bearer scheme is for pasting the cookie's token into another client.
  */
 @Configuration(proxyBeanMethods = false)
 @OpenAPIDefinition(
