@@ -77,20 +77,22 @@ class AuthTest {
   }
 
   @Test
-  void assignsTheTutorialRecipeOnlyToItsVerifiedPublisher() {
+  void assignsSeededRecipesOnlyToTheirVerifiedPublisher() {
     var seed = UUID.fromString("00000000-0000-4000-8000-000000000a01");
     var recipe = UUID.fromString("00000000-0000-4000-8000-00000000b001");
     jdbc.update(
         "INSERT INTO app_user (id, idp_subject, role) VALUES (?, 'system|workspaced', 'USER')",
         seed);
-    jdbc.update(
-        """
-        INSERT INTO recipe (id, author_id, title, category, content, visibility,
-                            author_first_name, author_last_name, published_at)
-        VALUES (?, ?, 'WordPress blog', 'websites', 'Tutorial', 'PUBLIC', 'Pavel', 'Usanli', now())
-        """,
-        recipe,
-        seed);
+    for (var suffix : List.of("b001", "b002", "b006", "b007", "b008", "b009", "b00a", "b00b")) {
+      jdbc.update(
+          """
+          INSERT INTO recipe (id, author_id, title, category, content, visibility,
+                              author_first_name, author_last_name, published_at)
+          VALUES (?, ?, 'Seeded recipe', 'websites', 'Steps', 'PUBLIC', 'Pavel', 'Usanli', now())
+          """,
+          UUID.fromString("00000000-0000-4000-8000-00000000" + suffix),
+          seed);
+    }
     var profile = new Auth0Users.Profile("pavel.usanli@gmail.com", "Pavel", "Usanli", "");
     assertThatThrownBy(() -> auth.signIn("publisher", profile, false, Role.USER))
         .isInstanceOf(AuthService.UnverifiedEmailException.class);
@@ -105,6 +107,15 @@ class AuthTest {
     var owner = users.findByIdpSubject("publisher").orElseThrow().getId();
     assertThat(jdbc.queryForObject("SELECT author_id FROM recipe WHERE id = ?", UUID.class, recipe))
         .isEqualTo(owner);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT count(*) FROM recipe WHERE author_id = ?", Integer.class, owner))
+        .isEqualTo(7);
+    assertThat(
+            jdbc.queryForObject(
+                "SELECT author_id FROM recipe WHERE id = '00000000-0000-4000-8000-00000000b002'",
+                UUID.class))
+        .isEqualTo(seed);
   }
 
   @Test

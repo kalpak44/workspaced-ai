@@ -393,4 +393,14 @@ public interface WorkspaceApi {
       @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
           @PathVariable
           UUID id);
+
+  @Operation(
+      operationId = "completeTutorial",
+      summary = "Finish the guided tutorial",
+      description =
+          "Saves one in-app completion notification with the trial's deletion time. No email is sent. Repeating this call creates no duplicate notification.")
+  @ApiResponse(responseCode = "204", description = "Recorded, or already completed.")
+  @ApiResponse(responseCode = "409", description = "The workspace is not an active free trial.")
+  @PostMapping("/{id}/tutorial-completed")
+  ResponseEntity<Void> completeTutorial(@PathVariable UUID id);
 }

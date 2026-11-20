@@ -1,6 +1,6 @@
 import { ArrowRight, Sparkles } from "lucide-react";
 import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { addTrialSecret, applyTourRecipe, isTrialReady, loadTrialMachines, loadTrialSecretNames, restartTrialWorkspace, scheduleTourTask, type VmSize } from "../../hooks/useDemoTour";
+import { addTrialSecret, applyTourRecipe, finishTour, isTrialReady, loadTrialMachines, loadTrialSecretNames, restartTrialWorkspace, scheduleTourTask, type VmSize } from "../../hooks/useDemoTour";
 import { useOpenRouterConnect } from "../../hooks/useOpenRouterConnect";
 import { navigate } from "../../hooks/useRoute";
 import type { CreateResult, DraftResult, NewWorkspace, Workspace } from "../../hooks/useWorkspaces";
@@ -203,6 +203,15 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
     else setProblem("The chat moved while typing. Click Next to try again.");
   };
 
+  const finish = async () => {
+    if (!workspaceId) return;
+    setWorking(true);
+    const completed = await finishTour(workspaceId);
+    setWorking(false);
+    if (completed) setTourProgress(null);
+    else setProblem("Could not save tutorial completion. Click Finish tutorial to try again.");
+  };
+
   const until = demo?.expiresAt ? Date.parse(demo.expiresAt) : null;
   const clock = until ? new Date(until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "the end of the trial";
   const savedUser = savedSecrets?.includes(SECRET_USER);
@@ -319,9 +328,9 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
       card = {
         title: "Edit your request, then press Send",
         target: 'textarea[aria-label="Message"]',
-        body: <><p>The example is ready below. Make it yours, send it, and keep exploring. Your blog and scheduled task share the workspace's files, so later sessions can build on this work.</p><p>{until ? <>You have <strong>{timeLeft(until, Date.now())}</strong>, until {clock}.</> : <>The trial lasts four hours.</>} Then the machine, blog, sessions and secrets are deleted. We remind you 30 minutes before. A permanent workspace is created separately from your funded account.</p></>,
+        body: <><p>The example is ready below. Make it yours, send it, and keep exploring. Your blog and scheduled task share the workspace's files, so later sessions can build on this work.</p><p>{until ? <>You have <strong>{timeLeft(until, Date.now())}</strong>, until {clock}.</> : <>The trial lasts four hours.</>} Then the machine, blog, sessions and secrets are deleted. We notify you when you finish, 30 minutes before deletion, and once it is deleted. A permanent workspace is created separately from your funded account.</p></>,
         nextLabel: "Finish tutorial",
-        onNext: () => setTourProgress(null),
+        onNext: finish,
       };
   }
 

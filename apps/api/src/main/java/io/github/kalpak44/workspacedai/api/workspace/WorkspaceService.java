@@ -423,6 +423,27 @@ public class WorkspaceService {
     return delete(id, Notifications::workspaceDeletedUnpaid);
   }
 
+  /** Records completion once, using a row lock so concurrent retries cannot duplicate it. */
+  @Transactional
+  public boolean completeTutorial(UUID id) {
+    var found = repository.lockById(id);
+    if (found.isEmpty()) return false;
+    var workspace = found.get();
+    if (!workspace.isDemo()
+        || workspace.isDraft()
+        || workspace.getExpiresAt() == null
+        || !workspace.getExpiresAt().isAfter(Instant.now())) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "the tutorial requires a running free trial");
+    }
+    notifications.sendOnce(
+        workspace.getOwnerId(),
+        "tutorial-completed",
+        Notifications.tutorialCompleted(
+            id, workspace.getName(), workspace.getExpiresAt(), workspace.getTimeZone()));
+    return true;
+  }
+
   /** Deletes a demo whose time is up; the owner is told that was why. */
   public boolean deleteExpiredDemo(UUID id) {
     return delete(id, Notifications::demoEnded);

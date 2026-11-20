@@ -108,6 +108,12 @@ public class WorkspaceController implements WorkspaceApi {
     return ResponseEntity.accepted().build();
   }
 
+  @Override
+  public ResponseEntity<Void> completeTutorial(UUID id) {
+    if (!service.completeTutorial(id)) throw notFound(id);
+    return ResponseEntity.noContent().build();
+  }
+
   private static ResponseStatusException notFound(UUID id) {
     return new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + id);
   }

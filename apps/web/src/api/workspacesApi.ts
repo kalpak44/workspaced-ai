@@ -100,3 +100,8 @@ export async function restartWorkspace(id: string): Promise<void> {
 export async function deleteWorkspace(id: string): Promise<void> {
   await send(workspaceUrl(id), { method: "DELETE" });
 }
+
+/** Records tutorial completion once and sends an in-app notification, without email. */
+export async function completeWorkspaceTutorial(id: string): Promise<void> {
+  await send(`${workspaceUrl(id)}/tutorial-completed`, { method: "POST" });
+}

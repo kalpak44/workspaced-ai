@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
@@ -14,6 +15,7 @@ import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
+import io.github.kalpak44.workspacedai.api.mail.Mailer;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
@@ -57,6 +59,7 @@ class DemoTest {
   @LocalServerPort int port;
   @MockitoBean ApiKeyCheck keyCheck;
   @MockitoBean VmPricing pricing;
+  @MockitoBean Mailer mailer;
   @MockitoSpyBean WorkspaceRuntime runtime;
   @Autowired UserRepository users;
   @Autowired WorkspaceRepository workspaces;
@@ -105,6 +108,45 @@ class DemoTest {
         .isZero();
     assertThat(account().get("demoAvailable").asBoolean()).isFalse();
     assertThat(newest().title()).isEqualTo("Your demo workspace is starting");
+  }
+
+  @Test
+  void notifiesCompletionOnceWithTheDeletionTimeWithoutEmail() throws Exception {
+    var workspace =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class);
+    var path = "/workspaces/" + workspace.id() + "/tutorial-completed";
+    assertThat(send("POST", path, null).statusCode()).isEqualTo(204);
+    assertThat(send("POST", path, null).statusCode()).isEqualTo(204);
+    var completed =
+        notifications.list(user).stream()
+            .filter(n -> n.title().equals("Tutorial completed"))
+            .toList();
+    assertThat(completed).hasSize(1);
+    assertThat(completed.getFirst().body())
+        .contains("permanently deleted", "secrets", "scheduled tasks", "not for production", "UTC");
+    assertThat(completed.getFirst().action().path()).isEqualTo("/workspaces/" + workspace.id());
+    verifyNoInteractions(mailer);
+  }
+
+  @Test
+  void announcesDeletionOnlyAfterTheRuntimeIsGone() throws Exception {
+    var workspace =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class);
+    var now = workspace.expiresAt().plusSeconds(1);
+    org.mockito.Mockito.doThrow(new IllegalStateException("VM unavailable"))
+        .doNothing()
+        .when(runtime)
+        .stop(workspace.id());
+    reaper.reap(now);
+    assertThat(workspaces.existsById(workspace.id())).isTrue();
+    assertThat(notifications.list(user)).noneMatch(n -> n.title().equals("Your demo has ended"));
+    reaper.reap(now);
+    reaper.reap(now.plusSeconds(60));
+    assertThat(workspaces.existsById(workspace.id())).isFalse();
+    assertThat(notifications.list(user))
+        .filteredOn(n -> n.title().equals("Your demo has ended"))
+        .hasSize(1);
+    verifyNoInteractions(mailer);
   }
 
   @Test
@@ -180,10 +222,12 @@ class DemoTest {
         .hasSize(1);
     assertThat(notifications.list(user)).noneMatch(n -> n.title().endsWith("10 minutes"));
     assertThat(workspaces.existsById(id)).isTrue();
+    assertThat(newest().summary()).contains("UTC", "deleted on");
 
     reaper.reap(expiresAt.plusSeconds(1));
     assertThat(workspaces.existsById(id)).isFalse();
     assertThat(newest().title()).isEqualTo("Your demo has ended");
+    verifyNoInteractions(mailer);
   }
 
   @Test

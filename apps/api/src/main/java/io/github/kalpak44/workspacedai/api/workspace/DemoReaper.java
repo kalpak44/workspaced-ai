@@ -53,7 +53,7 @@ public class DemoReaper {
           notifications.sendOnce(
               demo.getOwnerId(),
               "demo-ending:" + demo.getId(),
-              Notifications.demoEnding(demo.getId(), demo.getName(), minutes));
+              Notifications.demoEnding(demo.getId(), demo.getName(), minutes, demo.getExpiresAt()));
         } else {
           service.deleteExpiredDemo(demo.getId());
         }

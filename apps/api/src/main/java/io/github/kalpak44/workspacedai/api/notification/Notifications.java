@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.notification;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Locale;
@@ -138,6 +139,29 @@ public final class Notifications {
         null);
   }
 
+  /** In-app only: the tutorial is finished, but its workspace is still temporary. */
+  public static NotificationMessage tutorialCompleted(
+      UUID id, String name, Instant expiresAt, String timeZone) {
+    var deletion =
+        DateTimeFormatter.ofPattern("MMM d, yyyy 'at' HH:mm z", Locale.ENGLISH)
+            .withZone(ZoneId.of(timeZone))
+            .format(expiresAt);
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.SUCCESS,
+        "Tutorial completed",
+        "Your trial is ready. " + name + " will be deleted on " + deletion + ".",
+        "You finished the guided WordPress tutorial. You can keep exploring "
+            + name
+            + " until "
+            + deletion
+            + ". Then this workspace, its website, files, sessions, secrets"
+            + " and scheduled tasks are permanently deleted. Save anything you want to keep before"
+            + " then. This trial is not for production. We will notify you before deletion and"
+            + " once it has been deleted. OpenRouter bills AI usage separately.",
+        new NotificationAction("Open workspace", "/workspaces/" + id));
+  }
+
   /**
    * For an account's free demo, as its VM starts.
    *
@@ -163,17 +187,20 @@ public final class Notifications {
    *
    * @param minutes whole minutes it has left
    */
-  public static NotificationMessage demoEnding(UUID id, String name, long minutes) {
+  public static NotificationMessage demoEnding(
+      UUID id, String name, long minutes, Instant expiresAt) {
     return new NotificationMessage(
         NotificationKind.WORKSPACE,
         NotificationTone.WARNING,
         name + " is deleted in " + minutes + " minutes",
-        "Your demo ends soon. Save anything you want to keep now.",
+        "It will be deleted on " + WHEN.format(expiresAt) + ". Save anything you want to keep now.",
         "Your free demo "
             + name
             + " is deleted in "
             + minutes
-            + " minutes, with its files, sessions and anything it published. Download anything"
+            + " minutes, on "
+            + WHEN.format(expiresAt)
+            + ", with its website, files, sessions, secrets and scheduled tasks. Download anything"
             + " you want to keep before then. Liked it? Add funds and create a workspace of your"
             + " own to keep building.",
         new NotificationAction("Open workspace", "/workspaces/" + id));
@@ -187,7 +214,7 @@ public final class Notifications {
         name + " was deleted. Create a workspace of your own to keep building.",
         "Your free demo "
             + name
-            + " reached its end and was deleted with its files and sessions. Thank you for trying"
+            + " reached its end and was permanently deleted with its website, files, sessions, secrets and scheduled tasks. Thank you for trying"
             + " workspaced! Add funds and create a workspace of your own whenever you want to keep"
             + " building; your recipes are still here.",
         ADD_FUNDS);

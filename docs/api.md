@@ -521,3 +521,9 @@ cd apps/web
 npm run dev                                               # proxies /api to localhost:8080
 npm test                                                  # vitest plus the 80% line-coverage floor
 ```
+
+`POST /api/v1/workspaces/{id}/tutorial-completed` records completion of the owner's active free
+trial and sends one in-app notification, including its scheduled deletion time. It sends no email.
+It returns 204 on success (also on retries), 409 for a non-trial, draft or expired trial, and 404
+for a missing workspace. Workspace ownership and CSRF protection apply as on other workspace
+mutations. A row lock and a per-account deduplication key prevent duplicate notifications.

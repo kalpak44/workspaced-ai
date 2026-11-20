@@ -1,6 +1,6 @@
 import { addSecret, listSecrets } from "../api/secretsApi";
 import { listVmSizes } from "../api/vmSizesApi";
-import { listWorkspaces, restartWorkspace } from "../api/workspacesApi";
+import { completeWorkspaceTutorial, listWorkspaces, restartWorkspace } from "../api/workspacesApi";
 export type { VmSize } from "../api/vmSizesApi";
 
 import { fetchRecipe } from "../api/recipesApi";
@@ -9,6 +9,7 @@ import { saveTask } from "../api/tasksApi";
 import { applyPrompt, authorName } from "../lib/recipes";
 import { TOUR_RECIPE_ID, TOUR_TASK } from "../lib/tour";
 import { queuePrompt } from "./useChat";
+import { refreshNotifications } from "./useNotifications";
 
 /**
  * Applies the tour's recipe to the demo the way the store's Apply button does, and answers the
@@ -55,4 +56,15 @@ export async function restartTrialWorkspace(workspaceId: string) {
 export async function isTrialReady(workspaceId: string): Promise<boolean> {
   const workspace = (await listWorkspaces()).find((item) => item.id === workspaceId);
   return workspace?.status === "READY" && !workspace.restartRequired;
+}
+
+/** Keeps the final step retryable until the server has saved the completion notification. */
+export async function finishTour(workspaceId: string): Promise<boolean> {
+  try {
+    await completeWorkspaceTutorial(workspaceId);
+    await refreshNotifications();
+    return true;
+  } catch {
+    return false;
+  }
 }

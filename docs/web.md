@@ -131,10 +131,28 @@ OpenRouter. A partial secrets save can be retried; saved values are not overwrit
 
 Migration V42 updates the starter WordPress instructions and Pavel Usanli byline without
 changing V41's checksum. The WordPress recipe transfers from its seed account to
-`pavel.usanli@gmail.com` on that account's next verified sign-in. Other starter recipes
-remain owned by the platform seed account.
+`pavel.usanli@gmail.com` on that account's next verified sign-in. The six optional recipes imported from `docs/recipes` use the same publisher; the original
+platform examples remain owned by the seed account.
 
 Migration V43 upgrades the WordPress recipe to HTTPS without modifying V41 or V42.
 It also requires a shared `blog.md` instruction with tested WP-CLI examples for listing posts,
 publishing an article from standard input, saving drafts and publishing them later. The news
 task explicitly reads that instruction before publishing.
+
+## Optional Store recipes
+
+V44 snapshots the complete bodies and metadata of the six public recipes in `docs/recipes`:
+Gmail, read-only Google Calendar, Ciela, Telegram workspace control, personal Telegram access,
+and GoDaddy domain management. These are optional Store entries and do not change the tutorial.
+Its script configuration disables Flyway interpolation so shell and JavaScript examples remain
+literal. Source edits require a new migration; already-applied migrations are immutable.
+The publisher is reused from WordPress if already claimed, or linked on Pavel's next verified
+sign-in. The GoDaddy recipe uses `GDDY_PAT`, checks credentials and authoritative DNS, installs
+a CLI compatible with Alpine (a container wrapper when needed), and records DNS/HTTPS workflows
+in shared instructions. Platform Domains registration remains a user step for each new name.
+
+Finishing the tutorial posts to `/workspaces/{id}/tutorial-completed`, which saves one in-app
+notification with the deletion time. The notification bell refreshes immediately. Failed requests
+keep the final step retryable; skipping does not send it. The existing reaper sends a warning
+30 minutes before deletion and a final notification only after the runtime is gone. None of
+these three notifications sends email.

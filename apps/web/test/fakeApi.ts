@@ -643,6 +643,21 @@ export function installFakeApi(
       if (timeZone !== rows[index].timeZone) rows[index] = { ...rows[index], timeZone, restartRequired: true };
       return json(rows[index]);
     }
+    const tutorialRoute = /\/api\/v1\/workspaces\/([^/]+)\/tutorial-completed$/.exec(url);
+    if (tutorialRoute && init?.method === "POST") {
+      const workspace = rows.find((item) => item.id === tutorialRoute[1]);
+      if (!workspace) return json({}, 404);
+      if (state.fail) return json({}, state.fail);
+      if (!workspace.demo || !workspace.expiresAt) return json({}, 409);
+      if (!notifications.rows.some((item) => item.id === "tutorial-completed")) {
+        notifications.rows.unshift({ id: "tutorial-completed", kind: "WORKSPACE", tone: "SUCCESS",
+          title: "Tutorial completed", summary: `${workspace.name} will be deleted at ${workspace.expiresAt}.`,
+          body: "Your trial will be permanently deleted. Save anything you want to keep.",
+          createdAt: new Date().toISOString(), read: false,
+          action: { label: "Open workspace", path: `/workspaces/${workspace.id}` } });
+      }
+      return new Response(null, { status: 204 });
+    }
     const restartRoute = /\/api\/v1\/workspaces\/([^/]+)\/restart$/.exec(url);
     if (restartRoute) {
       if (state.holdRestart) await state.holdRestart;

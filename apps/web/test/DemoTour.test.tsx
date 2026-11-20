@@ -120,4 +120,25 @@ describe("guided WordPress trial", () => {
     await userEvent.setup().click(screen.getByRole("button", { name: "Send" }));
     expect(send).toHaveBeenCalledWith(TOUR_DESIGN_PROMPT);
   });
+  it("notifies on Finish, refreshes the bell and never emails", async () => {
+    const api = installFakeApi([workspace]);
+    mount(12);
+    await userEvent.setup().click(screen.getByRole("button", { name: "Finish tutorial" }));
+    await waitFor(() => expect(screen.getByTestId("progress")).toHaveTextContent("null"));
+    expect(api.notifications.rows.filter((notification) => notification.title === "Tutorial completed")).toHaveLength(1);
+    expect(api.mail.sent).toHaveLength(0);
+  });
+
+  it("keeps completion retryable after a failed request and does not notify on Skip", async () => {
+    const api = installFakeApi([workspace]);
+    api.state.fail = 503;
+    mount(12);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Finish tutorial" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save tutorial completion");
+    expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(false);
+    await user.click(screen.getByRole("button", { name: "Skip tour" }));
+    expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(false);
+  });
+
 });

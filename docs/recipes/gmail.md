@@ -3,7 +3,7 @@ title: Gmail for your agent
 summary: Build a small stdio MCP server that reads the user's Gmail over IMAP and writes drafts over SMTP, with attachment support, register it with OpenCode, and leave instructions.
 category: ai
 tags: [gmail, mcp, imap, smtp, attachments]
-visibility: private
+visibility: public
 recipe: # keep this line's id when revising an already-published recipe
 ---
 
