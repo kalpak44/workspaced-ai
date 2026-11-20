@@ -164,8 +164,11 @@ describe("full-screen guided WordPress workflow", () => {
     await title("Confirm the restart");
     await user.click(within(screen.getByRole("dialog", { name: "Restart My blog?" })).getByRole("button", { name: "Restart workspace" }));
     await title("Wait for the workspace to return");
+    expect(screen.getByRole("status", { name: "Workspace restarting" })).toBeInTheDocument();
+    expect(within(guide()).getByRole("button", { name: "Next" })).toBeDisabled();
     await waitFor(() => expect(api.restarted).toEqual(["trial"]));
     FakeEventSource.emit("trial", "READY");
+    await waitFor(() => expect(screen.queryByRole("status", { name: "Workspace restarting" })).not.toBeInTheDocument());
     await next();
     await title("Return through Sessions");
     await next();
