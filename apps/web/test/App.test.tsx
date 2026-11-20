@@ -506,7 +506,7 @@ describe("App", () => {
   });
 
   it("hides the version and API Reference from the regular user account menu", async () => {
-    api.auth.account.role = "USER";
+    api.auth.account = { ...api.auth.account, role: "USER" };
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "Account menu" }));
