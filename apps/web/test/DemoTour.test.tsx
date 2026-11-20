@@ -125,7 +125,7 @@ describe("full-screen guided WordPress workflow", () => {
     clickSelector(`[data-recipe="${tour.TOUR_RECIPE_ID}"]`);
     await title("Read what the recipe will do");
     await next();
-    await user.click(screen.getByRole("button", { name: "Apply" }));
+    await user.click(await screen.findByRole("button", { name: "Apply" }));
     await title("Apply it in your trial workspace");
     const picker = screen.getByRole("dialog", { name: "Apply WordPress blog" });
     await user.click(within(picker).getByRole("button", { name: "Apply" }));
@@ -185,6 +185,7 @@ describe("full-screen guided WordPress workflow", () => {
     await title("Open TCP port 443 for HTTPS");
     await next(); await next();
     await title("See what is now public");
+    expect(screen.getByRole("region", { name: "Guided tour" })).toHaveTextContent("anyone on the internet");
     expect(api.firewalls.get("trial")?.rules.map((rule) => rule.port)).toEqual(["80", "443"]);
     await next(); await next(); await next();
     await title("Let the recipe finish publishing");
@@ -231,6 +232,13 @@ describe("full-screen guided WordPress workflow", () => {
     await waitFor(() => expect(screen.queryByRole("region", { name: "Guided tour" })).not.toBeInTheDocument());
     expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(true);
     expect(api.mail.sent).toHaveLength(0);
+    const completion = await screen.findByRole("dialog", { name: "Tutorial completed" });
+    expect(completion).toHaveTextContent("You have finished the tour!");
+    expect(completion).toHaveTextContent("permanently deleted");
+    expect(completion).toHaveTextContent("paid workspace");
+    await user.click(within(completion).getByRole("link", { name: "GoDaddy domains for your workspace" }));
+    expect(location.pathname).toBe("/store/00000000-0000-4000-8000-00000000b00b");
+    expect(screen.queryByRole("dialog", { name: "Tutorial completed" })).not.toBeInTheDocument();
   }, 60000);
 
   it("stops simulated typing when the person edits the field", async () => {
@@ -242,10 +250,43 @@ describe("full-screen guided WordPress workflow", () => {
     expect(input.value).toBe("My own name"); input.remove();
   });
 
+  it("explains that tasks can be requested in chat for one-off and recurring work", async () => {
+    open(S.TASKS, "/workspaces/trial/settings");
+    await title("Find scheduled Tasks");
+    const explanation = screen.getByRole("region", { name: "Guided tour" });
+    expect(explanation).toHaveTextContent("In 30 minutes");
+    expect(explanation).toHaveTextContent("Every weekday at 9 am");
+    expect(explanation).toHaveTextContent("session chat");
+  });
+
+  it("lets the user dismiss completion and keep their conversation", async () => {
+    open(S.DONE);
+    await title("Make it yours, then Send");
+    const path = location.pathname;
+    await next("Finish tutorial");
+    const completion = await screen.findByRole("dialog", { name: "Tutorial completed" });
+    await user.click(within(completion).getByRole("button", { name: "Keep exploring" }));
+    expect(screen.queryByRole("dialog", { name: "Tutorial completed" })).not.toBeInTheDocument();
+    expect(location.pathname).toBe(path);
+  });
+
+  it("keeps the tour open when saving completion fails and allows a retry", async () => {
+    open(S.DONE);
+    await title("Make it yours, then Send");
+    api.state.fail = 503;
+    await next("Finish tutorial");
+    expect(within(guide()).getByRole("alert")).toHaveTextContent("Could not save completion");
+    expect(screen.queryByRole("dialog", { name: "Tutorial completed" })).not.toBeInTheDocument();
+    api.state.fail = 0;
+    await next("Finish tutorial");
+    expect(await screen.findByRole("dialog", { name: "Tutorial completed" })).toBeInTheDocument();
+  });
+
   it("does not notify completion when the user skips", async () => {
     open(S.DONE);
     await title("Make it yours, then Send");
     await user.click(within(guide()).getByRole("button", { name: "Skip tour" }));
     expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(false);
+    expect(screen.queryByRole("dialog", { name: "Tutorial completed" })).not.toBeInTheDocument();
   });
 });
