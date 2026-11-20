@@ -33,6 +33,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
   const demo = workspaces.find((w) => w.id === workspaceId) ?? null;
   const busy = useChatBusy(sessionId);
   const [working, setWorking] = useState(false);
+  const [trialConsent, setTrialConsent] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
   const [typed, setTyped] = useState("");
   const draftId = useRef(progress.draftId);
@@ -122,6 +123,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
 
   const launch = async () => {
     if (!key.current || !draftId.current) { go({ step: STEP.OPENROUTER }); return; }
+    if (!trialConsent) return;
     setWorking(true);
     try {
       const result = await onLaunch(draftId.current, key.current);
@@ -226,8 +228,9 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
     case STEP.BOX:
       card = {
         title: "Choose your trial machine",
-        body: <><p>The machine supplies CPU, memory and disk for WordPress and your agent. We selected the <strong>cheapest available machine</strong>. It is the single choice enabled for this trial; larger sizes are available when creating a paid workspace.</p><fieldset data-tour="trial-machines" className="max-h-[40dvh] space-y-2 overflow-y-auto"><legend className="mb-2 text-xs font-medium">Machine sizes</legend>{sizes?.map((size) => <label key={size.serverType} className={`flex items-start gap-3 rounded-lg border p-3 ${size.serverType === cheapest?.serverType ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "border-zinc-200 opacity-60 dark:border-zinc-700"}`}><input type="radio" name="trial-machine" checked={size.serverType === cheapest?.serverType} disabled={size.serverType !== cheapest?.serverType} readOnly aria-label={size.serverType} className="mt-1 accent-amber-600" /><span className="min-w-0 break-words"><strong>{size.serverType}</strong> · {size.cores} CPUs · {size.memoryGb} GB RAM · {size.diskGb} GB disk<span className="block text-xs">{size.serverType === cheapest?.serverType ? "Selected · free for 4 hours" : !size.available ? "Unavailable from the provider" : "Unavailable in the free trial"}</span></span></label>)}</fieldset><Button label="Refresh machines" variant="secondary" onClick={loadSizes} /><p>{key.current ? 'Your OpenRouter connection is ready.' : 'Reconnect OpenRouter after reloading this page.'} Next creates a fresh workspace named <strong>My WordPress trial</strong>. It will never turn into a paid workspace automatically.</p></>,
+        body: <><p>The machine supplies CPU, memory and disk for WordPress and your agent. We selected the <strong>cheapest available machine</strong>. It is the single choice enabled for this trial; larger sizes are available when creating a paid workspace.</p><fieldset data-tour="trial-machines" className="max-h-[40dvh] space-y-2 overflow-y-auto"><legend className="mb-2 text-xs font-medium">Machine sizes</legend>{sizes?.map((size) => <label key={size.serverType} className={`flex items-start gap-3 rounded-lg border p-3 ${size.serverType === cheapest?.serverType ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "border-zinc-200 opacity-60 dark:border-zinc-700"}`}><input type="radio" name="trial-machine" checked={size.serverType === cheapest?.serverType} disabled={size.serverType !== cheapest?.serverType} readOnly aria-label={size.serverType} className="mt-1 accent-amber-600" /><span className="min-w-0 break-words"><strong>{size.serverType}</strong> · {size.cores} CPUs · {size.memoryGb} GB RAM · {size.diskGb} GB disk<span className="block text-xs">{size.serverType === cheapest?.serverType ? "Selected · free for 4 hours" : !size.available ? "Unavailable from the provider" : "Unavailable in the free trial"}</span></span></label>)}</fieldset><Button label="Refresh machines" variant="secondary" onClick={loadSizes} /><p>{key.current ? 'Your OpenRouter connection is ready.' : 'Reconnect OpenRouter after reloading this page.'} Next creates a fresh workspace named <strong>My WordPress trial</strong>. It will never turn into a paid workspace automatically.</p><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30"><input type="checkbox" checked={trialConsent} onChange={(event) => setTrialConsent(event.target.checked)} className="mt-1 size-5 shrink-0 accent-amber-600" /><span>I understand this trial workspace and its website, files, sessions, secrets and scheduled tasks will be <strong>permanently deleted after 4 hours</strong>. I will not use it for production or anything I need to keep.</span></label></>,
         waiting: !key.current || cheapest ? undefined : sizes ? "No trial machine is available. Refresh to try again." : "Loading machines…",
+        disabled: !!key.current && !trialConsent,
         nextLabel: key.current ? "Create free workspace" : "Reconnect OpenRouter",
         onNext: launch,
       };
@@ -245,7 +248,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
       card = {
         title: "Apply the WordPress recipe",
         target: 'section[aria-label="Steps"]',
-        body: <><p>A <strong>recipe</strong> is a reusable set of instructions published in the Store. This WordPress recipe by <strong>Pavel Usanli</strong> installs the blog, publishes it at your machine's IP address, and records how to maintain it.</p><p>Read the highlighted steps. Applying this recipe makes the blog public over HTTP on port 80. Next collects the admin credentials as secrets, then applies it in a new session.</p></>,
+        body: <><p>A <strong>recipe</strong> is a reusable set of instructions published in the Store. This WordPress recipe by <strong>Pavel Usanli</strong> installs the blog, publishes it at your machine's IP address, and records how to maintain it.</p><p>Read the highlighted steps. Applying this recipe makes the blog public over HTTPS with a trusted certificate for your machine's IP address. Next collects the admin credentials as secrets, then applies it in a new session.</p></>,
         nextLabel: "Apply recipe",
         onNext: () => go({ step: STEP.SECRETS }),
       };
@@ -253,7 +256,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
     case STEP.SECRETS:
       card = {
         title: "Choose your WordPress admin credentials",
-        body: <><p><strong>Secrets</strong> pass private values to your workspace without putting them into chat or recipe text. Choose a username and a unique password; keep them in your password manager.</p><p>We save them as <code>{SECRET_USER}</code> and <code>{SECRET_PASSWORD}</code>. We also generate a separate database password as a secret. Then we restart the workspace so the agent can use them.</p><TextField id="tour-admin-user" label="WordPress admin username" autoComplete="username" value={savedUser ? "Saved as a secret" : username} disabled={working || !!savedUser} maxLength={60} onChange={(event) => setUsername(event.target.value)} /><TextField id="tour-admin-password" label="WordPress admin password" type="password" autoComplete="new-password" value={savedPassword ? "saved-secret" : password} disabled={working || !!savedPassword} maxLength={4096} hint="Use a unique password with at least 12 characters." onChange={(event) => setPassword(event.target.value)} />{savedSecrets === null && <Button label="Check secrets again" variant="secondary" onClick={checkSecrets} />}<p>The trial site uses unencrypted HTTP. Use these credentials only for this temporary blog.</p></>,
+        body: <><p><strong>Secrets</strong> pass private values to your workspace without putting them into chat or recipe text. Choose a username and a unique password; keep them in your password manager.</p><p>We save them as <code>{SECRET_USER}</code> and <code>{SECRET_PASSWORD}</code>. We also generate a separate database password as a secret. Then we restart the workspace so the agent can use them.</p><TextField id="tour-admin-user" label="WordPress admin username" autoComplete="username" value={savedUser ? "Saved as a secret" : username} disabled={working || !!savedUser} maxLength={60} onChange={(event) => setUsername(event.target.value)} /><TextField id="tour-admin-password" label="WordPress admin password" type="password" autoComplete="new-password" value={savedPassword ? "saved-secret" : password} disabled={working || !!savedPassword} maxLength={4096} hint="Use a unique password with at least 12 characters." onChange={(event) => setPassword(event.target.value)} />{savedSecrets === null && <Button label="Check secrets again" variant="secondary" onClick={checkSecrets} />}<p>Your blog and admin sign-in use HTTPS. Use these credentials only for this temporary blog.</p></>,
         waiting: savedSecrets && (savedUser || /^[A-Za-z0-9_.@-]{1,60}$/.test(username.trim())) && (savedPassword || password.length >= 12) ? undefined : "Enter a username and a password of at least 12 characters.",
         nextLabel: "Save secrets and restart",
         onNext: saveSecrets,
@@ -272,7 +275,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
       card = {
         title: "Watch the agent build your blog",
         target: 'section[aria-label="Chat"]',
-        body: <><p>A <strong>session</strong> is a conversation about work on this machine. Here the agent installs WordPress and its database, opens port 80, and writes the first post. It can take several minutes.</p><p>It will reply with the blog's public IP address and admin link. If it reports a problem, ask it to fix that in this chat before continuing.</p></>,
+        body: <><p>A <strong>session</strong> is a conversation about work on this machine. Here the agent installs WordPress and its database, sets up HTTPS on port 443, and writes the first post. It can take several minutes.</p><p>It will reply with the blog's public IP address and admin link. If it reports a problem, ask it to fix that in this chat before continuing.</p></>,
         waiting: busy === false ? undefined : "Waiting for the agent's reply… You can use the chat below.",
         onNext: () => go({ step: STEP.VERIFY }),
       };
@@ -281,7 +284,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { re
       card = {
         title: "Open your public WordPress blog",
         target: 'section[aria-label="Chat"]',
-        body: <><p>Open the <strong>http://machine-ip</strong> link in the agent's reply in a new tab. Anyone with that address can visit the blog while the trial runs. A domain is optional.</p><p>Check the home page and first post. If they do not work, ask the agent to fix them here. Continue once you have checked the site.</p></>,
+        body: <><p>Open the <strong>https://machine-ip</strong> link in the agent's reply in a new tab. Anyone with that address can visit the blog while the trial runs. A domain is optional.</p><p>Check the home page and first post. If they do not work, ask the agent to fix them here. Continue once you have checked the site.</p></>,
         nextLabel: "My blog works",
         onNext: () => go({ step: STEP.SCHEDULE }),
       };
@@ -332,6 +335,7 @@ interface CardContent {
   readonly target?: string;
   /** Set while Next has to wait, saying for what. */
   readonly waiting?: string;
+  readonly disabled?: boolean;
   readonly note?: string;
   readonly nextLabel?: string;
   readonly onNext: () => void | Promise<void>;
@@ -387,7 +391,7 @@ function TourCard({ step, card, working, problem, onSkip }: {
               {card.waiting}
             </span>
           )}
-          <Button label={card.nextLabel ?? "Next"} icon={ArrowRight} busy={working} disabled={card.waiting !== undefined}
+          <Button label={card.nextLabel ?? "Next"} icon={ArrowRight} busy={working} disabled={card.waiting !== undefined || card.disabled}
             onClick={() => void card.onNext()} />
         </span>
       </div>

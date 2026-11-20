@@ -110,10 +110,17 @@ then presents the live VM catalogue. Only its cheapest available size is enabled
 trial; other sizes explain whether they are sold out or excluded from the free trial.
 The server chooses again at launch if capacity has changed. The machine runs for four
 hours with no platform billing; OpenRouter bills the owner's AI usage separately.
+Before creation, a required checkbox acknowledges permanent deletion of the workspace and
+its data after four hours and that the trial is not for production. The create action stays
+disabled until checked; consent must be given again after reloading before launch.
 
 The tour opens the public WordPress recipe, collects admin username/password as write-only
 secrets, generates a separate database secret and restarts the workspace before applying
-the recipe. It waits for an agent reply and asks the owner to check the public IP link.
+the recipe. It waits for an agent reply and asks the owner to check the public HTTPS IP link.
+WordPress sits behind an nginx TLS proxy with a trusted Let's Encrypt IP certificate;
+port 80 serves ACME challenges and redirects other traffic to HTTPS. Certbot 5.4+
+uses the shortlived profile, and a workspace service checks renewal every 12 hours.
+The recipe verifies certificate trust and never falls back to insecure HTTP.
 It then schedules sourced technology news every five minutes, explains its OpenRouter
 usage and deletion control, and returns to chat with an editable design suggestion.
 The owner sends that last request themselves.
@@ -126,3 +133,8 @@ Migration V42 updates the starter WordPress instructions and Pavel Usanli byline
 changing V41's checksum. The WordPress recipe transfers from its seed account to
 `pavel.usanli@gmail.com` on that account's next verified sign-in. Other starter recipes
 remain owned by the platform seed account.
+
+Migration V43 upgrades the WordPress recipe to HTTPS without modifying V41 or V42.
+It also requires a shared `blog.md` instruction with tested WP-CLI examples for listing posts,
+publishing an article from standard input, saving drafts and publishing them later. The news
+task explicitly reads that instruction before publishing.

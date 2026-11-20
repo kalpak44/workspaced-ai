@@ -27,7 +27,8 @@ export const TOUR_TASK = {
     "Read a current technology news RSS feed. Choose one recent story not already covered on " +
     "the WordPress blog in ~/project/blog. Write an original summary of about 150 words, link " +
     "to the source and include its publication date. Verify the source; never invent news. " +
-    "Publish using the blog.md instructions. If there is no new verified story, skip this run.",
+    "Read ~/.config/workspaced/instructions/blog.md and publish using its tested WP-CLI " +
+    "commands, preserving the HTTPS site URL. If there is no new verified story, skip this run.",
 } as const;
 
 const KEY = "workspaced.tour.v2";

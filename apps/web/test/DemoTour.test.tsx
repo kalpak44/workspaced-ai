@@ -48,7 +48,13 @@ describe("guided WordPress trial", () => {
     expect(screen.getByRole("radio", { name: "sold-out" })).toBeDisabled();
     expect(onDraft).toHaveBeenCalledWith(expect.objectContaining({ demo: true, modelProvider: "openrouter" }));
     expect(onLaunch).not.toHaveBeenCalled();
-    await user.click(screen.getByRole("button", { name: "Create free workspace" }));
+    const create = screen.getByRole("button", { name: "Create free workspace" });
+    expect(create).toBeDisabled();
+    await user.click(create);
+    expect(onLaunch).not.toHaveBeenCalled();
+    await user.click(screen.getByRole("checkbox", { name: /permanently deleted after 4 hours/ }));
+    expect(create).toBeEnabled();
+    await user.click(create);
     expect(onLaunch).toHaveBeenCalledWith("trial", "private-openrouter-key");
     expect(localStorage.getItem("workspaced.tour.v2")).not.toContain("private-openrouter-key");
   });
