@@ -41,8 +41,7 @@ export function SecretsPanel({
   const tour = useTourProgress();
   const requiredName = tour && tour.workspaceId === workspaceId
     ? tour.step === TOUR_STEP.ADMIN_USER ? "WORDPRESS_ADMIN_USER"
-      : tour.step === TOUR_STEP.ADMIN_PASSWORD ? "WORDPRESS_ADMIN_PASSWORD"
-      : tour.step === TOUR_STEP.DB_PASSWORD ? "WORDPRESS_DB_PASSWORD" : null
+      : tour.step === TOUR_STEP.ADMIN_PASSWORD ? "WORDPRESS_ADMIN_PASSWORD" : null
     : null;
   const [customName, setName] = useState("");
   const name = requiredName ?? customName;

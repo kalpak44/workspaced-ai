@@ -125,7 +125,7 @@ V45 replaces the WordPress recipe with the versioned `docs/recipes/wordpress.md`
 contains Compose/nginx templates, image-digest pinning, private database/WordPress containers,
 Let's Encrypt IP TLS, renewal, verification and a shared CLI publishing guide. It first pauses
 for secrets and restart, then pauses again for the user to open TCP 80 and 443 through Firewall.
-The agent does not open ports itself. The user resumes the same conversation after each pause.
+Only the admin username and password are entered as Secrets. The recipe generates and keeps separate database credentials in a protected Docker volume, reusing them on retries. V46 publishes this revision without changing earlier migrations. The agent does not open ports itself. The user resumes the same conversation after each pause.
 Retries keep existing content, volumes and certificates. Earlier migration checksums stay intact.
 
 The user creates the news task through the real Tasks editor. Next can type the name, a five-minute
@@ -136,8 +136,8 @@ A plain-language example is typed only into an empty editor. Saved instructions 
 agent's next message and are available to future sessions and tasks. Finally, the user edits
 and sends a design request themselves; the tour does not auto-send it.
 
-Non-secret progress, names and workspace/session identifiers persist in `workspaced.tour.v3`.
-An active v2 tour is migrated without provisioning another workspace. Passwords and keys never
+Non-secret progress, names and workspace/session identifiers persist in `workspaced.tour.v4`.
+Active v2 and v3 tours are migrated without provisioning another workspace. Passwords and keys never
 enter tour storage. Reloading before launch requires reconnecting OpenRouter. Finishing sends
 one in-app completion notification with the deletion deadline, followed by the existing warning
 before expiry and confirmation after successful deletion. These alerts send no email. Skipping

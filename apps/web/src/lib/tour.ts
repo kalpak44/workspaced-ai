@@ -5,21 +5,21 @@ export const TOUR_STEP = {
   WELCOME: 0, NAME: 1, OPENROUTER: 2, MACHINE: 3, STARTING: 4,
   STORE: 5, PRIVATE: 6, OWN: 7, PUBLIC: 8, FIND_RECIPE: 9, REVIEW: 10, APPLY: 11, PICK: 12,
   REQUEST_SECRETS: 13, SETTINGS: 14, SECRETS: 15, ADMIN_USER: 16, ADMIN_PASSWORD: 17,
-  DB_PASSWORD: 18, RESTART: 19, CONFIRM_RESTART: 20, RESTARTING: 21, SESSIONS: 22,
-  SESSION: 23, RESUME_SECRETS: 24, BUILD: 25, PORT_SETTINGS: 26, FIREWALL: 27,
-  HTTP: 28, HTTPS: 29, PORT_REVIEW: 30, PORT_SESSIONS: 31, PORT_SESSION: 32,
-  RESUME_PORTS: 33, DEPLOY: 34, VERIFY: 35, TASK_SETTINGS: 36, TASKS: 37,
-  NEW_TASK: 38, TASK_NAME: 39, TASK_CONFIG: 40, TASK_SAVED: 41, INSTRUCTIONS: 42,
-  BLOG_GUIDE: 43, NEW_INSTRUCTION: 44, INSTRUCTION_NAME: 45, INSTRUCTION_EDIT: 46,
-  INSTRUCTION_SAVED: 47, DESIGN_SESSIONS: 48, DESIGN_SESSION: 49, DESIGN: 50, DONE: 51,
+  RESTART: 18, CONFIRM_RESTART: 19, RESTARTING: 20, SESSIONS: 21,
+  SESSION: 22, RESUME_SECRETS: 23, BUILD: 24, PORT_SETTINGS: 25, FIREWALL: 26,
+  HTTP: 27, HTTPS: 28, PORT_REVIEW: 29, PORT_SESSIONS: 30, PORT_SESSION: 31,
+  RESUME_PORTS: 32, DEPLOY: 33, VERIFY: 34, TASK_SETTINGS: 35, TASKS: 36,
+  NEW_TASK: 37, TASK_NAME: 38, TASK_CONFIG: 39, TASK_SAVED: 40, INSTRUCTIONS: 41,
+  BLOG_GUIDE: 42, NEW_INSTRUCTION: 43, INSTRUCTION_NAME: 44, INSTRUCTION_EDIT: 45,
+  INSTRUCTION_SAVED: 46, DESIGN_SESSIONS: 47, DESIGN_SESSION: 48, DESIGN: 49, DONE: 50,
 } as const;
 export const TOUR_STEP_COUNT = Object.keys(TOUR_STEP).length;
 export const TOUR_WORKSPACE_NAME = "My WordPress trial";
 export const TOUR_STYLE_NAME = "writing-style";
 export const TOUR_STYLE = "Use short, friendly sentences. Explain technical terms in plain language. " +
   "For news articles, include the source link and publication date. Never invent facts or quotes.";
-export const TOUR_SECRET_CONTINUE = "The WordPress admin and database secrets are saved and the workspace has restarted. " +
-  "Continue the recipe to its port-opening checkpoint. I will open ports 80 and 443 myself in Settings.";
+export const TOUR_SECRET_CONTINUE = "The WordPress admin username and password are saved and the workspace has restarted. " +
+  "Generate the database credentials automatically, then continue the recipe to its port-opening checkpoint. I will open ports 80 and 443 myself in Settings.";
 export const TOUR_PORT_CONTINUE = "TCP ports 80 and 443 are now open in Settings. Verify them, then continue the recipe: " +
   "obtain the Let's Encrypt IP certificate, publish the blog over HTTPS, write the shared blog instructions and verify the site.";
 
@@ -52,14 +52,21 @@ export const TOUR_TASK = {
     "commands, preserving the HTTPS site URL. If there is no new verified story, skip this run.",
 } as const;
 
-const KEY = "workspaced.tour.v3";
+const KEY = "workspaced.tour.v4";
 let progress: TourProgress | null = load();
 const listeners = new Set<() => void>();
 const actionListeners = new Set<(action: TourAction) => void>();
 
 function load(): TourProgress | null {
   try {
-    const stored = readStored(KEY);
+    let stored = readStored(KEY);
+    const previousV3 = !stored && readStored("workspaced.tour.v3");
+    if (previousV3) {
+      const old = JSON.parse(previousV3) as TourProgress;
+      if (!Number.isInteger(old.step) || old.step < 0 || old.step > 51) return null;
+      // The removed database-password step now resumes at Restart; later steps shift down.
+      stored = JSON.stringify({ ...old, step: old.step > 18 ? old.step - 1 : old.step });
+    }
     if (!stored) {
       const previous = readStored("workspaced.tour.v2");
       if (!previous) return null;
@@ -73,9 +80,12 @@ function load(): TourProgress | null {
       return migrated;
     }
     const value = JSON.parse(stored) as TourProgress;
-    return Number.isInteger(value.step) && value.step >= 0 && value.step < TOUR_STEP_COUNT
+    const valid = Number.isInteger(value.step) && value.step >= 0 && value.step < TOUR_STEP_COUNT
       && [value.workspaceId, value.sessionId, value.draftId, value.name, value.taskName, value.instructionName]
-        .every((item) => item === undefined || typeof item === "string") ? value : null;
+        .every((item) => item === undefined || typeof item === "string");
+    if (!valid) return null;
+    if (previousV3) { writeStored(KEY, JSON.stringify(value)); writeStored("workspaced.tour.v3", ""); }
+    return value;
   } catch { return null; }
 }
 function emit() { listeners.forEach((listener) => listener()); }
@@ -117,7 +127,7 @@ const checkpoints = new Map<string, ChatCheckpoint | undefined>();
 /** Only the latest completed assistant reply can unlock a Settings checkpoint. */
 export function reportChatCheckpoint(sessionId: string, text: string): void {
   const checkpoint = /settings/i.test(text) && /secrets/i.test(text)
-    && ["WORDPRESS_ADMIN_USER", "WORDPRESS_ADMIN_PASSWORD", "WORDPRESS_DB_PASSWORD"].every((name) => text.includes(name)) ? "secrets"
+    && ["WORDPRESS_ADMIN_USER", "WORDPRESS_ADMIN_PASSWORD"].every((name) => text.includes(name)) ? "secrets"
     : /settings/i.test(text) && /firewall/i.test(text) && /\b80\b/.test(text) && /\b443\b/.test(text) ? "ports" : undefined;
   if (checkpoints.get(sessionId) === checkpoint) return;
   checkpoints.set(sessionId, checkpoint); emit();

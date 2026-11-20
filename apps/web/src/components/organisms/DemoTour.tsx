@@ -22,7 +22,6 @@ interface Props {
 }
 const SECRET_USER = "WORDPRESS_ADMIN_USER";
 const SECRET_PASSWORD = "WORDPRESS_ADMIN_PASSWORD";
-const SECRET_DATABASE = "WORDPRESS_DB_PASSWORD";
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const isOneOf = (step: number, ...steps: number[]) => steps.includes(step);
 const control = <T extends HTMLElement = HTMLElement,>(selector: string): T | null => document.querySelector<T>(selector);
@@ -95,8 +94,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
     if (action.type === "instruction-form-opened" && step === S.NEW_INSTRUCTION) go(S.INSTRUCTION_NAME);
     if (action.type === "secret-saved") {
       if (step === S.ADMIN_USER && action.name === SECRET_USER) go(S.ADMIN_PASSWORD);
-      if (step === S.ADMIN_PASSWORD && action.name === SECRET_PASSWORD) go(S.DB_PASSWORD);
-      if (step === S.DB_PASSWORD && action.name === SECRET_DATABASE) go(S.RESTART);
+      if (step === S.ADMIN_PASSWORD && action.name === SECRET_PASSWORD) go(S.RESTART);
     }
     if (action.type === "restart-dialog-opened" && step === S.RESTART) go(S.CONFIRM_RESTART);
     if (action.type === "restart-cancelled" && step === S.CONFIRM_RESTART) go(S.RESTART);
@@ -173,7 +171,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
   useEffect(() => {
     if (!workspaceId) return;
     let live = true;
-    const secret = step === S.ADMIN_USER ? SECRET_USER : step === S.ADMIN_PASSWORD ? SECRET_PASSWORD : step === S.DB_PASSWORD ? SECRET_DATABASE : null;
+    const secret = step === S.ADMIN_USER ? SECRET_USER : step === S.ADMIN_PASSWORD ? SECRET_PASSWORD : null;
     if (secret) {
       setChecking(true);
       void loadTrialSecretNames(workspaceId).then((names) => { if (live && names.includes(secret)) go(step + 1); })
@@ -239,10 +237,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
     if (nameField.value !== name) { setProblem(`Use ${name} in Name so the recipe can find it. Your Value is kept.`); return; }
     if (!valueField.value) {
       if (example) await write(valueField, example);
-      else if (name === SECRET_DATABASE) {
-        const bytes = crypto.getRandomValues(new Uint8Array(32));
-        await write(valueField, Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""));
-      } else { valueField.focus(); setNote("Enter your own unique WordPress admin password in Value. It is never put in chat or tutorial storage."); }
+      else { valueField.focus(); setNote("Enter your own unique WordPress admin password in Value. It is never put in chat or tutorial storage."); }
       return;
     }
     click('[data-tour="add-secret"]');
@@ -322,7 +317,6 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
     case S.SECRETS: card = { title: "Find Secrets", target: section("secrets"), body: <>Secrets hold passwords and API keys that apps need to sign in to other services. Save them here instead of in chat or a recipe. The assistant can use them through environment variables, named values available to its tools; the app shows only their names after saving.</>, next: () => click(section("secrets")) }; break;
     case S.ADMIN_USER: card = { title: "Add the admin username as a secret", target: '[data-tour="secret-form"]', body: <>The required name <code>{SECRET_USER}</code> is filled and locked to prevent typos. Choose your admin username in Value, or Next types <strong>blog-admin</strong>. Review it, then use Add or Next again. Your own value is kept.</>, disabled: checking, next: () => secret(SECRET_USER, "blog-admin") }; break;
     case S.ADMIN_PASSWORD: card = { title: "Add your own admin password", target: '[data-tour="secret-form"]', body: <>The required name <code>{SECRET_PASSWORD}</code> is filled and locked. Enter your own unique password in Value and save with Add. Passwords stay out of chat and tutorial storage.</>, disabled: checking, next: () => secret(SECRET_PASSWORD) }; break;
-    case S.DB_PASSWORD: card = { title: "Use a separate database password", target: '[data-tour="secret-form"]', body: <>The database stores your posts, users and settings. WordPress uses its own password to connect to it, separate from the password you use to sign in to the blog. Save that secret as <code>{SECRET_DATABASE}</code>. Its name is filled and locked. Next fills a generated password in the real form. It stays masked; review the name, then save with Add or Next.</>, disabled: checking, next: () => secret(SECRET_DATABASE) }; break;
     case S.RESTART: card = { title: "Apply the secrets with a restart", target: '[data-tour="restart-workspace"]', body: <>Saved secrets reach the running agent after a restart. Files and conversations are kept. Use the actual Restart workspace button to see its confirmation.</>, next: () => click('[data-tour="restart-workspace"]') }; break;
     case S.CONFIRM_RESTART: card = { title: "Confirm the restart", target: '[data-tour="confirm-restart"]', body: <>This is the same confirmation used elsewhere in the app. It briefly stops the agent and reloads the saved secrets when the workspace starts again.</>, next: () => click('[data-tour="confirm-restart"]') }; break;
     case S.RESTARTING: card = { title: "Wait for the workspace to return", target: '[data-tour="demo-banner"]', body: <>Your assistant is restarting to pick up the secrets you saved. Your files and conversations are kept. This usually takes 30–60 seconds; there is nothing you need to do while you wait. Next becomes available when it is ready. Your trial countdown continues during the restart.</>, waiting: ready ? undefined : "Restarting…", next: () => go(S.SESSIONS) }; break;

@@ -74,7 +74,7 @@ describe("full-screen guided WordPress workflow", () => {
     await user.type(name, "My own project");
     await next();
     await title("Connect your own OpenRouter account");
-    expect(localStorage.getItem("workspaced.tour.v3")).toContain("My own project");
+    expect(localStorage.getItem("workspaced.tour.v4")).toContain("My own project");
     expect(api.launched).toHaveLength(0);
   });
 
@@ -106,7 +106,7 @@ describe("full-screen guided WordPress workflow", () => {
     await user.click(screen.getByRole("checkbox", { name: /permanently deleted after four hours/ }));
     await next("Create free workspace");
     expect(onLaunch).toHaveBeenCalledWith("trial", "private-openrouter-key");
-    expect(localStorage.getItem("workspaced.tour.v3")).not.toContain("private-openrouter-key");
+    expect(localStorage.getItem("workspaced.tour.v4")).not.toContain("private-openrouter-key");
   });
 
   it("uses the real Store, Apply, secrets, firewall, task and instruction forms", async () => {
@@ -136,7 +136,7 @@ describe("full-screen guided WordPress workflow", () => {
     const sessionId = api.prompts[0].sessionId;
     await answer(sessionId, "I am checking the workspace before starting.", false);
     expect(screen.queryByRole("heading", { name: "Find Secrets" })).not.toBeInTheDocument();
-    await answer(sessionId, "Add WORDPRESS_ADMIN_USER, WORDPRESS_ADMIN_PASSWORD and WORDPRESS_DB_PASSWORD in Settings → Secrets, then restart.");
+    await answer(sessionId, "Add WORDPRESS_ADMIN_USER and WORDPRESS_ADMIN_PASSWORD in Settings → Secrets, then restart.");
     await next();
     await next();
     await title("Find Secrets");
@@ -154,12 +154,9 @@ describe("full-screen guided WordPress workflow", () => {
     await next();
     await user.type(screen.getByLabelText("Value", { exact: true }), "my-private-password");
     await user.click(screen.getByRole("button", { name: "Add" }));
-    await title("Use a separate database password");
-    await next();
-    await user.click(screen.getByRole("button", { name: "Add" }));
     await title("Apply the secrets with a restart");
-    expect(localStorage.getItem("workspaced.tour.v3")).not.toContain("my-private-password");
-    expect(api.sent.filter((secret) => secret.name.startsWith("WORDPRESS_"))).toHaveLength(3);
+    expect(localStorage.getItem("workspaced.tour.v4")).not.toContain("my-private-password");
+    expect(api.sent.filter((secret) => secret.name.startsWith("WORDPRESS_"))).toHaveLength(2);
     await next();
     await title("Confirm the restart");
     await user.click(within(screen.getByRole("dialog", { name: "Restart My blog?" })).getByRole("button", { name: "Restart workspace" }));

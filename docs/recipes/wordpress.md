@@ -17,24 +17,25 @@ trusted HTTPS on the workspace's own public IP. It does not permit deleting exis
 Use `~/project/blog` and Compose project name `workspaced-blog`. On a fresh workspace, use the
 files below. On retries, reuse existing files, volumes and valid certificates; do not reset the
 database, repeat forced certificate issuance or overwrite an existing site. Inspect a different
-existing setup before adapting it. Keep secret values out of chat, files, command literals and
-logs. Command examples reference the environment; do not expand them into tool-call text or use
+existing setup before adapting it. Keep user-provided secret values out of chat, files, command literals and
+logs. Generated database credentials belong only in the protected credentials volume described below. Command examples reference the environment; do not expand them into tool-call text or use
 shell tracing. The private TLS key belongs only in the certificate volume.
 
 ## Phase 1 — check secrets, then pause if any are missing
 
-Check that `WORDPRESS_ADMIN_USER`, `WORDPRESS_ADMIN_PASSWORD` and `WORDPRESS_DB_PASSWORD` are set
-without printing their values. If any are missing, list the three required names (mark which
+Check that both `WORDPRESS_ADMIN_USER` and `WORDPRESS_ADMIN_PASSWORD` are set
+without printing their values. If any are missing, list both required names (mark which
 are missing), explain
-**Settings → Secrets**, and ask the user to save them and restart the workspace. The first two
-are their chosen WordPress login; the database password must be different. Never ask for a
+**Settings → Secrets**, and ask the user to save them and restart the workspace. These
+are their chosen WordPress login. Generate database credentials yourself in Phase 2; never ask
+the user to create a database secret or paste a database password. Never ask for a
 password in chat. End this turn and wait for the user to return. Do not start installation yet.
 
-If all three exist after a restart, continue. Get the real public IPv4 from `$WORKSPACE_IP` or
+If both exist after a restart, continue. Get the real public IPv4 from `$WORKSPACE_IP` or
 `firewall list`; never invent an address, use the platform hostname for the site, or request a
 certificate for the platform hostname. The site URL is `https://<the-public-IP>`.
 
-## Phase 2 — prepare the same private stack
+## Phase 2 — generate internal credentials and prepare the private stack
 
 Create `compose.yml` with these services. All persistent data and proxy configuration use named
 volumes: a harness path is not necessarily a path on the Docker daemon's host. Only nginx
@@ -42,29 +43,70 @@ publishes ports. Pull the official images, record their resolved digests in `ima
 pin the Compose image references to those digests before launch so restarts use the same images.
 Check that the Certbot image is version 5.4 or newer, which supports IP webroot certificates.
 
+The `credentials` helper generates two independent random 256-bit passwords inside a named
+Docker volume: one for WordPress's database user and one for database administration. It never
+prints them or writes them into Compose, chat, shell arguments or workspace instructions.
+The services use the official images' `_FILE` settings to read these files. Run the helper
+before starting the stack. Reuse existing files on every retry; do not rotate a database's
+password by regenerating files. If database data exists but credentials are missing, stop and
+recover the existing credentials rather than inventing new ones or deleting data. For a setup
+created with an earlier recipe, retain its working credentials and configuration until a safe
+migration is possible; never overwrite them with this fresh-install template.
+
 ```yaml
 name: workspaced-blog
 x-wordpress-environment: &wordpress-environment
   WORDPRESS_DB_HOST: db:3306
   WORDPRESS_DB_NAME: wordpress
   WORDPRESS_DB_USER: wordpress
-  WORDPRESS_DB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?Add the database secret and restart}
+  WORDPRESS_DB_PASSWORD_FILE: /run/secrets/database-password
   WORDPRESS_CONFIG_EXTRA: |
     if (isset($$_SERVER['HTTP_X_FORWARDED_PROTO']) && $$_SERVER['HTTP_X_FORWARDED_PROTO'] === 'https') {
       $$_SERVER['HTTPS'] = 'on';
     }
     if (!defined('FORCE_SSL_ADMIN')) { define('FORCE_SSL_ADMIN', true); }
 services:
+  credentials:
+    image: alpine:latest
+    profiles: [tools]
+    entrypoint: [sh, -ec]
+    command:
+      - |
+        umask 077
+        if [ -d /var/lib/mysql/mysql ]; then
+          test -s /run/secrets/database-password && test -s /run/secrets/root-password || {
+            echo 'Existing database needs its original credentials; stopping.' >&2
+            exit 1
+          }
+        fi
+        if [ ! -s /run/secrets/database-password ]; then
+          od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > /run/secrets/database-password.tmp
+          test "`wc -c < /run/secrets/database-password.tmp`" -eq 64
+          mv /run/secrets/database-password.tmp /run/secrets/database-password
+        fi
+        if [ ! -s /run/secrets/root-password ]; then
+          od -An -N32 -tx1 /dev/urandom | tr -d ' \n' > /run/secrets/root-password.tmp
+          test "`wc -c < /run/secrets/root-password.tmp`" -eq 64
+          mv /run/secrets/root-password.tmp /run/secrets/root-password
+        fi
+        chown 33:33 /run/secrets/database-password
+        chmod 440 /run/secrets/database-password
+        chown 0:0 /run/secrets/root-password
+        chmod 400 /run/secrets/root-password
+    volumes:
+      - credentials:/run/secrets
+      - database:/var/lib/mysql:ro
   db:
     image: mariadb:lts
     restart: unless-stopped
     environment:
       MARIADB_DATABASE: wordpress
       MARIADB_USER: wordpress
-      MARIADB_PASSWORD: ${WORDPRESS_DB_PASSWORD:?Add the database secret and restart}
-      MARIADB_ROOT_PASSWORD: ${WORDPRESS_DB_PASSWORD:?Add the database secret and restart}
+      MARIADB_PASSWORD_FILE: /run/secrets/database-password
+      MARIADB_ROOT_PASSWORD_FILE: /run/secrets/root-password
     volumes:
       - database:/var/lib/mysql
+      - credentials:/run/secrets:ro
     healthcheck:
       test: [CMD, healthcheck.sh, --connect, --innodb_initialized]
       interval: 5s
@@ -79,6 +121,7 @@ services:
     environment: *wordpress-environment
     volumes:
       - wordpress:/var/www/html
+      - credentials:/run/secrets:ro
   proxy:
     image: nginx:alpine
     restart: unless-stopped
@@ -104,6 +147,7 @@ services:
     environment: *wordpress-environment
     volumes:
       - wordpress:/var/www/html
+      - credentials:/run/secrets:ro
   certbot:
     image: certbot/certbot:latest
     profiles: [tools]
@@ -111,6 +155,7 @@ services:
       - challenges:/var/www/acme
       - certificates:/etc/letsencrypt
 volumes:
+  credentials:
   database:
   wordpress:
   proxy-config:
@@ -135,6 +180,7 @@ services. Do not mount the harness's configuration files into host Docker by pat
 
 ```sh
 cd ~/project/blog
+docker compose run --rm credentials
 docker compose run --rm -T proxy-config < nginx-bootstrap.conf
 docker compose up -d db wordpress proxy
 docker compose exec -T proxy nginx -t
@@ -241,8 +287,9 @@ process or a Docker socket mount in nginx. Check `certbot renew --dry-run` and t
 The four-hour trial still deletes the entire workspace when it expires.
 
 Write `~/.config/workspaced/instructions/blog.md` as a shared instruction. Include the actual
-HTTPS URL, Compose directory/project, service and volume names, and renewal procedure. Record
-secret names only. Include **tested, copyable commands** for:
+HTTPS URL, Compose directory/project, service and volume names, and renewal procedure. Explain that database credentials were
+generated automatically and persist in the credentials volume; never include their values.
+Record the two admin secret names only. Include **tested, copyable commands** for:
 
 - Listing posts with `docker compose run --rm cli post list --post_status=publish --fields=ID,post_title,post_date --format=table`.
 - Publishing an HTML article from standard input using the same successful command as the welcome
@@ -262,6 +309,7 @@ Point out **Settings → Instructions → blog** and the real Firewall rules. Ne
 password, token or TLS private key.
 
 References: https://hub.docker.com/_/wordpress,
+https://hub.docker.com/_/mariadb,
 https://developer.wordpress.org/cli/commands/core/install/,
 https://developer.wordpress.org/cli/commands/post/create/,
 https://letsencrypt.org/2026/03/11/shorter-certs-certbot/
