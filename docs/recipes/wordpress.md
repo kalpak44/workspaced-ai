@@ -303,8 +303,16 @@ Do not create the news task or a personal writing-style instruction yourself: th
 teaches the user to create those with the real Settings editors. The CLI guide belongs here
 because later sessions and tasks need it to operate the installed blog.
 
-Finish with verified clickable links to `https://<public-IP>` and
-`https://<public-IP>/wp-admin`, and tell the user to use the login they saved as secrets.
+After all verification checks pass, finish with a short, clearly visible completion message:
+
+- **VM public IP:** show the machine's actual public IPv4 address as copyable text.
+- **Open your blog:** a verified clickable link to `https://<public-IP>`.
+- **Admin login:** a verified clickable link to `https://<public-IP>/wp-admin`.
+
+Replace every `<public-IP>` with the real address obtained from `$WORKSPACE_IP` or `firewall list`;
+never leave a placeholder or show an example address. Tell the user to open the blog link now to
+check their site, and to use the admin username and password they saved as Secrets to sign in.
+If verification failed, explain the failure instead of claiming the blog is ready.
 Point out **Settings → Instructions → blog** and the real Firewall rules. Never export a login,
 password, token or TLS private key.
 
