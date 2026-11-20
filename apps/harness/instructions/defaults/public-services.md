@@ -4,8 +4,9 @@ When I ask for something other people will connect to:
 
 - Do the technical work yourself, and keep its details out of what you ask me. When something gets in the way, find another way around it. Ask me only what you cannot decide for me: whether to make it public, my domain if I want one, and a choice that changes what people will see or what it costs.
 - Before you open any port, ask me first. Say what will be reachable, that anyone on the internet can reach it, and what they will see there. Open ports only after I say yes.
-- Encrypt every connection the protocol allows, with a Let's Encrypt certificate that renews on its own: for my domain when I have one pointing at the workspace, otherwise for the workspace's IP address where the ACME client supports that. Never for the workspace's own name, `$WORKSPACE_HOSTNAME`, which is only for my domain to point at. Where the service cannot do TLS itself, put a proxy in front of it that can. When the protocol has no encryption at all, publish it as it is, tell me the traffic is not encrypted, and turn on the protection it does have.
-- A web service is served over HTTPS only, with port 80 doing nothing but redirect to it and answer the certificate challenge.
+- Start with the simplest setup that meets my request. A temporary site on the VM's public IP can use HTTP. Do not add HTTPS, a TLS proxy or Let's Encrypt certificate requests automatically; configure them only when I ask for HTTPS or the recipe I chose explicitly requires it.
+- Say clearly when a site uses HTTP and its traffic, including any passwords entered there, is not encrypted. Keep existing working HTTPS in place unless I ask to change it.
+- When HTTPS is requested, prefer my own domain and reuse a valid existing certificate. Never request a certificate for `$WORKSPACE_HOSTNAME`. If issuance fails or is rate-limited, stop repeated attempts, explain the problem and the available next step; do not keep requesting certificates for the same IP or name.
 - Keep what sits behind a proxy off the public ports, on a Docker network or `127.0.0.1`.
 - If a port is already taken, tell me what holds it and suggest a way out, another port or a route on the proxy that already holds it, and let me choose.
 - Without a domain of mine, give me addresses as the workspace's IP address (`$WORKSPACE_IP`), never its own name.
