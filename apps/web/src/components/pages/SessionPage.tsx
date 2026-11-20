@@ -5,7 +5,7 @@ import { useSessions } from "../../hooks/useSessions";
 import { useSessionAgents } from "../../hooks/useSessionAgents";
 import { FileLinkContext, useSessionFiles } from "../../hooks/useSessionFiles";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { reportChatBusy } from "../../lib/tour";
+import { reportChatBusy, reportChatCheckpoint, reportTourAction } from "../../lib/tour";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
 import { ChatAgentPicker } from "../organisms/ChatAgentPicker";
@@ -42,7 +42,12 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   useEffect(() => {
     // Idle before history arrives, or after an error, is not a completed deployment.
     const answered = chat.messages.some((message) => message.role === "assistant" && message.parts.some((part) => part.type === "text" && part.text?.trim()));
-    reportChatBusy(sessionId, !ready || chat.loading || chat.busy || !!chat.error || !answered);
+    const waiting = !ready || chat.loading || chat.busy || !!chat.error || !answered;
+    reportChatBusy(sessionId, waiting);
+    const lastUser = chat.messages.findLastIndex((message) => message.role === "user");
+    const reply = chat.messages.slice(lastUser + 1).filter((message) => message.role === "assistant")
+      .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text ?? "")).join("\n");
+    reportChatCheckpoint(sessionId, waiting ? "" : reply);
   }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages]);
 
   // A session that is not in the list was deleted, or the link was wrong.
@@ -79,7 +84,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           onEdit={chat.edit}
           onSend={async (text) => {
             const sent = await chat.send(files.withAttachments(text));
-            if (sent) files.clear();
+            if (sent) { files.clear(); reportTourAction({ type: "message-sent", workspaceId: workspace.id, sessionId }); }
             return sent;
           }}
           onStop={chat.stop}

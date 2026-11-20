@@ -3,7 +3,7 @@ import { useAccount } from "../../hooks/useAccount";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
 import { useWorkspaces } from "../../hooks/useWorkspaces";
-import { setTourProgress, useTourProgress } from "../../lib/tour";
+import { reportTourAction, setTourProgress, TOUR_STEP, useTourProgress } from "../../lib/tour";
 import { DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
 import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, DemoTour, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
@@ -54,7 +54,11 @@ export function WorkspacesPage() {
   // The API sends a new account's first sign-in to `/?welcome`, and its welcome mail links to
   // `/?tour`; both are read before any redirect drops them.
   const [tourAsked, setTourAsked] = useState(() => ["welcome", "tour"].some((parameter) => new URLSearchParams(globalThis.location.search).has(parameter)));
-  const openNew = () => setNewName(suggestName());
+  const openNew = () => {
+    setNewName(tour ? "" : suggestName());
+    reportTourAction({ type: "workspace-form-opened" });
+  };
+  const openRestart = (id: string) => { setRestartId(id); reportTourAction({ type: "restart-dialog-opened", workspaceId: id }); };
   const { account } = useAccount();
   const tour = useTourProgress();
   const demo = workspaces.find((w) => w.demo) ?? null;
@@ -63,6 +67,10 @@ export function WorkspacesPage() {
   const startTour = () => {
     setTourProgress({ step: 0 });
   };
+
+  useEffect(() => {
+    if (tour?.step === TOUR_STEP.NAME && newName === null) setNewName("");
+  }, [tour?.step, newName]);
 
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
@@ -122,7 +130,7 @@ export function WorkspacesPage() {
     tabTitle = "Workspaces";
     page = (
       <WorkspacesOverview workspaces={workspaces} loading={loading} deleting={deleting} onNew={openNew}
-        onRename={rename} onRestart={setRestartId} onDelete={setDeleteId}
+        onRename={rename} onRestart={openRestart} onDelete={setDeleteId}
         onStartTour={demoAvailable && !tour ? startTour : undefined} />
     );
   } else if (!workspace) {
@@ -140,7 +148,7 @@ export function WorkspacesPage() {
         workspace={workspace}
         section={route.section}
         onChanged={(changes) => patch(workspace.id, changes)}
-        onRestart={() => setRestartId(workspace.id)}
+        onRestart={() => openRestart(workspace.id)}
       />
     );
   } else if (route.name === "monitoring") {
@@ -181,7 +189,7 @@ export function WorkspacesPage() {
     page = (
       <>
         <WorkspaceHeader workspace={workspace} workspaces={workspaces} current={view} deleting={deleting.has(workspace.id)}
-          onRestart={() => setRestartId(workspace.id)} onRename={(name) => rename(workspace.id, name)}
+          onRestart={() => openRestart(workspace.id)} onRename={(name) => rename(workspace.id, name)}
           onDelete={() => setDeleteId(workspace.id)} onNew={openNew} />
         {page}
       </>
@@ -189,7 +197,7 @@ export function WorkspacesPage() {
   }
 
   return (
-    <AppLayout
+    <AppLayout guided={!!tour}
       header={<TopBar theme={theme} onThemeChange={setTheme} storeOpen={route.name === "store" || route.name === "recipe"} onSearch={() => setPaletteOpen(true)}
         workspacesOpen={route.name === "home"} onNewWorkspace={openNew} />}
       notice={(demo || error) && (
@@ -205,6 +213,7 @@ export function WorkspacesPage() {
       {newName !== null && (
         <CreateWorkspaceDialog
           initialName={newName}
+          onNameChosen={tour ? (name) => { setNewName(null); reportTourAction({ type: "workspace-named", name }); } : undefined}
           onCreate={(request) =>
             create(request, (created) =>
               navigate({ name: "workspace", workspaceId: created.id }),
@@ -215,16 +224,18 @@ export function WorkspacesPage() {
             launch(id, key, (created) => navigate({ name: "workspace", workspaceId: created.id }))
           }
           onDiscard={discardDraft}
-          onClose={() => setNewName(null)}
+          onClose={() => { setNewName(null); reportTourAction({ type: "workspace-form-closed" }); }}
         />
       )}
-      <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key) => launch(id, key)} />
+      <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key) => launch(id, key)}
+        onExit={() => { setNewName(null); setTourProgress(null); }} />
       {restartTarget && (
         <RestartWorkspaceDialog
           name={restartTarget.name}
-          onClose={() => setRestartId(null)}
+          onClose={() => { setRestartId(null); reportTourAction({ type: "restart-cancelled" }); }}
           onConfirm={() => {
             restart(restartTarget.id);
+            reportTourAction({ type: "restart-confirmed", workspaceId: restartTarget.id });
             setRestartId(null);
           }}
         />

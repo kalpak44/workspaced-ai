@@ -101,43 +101,47 @@ harness image before the shell defaults change.
 
 ## Guided WordPress trial
 
-The tutorial opens automatically on a new account's first successful sign-in (`/?welcome`).
-Returning sign-ins land at `/` and do not reopen it. An unfinished tutorial resumes on reload;
-skipping or finishing clears its progress. Eligible accounts can also start it manually from
-the home-page invitation or `/?tour`.
-The tutorial explains a workspace, connects the owner's OpenRouter account with PKCE,
-then presents the live VM catalogue. Only its cheapest available size is enabled for the
-trial; other sizes explain whether they are sold out or excluded from the free trial.
-The server chooses again at launch if capacity has changed. The machine runs for four
-hours with no platform billing; OpenRouter bills the owner's AI usage separately.
-Before creation, a required checkbox acknowledges permanent deletion of the workspace and
-its data after four hours and that the trial is not for production. The create action stays
-disabled until checked; consent must be given again after reloading before launch.
+The tour starts automatically on a new account's first successful sign-in (`/?welcome`), with
+no opt-in prompt. Returning sign-ins do not restart it. A full-screen guide reserves space for
+its explanation and controls, leaving the real app visible and interactive between them. It
+spotlights the current control. Users can act directly or use Next to demonstrate a click or
+type an example, edit it, and continue. User-written values are preserved; simulated typing
+stops if they edit the field, leave the screen or skip. Reduced-motion preferences disable the
+typing animation. Guide chrome and app dialogs resize together on mobile and desktop.
 
-The tour opens the public WordPress recipe, collects admin username/password as write-only
-secrets, generates a separate database secret and restarts the workspace before applying
-the recipe. It waits for an agent reply and asks the owner to check the public HTTPS IP link.
-WordPress sits behind an nginx TLS proxy with a trusted Let's Encrypt IP certificate;
-port 80 serves ACME challenges and redirects other traffic to HTTPS. Certbot 5.4+
-uses the shortlived profile, and a workspace service checks renewal every 12 hours.
-The recipe verifies certificate trust and never falls back to insecure HTTP.
-It then schedules sourced technology news every five minutes, explains its OpenRouter
-usage and deletion control, and returns to chat with an editable design suggestion.
-The owner sends that last request themselves.
+Only OpenRouter authentication and trial machine selection are custom. The real New workspace
+name form hands off to OpenRouter, followed by the cheapest available VM. Other sizes are
+visible but disabled. The server selects the cheapest available size again at launch. A required
+checkbox acknowledges permanent deletion after four hours and no production use. The VM is
+free; OpenRouter bills the user's own account for AI usage. There is no automatic paid upgrade.
 
-Progress and draft/session/workspace identifiers persist across reloads. Keys, passwords
-and typed credentials never enter tour storage. Reloading before launch requires reconnecting
-OpenRouter. A partial secrets save can be retried; saved values are not overwritten.
+Everything after that uses the ordinary app controls: Store, Private, New recipe, Public,
+WordPress recipe card, Apply, workspace picker, conversation, Settings, Secrets, restart
+confirmation, Firewall, Tasks and Instructions. The guide advances on accepted mutations or
+actual navigation; a failed request does not count as completing a step. It reads saved secrets
+and firewall rules to recover after reloads and reopens transient local forms when needed.
 
-Migration V42 updates the starter WordPress instructions and Pavel Usanli byline without
-changing V41's checksum. The WordPress recipe transfers from its seed account to
-`pavel.usanli@gmail.com` on that account's next verified sign-in. The six optional recipes imported from `docs/recipes` use the same publisher; the original
-platform examples remain owned by the seed account.
+V45 replaces the WordPress recipe with the versioned `docs/recipes/wordpress.md` snapshot. It
+contains Compose/nginx templates, image-digest pinning, private database/WordPress containers,
+Let's Encrypt IP TLS, renewal, verification and a shared CLI publishing guide. It first pauses
+for secrets and restart, then pauses again for the user to open TCP 80 and 443 through Firewall.
+The agent does not open ports itself. The user resumes the same conversation after each pause.
+Retries keep existing content, volumes and certificates. Earlier migration checksums stay intact.
 
-Migration V43 upgrades the WordPress recipe to HTTPS without modifying V41 or V42.
-It also requires a shared `blog.md` instruction with tested WP-CLI examples for listing posts,
-publishing an article from standard input, saving drafts and publishing them later. The news
-task explicitly reads that instruction before publishing.
+The user creates the news task through the real Tasks editor. Next can type the name, a five-minute
+schedule and a sourced-news prompt, leaving all values editable before Save. Each run spends
+OpenRouter credit. The user then inspects the recipe's `blog` instruction and creates their own
+`writing-style` (or custom-named) shared instruction with the ordinary name form and editor.
+A plain-language example is typed only into an empty editor. Saved instructions apply from the
+agent's next message and are available to future sessions and tasks. Finally, the user edits
+and sends a design request themselves; the tour does not auto-send it.
+
+Non-secret progress, names and workspace/session identifiers persist in `workspaced.tour.v3`.
+An active v2 tour is migrated without provisioning another workspace. Passwords and keys never
+enter tour storage. Reloading before launch requires reconnecting OpenRouter. Finishing sends
+one in-app completion notification with the deletion deadline, followed by the existing warning
+before expiry and confirmation after successful deletion. These alerts send no email. Skipping
+does not send a completion notification.
 
 ## Optional Store recipes
 

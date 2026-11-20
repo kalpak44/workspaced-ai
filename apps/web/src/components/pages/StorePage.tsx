@@ -1,6 +1,7 @@
 import { Globe, Lock, SearchX, Store, Trash2 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { createRecipe, deleteRecipe, importRecipe, type Recipe, type RecipeCategory, type RecipeScope, type RecipeSort, useRecipes } from "../../hooks/useRecipes";
+import { reportTourAction } from "../../lib/tour";
 import { navigate } from "../../hooks/useRoute";
 import { Button, CATEGORIES, Select, Skeleton } from "../atoms";
 import { EmptyState, FilterChips, Modal, ModalBody, ModalFooter, PageHeader, Pagination, RecipeCard, SearchField, Tabs } from "../molecules";
@@ -102,7 +103,7 @@ export function StorePage() {
             <Tabs
               label="Recipes"
               value={scope}
-              onChange={setScope}
+              onChange={(scope) => { setScope(scope); reportTourAction({ type: "store-scope", value: scope }); }}
               tabs={[
                 { value: "public", label: "Public", icon: Globe },
                 { value: "private", label: "Private", icon: Lock },

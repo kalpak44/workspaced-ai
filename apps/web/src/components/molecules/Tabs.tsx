@@ -20,6 +20,7 @@ export function Tabs<T extends string>({ label, tabs, value, onChange }: Props<T
       {tabs.map(({ value: tab, label: name, icon: Icon }) => (
         <button
           key={tab}
+          data-tab={tab}
           type="button"
           role="tab"
           aria-selected={tab === value}

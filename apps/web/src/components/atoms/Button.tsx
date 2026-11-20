@@ -3,6 +3,7 @@ import { Spinner } from "./Spinner";
 
 interface Props {
   readonly label: string;
+  readonly tourId?: string;
   readonly onClick?: () => void;
   readonly icon?: LucideIcon;
   /** Primary is inverted against the page; secondary is a quiet outline. */
@@ -25,6 +26,7 @@ const VARIANTS = {
 
 export function Button({
   label,
+  tourId,
   onClick,
   icon: Icon,
   variant = "primary",
@@ -35,6 +37,7 @@ export function Button({
 }: Props) {
   return (
     <button
+      data-tour={tourId}
       // A literal per branch: the button type is never computed from a prop at render time.
       type={type === "submit" ? "submit" : "button"}
       onClick={onClick}

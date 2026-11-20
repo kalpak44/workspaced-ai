@@ -29,7 +29,7 @@ export function RestartWorkspaceDialog({ name, onConfirm, onClose }: Props) {
       </ModalBody>
       <ModalFooter>
         <Button label="Cancel" variant="secondary" onClick={onClose} autoFocus />
-        <Button label="Restart workspace" icon={RotateCw} onClick={onConfirm} />
+        <Button tourId="confirm-restart" label="Restart workspace" icon={RotateCw} onClick={onConfirm} />
       </ModalFooter>
     </Modal>
   );

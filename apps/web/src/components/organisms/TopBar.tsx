@@ -60,6 +60,7 @@ export function TopBar({ theme, onThemeChange, storeOpen = false, onSearch, work
           <span className="max-sm:sr-only">Workspaces</span>
         </a>
         <a
+          data-tour="open-store"
           href="/store"
           aria-current={storeOpen ? "page" : undefined}
           onClick={(event) => {
@@ -72,7 +73,7 @@ export function TopBar({ theme, onThemeChange, storeOpen = false, onSearch, work
           <span className="max-sm:sr-only">Store</span>
         </a>
         {onNewWorkspace && (
-          <button type="button" aria-label="New workspace" title="New workspace" onClick={onNewWorkspace}
+          <button data-tour="new-workspace" type="button" aria-label="New workspace" title="New workspace" onClick={onNewWorkspace}
             className="flex items-center gap-1.5 rounded-md p-1.5 text-sm font-medium text-zinc-500 transition-colors hover:bg-zinc-100 hover:text-zinc-900 sm:rounded-lg sm:bg-zinc-900 sm:px-2.5 sm:text-white sm:shadow-sm sm:hover:bg-zinc-700 sm:hover:text-white dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100 sm:dark:bg-white sm:dark:text-zinc-900 sm:dark:hover:bg-zinc-200 sm:dark:hover:text-zinc-900">
             <Plus aria-hidden className="size-4" /><span aria-hidden className="hidden lg:inline">New workspace</span>
           </button>

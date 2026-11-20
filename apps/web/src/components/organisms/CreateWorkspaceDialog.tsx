@@ -112,6 +112,8 @@ function BalanceHint({ billing, size, onClose }: { readonly billing: Billing; re
 
 interface Props {
   readonly initialName: string;
+  /** The tour uses the real name form, then its separate OpenRouter and trial-size steps. */
+  readonly onNameChosen?: (name: string) => void;
   /** Resolves "created" once it exists; on anything else the dialog stays and keeps its input. */
   readonly onCreate: (workspace: NewWorkspace) => Promise<CreateResult>;
   /** Reserves the id OpenRouter's key is labelled with, before the key exists. */
@@ -134,7 +136,7 @@ interface Props {
  * launched once the key arrives. A draft the dialog leaves without launching is discarded. A user who pays for workspaces sees, with the size, how long the balance
  * lasts with it among their others, since the API refuses one the balance cannot pay a month of.
  */
-export function CreateWorkspaceDialog({ initialName, onCreate, onDraft, onLaunch, onDiscard, onClose }: Props) {
+export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onDraft, onLaunch, onDiscard, onClose }: Props) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initialName);
   const [serverType, setServerType] = useState("");
@@ -269,6 +271,10 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onDraft, onLaunch
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
+    if (step === 0 && onNameChosen) {
+      if (name.trim()) onNameChosen(name.trim());
+      return;
+    }
     if (step < LAST) {
       setStep(step + 1);
       return;
@@ -421,13 +427,13 @@ export function CreateWorkspaceDialog({ initialName, onCreate, onDraft, onLaunch
   return (
     <Modal
       title="New workspace"
-      description="Name it, choose the VM it runs on, then connect the model provider its agent will use."
+      description={onNameChosen ? "Name it, connect OpenRouter, then confirm the free trial machine." : "Name it, choose the VM it runs on, then connect the model provider its agent will use."}
       onClose={close}
     >
-      <form onSubmit={submit} className="flex min-h-0 flex-col overflow-hidden">
+      <form data-tour="workspace-name-form" onSubmit={submit} className="flex min-h-0 flex-col overflow-hidden">
         <ModalBody>
           <ol aria-label="Steps" className="flex items-center gap-2 text-xs font-medium">
-            {STEPS.map((label, index) => {
+            {(onNameChosen ? ["Name", "OpenRouter", "Trial machine"] : STEPS).map((label, index) => {
               const reached = index <= step;
               return (
                 <li

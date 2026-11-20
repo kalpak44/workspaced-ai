@@ -17,12 +17,12 @@ async function signedInAt(path: string, { demoAvailable = true, workspaces = tru
 describe("welcome", () => {
   it("opens the tutorial automatically on the first-login callback and drops the parameter", async () => {
     await signedInAt("/?welcome");
-    const dialog = await screen.findByRole("dialog", { name: "Welcome to workspaced" });
+    const dialog = await screen.findByRole("region", { name: "Guided tour" });
     expect(dialog).toHaveTextContent("Guided tour");
     expect(dialog).toHaveTextContent("Just click Next");
-    expect(dialog).toHaveTextContent("which OpenRouter bills separately");
+    expect(dialog).toHaveTextContent("OpenRouter bills your AI usage separately");
     expect(globalThis.location.pathname + globalThis.location.search).toBe("/");
-    await userEvent.setup().click(within(dialog).getByRole("button", { name: "Skip tour" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Skip tour" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 

@@ -1,3 +1,4 @@
+import { reportTourAction } from "../../lib/tour";
 import { FileText, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { INSTRUCTION_NAME, useInstructions } from "../../hooks/useInstructions";
@@ -62,6 +63,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
     if (!newName || nameError) return;
     setBusy(true);
     if (await save(newName, "")) {
+      reportTourAction({ type: "instruction-created", workspaceId, name: newName });
       setSelected(newName);
       setNewName(null);
       setNotice("Created. New chats are given it; chats already open, once the workspace restarts.");
@@ -78,6 +80,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
     if (saved) {
       setDrafts(({ [file.name]: _, ...rest }) => rest);
       setNotice("Saved. The agent uses them from its next message.");
+      reportTourAction({ type: "instruction-saved", workspaceId, name: file.name });
     } else {
       setNotice("Could not save the instructions. Please try again.");
     }
@@ -105,7 +108,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
         <nav aria-label="Instruction files" className="flex shrink-0 flex-col gap-1 md:w-56">
           {files.map(({ name }) => (
             <div key={name} className={`group relative flex min-w-0 items-center rounded-md ${name === selected ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-100/70 dark:text-zinc-400 dark:hover:bg-zinc-800/50"}`}>
-              <button type="button" aria-current={name === selected ? "page" : undefined}
+              <button data-instruction={name} type="button" aria-current={name === selected ? "page" : undefined}
                 onClick={() => { setSelected(name); setNotice(""); }}
                 className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm font-medium">
                 <FileText aria-hidden className="size-4 shrink-0" />
@@ -117,7 +120,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
             </div>
           ))}
           {newName === null ? (
-            <button type="button" onClick={() => { setNewName(""); setNotice(""); }}
+            <button data-tour="new-instruction" type="button" onClick={() => { setNewName(""); setNotice(""); reportTourAction({ type: "instruction-form-opened", workspaceId }); }}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900">
               <Plus aria-hidden className="size-4" />New instructions
             </button>
@@ -141,7 +144,7 @@ export function InstructionsPanel({ workspaceId }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{file.name}.md · {draft.length.toLocaleString()} characters</p>
                 <div className="flex gap-2">
-                  <Button label="Save" busy={busy && deleteTarget === null} disabled={draft === file.content} onClick={() => void submit()} />
+                  <Button tourId="save-instruction" label="Save" busy={busy && deleteTarget === null} disabled={draft === file.content} onClick={() => void submit()} />
                 </div>
               </div>
             </>

@@ -22,6 +22,8 @@ import org.springframework.context.annotation.Import;
 class StarterRecipesTest {
   private static final Map<String, String> SOURCES =
       Map.of(
+          "wordpress",
+          "b001",
           "gmail",
           "b006",
           "google-calendar",

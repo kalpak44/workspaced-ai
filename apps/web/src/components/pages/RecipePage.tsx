@@ -4,6 +4,7 @@ import { useAccount } from "../../hooks/useAccount";
 import { startRecipeSession, useRecipe } from "../../hooks/useRecipes";
 import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
+import { reportTourAction } from "../../lib/tour";
 import { applyPrompt, authorName, draftName, revisePrompt, serializeDraft } from "../../lib/recipes";
 import { Button, CategoryTile, Stars, Tag, categoryLabel } from "../atoms";
 import { EmptyState, Markdown, Modal, ModalBody, ModalFooter, PageHeader, RatingInput } from "../molecules";
@@ -54,7 +55,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
         variant="bar"
         title={recipe.title}
         crumbs={[{ label: "Recipe store", onClick: back }]}
-        actions={<Button label="Apply" icon={Play} onClick={() => setDialog("apply")} />}
+        actions={<Button tourId="recipe-apply" label="Apply" icon={Play} onClick={() => { setDialog("apply"); reportTourAction({ type: "recipe-apply-opened" }); }} />}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <article className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">

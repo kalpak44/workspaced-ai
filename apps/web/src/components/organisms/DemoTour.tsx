@@ -1,11 +1,15 @@
-import { ArrowRight, Sparkles } from "lucide-react";
-import { type KeyboardEvent as ReactKeyboardEvent, type ReactNode, useEffect, useRef, useState } from "react";
-import { addTrialSecret, applyTourRecipe, finishTour, isTrialReady, loadTrialMachines, loadTrialSecretNames, restartTrialWorkspace, scheduleTourTask, type VmSize } from "../../hooks/useDemoTour";
+import { ArrowRight, Check, Sparkles } from "lucide-react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
+import { finishTour, isTrialReady, loadTrialMachines, loadTrialSecretNames, trialPortIsOpen, type VmSize } from "../../hooks/useDemoTour";
 import { useOpenRouterConnect } from "../../hooks/useOpenRouterConnect";
-import { navigate } from "../../hooks/useRoute";
+import { navigate, useRoute } from "../../hooks/useRoute";
 import type { CreateResult, DraftResult, NewWorkspace, Workspace } from "../../hooks/useWorkspaces";
-import { setTourProgress, TOUR_DESIGN_PROMPT, TOUR_RECIPE_ID, TOUR_TASK, type TourProgress, typeInto, useChatBusy, useTourProgress } from "../../lib/tour";
-import { Button, Spinner, TextField } from "../atoms";
+import {
+  setTourProgress, subscribeTourActions, TOUR_DESIGN_PROMPT, TOUR_PORT_CONTINUE, TOUR_RECIPE_ID,
+  TOUR_SECRET_CONTINUE, TOUR_STEP as S, TOUR_STEP_COUNT, TOUR_STYLE, TOUR_STYLE_NAME, TOUR_TASK,
+  TOUR_WORKSPACE_NAME, type TourProgress, typeInto, useChatBusy, useChatCheckpoint, useTourProgress,
+} from "../../lib/tour";
+import { Button, Spinner } from "../atoms";
 import { timeLeft } from "../molecules/DemoBanner";
 
 interface Props {
@@ -13,462 +17,395 @@ interface Props {
   readonly loading: boolean;
   readonly onDraft: (workspace: Omit<NewWorkspace, "apiKey">) => Promise<DraftResult>;
   readonly onLaunch: (id: string, apiKey: string) => Promise<CreateResult>;
+  readonly onExit?: () => void;
 }
-
-const STEP = { WELCOME: 0, OPENROUTER: 1, BOX: 2, STARTING: 3, RECIPE: 4, SECRETS: 5, RESTART: 6, BUILDING: 7, VERIFY: 8, SCHEDULE: 9, TASKS: 10, DESIGN: 11, DONE: 12 } as const;
-const STEPS = 13;
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 const SECRET_USER = "WORDPRESS_ADMIN_USER";
 const SECRET_PASSWORD = "WORDPRESS_ADMIN_PASSWORD";
 const SECRET_DATABASE = "WORDPRESS_DB_PASSWORD";
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+const isOneOf = (step: number, ...steps: number[]) => steps.includes(step);
+const control = <T extends HTMLElement = HTMLElement,>(selector: string): T | null => document.querySelector<T>(selector);
 
-/** A guided creation flow followed by the real recipe, secrets, chat and task screens. */
 export function DemoTour(props: Props) {
   const progress = useTourProgress();
   return progress ? <Tour {...props} progress={progress} /> : null;
 }
 
-function Tour({ workspaces, loading, onDraft, onLaunch, progress }: Props & { readonly progress: TourProgress }) {
+function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress }: Props & { readonly progress: TourProgress }) {
   const { step, workspaceId, sessionId } = progress;
-  const demo = workspaces.find((w) => w.id === workspaceId) ?? null;
+  const route = useRoute();
+  const demo = workspaces.find((workspace) => workspace.id === workspaceId);
   const busy = useChatBusy(sessionId);
+  const checkpoint = useChatCheckpoint(sessionId);
   const [working, setWorking] = useState(false);
-  const [trialConsent, setTrialConsent] = useState(false);
+  const [acting, setActing] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
-  const [typed, setTyped] = useState("");
-  const draftId = useRef(progress.draftId);
-  // Keys and credentials stay in memory only, never in the persisted tour progress.
-  const key = useRef<string | null>(null);
-  const active = useRef(true);
-  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  const [note, setNote] = useState<string | null>(null);
   const [sizes, setSizes] = useState<readonly VmSize[] | null>(null);
-  const [username, setUsername] = useState("");
-  const [password, setPassword] = useState("");
-  const [savedSecrets, setSavedSecrets] = useState<readonly string[] | null>(null);
-  const [restarted, setRestarted] = useState(false);
+  const [consent, setConsent] = useState(false);
+  const [ready, setReady] = useState(false);
+  const [checking, setChecking] = useState(false);
+  const key = useRef<string | null>(null);
+  const draft = useRef(progress.draftId);
+  const active = useRef(true);
+  const typing = useRef<AbortController | null>(null);
   const cheapest = sizes?.filter((size) => size.available).toSorted((a, b) => a.monthlyGross - b.monthlyGross || a.serverType.localeCompare(b.serverType))[0];
-
-  const go = (next: Partial<TourProgress>) => {
+  const exit = () => { typing.current?.abort(); onExit?.(); setTourProgress(null); };
+  const go = (next: number, extra: Partial<TourProgress> = {}) => {
     if (!active.current) return;
-    setProblem(null);
-    setTourProgress({ ...progress, ...next });
-  };
-
-  const openRouter = useOpenRouterConnect((apiKey) => {
-    key.current = apiKey;
-    go({ step: STEP.BOX, draftId: draftId.current });
-  });
-
-  const keyLabel = async (): Promise<string | null> => {
-    if (!draftId.current) {
-      const result = await onDraft({ name: "My WordPress trial", serverType: "", modelProvider: "openrouter", demo: true }).catch((): DraftResult => "failed");
-      if (typeof result !== "object") {
-        setProblem("The free trial could not be prepared. It may be unavailable, or this account has already used its trial. Try again later.");
-        return null;
-      }
-      draftId.current = result.id;
-      go({ draftId: result.id });
-    }
-    return `workspaced trial: ${draftId.current}`;
-  };
-
-  const loadSizes = () => {
-    setProblem(null);
-    void loadTrialMachines().then(setSizes).catch(() => setProblem("Machine sizes could not be loaded. Click Refresh machines to retry."));
+    setProblem(null); setNote(null);
+    setTourProgress({ ...progress, step: next, ...extra });
   };
   useEffect(() => {
-    if (step === STEP.BOX) loadSizes();
+    active.current = true;
+    return () => { active.current = false; typing.current?.abort(); };
+  }, []);
+  useEffect(() => { setNote(null); setProblem(null); }, [step]);
+
+  // Accepted mutations advance the guide; clicking a button or a failed request does not.
+  useEffect(() => subscribeTourActions((action) => {
+    if (action.workspaceId && workspaceId && action.workspaceId !== workspaceId) return;
+    if (action.type === "workspace-form-opened" && step === S.WELCOME) go(S.NAME);
+    if (action.type === "workspace-form-closed" && step === S.NAME) go(S.WELCOME);
+    if (action.type === "workspace-named" && step === S.NAME) go(S.OPENROUTER, { name: action.name });
+    if (action.type === "store-scope" && step === S.PRIVATE && action.value === "private") go(S.OWN);
+    if (action.type === "store-scope" && step === S.PUBLIC && action.value === "public") go(S.FIND_RECIPE);
+    if (action.type === "recipe-apply-opened" && (step === S.REVIEW || step === S.APPLY)) go(S.PICK);
+    if (action.type === "task-form-opened" && step === S.NEW_TASK) go(S.TASK_NAME);
+    if (action.type === "instruction-form-opened" && step === S.NEW_INSTRUCTION) go(S.INSTRUCTION_NAME);
+    if (action.type === "secret-saved") {
+      if (step === S.ADMIN_USER && action.name === SECRET_USER) go(S.ADMIN_PASSWORD);
+      if (step === S.ADMIN_PASSWORD && action.name === SECRET_PASSWORD) go(S.DB_PASSWORD);
+      if (step === S.DB_PASSWORD && action.name === SECRET_DATABASE) go(S.RESTART);
+    }
+    if (action.type === "restart-dialog-opened" && step === S.RESTART) go(S.CONFIRM_RESTART);
+    if (action.type === "restart-cancelled" && step === S.CONFIRM_RESTART) go(S.RESTART);
+    if (action.type === "restart-confirmed" && step === S.CONFIRM_RESTART) go(S.RESTARTING);
+    if (action.type === "message-sent" && action.sessionId === sessionId) {
+      if (step === S.RESUME_SECRETS) go(S.BUILD);
+      if (step === S.RESUME_PORTS) go(S.DEPLOY);
+    }
+    if (action.type === "port-opened" && workspaceId && action.value === "tcp"
+        && ((step === S.HTTP && action.name === "80") || (step === S.HTTPS && action.name === "443"))) {
+      void trialPortIsOpen(workspaceId, action.name).then((open) => {
+        if (open) go(step === S.HTTP ? S.HTTPS : S.PORT_REVIEW);
+        else setProblem("This demo needs the port reachable from Anyone. Check the rule's From field.");
+      }).catch(() => setProblem("Could not verify the saved firewall rule. Check the rules and retry."));
+    }
+    if (action.type === "task-created" && step === S.TASK_NAME) go(S.TASK_CONFIG, { taskName: action.name });
+    if (action.type === "task-saved" && step === S.TASK_CONFIG && action.name === progress.taskName) go(S.TASK_SAVED);
+    if (action.type === "instruction-created" && step === S.INSTRUCTION_NAME) go(S.INSTRUCTION_EDIT, { instructionName: action.name });
+    if (action.type === "instruction-saved" && step === S.INSTRUCTION_EDIT && action.name === progress.instructionName) go(S.INSTRUCTION_SAVED);
+  }), [step, workspaceId, sessionId, progress]);
+
+  // Real navigation also works when the user clicks without the guide's Next button.
+  useEffect(() => {
+    const settings = route.name === "settings" && route.workspaceId === workspaceId;
+    const sessions = route.name === "workspace" && route.workspaceId === workspaceId;
+    const chat = route.name === "session" && route.workspaceId === workspaceId && route.sessionId === sessionId;
+    if (step === S.STORE && route.name === "store") go(S.PRIVATE);
+    if (step === S.FIND_RECIPE && route.name === "recipe" && route.recipeId === TOUR_RECIPE_ID) go(S.REVIEW);
+    if (step === S.PICK && route.name === "session" && route.workspaceId === workspaceId) go(S.REQUEST_SECRETS, { sessionId: route.sessionId });
+    if (settings && isOneOf(step, S.SETTINGS, S.PORT_SETTINGS, S.TASK_SETTINGS)) go(step === S.SETTINGS ? S.SECRETS : step === S.PORT_SETTINGS ? S.FIREWALL : S.TASKS);
+    if (settings && step === S.SECRETS && route.section === "secrets") go(S.ADMIN_USER);
+    if (settings && step === S.FIREWALL && route.section === "firewall") go(S.HTTP);
+    if (settings && step === S.TASKS && route.section === "tasks") go(S.NEW_TASK);
+    if (settings && step === S.INSTRUCTIONS && route.section === "instructions") go(S.BLOG_GUIDE);
+    if (sessions && isOneOf(step, S.SESSIONS, S.PORT_SESSIONS, S.DESIGN_SESSIONS)) go(step + 1);
+    if (chat && isOneOf(step, S.SESSION, S.PORT_SESSION, S.DESIGN_SESSION)) go(step + 1);
+  }, [route, step, workspaceId, sessionId]);
+
+  // Reopen transient app forms after reload. These controls do not save anything themselves.
+  useEffect(() => {
+    const restore = () => {
+      const pair = step === S.PICK ? ['[data-tour="workspace-picker-confirm"]', '[data-tour="recipe-apply"]']
+        : step === S.TASK_NAME ? ['#task-name', '[data-tour="new-task"]']
+        : step === S.INSTRUCTION_NAME ? ['#instructions-name', '[data-tour="new-instruction"]']
+        : step === S.CONFIRM_RESTART ? ['[data-tour="confirm-restart"]', '[data-tour="restart-workspace"]'] : null;
+      if (pair && !control(pair[0])) control<HTMLButtonElement>(pair[1])?.click();
+    };
+    restore(); const timer = setInterval(restore, 250);
+    return () => clearInterval(timer);
   }, [step]);
 
+  // Restore the relevant screen on reload without replacing normal user navigation on each render.
   useEffect(() => {
-    if (step === STEP.STARTING && workspaceId) navigate({ name: "workspace", workspaceId });
-    if (step === STEP.RECIPE) navigate({ name: "recipe", recipeId: TOUR_RECIPE_ID });
-    if ((step === STEP.SECRETS || step === STEP.RESTART) && workspaceId) navigate({ name: "settings", workspaceId, section: "secrets" });
-    if ((step === STEP.BUILDING || step === STEP.VERIFY || step === STEP.DESIGN || step === STEP.DONE) && workspaceId && sessionId) navigate({ name: "session", workspaceId, sessionId });
-    if ((step === STEP.SCHEDULE || step === STEP.TASKS) && workspaceId) navigate({ name: "settings", workspaceId, section: "tasks" });
-  }, [step, workspaceId, sessionId]);
+    if (workspaceId && isOneOf(step, S.REQUEST_SECRETS, S.RESUME_SECRETS, S.BUILD, S.RESUME_PORTS, S.DEPLOY, S.VERIFY, S.DESIGN, S.DONE) && sessionId) {
+      navigate({ name: "session", workspaceId, sessionId });
+    } else if (workspaceId && step === S.STARTING) navigate({ name: "workspace", workspaceId });
+  }, []);
 
   useEffect(() => {
-    if (!loading && workspaceId && !demo) setTourProgress(null);
+    if (loading || !workspaceId || demo) return;
+    const timer = setTimeout(() => exit(), 3000);
+    return () => clearTimeout(timer);
   }, [loading, workspaceId, demo]);
 
-  const checkSecrets = () => {
-    if (!workspaceId) return;
-    setProblem(null);
-    void loadTrialSecretNames(workspaceId).then((secrets) => {
-      if (active.current) setSavedSecrets(secrets);
-    }).catch(() => { if (active.current) setProblem("Could not check secrets. Click Check secrets again to retry."); });
-  };
-
   useEffect(() => {
-    if (step !== STEP.SECRETS || !workspaceId) return;
+    if (!workspaceId || step !== S.RESTARTING) return;
     let live = true;
-    void loadTrialSecretNames(workspaceId).then((secrets) => {
-      if (live) setSavedSecrets(secrets);
-    }).catch(() => { if (live) setProblem("Could not check secrets. Click Check secrets again to retry."); });
-    return () => { live = false; };
-  }, [step, workspaceId]);
-
-  // A fresh list confirms the restart has completed, including after a page reload.
-  useEffect(() => {
-    if (step !== STEP.RESTART || !workspaceId) return;
-    let live = true;
-    const check = () => void isTrialReady(workspaceId).then((ready) => {
-      if (live) setRestarted(ready);
-    }).catch(() => { /* A reboot can briefly disconnect the workspace; keep waiting. */ });
-    check();
-    const timer = setInterval(check, 2500);
+    const check = () => void isTrialReady(workspaceId).then((value) => { if (live) setReady(value); }).catch(() => {});
+    check(); const timer = setInterval(check, 2500);
     return () => { live = false; clearInterval(timer); };
   }, [step, workspaceId]);
 
-  const launch = async () => {
-    if (!key.current || !draftId.current) { go({ step: STEP.OPENROUTER }); return; }
-    if (!trialConsent) return;
-    setWorking(true);
-    try {
-      const result = await onLaunch(draftId.current, key.current);
-      if (!active.current) return;
-      if (result === "created") {
-        key.current = null;
-        go({ step: STEP.STARTING, workspaceId: draftId.current });
-      } else if (result === "rejected") {
-        key.current = null;
-        go({ step: STEP.OPENROUTER });
-        setProblem("OpenRouter did not accept the connection. Connect again and check your OpenRouter credit.");
-      } else {
-        loadSizes();
-        setProblem("Your trial could not start. Refresh the machines and try again; no paid workspace is created.");
-      }
-    } catch { setProblem("Your trial could not start. Try again in a moment."); }
-    finally { setWorking(false); }
-  };
-
-  const saveSecrets = async () => {
-    if (!workspaceId || !savedSecrets) return;
-    setWorking(true);
-    try {
-      if (!savedSecrets.includes(SECRET_USER)) {
-        await addTrialSecret(workspaceId, SECRET_USER, username.trim());
-        setSavedSecrets((names) => [...(names ?? []), SECRET_USER]);
-        setUsername("");
-      }
-      if (!savedSecrets.includes(SECRET_PASSWORD)) {
-        await addTrialSecret(workspaceId, SECRET_PASSWORD, password);
-        setSavedSecrets((names) => [...(names ?? []), SECRET_PASSWORD]);
-        setPassword("");
-      }
-      if (!savedSecrets.includes(SECRET_DATABASE)) {
-        const bytes = crypto.getRandomValues(new Uint8Array(32));
-        await addTrialSecret(workspaceId, SECRET_DATABASE, Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""));
-        setSavedSecrets((names) => [...(names ?? []), SECRET_DATABASE]);
-      }
-      await restartTrialWorkspace(workspaceId);
-      go({ step: STEP.RESTART });
-    } catch { setProblem("Could not save the credentials or restart. Saved secrets are kept; click Next to retry the remaining step."); }
-    finally { setWorking(false); }
-  };
-
-  const applyRecipe = async () => {
+  // Reload recovery reads the server, including a mutation accepted just before a browser reload.
+  useEffect(() => {
     if (!workspaceId) return;
-    setWorking(true);
-    const session = await applyTourRecipe(workspaceId);
-    setWorking(false);
-    if (session) go({ step: STEP.BUILDING, sessionId: session });
-    else setProblem("The recipe could not be applied. Click Next to try again.");
-  };
-
-  const schedule = async () => {
-    if (!workspaceId || !demo) return;
-    setWorking(true);
-    const text = `Every 5 minutes: ${TOUR_TASK.prompt}`;
-    for (let length = 4; length < text.length + 4; length += 4) {
-      if (!active.current) return;
-      setTyped(text.slice(0, length));
-      await sleep(16);
+    let live = true;
+    const secret = step === S.ADMIN_USER ? SECRET_USER : step === S.ADMIN_PASSWORD ? SECRET_PASSWORD : step === S.DB_PASSWORD ? SECRET_DATABASE : null;
+    if (secret) {
+      setChecking(true);
+      void loadTrialSecretNames(workspaceId).then((names) => { if (live && names.includes(secret)) go(step + 1); })
+        .catch(() => { if (live) setProblem("Could not check saved secrets. Check the Secrets list before adding one."); })
+        .finally(() => { if (live) setChecking(false); });
     }
-    const saved = await scheduleTourTask(workspaceId, demo.timeZone);
-    setWorking(false);
-    if (saved) go({ step: STEP.TASKS });
-    else setProblem("The task could not be saved. Click Next to try again.");
-  };
+    if (step === S.HTTP || step === S.HTTPS) {
+      void trialPortIsOpen(workspaceId, step === S.HTTP ? "80" : "443").then((open) => { if (live && open) go(step === S.HTTP ? S.HTTPS : S.PORT_REVIEW); }).catch(() => {});
+    }
+    return () => { live = false; };
+  }, [step, workspaceId]);
 
-  const prepareDesign = async () => {
-    const field = document.querySelector<HTMLTextAreaElement>('textarea[aria-label="Message"]');
-    if (!field || field.disabled) { setProblem("The chat is still loading. Click Next again in a moment."); return; }
-    if (field.value.trim()) { go({ step: STEP.DONE }); return; }
+  const openRouter = useOpenRouterConnect((apiKey) => { key.current = apiKey; go(S.MACHINE, { draftId: draft.current }); });
+  const connect = () => openRouter.connect(async () => {
+    if (!draft.current) {
+      const result = await onDraft({ name: progress.name ?? TOUR_WORKSPACE_NAME, serverType: "", modelProvider: "openrouter", demo: true }).catch((): DraftResult => "failed");
+      if (typeof result !== "object") { setProblem("The free trial could not be prepared. It may be unavailable or already used by this account."); return null; }
+      draft.current = result.id;
+      setTourProgress({ ...progress, draftId: result.id });
+    }
+    return `workspaced trial: ${draft.current}`;
+  });
+  const loadSizes = () => void loadTrialMachines().then(setSizes).catch(() => setProblem("Could not load machines. Click Refresh machines to retry."));
+  useEffect(() => { if (step === S.MACHINE) loadSizes(); }, [step]);
+  const launch = async () => {
+    if (!key.current || !draft.current) { go(S.OPENROUTER); return; }
+    if (!consent || !cheapest) return;
     setWorking(true);
-    const complete = await typeInto(field, TOUR_DESIGN_PROMPT);
-    setWorking(false);
-    if (complete) go({ step: STEP.DONE });
-    else setProblem("The chat moved while typing. Click Next to try again.");
+    try {
+      const result = await onLaunch(draft.current, key.current);
+      if (result === "created") { key.current = null; go(S.STARTING, { workspaceId: draft.current }); navigate({ name: "workspace", workspaceId: draft.current }); }
+      else if (result === "rejected") { key.current = null; go(S.OPENROUTER); setProblem("OpenRouter refused the connection. Check your credit and reconnect."); }
+      else { loadSizes(); setProblem("The trial could not start. Refresh machines and try again. No paid workspace is created."); }
+    } catch { setProblem("Could not start the trial. Try again."); }
+    finally { setWorking(false); }
   };
 
+  const click = (selector: string) => {
+    const element = control<HTMLButtonElement>(selector);
+    if (!element || element.closest("[hidden]")) { setProblem("The highlighted control is still loading, or you moved to another page. Return to this step and try again."); return false; }
+    if (element.disabled) { setProblem("Complete the highlighted form, then use its button or Next."); return false; }
+    element.click(); return true;
+  };
+  const write = async (field: HTMLTextAreaElement | HTMLInputElement, text: string) => {
+    if (!active.current) return false;
+    typing.current?.abort(); typing.current = new AbortController();
+    setWorking(true);
+    const completed = await typeInto(field, text, field.type === "password" ? 0 : 18, typing.current.signal);
+    if (active.current) { setWorking(false); setNote(completed ? "Example entered. Edit it if you like, then use the highlighted button or Next." : "Typing stopped so you can keep your own changes."); }
+    return completed;
+  };
+  const fillThenSubmit = async (selector: string, fallback: string, submit: string) => {
+    const field = control<HTMLInputElement | HTMLTextAreaElement>(selector);
+    if (!field) { setProblem("The form is still loading. Try Next again in a moment."); return; }
+    if (!field.value.trim()) { await write(field, fallback); return; }
+    click(submit);
+  };
+  const secret = async (name: string, example?: string) => {
+    const nameField = control<HTMLInputElement>("#secret-name");
+    const valueField = control<HTMLInputElement>("#secret-value");
+    if (!nameField || !valueField) { setProblem("Open Settings → Secrets to continue."); return; }
+    if (!nameField.value) { await write(nameField, name); }
+    if (nameField.value !== name) { setProblem(`Use ${name} in Name so the recipe can find it. Your Value is kept.`); return; }
+    if (!valueField.value) {
+      if (example) await write(valueField, example);
+      else if (name === SECRET_DATABASE) {
+        const bytes = crypto.getRandomValues(new Uint8Array(32));
+        await write(valueField, Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join(""));
+      } else { valueField.focus(); setNote("Enter your own unique WordPress admin password in Value. It is never put in chat or tutorial storage."); }
+      return;
+    }
+    click('[data-tour="add-secret"]');
+  };
+  const message = async (example: string, send: boolean) => {
+    const field = control<HTMLTextAreaElement>('textarea[aria-label="Message"]');
+    if (!field || field.disabled) { setProblem("The conversation is still loading. Try again in a moment."); return; }
+    if (!field.value.trim()) { await write(field, example); return; }
+    if (send) click('button[aria-label="Send"]');
+    else go(S.DONE);
+  };
+  const rawEditor = async (label: string): Promise<HTMLTextAreaElement | null> => {
+    let field = control<HTMLTextAreaElement>(`textarea[aria-label="${label} Markdown"]`);
+    if (field) return field;
+    const modes = control(`[aria-label="${label} editing mode"]`);
+    const raw = [...(modes?.querySelectorAll<HTMLButtonElement>("button") ?? [])].find((button) => button.textContent === "Raw Markdown");
+    raw?.click();
+    await sleep(60);
+    field = control<HTMLTextAreaElement>(`textarea[aria-label="${label} Markdown"]`);
+    return field;
+  };
+  const configureTask = async () => {
+    const chosen = control<HTMLButtonElement>(`[data-task="${(globalThis.CSS?.escape?.(progress.taskName ?? TOUR_TASK.name) ?? progress.taskName ?? TOUR_TASK.name)}"]`);
+    if (chosen && chosen.getAttribute("aria-current") !== "page") { chosen.click(); await sleep(60); }
+    const cron = control<HTMLInputElement>("#task-cron");
+    if (!cron) { setProblem("Select the new task to continue."); return; }
+    const field = await rawEditor("Task prompt");
+    if (!field) { setProblem("The task editor is still loading. Try again in a moment."); return; }
+    let demonstrated = false;
+    if (cron.value === "0 9 * * 1-5" || !cron.value.trim()) { await write(cron, TOUR_TASK.cron); demonstrated = true; }
+    if (!field.value.trim()) { await write(field, TOUR_TASK.prompt); demonstrated = true; }
+    if (!demonstrated) click('[data-tour="save-task"]');
+  };
+  const configureInstruction = async () => {
+    const chosen = control<HTMLButtonElement>(`[data-instruction="${(globalThis.CSS?.escape?.(progress.instructionName ?? TOUR_STYLE_NAME) ?? progress.instructionName ?? TOUR_STYLE_NAME)}"]`);
+    if (chosen && chosen.getAttribute("aria-current") !== "page") { chosen.click(); await sleep(60); }
+    const field = await rawEditor("AI instructions");
+    if (!field) { setProblem("Select your new instruction and try again."); return; }
+    if (!field.value.trim()) { await write(field, TOUR_STYLE); return; }
+    click('[data-tour="save-instruction"]');
+  };
   const finish = async () => {
     if (!workspaceId) return;
-    setWorking(true);
-    const completed = await finishTour(workspaceId);
+    setWorking(true); const saved = await finishTour(workspaceId);
+    if (!active.current) return;
     setWorking(false);
-    if (completed) setTourProgress(null);
-    else setProblem("Could not save tutorial completion. Click Finish tutorial to try again.");
+    if (saved) exit(); else setProblem("Could not save completion. Click Finish tutorial to retry.");
   };
 
+  const settingsTarget = '[data-tour="session-settings"]';
+  const sessionsTarget = '[data-workspace-view="sessions"]';
+  const sessionTarget = `[data-session="${sessionId ?? ""}"]`;
+  const section = (name: string) => `[data-section="${name}"]`;
+  const port = step === S.HTTP ? "80" : "443";
   const until = demo?.expiresAt ? Date.parse(demo.expiresAt) : null;
-  const clock = until ? new Date(until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : "the end of the trial";
-  const savedUser = savedSecrets?.includes(SECRET_USER);
-  const savedPassword = savedSecrets?.includes(SECRET_PASSWORD);
-  let card: CardContent;
+  let card: Card;
   switch (step) {
-    case STEP.WELCOME:
-      card = {
-        title: "Welcome to workspaced",
-        body: <><p>A <strong>workspace</strong> is your own computer in the cloud, with its own files, apps and AI agent. It keeps your project separate from other work and lets your website and scheduled jobs run while your browser is closed.</p><p>Just click <strong>Next</strong> as we guide you: connect OpenRouter, choose a machine, apply a WordPress recipe, publish a blog and schedule news. At the end, you try changing its design.</p><p>The VM is free for <strong>4 hours</strong>, then it and its data are deleted. You use your own OpenRouter account for AI usage, which OpenRouter bills separately. No platform top-up or card is needed for this trial.</p></>,
-        onNext: () => go({ step: STEP.OPENROUTER }),
-      };
-      break;
-    case STEP.OPENROUTER:
-      card = {
-        title: "Connect your OpenRouter account",
-        body: <><p>Your workspace runs the tools; an AI model decides what to do. <strong>OpenRouter</strong> connects it to models through your own account. AI usage is charged by OpenRouter, even during the free VM trial.</p><p>Click Next, sign in or create an OpenRouter account, and approve access. Keep credit in that account to run the agent. You do not need to copy an API key.</p></>,
-        waiting: openRouter.status === "exchanging" ? "Connecting OpenRouter…" : undefined,
-        note: openRouter.status === "waiting" ? "Finish in the OpenRouter window. If you closed it, click Next to reopen it." : openRouter.status === "blocked" ? "Allow pop-ups for this site, then click Next." : openRouter.status === "failed" ? "The connection did not complete. Click Next to retry." : undefined,
-        onNext: () => openRouter.connect(keyLabel),
-      };
-      break;
-    case STEP.BOX:
-      card = {
-        title: "Choose your trial machine",
-        body: <><p>The machine supplies CPU, memory and disk for WordPress and your agent. We selected the <strong>cheapest available machine</strong>. It is the single choice enabled for this trial; larger sizes are available when creating a paid workspace.</p><fieldset data-tour="trial-machines" className="max-h-[40dvh] space-y-2 overflow-y-auto"><legend className="mb-2 text-xs font-medium">Machine sizes</legend>{sizes?.map((size) => <label key={size.serverType} className={`flex items-start gap-3 rounded-lg border p-3 ${size.serverType === cheapest?.serverType ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "border-zinc-200 opacity-60 dark:border-zinc-700"}`}><input type="radio" name="trial-machine" checked={size.serverType === cheapest?.serverType} disabled={size.serverType !== cheapest?.serverType} readOnly aria-label={size.serverType} className="mt-1 accent-amber-600" /><span className="min-w-0 break-words"><strong>{size.serverType}</strong> · {size.cores} CPUs · {size.memoryGb} GB RAM · {size.diskGb} GB disk<span className="block text-xs">{size.serverType === cheapest?.serverType ? "Selected · free for 4 hours" : !size.available ? "Unavailable from the provider" : "Unavailable in the free trial"}</span></span></label>)}</fieldset><Button label="Refresh machines" variant="secondary" onClick={loadSizes} /><p>{key.current ? 'Your OpenRouter connection is ready.' : 'Reconnect OpenRouter after reloading this page.'} Next creates a fresh workspace named <strong>My WordPress trial</strong>. It will never turn into a paid workspace automatically.</p><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm dark:border-amber-800 dark:bg-amber-950/30"><input type="checkbox" checked={trialConsent} onChange={(event) => setTrialConsent(event.target.checked)} className="mt-1 size-5 shrink-0 accent-amber-600" /><span>I understand this trial workspace and its website, files, sessions, secrets and scheduled tasks will be <strong>permanently deleted after 4 hours</strong>. I will not use it for production or anything I need to keep.</span></label></>,
-        waiting: !key.current || cheapest ? undefined : sizes ? "No trial machine is available. Refresh to try again." : "Loading machines…",
-        disabled: !!key.current && !trialConsent,
-        nextLabel: key.current ? "Create free workspace" : "Reconnect OpenRouter",
-        onNext: launch,
-      };
-      break;
-    case STEP.STARTING:
-      card = {
-        title: "Your workspace is starting",
-        target: '[data-tour="demo-banner"]',
-        body: <><p>We are preparing your machine and agent. The countdown shows how long you have before the trial and its data are deleted.</p><p>Once ready, you can use Sessions to talk to the agent, Settings for secrets and automation, or Terminal to run commands yourself.</p></>,
-        waiting: demo?.status === "READY" ? undefined : "Starting your workspace…",
-        onNext: () => go({ step: STEP.RECIPE }),
-      };
-      break;
-    case STEP.RECIPE:
-      card = {
-        title: "Apply the WordPress recipe",
-        target: 'section[aria-label="Steps"]',
-        body: <><p>A <strong>recipe</strong> is a reusable set of instructions published in the Store. This WordPress recipe by <strong>Pavel Usanli</strong> installs the blog, publishes it at your machine's IP address, and records how to maintain it.</p><p>Read the highlighted steps. Applying this recipe makes the blog public over HTTPS with a trusted certificate for your machine's IP address. Next collects the admin credentials as secrets, then applies it in a new session.</p></>,
-        nextLabel: "Apply recipe",
-        onNext: () => go({ step: STEP.SECRETS }),
-      };
-      break;
-    case STEP.SECRETS:
-      card = {
-        title: "Choose your WordPress admin credentials",
-        body: <><p><strong>Secrets</strong> pass private values to your workspace without putting them into chat or recipe text. Choose a username and a unique password; keep them in your password manager.</p><p>We save them as <code>{SECRET_USER}</code> and <code>{SECRET_PASSWORD}</code>. We also generate a separate database password as a secret. Then we restart the workspace so the agent can use them.</p><TextField id="tour-admin-user" label="WordPress admin username" autoComplete="username" value={savedUser ? "Saved as a secret" : username} disabled={working || !!savedUser} maxLength={60} onChange={(event) => setUsername(event.target.value)} /><TextField id="tour-admin-password" label="WordPress admin password" type="password" autoComplete="new-password" value={savedPassword ? "saved-secret" : password} disabled={working || !!savedPassword} maxLength={4096} hint="Use a unique password with at least 12 characters." onChange={(event) => setPassword(event.target.value)} />{savedSecrets === null && <Button label="Check secrets again" variant="secondary" onClick={checkSecrets} />}<p>Your blog and admin sign-in use HTTPS. Use these credentials only for this temporary blog.</p></>,
-        waiting: savedSecrets && (savedUser || /^[A-Za-z0-9_.@-]{1,60}$/.test(username.trim())) && (savedPassword || password.length >= 12) ? undefined : "Enter a username and a password of at least 12 characters.",
-        nextLabel: "Save secrets and restart",
-        onNext: saveSecrets,
-      };
-      break;
-    case STEP.RESTART:
-      card = {
-        title: "Make the secrets available",
-        target: 'section[aria-label="Secrets"]',
-        body: <><p>Settings lists secret <strong>names</strong>, never their saved values. The restart loads them into the agent's environment.</p><p>Next starts a new session and hands the recipe to the agent. Your credentials are referenced by name, never pasted into its prompt.</p></>,
-        waiting: restarted ? undefined : "Waiting for the workspace to finish restarting…",
-        onNext: applyRecipe,
-      };
-      break;
-    case STEP.BUILDING:
-      card = {
-        title: "Watch the agent build your blog",
-        target: 'section[aria-label="Chat"]',
-        body: <><p>A <strong>session</strong> is a conversation about work on this machine. Here the agent installs WordPress and its database, sets up HTTPS on port 443, and writes the first post. It can take several minutes.</p><p>It will reply with the blog's public IP address and admin link. If it reports a problem, ask it to fix that in this chat before continuing.</p></>,
-        waiting: busy === false ? undefined : "Waiting for the agent's reply… You can use the chat below.",
-        onNext: () => go({ step: STEP.VERIFY }),
-      };
-      break;
-    case STEP.VERIFY:
-      card = {
-        title: "Open your public WordPress blog",
-        target: 'section[aria-label="Chat"]',
-        body: <><p>Open the <strong>https://machine-ip</strong> link in the agent's reply in a new tab. Anyone with that address can visit the blog while the trial runs. A domain is optional.</p><p>Check the home page and first post. If they do not work, ask the agent to fix them here. Continue once you have checked the site.</p></>,
-        nextLabel: "My blog works",
-        onNext: () => go({ step: STEP.SCHEDULE }),
-      };
-      break;
-    case STEP.SCHEDULE:
-      card = {
-        title: "Publish news on a schedule",
-        target: 'section[aria-label="Tasks"]',
-        body: <><p>A <strong>task</strong> is a saved prompt that starts a new agent session on a schedule. We will add <strong>tech-news</strong>, which checks a current technology news feed and publishes a short summary with a source link.</p><p>For this short trial it runs <strong>every 5 minutes</strong> in {demo?.timeZone ?? "your workspace's time zone"}. Each run uses your OpenRouter credit. It skips stories already covered and stops when the workspace is deleted. You can delete it sooner in Tasks.</p>{typed && <p aria-label="Task being added" className="rounded-lg bg-zinc-100 p-3 font-mono text-xs leading-5 dark:bg-zinc-800">{typed}</p>}</>,
-        nextLabel: "Create news task",
-        onNext: schedule,
-      };
-      break;
-    case STEP.TASKS:
-      card = {
-        title: "Your news task is scheduled",
-        target: 'nav[aria-label="Tasks"]',
-        body: <><p>The task is saved. <code>*/5 * * * *</code> means every five minutes. Each run appears under <strong>Sessions → Scheduled</strong>. Wait for a run, then reload your blog to see a new post if the feed has a fresh story.</p><p>You can change its prompt or schedule here, or delete it to stop further AI usage. Next takes us back to the blog session for your turn.</p></>,
-        onNext: () => go({ step: STEP.DESIGN }),
-      };
-      break;
-    case STEP.DESIGN:
-      card = {
-        title: "Your turn: change the design",
-        target: 'textarea[aria-label="Message"]',
-        body: <><p>Describe the look you want in plain words. We will type an example into the message box. <strong>Edit it however you like and send it yourself.</strong></p><p>Try your favourite colours, different headings or a new layout. After the agent replies, reload the blog to see your changes.</p></>,
-        nextLabel: "Type an example for me",
-        onNext: prepareDesign,
-      };
-      break;
-    default:
-      card = {
-        title: "Edit your request, then press Send",
-        target: 'textarea[aria-label="Message"]',
-        body: <><p>The example is ready below. Make it yours, send it, and keep exploring. Your blog and scheduled task share the workspace's files, so later sessions can build on this work.</p><p>{until ? <>You have <strong>{timeLeft(until, Date.now())}</strong>, until {clock}.</> : <>The trial lasts four hours.</>} Then the machine, blog, sessions and secrets are deleted. We notify you when you finish, 30 minutes before deletion, and once it is deleted. A permanent workspace is created separately from your funded account.</p></>,
-        nextLabel: "Finish tutorial",
-        onNext: finish,
-      };
+    case S.WELCOME: card = { title: "Your own workspace, step by step", target: '[data-tour="new-workspace"]',
+      body: <>A workspace is your computer in the cloud, with an AI agent, files and apps kept together. Just click <strong>Next</strong> to demonstrate each step, or use the highlighted controls yourself. We will build a WordPress blog on a free four-hour machine; OpenRouter bills your AI usage separately.</>, next: () => click('[data-tour="new-workspace"]') }; break;
+    case S.NAME: card = { title: "Give your workspace a name", target: "#workspace-name",
+      body: <>Type your own name for the project, or click Next and watch us enter <strong>{TOUR_WORKSPACE_NAME}</strong>. You can edit the example before continuing with the real form's Next button.</>, next: () => fillThenSubmit("#workspace-name", TOUR_WORKSPACE_NAME, '[data-tour="workspace-name-form"] button[type="submit"]') }; break;
+    case S.OPENROUTER: card = { title: "Connect your own OpenRouter account",
+      body: <>The workspace runs your tools; OpenRouter supplies the AI model. Connect your own account and approve the popup. Keep credit there for AI usage; the VM is free for four hours, while OpenRouter charges separately. No API key needs copying.</>, waiting: openRouter.status === "exchanging" ? "Connecting OpenRouter…" : undefined, next: connect }; break;
+    case S.MACHINE: card = { title: "Choose the machine for this trial",
+      body: <>CPU, memory and disk run WordPress and your agent. The cheapest available VM is selected. Other sizes are shown but unavailable in this free trial. A permanent, paid workspace is created separately.</>, disabled: !!key.current && (!consent || !cheapest), label: key.current ? "Create free workspace" : "Reconnect OpenRouter", next: launch }; break;
+    case S.STARTING: card = { title: "Your workspace is starting", target: '[data-tour="demo-banner"]', body: <>The machine is being prepared. Its banner keeps the deletion deadline visible on every page. You can leave the browser open while it starts.</>, waiting: demo?.status === "READY" ? undefined : "Preparing the workspace…", next: () => go(S.STORE) }; break;
+    case S.STORE: card = { title: "Open the real recipe Store", target: '[data-tour="open-store"]', body: <>Recipes are reusable instructions that someone has written for an agent to follow. Open Store in the top bar; Next clicks that same link.</>, next: () => click('[data-tour="open-store"]') }; break;
+    case S.PRIVATE: card = { title: "Recipes can belong just to you", target: '[role="tab"][data-tab="private"]', body: <>Select Private to see recipes only you can use. You can keep your own setup instructions here and reuse them in another workspace.</>, next: () => click('[role="tab"][data-tab="private"]') }; break;
+    case S.OWN: card = { title: "You can write or import your own", target: '[data-tour="new-recipe"]', body: <>New recipe lets you write instructions or import a Markdown file. Choose private for your own use or public to share it. We will use a published recipe today.</>, next: () => go(S.PUBLIC) }; break;
+    case S.PUBLIC: card = { title: "See what people have shared", target: '[role="tab"][data-tab="public"]', body: <>Public is the community recipe collection: reusable setups shared by other people. You can browse, apply and rate them. Next opens it.</>, next: () => click('[role="tab"][data-tab="public"]') }; break;
+    case S.FIND_RECIPE: card = { title: "Find WordPress blog", target: control(`[data-recipe="${TOUR_RECIPE_ID}"]`) ? `[data-recipe="${TOUR_RECIPE_ID}"]` : '[aria-label="Search recipes"]', body: <>Here is WordPress blog by Pavel Usanli: a community recipe for building your own custom blog. Open it, or use Search recipes if it is not visible.</>, next: async () => { if (control(`[data-recipe="${TOUR_RECIPE_ID}"]`)) click(`[data-recipe="${TOUR_RECIPE_ID}"]`); else { const field = control<HTMLInputElement>('[aria-label="Search recipes"]'); if (field && !field.value) await write(field, "WordPress blog"); else setProblem("Search for WordPress blog, then open its card."); } } }; break;
+    case S.REVIEW: card = { title: "Read what the recipe will do", target: 'section[aria-label="Steps"]', body: <>This recipe builds your custom WordPress blog, publishes it with HTTPS, and leaves CLI instructions for adding articles. Apply it to start a real session; the agent will explain what it needs as it works.</>, next: () => go(S.APPLY) }; break;
+    case S.APPLY: card = { title: "Use the actual Apply button", target: '[data-tour="recipe-apply"]', body: <>Apply asks which workspace should run the recipe. It starts a normal conversation; nothing is deployed merely by reading the recipe.</>, next: () => click('[data-tour="recipe-apply"]') }; break;
+    case S.PICK: card = { title: "Apply it in your trial workspace", target: '[data-tour="workspace-picker-confirm"]', body: <>Select <strong>{demo?.name}</strong>, then click the highlighted Apply button. Next selects that workspace if needed and uses the same button. This really applies the recipe and opens its session. No credentials are entered here.</>, next: () => { const radio = control<HTMLInputElement>(`[data-workspace-choice="${workspaceId}"]`); if (radio && !radio.checked) { radio.click(); return; } click('[data-tour="workspace-picker-confirm"]'); } }; break;
+    case S.REQUEST_SECRETS: card = { title: "Watch the recipe start in chat", target: 'section[aria-label="Chat"]', body: <>The recipe is now running in this real session. The agent checks what it needs and asks you to add missing credentials through Settings → Secrets. Read its reply here. If it reports a problem, ask it to fix that before continuing. Next shows where those secrets live.</>, waiting: busy === false && checkpoint === "secrets" ? undefined : "Waiting for the agent to request the WordPress secrets in Settings…", next: () => go(S.SETTINGS) }; break;
+    case S.SETTINGS: case S.PORT_SETTINGS: case S.TASK_SETTINGS: card = { title: "Open this workspace's Settings", target: settingsTarget, body: <>Use the settings button beside the workspace name. Settings belongs to this machine and holds its secrets, firewall, instructions and tasks.</>, next: () => click(settingsTarget) }; break;
+    case S.SECRETS: card = { title: "Find Secrets", target: section("secrets"), body: <>Secret values go into the workspace's environment. They are never pasted into chat, and the app shows only their names after saving.</>, next: () => click(section("secrets")) }; break;
+    case S.ADMIN_USER: card = { title: "Add the admin username as a secret", target: '[data-tour="secret-form"]', body: <>The required name <code>{SECRET_USER}</code> is filled and locked to prevent typos. Choose your admin username in Value, or Next types <strong>blog-admin</strong>. Review it, then use Add or Next again. Your own value is kept.</>, disabled: checking, next: () => secret(SECRET_USER, "blog-admin") }; break;
+    case S.ADMIN_PASSWORD: card = { title: "Add your own admin password", target: '[data-tour="secret-form"]', body: <>The required name <code>{SECRET_PASSWORD}</code> is filled and locked. Enter your own unique password in Value and save with Add. Passwords stay out of chat and tutorial storage.</>, disabled: checking, next: () => secret(SECRET_PASSWORD) }; break;
+    case S.DB_PASSWORD: card = { title: "Use a separate database password", target: '[data-tour="secret-form"]', body: <>The database gets a different secret named <code>{SECRET_DATABASE}</code>. Its name is filled and locked. Next fills a generated password in the real form. It stays masked; review the name, then save with Add or Next.</>, disabled: checking, next: () => secret(SECRET_DATABASE) }; break;
+    case S.RESTART: card = { title: "Apply the secrets with a restart", target: '[data-tour="restart-workspace"]', body: <>Saved secrets reach the running agent after a restart. Files and conversations are kept. Use the actual Restart workspace button to see its confirmation.</>, next: () => click('[data-tour="restart-workspace"]') }; break;
+    case S.CONFIRM_RESTART: card = { title: "Confirm the restart", target: '[data-tour="confirm-restart"]', body: <>This is the same confirmation used elsewhere in the app. It briefly stops the agent and reloads the saved secrets when the workspace starts again.</>, next: () => click('[data-tour="confirm-restart"]') }; break;
+    case S.RESTARTING: card = { title: "Wait for the workspace to return", target: '[data-tour="demo-banner"]', body: <>The countdown continues during the restart. Once ready, return to the same conversation to continue the recipe.</>, waiting: ready ? undefined : "Restarting…", next: () => go(S.SESSIONS) }; break;
+    case S.SESSIONS: case S.PORT_SESSIONS: case S.DESIGN_SESSIONS: card = { title: "Return through Sessions", target: sessionsTarget, body: <>Sessions lists this workspace's conversations. Open it using the real workspace tab, then return to the recipe's conversation.</>, next: () => click(sessionsTarget) }; break;
+    case S.SESSION: case S.PORT_SESSION: case S.DESIGN_SESSION: card = { title: "Reopen the recipe conversation", target: sessionTarget, body: <>A conversation keeps its history. Reopening this one lets the agent continue where it paused, using the same workspace files.</>, next: () => click(sessionTarget) }; break;
+    case S.RESUME_SECRETS: card = { title: "Tell the agent the secrets are ready", target: 'textarea[aria-label="Message"]', body: <>Write your own update, or Next types an example. Read or edit it, then Send or Next again. The recipe continues to its port-opening checkpoint.</>, next: () => message(TOUR_SECRET_CONTINUE, true) }; break;
+    case S.BUILD: card = { title: "Watch the installation", target: 'section[aria-label="Chat"]', body: <>The agent builds the same Compose setup each time and checks it before moving on. It will pause and ask you to open ports 80 and 443 in Settings. Read that reply before continuing.</>, waiting: busy === false && checkpoint === "ports" ? undefined : "Waiting for the agent to request ports 80 and 443 in Settings…", next: () => go(S.PORT_SETTINGS) }; break;
+    case S.FIREWALL: card = { title: "Find the Firewall controls", target: section("firewall"), body: <>A port is a numbered doorway into this machine. A service stays private until a firewall rule lets visitors reach it. Open Firewall to see the actual rules.</>, next: () => click(section("firewall")) }; break;
+    case S.HTTP: case S.HTTPS: card = { title: step === S.HTTP ? "Open TCP port 80 for certificate checks" : "Open TCP port 443 for HTTPS", target: 'form[aria-label="Open a port"]', body: <>Keep Protocol as TCP and From empty for Anyone. {step === S.HTTP ? "Port 80 handles Let's Encrypt validation and redirects visitors to HTTPS." : "Port 443 carries encrypted website and admin traffic."} Type <strong>{port}</strong>, or Next types it. Use Open port or Next again to save the real rule.</>, next: () => fillThenSubmit("#firewall-port", port, '[data-tour="open-port"]') }; break;
+    case S.PORT_REVIEW: card = { title: "See what is now public", target: '[aria-label="Firewall rules"]', body: <>The real rules now allow TCP 80 and 443. Opening a port does not install a website—it allows the service listening there to be reached. You can remove a rule here at any time.</>, next: () => go(S.PORT_SESSIONS) }; break;
+    case S.RESUME_PORTS: card = { title: "Let the recipe finish publishing", target: 'textarea[aria-label="Message"]', body: <>Tell the agent the ports are open. Next types an example; review it and send with the real Send button or Next again. It verifies the rules and sets up HTTPS for the machine IP.</>, next: () => message(TOUR_PORT_CONTINUE, true) }; break;
+    case S.DEPLOY: card = { title: "Watch HTTPS and the first article appear", target: 'section[aria-label="Chat"]', body: <>The agent obtains a trusted Let's Encrypt certificate, installs WordPress, publishes a welcome article and saves CLI instructions. If any check fails, ask it to fix that here.</>, waiting: busy === false ? undefined : "Waiting for the agent to finish…", next: () => go(S.VERIFY) }; break;
+    case S.VERIFY: card = { title: "Check your real website", target: 'section[aria-label="Chat"]', body: <>Open the <strong>https://machine-ip</strong> link in the reply in a new tab. Check the home page, welcome article and trusted HTTPS connection. Continue once it works; if it does not, ask the agent to fix it first.</>, label: "My blog works", next: () => go(S.TASK_SETTINGS) }; break;
+    case S.TASKS: card = { title: "Find scheduled Tasks", target: section("tasks"), body: <>A task is a prompt that runs in a new session on a schedule, even with your browser closed. We will create one through the actual editor.</>, next: () => click(section("tasks")) }; break;
+    case S.NEW_TASK: card = { title: "Create a news task", target: '[data-tour="new-task"]', body: <>New task opens the name form. This task will look for a fresh technology story and publish a sourced summary. Every run uses your OpenRouter credit.</>, next: () => click('[data-tour="new-task"]') }; break;
+    case S.TASK_NAME: card = { title: "Name the task", target: "#task-name", body: <>Choose your own file name or let Next type <strong>{TOUR_TASK.name}</strong>. Then use Create or Next again. Its prompt and schedule are edited next.</>, next: () => fillThenSubmit("#task-name", TOUR_TASK.name, 'form[aria-label="New task"] button[type="submit"]') }; break;
+    case S.TASK_CONFIG: card = { title: "Write what should run, and when", target: 'section[aria-label="Tasks"]', body: <>Next demonstrates every five minutes and types a news prompt into the real Markdown editor. You can change either. Review the source-checking and duplicate-checking rules, then Save or Next again. Each run spends OpenRouter credit.</>, next: configureTask }; break;
+    case S.TASK_SAVED: card = { title: "Your automation is saved", target: 'nav[aria-label="Tasks"]', body: <>Each run appears under Sessions → Scheduled. Reload your blog after a run to see a new post if there is a fresh story. You can change or delete the task here; it stops when the trial is deleted.</>, next: () => go(S.INSTRUCTIONS) }; break;
+    case S.INSTRUCTIONS: card = { title: "See the workspace's shared Instructions", target: section("instructions"), body: <>Instructions are rules and working notes shared by the agent's sessions. The recipe has already saved how to operate your blog. We will inspect that, then add your own writing rule.</>, next: () => click(section("instructions")) }; break;
+    case S.BLOG_GUIDE: card = { title: "The recipe left a CLI publishing guide", target: '[data-instruction="blog"]', body: <>Open blog to see the tested commands for listing articles and publishing new ones. The news task reads this same guide. Next opens it; continue after looking through it.</>, next: () => { const file = control<HTMLButtonElement>('[data-instruction="blog"]'); if (file && file.getAttribute("aria-current") !== "page") { file.click(); return; } go(S.NEW_INSTRUCTION); } }; break;
+    case S.NEW_INSTRUCTION: card = { title: "Add a rule of your own", target: '[data-tour="new-instruction"]', body: <>Use New instructions to create a shared writing-style rule. It can guide future replies and scheduled articles without repeating it in every prompt.</>, next: () => click('[data-tour="new-instruction"]') }; break;
+    case S.INSTRUCTION_NAME: card = { title: "Name your instruction", target: "#instructions-name", body: <>Choose a short file name, or Next types <strong>{TOUR_STYLE_NAME}</strong>. Create it using the real form; then we will write its contents.</>, next: () => fillThenSubmit("#instructions-name", TOUR_STYLE_NAME, 'form[aria-label="New instructions"] button[type="submit"]') }; break;
+    case S.INSTRUCTION_EDIT: card = { title: "Choose how the agent should write", target: 'section[aria-label="Instructions"]', body: <>Write your own rule or let Next demonstrate short, friendly sentences, plain explanations and sourced news. It types into the real editor. Edit the example, then Save or Next again.</>, next: configureInstruction }; break;
+    case S.INSTRUCTION_SAVED: card = { title: "Your writing rule is now shared", target: `nav[aria-label="Instruction files"]`, body: <>Your saved rule appears alongside blog. The agent uses saved instructions from its next message; later sessions and scheduled tasks receive them too. You can edit or remove the rule here.</>, next: () => go(S.DESIGN_SESSIONS) }; break;
+    case S.DESIGN: card = { title: "Your turn: request a new design", target: 'textarea[aria-label="Message"]', body: <>Describe the look you want. Next types an example if the message box is empty; your own text is kept. Edit it however you like. You will send this final request yourself.</>, next: async () => { const field = control<HTMLTextAreaElement>('textarea[aria-label="Message"]'); if (!field) { setProblem("The conversation is still loading."); return; } if (!field.value.trim()) await write(field, TOUR_DESIGN_PROMPT); if (active.current) go(S.DONE); } }; break;
+    default: card = { title: "Make it yours, then Send", target: 'textarea[aria-label="Message"]', body: <>Edit the request below and send it yourself. Reload your blog after the agent replies. {until ? <>You have <strong>{timeLeft(until, Date.now())}</strong> left.</> : "The trial lasts four hours."} Then the workspace and its data are permanently deleted. Finishing sends an in-app notification with the exact deadline; you are also notified before deletion and after it succeeds. No email is sent for these alerts.</>, label: "Finish tutorial", next: finish };
   }
 
-  return <TourCard step={step} card={card} working={working} problem={problem} onSkip={() => setTourProgress(null)} />;
+  const custom = step === S.OPENROUTER || step === S.MACHINE;
+  const customContent = step === S.OPENROUTER ? <div className="space-y-5"><h2 className="text-xl font-semibold">Use your OpenRouter account</h2><p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">Approve access in the popup. Your key stays in memory until the workspace launches.</p><Button label="Connect OpenRouter" onClick={connect} busy={openRouter.status === "exchanging"} /><p role="status" className="text-sm text-amber-700 dark:text-amber-400">{openRouter.status === "waiting" ? "Finish in the OpenRouter window. Closed it? Connect again." : openRouter.status === "blocked" ? "Allow pop-ups for this site and connect again." : openRouter.status === "failed" ? "The connection failed. Connect again to retry." : ""}</p></div> : <div className="space-y-4"><h2 className="text-xl font-semibold">{progress.name ?? TOUR_WORKSPACE_NAME}</h2><fieldset className="space-y-2"><legend className="mb-2 text-sm font-medium">Trial machine</legend>{sizes?.map((size) => <label key={size.serverType} className={`flex items-start gap-3 rounded-lg border p-3 ${size.serverType === cheapest?.serverType ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "border-zinc-200 opacity-60 dark:border-zinc-700"}`}><input type="radio" name="trial-machine" aria-label={size.serverType} checked={size.serverType === cheapest?.serverType} disabled={size.serverType !== cheapest?.serverType} readOnly className="mt-1 accent-amber-600" /><span className="min-w-0 break-words text-sm"><strong>{size.serverType}</strong> · {size.cores} CPUs · {size.memoryGb} GB RAM · {size.diskGb} GB disk<span className="block text-xs">{size.serverType === cheapest?.serverType ? "Selected · free for four hours" : size.available ? "Unavailable in this free trial" : "Unavailable from the provider"}</span></span></label>)}</fieldset><Button label="Refresh machines" variant="secondary" onClick={loadSizes} /><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm leading-6 dark:border-amber-800 dark:bg-amber-950/30"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 size-5 shrink-0 accent-amber-600" /><span>I understand this workspace, its website, files, sessions, secrets and scheduled tasks will be <strong>permanently deleted after four hours</strong>. I will not use it for production or anything I need to keep.</span></label>{!sizes && <Spinner label="Loading machines" />}{sizes && !cheapest && <p role="status">No trial machine is available. Refresh to check again.</p>}</div>;
+  const runNext = async () => {
+    if (acting || working) return;
+    setActing(true);
+    try { await card.next(); }
+    catch { if (active.current) setProblem("Could not complete this step. Check the highlighted control and try again."); }
+    finally { if (active.current) setActing(false); }
+  };
+  return <TourFrame step={step} card={{ ...card, next: runNext }} working={working || acting} problem={problem} note={note} onSkip={exit} custom={custom ? customContent : undefined} />;
 }
 
-interface CardContent {
+interface Card {
   readonly title: string;
   readonly body: ReactNode;
-  /** A selector for what the step is about; without one the card fills the screen. */
   readonly target?: string;
-  /** Set while Next has to wait, saying for what. */
   readonly waiting?: string;
   readonly disabled?: boolean;
-  readonly note?: string;
-  readonly nextLabel?: string;
-  readonly onNext: () => void | Promise<void>;
+  readonly label?: string;
+  readonly next: () => unknown | Promise<unknown>;
 }
-
-function TourCard({ step, card, working, problem, onSkip }: {
-  readonly step: number;
-  readonly card: CardContent;
-  readonly working: boolean;
-  readonly problem: string | null;
-  readonly onSkip: () => void;
+function chapter(step: number): string {
+  return step <= S.STARTING ? "Your workspace" : step <= S.PICK ? "The recipe Store" : step <= S.RESUME_SECRETS ? "Secrets" : step <= S.VERIFY ? "Publish with HTTPS" : step <= S.TASK_SAVED ? "Scheduled tasks" : step <= S.INSTRUCTION_SAVED ? "Shared instructions" : "Your turn";
+}
+function TourFrame({ step, card, working, problem, note, onSkip, custom }: {
+  readonly step: number; readonly card: Card; readonly working: boolean; readonly problem: string | null;
+  readonly note: string | null; readonly onSkip: () => void; readonly custom?: ReactNode;
 }) {
+  const header = useRef<HTMLElement>(null);
+  const footer = useRef<HTMLElement>(null);
+  const heading = useRef<HTMLHeadingElement>(null);
   const rect = useTargetRect(card.target);
-  const dialog = useRef<HTMLElement>(null);
   useEffect(() => {
-    const node = dialog.current;
-    node?.focus({ preventScroll: true });
-    if (node) node.scrollTop = 0;
+    const root = document.documentElement;
+    root.dataset.guidedTour = "true";
+    const measure = () => {
+      root.style.setProperty("--tour-header", `${header.current?.getBoundingClientRect().height || 160}px`);
+      root.style.setProperty("--tour-footer", `${footer.current?.getBoundingClientRect().height || 80}px`);
+    };
+    measure();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+    if (header.current) observer?.observe(header.current);
+    if (footer.current) observer?.observe(footer.current);
+    globalThis.addEventListener("resize", measure);
+    return () => { observer?.disconnect(); globalThis.removeEventListener("resize", measure); root.style.removeProperty("--tour-header"); root.style.removeProperty("--tour-footer"); delete root.dataset.guidedTour; };
+  }, []);
+  useEffect(() => {
+    const focused = document.activeElement;
+    if (focused === document.body || !focused?.isConnected) heading.current?.focus({ preventScroll: true });
   }, [step]);
-  const onKeyDown = (event: ReactKeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") { event.stopPropagation(); onSkip(); return; }
-    if (card.target || event.key !== "Tab" || !dialog.current) return;
-    const controls = [...dialog.current.querySelectorAll<HTMLElement>('button:not([disabled]), input:not([disabled]), a[href]')];
-    const first = controls.at(0);
-    const last = controls.at(-1);
-    if (event.shiftKey && (document.activeElement === first || document.activeElement === dialog.current)) {
-      event.preventDefault(); last?.focus();
-    } else if (!event.shiftKey && document.activeElement === last) {
-      event.preventDefault(); first?.focus();
-    }
-  };
-  const content = (
-    <>
-      <div className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-        <Sparkles aria-hidden className="size-3.5 text-amber-500" />
-        <span>Guided tour · {step + 1} of {STEPS}</span>
-      </div>
-      <div className="flex gap-1" role="progressbar" aria-label="Tutorial progress" aria-valuemin={1} aria-valuemax={STEPS} aria-valuenow={step + 1}>
-        {Array.from({ length: STEPS }, (_, index) => (
-          <span key={index} className={`h-1 flex-1 rounded-full ${index <= step ? "bg-amber-500" : "bg-zinc-200 dark:bg-zinc-700"}`} />
-        ))}
-      </div>
-      <h2 className="text-lg font-semibold">{card.title}</h2>
-      <div className="flex flex-col gap-3 text-sm leading-6 text-zinc-700 dark:text-zinc-300">{card.body}</div>
-      {card.note && <p className="text-sm text-amber-700 dark:text-amber-400">{card.note}</p>}
-      {problem && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">{problem}</p>}
-      <div className="mt-1 flex flex-col-reverse gap-3 sm:flex-row sm:items-center">
-        <button type="button" onClick={onSkip} className="text-xs text-zinc-500 underline-offset-2 hover:underline dark:text-zinc-400">Skip tour</button>
-        <span className="flex flex-col gap-3 sm:ml-auto sm:items-end">
-          {card.waiting && (
-            <span role="status" className="flex items-center gap-2 text-xs text-zinc-500 dark:text-zinc-400">
-              <Spinner label={card.waiting} className="size-3.5" />
-              {card.waiting}
-            </span>
-          )}
-          <Button label={card.nextLabel ?? "Next"} icon={ArrowRight} busy={working} disabled={card.waiting !== undefined || card.disabled}
-            onClick={() => void card.onNext()} />
-        </span>
-      </div>
-    </>
-  );
-
-  if (!card.target) {
-    return (
-      <div className="fixed inset-0 z-[60] flex items-stretch justify-center bg-zinc-950/70 backdrop-blur-sm sm:items-center sm:p-6">
-        <section ref={dialog} tabIndex={-1} onKeyDown={onKeyDown} role="dialog" aria-modal="true" aria-label={card.title}
-          className="outline-none [&_button]:min-h-11 sm:max-h-[calc(100dvh-3rem)] flex max-h-[100dvh] w-full flex-col gap-4 overflow-y-auto bg-white px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] shadow-xl sm:max-w-lg sm:rounded-2xl sm:p-7 dark:bg-zinc-900">
-          {content}
-        </section>
-      </div>
-    );
-  }
-
-  // The card keeps clear of what it points at: above it when it sits low on the screen.
-  const low = rect !== null && rect.top + rect.height / 2 > globalThis.innerHeight / 2;
-  return (
-    <>
-      <div aria-hidden className="pointer-events-none fixed inset-0 z-[60]">
-        {rect ? (
-          <div className="absolute rounded-xl ring-2 ring-amber-400 transition-all duration-300"
-            style={{ top: rect.top - 6, left: rect.left - 6, width: rect.width + 12, height: rect.height + 12, boxShadow: "0 0 0 200vmax rgb(9 9 11 / 0.45)" }} />
-        ) : (
-          <div className="absolute inset-0 bg-zinc-950/45" />
-        )}
-      </div>
-      <section ref={dialog} tabIndex={-1} onKeyDown={onKeyDown} role="dialog" aria-label={card.title}
-        className={`outline-none [&_button]:min-h-11 fixed inset-x-0 z-[61] flex max-h-[60dvh] flex-col gap-3 overflow-y-auto border-zinc-200 bg-white p-5 shadow-2xl sm:inset-x-auto sm:right-6 sm:w-[26rem] sm:rounded-2xl sm:border dark:border-zinc-800 dark:bg-zinc-900 ${
-          low
-            ? "top-0 rounded-b-2xl pt-[max(1.25rem,env(safe-area-inset-top))] sm:top-20"
-            : "bottom-0 rounded-t-2xl pb-[max(1.25rem,env(safe-area-inset-bottom))] sm:bottom-6"
-        }`}>
-        {content}
-      </section>
-    </>
-  );
+  return <>
+    <header ref={header} role="region" aria-label="Guided tour" className="fixed inset-x-0 top-0 z-[90] border-b border-zinc-200 bg-white px-4 pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="mx-auto max-w-5xl space-y-2"><div className="flex items-center justify-between gap-3 text-xs font-medium text-zinc-500"><span className="flex items-center gap-2"><Sparkles aria-hidden className="size-4 text-amber-500" />Guided tour · {chapter(step)}</span><span className="tabular-nums">{step + 1}/{TOUR_STEP_COUNT}</span></div><h1 ref={heading} tabIndex={-1} className="text-lg font-semibold outline-none sm:text-xl" aria-live="polite">{card.title}</h1><div className="max-h-[min(20dvh,7.5rem)] overflow-y-auto text-sm leading-5 [@media(max-height:650px)]:max-h-16 text-zinc-600 dark:text-zinc-400">{card.body}</div><div role="progressbar" aria-label="Tutorial progress" aria-valuemin={1} aria-valuemax={TOUR_STEP_COUNT} aria-valuenow={step + 1} className="h-1 overflow-hidden rounded bg-zinc-100 dark:bg-zinc-800"><div className="h-full rounded bg-amber-500 transition-[width] motion-reduce:transition-none" style={{ width: `${(step + 1) / TOUR_STEP_COUNT * 100}%` }} /></div></div>
+    </header>
+    {custom ? <section aria-label="Trial setup" className="fixed inset-x-0 z-50 overflow-y-auto bg-zinc-50 p-4 sm:p-6 dark:bg-zinc-950" style={{ top: "var(--tour-header, 160px)", bottom: "var(--tour-footer, 80px)" }}><div className="mx-auto max-w-lg rounded-xl border border-zinc-200 bg-white p-5 dark:border-zinc-800 dark:bg-zinc-900">{custom}</div></section> : rect && <div aria-hidden className="pointer-events-none fixed z-[80] rounded-lg border-2 border-amber-400 transition-all motion-reduce:transition-none" style={{ top: Math.max(rect.top - 4, header.current?.getBoundingClientRect().bottom ?? 0), left: Math.max(2, rect.left - 4), width: Math.min(rect.width + 8, globalThis.innerWidth - 4), height: Math.max(0, Math.min(rect.bottom + 4, footer.current?.getBoundingClientRect().top ?? globalThis.innerHeight) - Math.max(rect.top - 4, header.current?.getBoundingClientRect().bottom ?? 0)), boxShadow: "0 0 0 200vmax rgb(9 9 11 / 0.24)" }} />}
+    <footer ref={footer} role="region" aria-label="Guided tour controls" className="fixed inset-x-0 bottom-0 z-[90] border-t border-zinc-200 bg-white px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-sm dark:border-zinc-800 dark:bg-zinc-950">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-3"><div className="min-w-0 basis-full text-xs leading-5 sm:min-w-40 sm:flex-1 sm:basis-auto">{problem ? <p role="alert" className="text-rose-600 dark:text-rose-400">{problem}</p> : card.waiting ? <p role="status" className="flex items-center gap-2 text-zinc-500"><Spinner className="size-3.5" />{card.waiting}</p> : <p className="text-zinc-500">{note ?? (card.target ? "Use the highlighted control, or let Next demonstrate it." : "Continue when you are ready.")}</p>}</div><button type="button" onClick={onSkip} className="min-h-11 px-2 text-sm text-zinc-500 underline-offset-2 hover:underline">Skip tour</button><div className="flex-1 sm:flex-none [&>button]:min-h-11 [&>button]:w-full"><Button label={card.label ?? "Next"} icon={step === S.DONE ? Check : ArrowRight} busy={working} disabled={!!card.waiting || card.disabled} onClick={() => { void card.next(); }} /></div></div>
+    </footer>
+  </>;
 }
-
-/** Where the target is on screen, followed as the page lays itself out; null while it is absent. */
 function useTargetRect(selector: string | undefined): DOMRect | null {
   const [rect, setRect] = useState<DOMRect | null>(null);
   useEffect(() => {
     setRect(null);
-    if (!selector) return undefined;
+    if (!selector) return;
     let scrolled = false;
     const measure = () => {
-      const element = document.querySelector(selector);
-      if (element && !scrolled) {
-        scrolled = true;
-        element.scrollIntoView?.({ block: "center", behavior: "smooth" });
-      }
+      const element = control(selector);
+      if (element && !element.closest("[hidden]") && !scrolled) { scrolled = true; element.scrollIntoView?.({ block: "center", inline: "nearest", behavior: "instant" }); }
       const next = element?.getBoundingClientRect() ?? null;
-      setRect((current) =>
-        current && next && current.top === next.top && current.left === next.left && current.width === next.width && current.height === next.height
-          ? current
-          : next,
-      );
+      setRect((current) => current && next && current.top === next.top && current.left === next.left && current.width === next.width && current.height === next.height ? current : next);
     };
-    measure();
-    const timer = setInterval(measure, 250);
+    measure(); const timer = setInterval(measure, 200);
     globalThis.addEventListener("resize", measure);
-    return () => {
-      clearInterval(timer);
-      globalThis.removeEventListener("resize", measure);
-    };
+    return () => { clearInterval(timer); globalThis.removeEventListener("resize", measure); };
   }, [selector]);
   return rect;
 }

@@ -1,3 +1,4 @@
+import { reportTourAction, TOUR_STEP, useTourProgress } from "../../lib/tour";
 import { Plus } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { type AddResult, MAX_SECRETS, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
@@ -8,6 +9,7 @@ const MAX_NAME = 100;
 const MAX_VALUE = 65536;
 
 interface Props {
+  readonly workspaceId?: string;
   readonly secrets: readonly Secret[];
   readonly loading: boolean;
   readonly removing: ReadonlySet<string>;
@@ -24,6 +26,7 @@ interface Props {
 
 /** A workspace's secrets by name, and a form to add one; values are write-only. */
 export function SecretsPanel({
+  workspaceId,
   secrets,
   loading,
   removing,
@@ -35,7 +38,14 @@ export function SecretsPanel({
   restartDisabled,
   onRestart,
 }: Props) {
-  const [name, setName] = useState("");
+  const tour = useTourProgress();
+  const requiredName = tour && tour.workspaceId === workspaceId
+    ? tour.step === TOUR_STEP.ADMIN_USER ? "WORDPRESS_ADMIN_USER"
+      : tour.step === TOUR_STEP.ADMIN_PASSWORD ? "WORDPRESS_ADMIN_PASSWORD"
+      : tour.step === TOUR_STEP.DB_PASSWORD ? "WORDPRESS_DB_PASSWORD" : null
+    : null;
+  const [customName, setName] = useState("");
+  const name = requiredName ?? customName;
   const [value, setValue] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -52,6 +62,7 @@ export function SecretsPanel({
     try {
       const result = await onAdd(name, value).catch((): AddResult => "failed");
       if (result === "added") {
+        reportTourAction({ type: "secret-saved", workspaceId, name });
         setName("");
         setValue("");
       } else if (result === "conflict") {
@@ -96,7 +107,7 @@ export function SecretsPanel({
           ))}
         </ul>
       )}
-      <form onSubmit={submit} className="flex flex-col gap-3 rounded-md bg-zinc-50 p-4 sm:flex-row sm:items-start dark:bg-zinc-900/60">
+      <form data-tour="secret-form" onSubmit={submit} className="flex flex-col gap-3 rounded-md bg-zinc-50 p-4 sm:flex-row sm:items-start dark:bg-zinc-900/60">
         <div className="min-w-0 flex-1">
           <TextField
             id="secret-name"
@@ -106,6 +117,8 @@ export function SecretsPanel({
             autoComplete="off"
             spellCheck={false}
             value={name}
+            readOnly={!!requiredName}
+            hint={requiredName ? "The recipe needs this exact name. Enter your own Value below." : undefined}
             maxLength={MAX_NAME}
             disabled={pending || full}
             error={nameError}
@@ -131,6 +144,7 @@ export function SecretsPanel({
         <div className="sm:mt-6">
           <Button
             label="Add"
+            tourId="add-secret"
             type="submit"
             icon={Plus}
             busy={pending}

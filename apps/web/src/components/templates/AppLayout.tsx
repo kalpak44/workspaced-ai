@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 
 interface Props {
+  readonly guided?: boolean;
   readonly header: ReactNode;
   readonly sidebar?: ReactNode;
   /** Shown above the page, e.g. an error banner. */
@@ -10,9 +11,10 @@ interface Props {
 }
 
 /** The frame every page sits in: a bar across the top, a sidebar, and the page beside it. */
-export function AppLayout({ header, sidebar, notice, children }: Props) {
+export function AppLayout({ header, sidebar, notice, children, guided = false }: Props) {
   return (
-    <div className="flex h-dvh flex-col pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]">
+    <div className="flex flex-col pr-[env(safe-area-inset-right)] pl-[env(safe-area-inset-left)]"
+      style={guided ? { height: "calc(100dvh - var(--tour-header, 160px) - var(--tour-footer, 80px))", marginTop: "var(--tour-header, 160px)" } : { height: "100dvh" }}>
       {/* The first stop for a keyboard: past the bar and the sidebar, straight to the page. */}
       <a href="#main" className="sr-only z-50 rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white focus:not-sr-only focus:fixed focus:top-2 focus:left-2 dark:bg-white dark:text-zinc-900">
         Skip to content

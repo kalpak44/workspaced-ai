@@ -1,3 +1,4 @@
+import { reportTourAction } from "../../lib/tour";
 import { CalendarClock, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { TASK_NAME, type TaskContent, useTasks } from "../../hooks/useTasks";
@@ -81,6 +82,7 @@ export function TasksPanel({ workspaceId, timeZone }: Props) {
     if (!newName || nameError) return;
     setBusy(true);
     if (await save(newName, { cron: "0 9 * * 1-5", timeZone, prompt: "" })) {
+      reportTourAction({ type: "task-created", workspaceId, name: newName });
       setSelected(newName);
       setNewName(null);
       setNotice("Created. Write what the agent should do, set when, and save.");
@@ -96,6 +98,7 @@ export function TasksPanel({ workspaceId, timeZone }: Props) {
     if (await save(task.name, { ...draft, cron: draft.cron.trim(), timeZone: draft.timeZone.trim() })) {
       setDrafts(({ [task.name]: _, ...rest }) => rest);
       setNotice("Saved. It runs at the next matching time while the workspace is running.");
+      reportTourAction({ type: "task-saved", workspaceId, name: task.name });
     } else {
       setNotice("Could not save the task. Please try again.");
     }
@@ -120,7 +123,7 @@ export function TasksPanel({ workspaceId, timeZone }: Props) {
         <nav aria-label="Tasks" className="flex shrink-0 flex-col gap-1 md:w-56">
           {tasks.map(({ name }) => (
             <div key={name} className={`group relative flex min-w-0 items-center rounded-md ${name === selected ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100" : "text-zinc-500 hover:bg-zinc-100/70 dark:text-zinc-400 dark:hover:bg-zinc-800/50"}`}>
-              <button type="button" aria-current={name === selected ? "page" : undefined}
+              <button data-task={name} type="button" aria-current={name === selected ? "page" : undefined}
                 onClick={() => { setSelected(name); setNotice(""); }}
                 className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm font-medium">
                 <CalendarClock aria-hidden className="size-4 shrink-0" />
@@ -132,7 +135,7 @@ export function TasksPanel({ workspaceId, timeZone }: Props) {
             </div>
           ))}
           {newName === null ? (
-            <button type="button" onClick={() => { setNewName(""); setNotice(""); }}
+            <button data-tour="new-task" type="button" onClick={() => { setNewName(""); setNotice(""); reportTourAction({ type: "task-form-opened", workspaceId }); }}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-left text-sm font-medium text-zinc-500 hover:bg-zinc-50 dark:text-zinc-400 dark:hover:bg-zinc-900">
               <Plus aria-hidden className="size-4" />New task
             </button>
@@ -167,7 +170,7 @@ export function TasksPanel({ workspaceId, timeZone }: Props) {
               <div className="flex flex-wrap items-center justify-between gap-3 border-t border-zinc-200 pt-4 dark:border-zinc-800">
                 <p className="text-xs text-zinc-500 dark:text-zinc-400">{task.name}.md · {draft.prompt.length.toLocaleString()} characters</p>
                 <div className="flex gap-2">
-                  <Button label="Save" busy={busy && deleteTarget === null} disabled={!changed || scheduleError !== null || zoneError !== null}
+                  <Button tourId="save-task" label="Save" busy={busy && deleteTarget === null} disabled={!changed || scheduleError !== null || zoneError !== null}
                     onClick={() => void submit()} />
                 </div>
               </div>

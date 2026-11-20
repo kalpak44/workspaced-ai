@@ -20,7 +20,7 @@ export function NewRecipeMenu({ onWrite, onImport }: Props) {
 
   return (
     <div ref={root} className="relative">
-      <button
+      <button data-tour="new-recipe"
         type="button"
         aria-haspopup="menu"
         aria-expanded={open}

@@ -1,3 +1,4 @@
+import { reportTourAction } from "../../lib/tour";
 import { Copy, Plus, Trash2 } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { type FirewallProtocol, type FirewallRule, useFirewall } from "../../hooks/useFirewall";
@@ -45,7 +46,7 @@ export function FirewallPanel({ workspaceId }: Props) {
     };
     const failure = await saveRules([...firewall.rules, rule]);
     report(failure, "Rule added.");
-    if (!failure) { setPort(""); setSource(""); setDescription(""); }
+    if (!failure) { reportTourAction({ type: "port-opened", workspaceId, name: rule.port ?? "", value: rule.protocol }); setPort(""); setSource(""); setDescription(""); }
   };
 
   const remove = async (index: number) => {
@@ -95,7 +96,7 @@ export function FirewallPanel({ workspaceId }: Props) {
           value={source} disabled={saving} onChange={(e) => setSource(e.currentTarget.value)} />
         <TextField id="firewall-description" label="Note" placeholder="Optional" maxLength={255}
           value={description} disabled={saving} onChange={(e) => setDescription(e.currentTarget.value)} />
-        <div className="sm:col-span-2"><Button label="Open port" icon={Plus} type="submit" busy={saving} /></div>
+        <div className="sm:col-span-2"><Button tourId="open-port" label="Open port" icon={Plus} type="submit" busy={saving} /></div>
       </form>
 
       <form aria-label="Agent firewall permission" className="space-y-3 rounded-md bg-zinc-50 p-4 dark:bg-zinc-900/60" onSubmit={async (event) => {

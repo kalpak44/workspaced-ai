@@ -42,7 +42,7 @@ export function Modal({ title, description, onClose, children, portal = true, wi
 
   // Tab and Shift+Tab cycle inside the dialog rather than escaping to the page behind it.
   const trapFocus = (event: ReactKeyboardEvent<HTMLDialogElement>) => {
-    if (event.key !== "Tab" || event.defaultPrevented || !dialog.current) return;
+    if (document.documentElement.dataset.guidedTour === "true" || event.key !== "Tab" || event.defaultPrevented || !dialog.current) return;
     const focusable = [...dialog.current.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((element) => !element.closest("[hidden]"));
     const first = focusable.at(0);
     const last = focusable.at(-1);
@@ -67,7 +67,8 @@ export function Modal({ title, description, onClose, children, portal = true, wi
   }, [onClose]);
 
   const content = (
-    <div className="fixed inset-0 z-40 flex items-end justify-center pt-3 sm:items-center sm:p-4">
+    <div className="fixed inset-x-0 z-40 flex items-end justify-center pt-3 sm:items-center sm:p-4"
+      style={{ top: "var(--tour-header, 0px)", bottom: "var(--tour-footer, 0px)" }}>
       <button
         type="button"
         aria-label="Dismiss dialog"
@@ -78,6 +79,7 @@ export function Modal({ title, description, onClose, children, portal = true, wi
       {/* The browser styles <dialog> with its own colours, so both are set explicitly. */}
       <dialog
         ref={dialog}
+        style={{ maxHeight: "calc(100dvh - var(--tour-header, 0px) - var(--tour-footer, 0px) - 1rem)" }}
         open
         tabIndex={-1}
         aria-modal="true"

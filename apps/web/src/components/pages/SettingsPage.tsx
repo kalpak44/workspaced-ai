@@ -90,6 +90,7 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
         </div>
         <div hidden={section !== "secrets"}>
           <SecretsPanel
+            workspaceId={workspace.id}
             secrets={secrets.secrets}
             loading={secrets.loading}
             removing={secrets.removing}

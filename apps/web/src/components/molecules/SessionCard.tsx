@@ -19,6 +19,7 @@ export function SessionCard({ session, deleting, onOpen, onDelete, selected, onT
   return (
     <li className="group relative flex items-center transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
       <button
+        data-session={session.id}
         type="button"
         onClick={selecting ? onToggle : onOpen}
         // An unavailable conversation cannot be opened, but it can still be chosen for deletion.

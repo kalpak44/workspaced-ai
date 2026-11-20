@@ -17,6 +17,7 @@ export function RecipeCard({ recipe, onOpen }: Props) {
   return (
     <li className="min-w-0">
       <button
+        data-recipe={recipe.id}
         type="button"
         onClick={onOpen}
         className="card group flex h-full w-full flex-col gap-3 p-4 text-left transition-all hover:-translate-y-px hover:border-zinc-300 hover:shadow-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-500 dark:hover:border-zinc-700"

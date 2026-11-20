@@ -72,7 +72,7 @@ export function WorkspacePickerDialog({ title, description, workspaces, actionLa
                   return (
                     <li key={workspace.id}>
                       <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-zinc-200 px-4 py-3 hover:border-zinc-400 has-checked:border-zinc-900 has-checked:bg-zinc-50 has-focus-visible:ring-2 has-focus-visible:ring-zinc-400 has-disabled:cursor-not-allowed has-disabled:opacity-60 dark:border-zinc-700 dark:hover:border-zinc-500 dark:has-checked:border-zinc-200 dark:has-checked:bg-zinc-800/60">
-                        <input type="radio" name="workspace" value={workspace.id} checked={checked} disabled={!available} onChange={() => setSelected(workspace.id)} className="sr-only" />
+                        <input data-workspace-choice={workspace.id} type="radio" name="workspace" value={workspace.id} checked={checked} disabled={!available} onChange={() => setSelected(workspace.id)} className="sr-only" />
                         <span className="flex size-9 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-zinc-700 dark:bg-zinc-800 dark:text-zinc-200">
                           <Layers aria-hidden className="size-4" />
                         </span>
@@ -111,7 +111,7 @@ export function WorkspacePickerDialog({ title, description, workspaces, actionLa
         </ModalBody>
         <ModalFooter>
           <Button label="Cancel" variant="secondary" onClick={onClose} />
-          <Button label={actionLabel} icon={actionIcon} type="submit" disabled={!ready} busy={busy} />
+          <Button tourId="workspace-picker-confirm" label={actionLabel} icon={actionIcon} type="submit" disabled={!ready} busy={busy} />
         </ModalFooter>
       </form>
     </Modal>

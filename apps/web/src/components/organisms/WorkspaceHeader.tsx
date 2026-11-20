@@ -141,7 +141,7 @@ export function WorkspaceHeader({ workspace, workspaces, current, deleting, onRe
               <Icon aria-hidden className="size-4 max-sm:hidden" />{label}
             </span>
           ) : (
-            <a key={view} href={routePath(route)} aria-current={view === current ? "page" : undefined} onClick={(event) => open(event, route)}
+            <a data-workspace-view={view} key={view} href={routePath(route)} aria-current={view === current ? "page" : undefined} onClick={(event) => open(event, route)}
               className={`flex shrink-0 items-center gap-1.5 rounded-t-md border-b-2 px-2.5 py-2.5 sm:gap-2 sm:px-3 text-sm font-medium whitespace-nowrap transition-colors ${
                 view === current
                   ? "border-zinc-900 text-zinc-900 dark:border-white dark:text-white"

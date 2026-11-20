@@ -21,7 +21,7 @@ export function RestartRequiredBanner({ restartDisabled, onRestart }: Props) {
       <p className="min-w-0 flex-1 text-sm leading-6 text-zinc-700 dark:text-zinc-300">
         Settings changed. The workspace picks them up only after it restarts.
       </p>
-      <Button label="Restart workspace" variant="secondary" icon={RotateCw} disabled={restartDisabled} onClick={onRestart} />
+      <Button tourId="restart-workspace" label="Restart workspace" variant="secondary" icon={RotateCw} disabled={restartDisabled} onClick={onRestart} />
     </div>
   );
 }

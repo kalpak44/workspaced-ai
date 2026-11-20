@@ -25,7 +25,7 @@ export function SectionNav<T extends string>({ label, sections, current, onSelec
       <nav aria-label={label}
         className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none] sm:flex-col sm:overflow-visible sm:p-3 [&::-webkit-scrollbar]:hidden">
         {sections.map(({ id, label: name, Icon }) => (
-          <button key={id} type="button" aria-current={current === id ? "page" : undefined} onClick={() => onSelect(id)}
+          <button data-section={id} key={id} type="button" aria-current={current === id ? "page" : undefined} onClick={() => onSelect(id)}
             className={`flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-left text-sm font-medium whitespace-nowrap transition-colors ${
               current === id
                 ? "bg-zinc-100 text-zinc-900 dark:bg-zinc-800 dark:text-zinc-100"
