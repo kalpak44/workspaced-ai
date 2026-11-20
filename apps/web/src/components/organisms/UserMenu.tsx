@@ -36,10 +36,10 @@ export function UserMenu({ theme, onThemeChange }: Props) {
               {name && <p className="truncate text-xs text-zinc-500 dark:text-zinc-400">{account?.email}</p>}
             </div>
           </div>
-          <div className={ROW}>
+          {account?.role === "ADMIN" && <div className={ROW}>
             <span>Version</span>
             <span className="text-emerald-500">{import.meta.env.VITE_APP_VERSION ?? "dev"}</span>
-          </div>
+          </div>}
           <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "billing" }); }}>
             Billing
             {billing && <span className="tabular-nums text-zinc-500 dark:text-zinc-400">{formatMoney(billing.balanceCents)}</span>}
@@ -47,9 +47,9 @@ export function UserMenu({ theme, onThemeChange }: Props) {
           <MenuItem className={ROW} onClick={() => { close(); navigate({ name: "general-settings" }); }}>
             Settings
           </MenuItem>
-          <MenuLink className={`${ROW} ${SEPARATED}`} href="/api/v1/swagger-ui">
+          {account?.role === "ADMIN" && <MenuLink className={`${ROW} ${SEPARATED}`} href="/api/v1/swagger-ui">
             API Reference
-          </MenuLink>
+          </MenuLink>}
           <div className={`${ROW} ${SEPARATED}`}>
             <span>Theme</span>
             <ThemeSwitch theme={theme} onChange={onThemeChange} />

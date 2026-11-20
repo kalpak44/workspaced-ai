@@ -483,7 +483,7 @@ describe("App", () => {
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
   });
 
-  it("shows the version, API Reference link and the theme switch in the account menu", async () => {
+  it("shows the version, API Reference link and the theme switch in the admin account menu", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "Account menu" }));
@@ -503,6 +503,19 @@ describe("App", () => {
 
     await user.click(within(menu).getByRole("menuitem", { name: "Settings" }));
     expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+  });
+
+  it("hides the version and API Reference from the regular user account menu", async () => {
+    api.auth.account.role = "USER";
+    const user = userEvent.setup();
+    await renderLoaded();
+    await user.click(screen.getByRole("button", { name: "Account menu" }));
+    const menu = screen.getByRole("menu");
+    expect(within(menu).queryByText("Version")).not.toBeInTheDocument();
+    expect(within(menu).queryByText("dev")).not.toBeInTheDocument();
+    expect(within(menu).queryByRole("menuitem", { name: "API Reference" })).not.toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: "Settings" })).toBeInTheDocument();
+    expect(within(menu).getByRole("menuitem", { name: /Billing/ })).toBeInTheDocument();
   });
 
   it("closes the account menu on Escape and from Logout", async () => {
