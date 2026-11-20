@@ -1,5 +1,6 @@
 export { ChatComposer } from "./ChatComposer";
 export { ChatMessageEditor, ChatMessageView } from "./ChatMessageView";
+export { DemoBanner } from "./DemoBanner";
 export { EmptyState } from "./EmptyState";
 export { ErrorBanner } from "./ErrorBanner";
 export { Markdown } from "./Markdown";

@@ -660,13 +660,13 @@ export function installFakeApi(
       if (apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
       drafts.delete(draft.id);
       launched.push({ id: draft.id, apiKey });
-      const workspace = { ...draft, status: state.createStatus };
+      const workspace = { ...draft, status: state.createStatus, ...demoFields(draft.demo === true) };
       rows.push(workspace);
       return json(workspace);
     }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
-      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string; serverType?: string })
+      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string; serverType?: string; demo?: boolean })
       : undefined;
     const index = rows.findIndex((w) => w.id === id);
     switch (init?.method ?? "GET") {
@@ -674,7 +674,8 @@ export function installFakeApi(
         if (state.holdCreate) await state.holdCreate;
         if (body!.apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
         if (state.vmSizes.some((size) => size.serverType === body!.serverType && !size.available)) return json({ status: 409 }, 409);
-        if (state.noFunds) return json({ status: 402, detail: "add funds" }, 402);
+        if (body!.demo && !auth.account.demoAvailable) return json({ status: 409 }, 409);
+        if (state.noFunds && !body!.demo) return json({ status: 402, detail: "add funds" }, 402);
         if (body!.apiKey === undefined) {
           const draft = {
             id: `ws-${state.nextId++}`,
@@ -683,6 +684,7 @@ export function installFakeApi(
             model: null,
             timeZone: body!.timeZone ?? "UTC",
             restartRequired: false,
+            demo: body!.demo === true,
           };
           drafts.set(draft.id, draft);
           return json({ ...draft, status: "DRAFT" }, 201);
@@ -695,6 +697,7 @@ export function installFakeApi(
           timeZone: body!.timeZone ?? "UTC",
           status: state.createStatus,
           restartRequired: false,
+          ...demoFields(body!.demo === true),
         };
         rows.push(created);
         return json(created, 201);
@@ -808,6 +811,13 @@ export function installFakeApi(
       list.filter((s) => s.id !== sessionId),
     );
     return new Response(null, { status: 204 });
+  }
+
+  // A demo is deleted four hours after it starts, and it uses up the account's one demo.
+  function demoFields(demo: boolean) {
+    if (!demo) return {};
+    auth.account = { ...auth.account, demoAvailable: false };
+    return { demo: true, expiresAt: new Date(Date.now() + 4 * 3600_000).toISOString() };
   }
 
   function markRestartRequired(workspaceId: string, restartRequired: boolean) {

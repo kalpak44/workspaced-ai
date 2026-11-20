@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
 import io.swagger.v3.oas.annotations.media.Schema;
+import java.time.Instant;
 import java.util.UUID;
 
 @Schema(description = "A workspace AI agents run in")
@@ -28,7 +29,15 @@ public record Workspace(
             description =
                 "Whether secrets changed since its runtime started, and apply only after a restart",
             example = "false")
-        boolean restartRequired) {
+        boolean restartRequired,
+    @Schema(description = "The account's free demo, which is never charged", example = "false")
+        boolean demo,
+    @Schema(
+            description =
+                "When a demo is deleted; null for every other workspace, and for a demo"
+                    + " whose VM has not started yet",
+            example = "2026-11-19T18:00:00Z")
+        Instant expiresAt) {
 
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
     return new Workspace(
@@ -39,6 +48,8 @@ public record Workspace(
         entity.getModel(),
         entity.getTimeZone(),
         status,
-        entity.isSecretsPendingRestart());
+        entity.isSecretsPendingRestart(),
+        entity.isDemo(),
+        entity.getExpiresAt());
   }
 }

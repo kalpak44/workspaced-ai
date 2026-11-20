@@ -208,7 +208,16 @@ class WorkspaceControllerTest {
     assertThat(JSON.readValue(renamed.body(), Workspace.class))
         .isEqualTo(
             new Workspace(
-                id, "New", "openrouter", null, null, "UTC", WorkspaceStatus.READY, false));
+                id,
+                "New",
+                "openrouter",
+                null,
+                null,
+                "UTC",
+                WorkspaceStatus.READY,
+                false,
+                false,
+                null));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
   }
 

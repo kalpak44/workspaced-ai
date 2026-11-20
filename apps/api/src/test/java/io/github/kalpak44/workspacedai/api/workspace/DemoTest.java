@@ -1,0 +1,259 @@
+package io.github.kalpak44.workspacedai.api.workspace;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+import io.github.kalpak44.workspacedai.api.TestDatabase;
+import io.github.kalpak44.workspacedai.api.TestRuntime;
+import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.compute.VmPricing;
+import io.github.kalpak44.workspacedai.api.compute.VmSize;
+import io.github.kalpak44.workspacedai.api.notification.Notification;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
+import java.math.BigDecimal;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpRequest.BodyPublishers;
+import java.net.http.HttpResponse;
+import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.temporal.ChronoUnit;
+import java.util.List;
+import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
+import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.annotation.Import;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import tools.jackson.databind.json.JsonMapper;
+
+/**
+ * Every account gets one free demo workspace: started with no balance, never charged, and deleted
+ * once its hours are up, with a warning shortly before.
+ */
+@SpringBootTest(
+    webEnvironment = WebEnvironment.RANDOM_PORT,
+    properties = "workspaced.demo.at-once=2")
+@Import({TestDatabase.class, TestRuntime.class})
+class DemoTest {
+
+  private static final JsonMapper JSON = JsonMapper.builder().build();
+
+  @LocalServerPort int port;
+  @MockitoBean ApiKeyCheck keyCheck;
+  @MockitoBean VmPricing pricing;
+  @MockitoSpyBean WorkspaceRuntime runtime;
+  @Autowired UserRepository users;
+  @Autowired WorkspaceRepository workspaces;
+  @Autowired DemoReaper reaper;
+  @Autowired NotificationService notifications;
+  @Autowired JdbcTemplate jdbc;
+
+  private final HttpClient http = HttpClient.newHttpClient();
+  private UUID user;
+  private String bearer;
+
+  @BeforeEach
+  void signIn() {
+    workspaces.deleteAll();
+    when(pricing.sizes(true))
+        .thenReturn(
+            List.of(
+                size("cx53", true, true, "20"),
+                size("cx23", false, true, "5"),
+                size("sold-out", false, false, "1")));
+    when(keyCheck.accepts(any(), any())).thenReturn(true);
+    var name = "visitor-" + UUID.randomUUID();
+    var saved = users.save(TestUsers.newUser(name));
+    user = saved.getId();
+    bearer = TestUsers.bearer(saved);
+  }
+
+  @Test
+  void startsAFreeDemoWithAnEmptyBalanceForAFewHours() throws Exception {
+    assertThat(account().get("demoAvailable").asBoolean()).isTrue();
+
+    var created = send("POST", "/workspaces", demo("sk-or-1"));
+
+    assertThat(created.statusCode()).isEqualTo(201);
+    var workspace = JSON.readValue(created.body(), Workspace.class);
+    assertThat(workspace.demo()).isTrue();
+    assertThat(workspace.expiresAt())
+        .isCloseTo(Instant.now().plus(Duration.ofHours(4)), within(1, ChronoUnit.MINUTES));
+    // A size asked for is ignored: pick the cheapest available, even if it is not the default.
+    verify(runtime).start(eq(workspace.id()), eq(user), eq("cx23"), any());
+    assertThat(
+            jdbc.queryForObject(
+                "select count(*) from billing_usage where workspace_id = ?",
+                Long.class,
+                workspace.id()))
+        .isZero();
+    assertThat(account().get("demoAvailable").asBoolean()).isFalse();
+    assertThat(newest().title()).isEqualTo("Your demo workspace is starting");
+  }
+
+  @Test
+  void givesNoSecondDemoEvenOnceTheFirstIsDeleted() throws Exception {
+    var first =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class);
+    assertThat(send("DELETE", "/workspaces/" + first.id(), null).statusCode()).isEqualTo(204);
+
+    var again = send("POST", "/workspaces", demo("sk-or-1"));
+
+    assertThat(again.statusCode()).isEqualTo(409);
+    assertThat(again.body()).contains("this account has had its demo");
+  }
+
+  @Test
+  void handsTheDemoBackWhenItsVmFailsToStart() throws Exception {
+    doThrow(new IllegalStateException("Hetzner is down"))
+        .when(runtime)
+        .start(any(), eq(user), any(), any());
+
+    assertThat(send("POST", "/workspaces", demo("sk-or-1")).statusCode()).isEqualTo(500);
+
+    assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
+    assertThat(account().get("demoAvailable").asBoolean()).isTrue();
+  }
+
+  @Test
+  void launchesADemoDraftOnceItsKeyArrives() throws Exception {
+    var draft = JSON.readValue(send("POST", "/workspaces", demo(null)).body(), Workspace.class);
+    assertThat(draft.status()).isEqualTo(WorkspaceStatus.DRAFT);
+    // The draft does not use the demo up: a closed dialog would otherwise cost it.
+    assertThat(account().get("demoAvailable").asBoolean()).isTrue();
+
+    // Capacity changes while the owner connects OpenRouter: select again at launch.
+    when(pricing.sizes(true)).thenReturn(List.of(size("cx33", false, true, "8")));
+    var launched = send("POST", "/workspaces/" + draft.id() + "/launch", "{\"apiKey\":\"sk-2\"}");
+
+    assertThat(launched.statusCode()).isEqualTo(200);
+    var workspace = JSON.readValue(launched.body(), Workspace.class);
+    assertThat(workspace.demo()).isTrue();
+    assertThat(workspace.expiresAt()).isNotNull();
+    verify(runtime).start(eq(workspace.id()), eq(user), eq("cx33"), any());
+    assertThat(account().get("demoAvailable").asBoolean()).isFalse();
+  }
+
+  @Test
+  void refusesADemoWhileEveryDemoIsTaken() throws Exception {
+    for (var i = 0; i < 2; i++) {
+      var other = users.save(TestUsers.newUser("other-" + UUID.randomUUID()));
+      assertThat(send("POST", "/workspaces", demo("sk-or-1"), TestUsers.bearer(other)).statusCode())
+          .isEqualTo(201);
+    }
+
+    var refused = send("POST", "/workspaces", demo("sk-or-1"));
+
+    assertThat(refused.statusCode()).isEqualTo(503);
+    assertThat(account().get("demoAvailable").asBoolean()).isTrue();
+  }
+
+  @Test
+  void warnsOnceShortlyBeforeAndThenDeletesIt() throws Exception {
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    var expiresAt = workspaces.findById(id).orElseThrow().getExpiresAt();
+
+    reaper.reap(expiresAt.minus(Duration.ofHours(1)));
+    assertThat(newest().title()).isEqualTo("Your demo workspace is starting");
+
+    reaper.reap(expiresAt.minus(Duration.ofMinutes(20)));
+    reaper.reap(expiresAt.minus(Duration.ofMinutes(10)));
+    assertThat(notifications.list(user))
+        .filteredOn(n -> n.title().endsWith("is deleted in 20 minutes"))
+        .hasSize(1);
+    assertThat(notifications.list(user)).noneMatch(n -> n.title().endsWith("10 minutes"));
+    assertThat(workspaces.existsById(id)).isTrue();
+
+    reaper.reap(expiresAt.plusSeconds(1));
+    assertThat(workspaces.existsById(id)).isFalse();
+    assertThat(newest().title()).isEqualTo("Your demo has ended");
+  }
+
+  @Test
+  void leavesWorkspacesThatAreNotDemosAlone() throws Exception {
+    var admin = TestUsers.bearer(port);
+    var created =
+        send(
+            "POST",
+            "/workspaces",
+            "{\"name\":\"Kept\",\"modelProvider\":\"openrouter\",\"apiKey\":\"sk-or-1\"}",
+            admin);
+    var id = JSON.readValue(created.body(), Workspace.class).id();
+
+    reaper.reap(Instant.now().plus(Duration.ofDays(365)));
+
+    assertThat(workspaces.existsById(id)).isTrue();
+  }
+
+  @Test
+  void refusesWhenNoMachineIsAvailableWithoutUsingTheTrial() throws Exception {
+    when(pricing.sizes(true)).thenReturn(List.of(size("cx23", true, false, "5")));
+    assertThat(send("POST", "/workspaces", demo("sk-or-1")).statusCode()).isEqualTo(503);
+    assertThat(account().get("demoAvailable").asBoolean()).isTrue();
+    assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
+  }
+
+  private static VmSize size(String type, boolean isDefault, boolean available, String price) {
+    return new VmSize(
+        type,
+        isDefault,
+        2,
+        4,
+        40,
+        "shared",
+        "x86",
+        "nbg1",
+        new BigDecimal(price),
+        new BigDecimal(price),
+        true,
+        available);
+  }
+
+  private Notification newest() {
+    return notifications.list(user).getFirst();
+  }
+
+  private tools.jackson.databind.JsonNode account() throws Exception {
+    return JSON.readTree(send("GET", "/account", null).body());
+  }
+
+  private static String demo(String apiKey) {
+    var key = apiKey == null ? "" : ",\"apiKey\":\"" + apiKey + "\"";
+    return "{\"name\":\"Demo\",\"modelProvider\":\"openrouter\",\"serverType\":\"cx53\","
+        + "\"demo\":true"
+        + key
+        + "}";
+  }
+
+  private HttpResponse<String> send(String method, String path, String body) throws Exception {
+    return send(method, path, body, bearer);
+  }
+
+  private HttpResponse<String> send(String method, String path, String body, String authorization)
+      throws Exception {
+    var request =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + "/api/v1" + path))
+            .header("Authorization", authorization)
+            .header("Content-Type", "application/json")
+            .method(method, body == null ? BodyPublishers.noBody() : BodyPublishers.ofString(body))
+            .build();
+    return http.send(request, BodyHandlers.ofString());
+  }
+}

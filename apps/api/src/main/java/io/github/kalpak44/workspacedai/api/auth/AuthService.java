@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.api.auth;
 import io.github.kalpak44.workspacedai.api.mail.MailService;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
+import io.github.kalpak44.workspacedai.api.recipe.StarterRecipes;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -34,6 +35,7 @@ public class AuthService {
   private final Auth0Users auth0Users;
   private final VerificationEmails verificationEmails;
   private final AuthProperties properties;
+  private final StarterRecipes starterRecipes;
 
   public AuthService(
       UserRepository users,
@@ -44,7 +46,8 @@ public class AuthService {
       MailService mail,
       Auth0Users auth0Users,
       VerificationEmails verificationEmails,
-      AuthProperties properties) {
+      AuthProperties properties,
+      StarterRecipes starterRecipes) {
     this.users = users;
     this.tokens = tokens;
     this.decoder = decoder;
@@ -54,6 +57,7 @@ public class AuthService {
     this.auth0Users = auth0Users;
     this.verificationEmails = verificationEmails;
     this.properties = properties;
+    this.starterRecipes = starterRecipes;
   }
 
   /**
@@ -82,6 +86,7 @@ public class AuthService {
     var existing = users.findByIdpSubject(subject);
     var user = existing.orElseGet(() -> create(subject, role));
     user.signedIn(role);
+    starterRecipes.claimPublisher(user.getId(), profile.email());
     return new SignIn(tokens.issue(user, profile), profile.email(), existing.isEmpty());
   }
 
@@ -94,13 +99,17 @@ public class AuthService {
         """
         Welcome to workspaced!
 
-        Your account is ready. A workspace is a sandbox with its own AI agent: add funds to \
-        your balance, then create a workspace from the sidebar and start a session to give \
-        the agent a task.
+        Your account is ready. A workspace is a small computer of your own in the cloud, with \
+        an AI agent that builds and runs things for you.
 
-        [Open workspaced](%s)
+        Your first one is on us: the guided tour sets up a free demo workspace, has its agent \
+        build a website and schedule work on it, and explains every step. You only click \
+        Next, connect your own OpenRouter account and choose your WordPress credentials. The VM \
+        is free for four hours and then deleted. OpenRouter bills your AI usage separately.
+
+        [Start the tour](%s)
         """
-            .formatted(properties.appUrl() + "/");
+            .formatted(properties.appUrl() + "/?tour");
     try {
       mail.notify(List.of(email), "Welcome to workspaced", text);
     } catch (RuntimeException e) {

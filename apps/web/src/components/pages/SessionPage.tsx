@@ -5,6 +5,7 @@ import { useSessions } from "../../hooks/useSessions";
 import { useSessionAgents } from "../../hooks/useSessionAgents";
 import { FileLinkContext, useSessionFiles } from "../../hooks/useSessionFiles";
 import type { Workspace } from "../../hooks/useWorkspaces";
+import { reportChatBusy } from "../../lib/tour";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
 import { ChatAgentPicker } from "../organisms/ChatAgentPicker";
@@ -37,6 +38,12 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   const deleteTarget = sessions.sessions.find((item) => item.id === deleteId);
 
   useEffect(() => onTitle(title), [onTitle, title]);
+  // The guided tour waits on the agent finishing; this page is where that is known.
+  useEffect(() => {
+    // Idle before history arrives, or after an error, is not a completed deployment.
+    const answered = chat.messages.some((message) => message.role === "assistant" && message.parts.some((part) => part.type === "text" && part.text?.trim()));
+    reportChatBusy(sessionId, !ready || chat.loading || chat.busy || !!chat.error || !answered);
+  }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages]);
 
   // A session that is not in the list was deleted, or the link was wrong.
   const missing = ready && !sessions.loading && !sessions.error && !session;

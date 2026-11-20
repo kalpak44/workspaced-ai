@@ -1,11 +1,14 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
 import io.github.kalpak44.workspacedai.api.auth.Role;
+import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.billing.BillingService;
 import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
+import io.github.kalpak44.workspacedai.api.compute.VmSize;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
+import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
@@ -16,15 +19,20 @@ import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import java.io.OutputStream;
 import java.math.BigDecimal;
 import java.security.SecureRandom;
+import java.time.Duration;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Base64;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -37,6 +45,10 @@ import org.springframework.web.server.ResponseStatusException;
  * asked for a VM, so that slow call holds no database connection; any failure after that removes
  * both again, so a failed create leaves nothing behind to bill or to list. The other slow calls
  * (checking the provider's key, waiting for a VM to be deleted) run outside any transaction too.
+ *
+ * <p>A demo is an account's one free workspace: the cheapest available size, never charged, and
+ * deleted by {@link DemoReaper} once its time is up. The account's claim on it is taken before the
+ * VM is asked for and handed back only when that start fails.
  */
 @Service
 public class WorkspaceService {
@@ -54,6 +66,8 @@ public class WorkspaceService {
   private final VmPricing pricing;
   private final BillingService billing;
   private final NotificationService notifications;
+  private final Duration demoLength;
+  private final int demosAtOnce;
 
   public WorkspaceService(
       WorkspaceRepository repository,
@@ -65,7 +79,9 @@ public class WorkspaceService {
       UserRepository users,
       VmPricing pricing,
       BillingService billing,
-      NotificationService notifications) {
+      NotificationService notifications,
+      @Value("${workspaced.demo.length:PT4H}") Duration demoLength,
+      @Value("${workspaced.demo.at-once:20}") int demosAtOnce) {
     this.repository = repository;
     this.runtime = runtime;
     this.events = events;
@@ -76,6 +92,8 @@ public class WorkspaceService {
     this.pricing = pricing;
     this.billing = billing;
     this.notifications = notifications;
+    this.demoLength = demoLength;
+    this.demosAtOnce = demosAtOnce;
   }
 
   /** The workspaces one user owns; nobody sees another user's, and drafts are not listed. */
@@ -86,14 +104,7 @@ public class WorkspaceService {
     return entities.stream().map(e -> Workspace.of(e, statuses.get(e.getId()))).toList();
   }
 
-  /**
-   * The key is checked before anything is stored, so a rejected key leaves nothing behind. The
-   * workspace receives it as a secret and the base URL as config; neither is kept in the database.
-   * The harness gets a password of its own, which only the API and the workspace ever see.
-   *
-   * @param serverType null for the default size
-   * @param timeZone an IANA zone, which the harness always starts with
-   */
+  /** A workspace the owner's balance pays for, as {@link #create} with demo false makes one. */
   public Workspace create(
       UUID ownerId,
       String name,
@@ -101,26 +112,57 @@ public class WorkspaceService {
       String apiKey,
       String serverType,
       String timeZone) {
+    return create(ownerId, name, provider, apiKey, serverType, timeZone, false);
+  }
+
+  /**
+   * The key is checked before anything is stored, so a rejected key leaves nothing behind. The
+   * workspace receives it as a secret and the base URL as config; neither is kept in the database.
+   * The harness gets a password of its own, which only the API and the workspace ever see.
+   *
+   * @param serverType null for the default size, ignored for a demo, which chooses the cheapest
+   *     available size
+   * @param timeZone an IANA zone, which the harness always starts with
+   * @param demo the account's one free demo, rather than a workspace its balance pays for
+   */
+  public Workspace create(
+      UUID ownerId,
+      String name,
+      ModelProvider provider,
+      String apiKey,
+      String serverType,
+      String timeZone,
+      boolean demo) {
     validTimeZone(timeZone);
-    var price = priceFor(ownerId, serverType);
+    var size = demo ? cheapestDemoSize() : serverType;
+    var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
     price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    if (demo) {
+      requireDemoAvailable(ownerId);
+    }
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
+    }
+    if (demo) {
+      claimDemo(ownerId);
     }
     var id =
         transactions
             .execute(
                 _ ->
                     repository.saveAndFlush(
-                        new WorkspaceEntity(ownerId, name, provider.id(), timeZone)))
+                        new WorkspaceEntity(ownerId, name, provider.id(), timeZone, demo)))
             .getId();
     try {
-      return start(id, ownerId, name, provider, apiKey, serverType, timeZone, price);
+      return start(id, ownerId, name, provider, apiKey, size, timeZone, price, demo);
     } catch (RuntimeException e) {
       // The user sees only that it failed; this is where the reason is kept.
       log.warn("workspace {} failed to create", id, e);
       release(id);
       transactions.executeWithoutResult(_ -> repository.deleteById(id));
+      if (demo) {
+        users.releaseDemo(ownerId);
+      }
       throw e;
     }
   }
@@ -132,14 +174,24 @@ public class WorkspaceService {
    * @param serverType null for the default size
    */
   public Workspace createDraft(
-      UUID ownerId, String name, ModelProvider provider, String serverType, String timeZone) {
+      UUID ownerId,
+      String name,
+      ModelProvider provider,
+      String serverType,
+      String timeZone,
+      boolean demo) {
     validTimeZone(timeZone);
-    priceFor(ownerId, serverType).ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    var size = demo ? cheapestDemoSize() : serverType;
+    if (demo) {
+      requireDemoAvailable(ownerId);
+    } else {
+      priceFor(ownerId, size).ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    }
     var entity =
         transactions.execute(
             _ ->
                 repository.saveAndFlush(
-                    WorkspaceEntity.draft(ownerId, name, provider.id(), serverType, timeZone)));
+                    WorkspaceEntity.draft(ownerId, name, provider.id(), size, timeZone, demo)));
     return Workspace.of(entity, WorkspaceStatus.DRAFT);
   }
 
@@ -157,14 +209,25 @@ public class WorkspaceService {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace is already launched");
     }
     var ownerId = draft.getOwnerId();
+    var demo = draft.isDemo();
     var provider = ModelProvider.byId(draft.getModelProvider()).orElseThrow();
-    var price = priceFor(ownerId, draft.getServerType());
+    var size = demo ? cheapestDemoSize() : draft.getServerType();
+    var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
     price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    if (demo) {
+      requireDemoAvailable(ownerId);
+    }
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
+    if (demo) {
+      claimDemo(ownerId);
+    }
     // Claimed before the VM is asked for, so two launches at once start one VM between them.
     if (repository.claimDraft(id) == 0) {
+      if (demo) {
+        users.releaseDemo(ownerId);
+      }
       throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace is already launched");
     }
     try {
@@ -175,13 +238,17 @@ public class WorkspaceService {
               draft.getName(),
               provider,
               apiKey,
-              draft.getServerType(),
+              size,
               draft.getTimeZone(),
-              price));
+              price,
+              demo));
     } catch (RuntimeException e) {
       log.warn("workspace {} failed to launch", id, e);
       release(id);
       repository.returnToDraft(id);
+      if (demo) {
+        users.releaseDemo(ownerId);
+      }
       throw e;
     }
   }
@@ -194,7 +261,8 @@ public class WorkspaceService {
       String apiKey,
       String serverType,
       String timeZone,
-      Optional<BigDecimal> price) {
+      Optional<BigDecimal> price,
+      boolean demo) {
     var startedAs =
         runtime.start(
             id,
@@ -213,10 +281,47 @@ public class WorkspaceService {
             _ -> {
               var saved = repository.findById(id).orElseThrow();
               saved.setServerType(startedAs);
-              notifications.send(ownerId, Notifications.workspaceCreated(id, name));
+              if (demo) {
+                var expiresAt = Instant.now().plus(demoLength);
+                saved.setExpiresAt(expiresAt);
+                notifications.send(ownerId, Notifications.demoCreated(id, name, expiresAt));
+              } else {
+                notifications.send(ownerId, Notifications.workspaceCreated(id, name));
+              }
               return saved;
             });
     return Workspace.of(entity, statusOf(id));
+  }
+
+  // Checked before the provider's key, so an account that cannot have a demo is told why rather
+  // than that its key was rejected; the claim itself is taken only once the key is accepted.
+  private void requireDemoAvailable(UUID ownerId) {
+    var available = users.findById(ownerId).map(UserEntity::isDemoAvailable).orElse(false);
+    if (!available) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "this account has had its demo");
+    }
+    if (repository.countByDemoTrueAndDraftFalse() >= demosAtOnce) {
+      throw new ResponseStatusException(
+          HttpStatus.SERVICE_UNAVAILABLE, "every demo is taken right now; try again later");
+    }
+  }
+
+  private String cheapestDemoSize() {
+    return pricing.sizes(true).stream()
+        .filter(VmSize::available)
+        .min(Comparator.comparing(VmSize::monthlyGross).thenComparing(VmSize::serverType))
+        .map(VmSize::serverType)
+        .orElseThrow(
+            () ->
+                new ResponseStatusException(
+                    HttpStatus.SERVICE_UNAVAILABLE,
+                    "no demo VM size is available right now; try again later"));
+  }
+
+  private void claimDemo(UUID ownerId) {
+    if (users.claimDemo(ownerId, Instant.now()) == 0) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "this account has had its demo");
+    }
   }
 
   /**
@@ -307,7 +412,7 @@ public class WorkspaceService {
    * not stop the row is kept, so the delete can be retried. False when no workspace has that id.
    */
   public boolean delete(UUID id) {
-    return delete(id, false);
+    return delete(id, Notifications::workspaceDeleted);
   }
 
   /**
@@ -315,10 +420,15 @@ public class WorkspaceService {
    * could no longer keep it; the owner is told that was why.
    */
   public boolean deleteUnpaid(UUID id) {
-    return delete(id, true);
+    return delete(id, Notifications::workspaceDeletedUnpaid);
   }
 
-  private boolean delete(UUID id, boolean unpaid) {
+  /** Deletes a demo whose time is up; the owner is told that was why. */
+  public boolean deleteExpiredDemo(UUID id) {
+    return delete(id, Notifications::demoEnded);
+  }
+
+  private boolean delete(UUID id, Function<String, NotificationMessage> reason) {
     var owner = repository.findOwnerIdById(id);
     if (owner.isEmpty()) {
       return false;
@@ -334,10 +444,7 @@ public class WorkspaceService {
           repository
               .findById(id)
               .ifPresent(
-                  workspace ->
-                      notifications.send(
-                          owner.get(),
-                          Notifications.workspaceDeleted(workspace.getName(), unpaid)));
+                  workspace -> notifications.send(owner.get(), reason.apply(workspace.getName())));
           repository.deleteById(id);
           events.publishEvent(new WorkspaceDeleted(id, owner.get()));
         });

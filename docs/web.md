@@ -98,3 +98,31 @@ The terminal uses an ANSI color palette on a dark background. The harness image 
 and installs an interactive Bash profile with a colored prompt and `ls` output. Existing pods need the rebuilt
 harness image before the shell defaults change.
 
+
+## Guided WordPress trial
+
+The tutorial opens automatically on a new account's first successful sign-in (`/?welcome`).
+Returning sign-ins land at `/` and do not reopen it. An unfinished tutorial resumes on reload;
+skipping or finishing clears its progress. Eligible accounts can also start it manually from
+the home-page invitation or `/?tour`.
+The tutorial explains a workspace, connects the owner's OpenRouter account with PKCE,
+then presents the live VM catalogue. Only its cheapest available size is enabled for the
+trial; other sizes explain whether they are sold out or excluded from the free trial.
+The server chooses again at launch if capacity has changed. The machine runs for four
+hours with no platform billing; OpenRouter bills the owner's AI usage separately.
+
+The tour opens the public WordPress recipe, collects admin username/password as write-only
+secrets, generates a separate database secret and restarts the workspace before applying
+the recipe. It waits for an agent reply and asks the owner to check the public IP link.
+It then schedules sourced technology news every five minutes, explains its OpenRouter
+usage and deletion control, and returns to chat with an editable design suggestion.
+The owner sends that last request themselves.
+
+Progress and draft/session/workspace identifiers persist across reloads. Keys, passwords
+and typed credentials never enter tour storage. Reloading before launch requires reconnecting
+OpenRouter. A partial secrets save can be retried; saved values are not overwritten.
+
+Migration V42 updates the starter WordPress instructions and Pavel Usanli byline without
+changing V41's checksum. The WordPress recipe transfers from its seed account to
+`pavel.usanli@gmail.com` on that account's next verified sign-in. Other starter recipes
+remain owned by the platform seed account.

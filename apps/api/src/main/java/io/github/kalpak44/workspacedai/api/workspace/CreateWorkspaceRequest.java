@@ -33,7 +33,18 @@ public record CreateWorkspaceRequest(
                 "An IANA time zone for its agent, usually the browser's; UTC when omitted",
             example = "Europe/Sofia")
         @Size(max = 64)
-        String timeZone) {
+        String timeZone,
+    @Schema(
+            description =
+                "The account's one free demo: the cheapest available size, never charged, and deleted a few"
+                    + " hours after it starts. serverType is ignored",
+            example = "false")
+        Boolean demo) {
+
+  /** Omitted means a workspace the balance pays for. */
+  boolean wantsDemo() {
+    return Boolean.TRUE.equals(demo);
+  }
 
   /** Blank means the default size. */
   String serverTypeOrNull() {

@@ -14,7 +14,9 @@ public record Account(
                 "A picture URL: the user's Gravatar, or Auth0's picture of their initials",
             example = "https://s.gravatar.com/avatar/0bc83cb571cd1c50ba6f3e8a78ef1346")
         String avatar,
-    @Schema(description = "An admin also manages the platform's mail") Role role) {
+    @Schema(description = "An admin also manages the platform's mail") Role role,
+    @Schema(description = "Whether the account can still start its one free demo workspace")
+        boolean demoAvailable) {
 
   static Account of(UserEntity user, Auth0Users.Profile profile) {
     return new Account(
@@ -23,6 +25,7 @@ public record Account(
         profile.givenName(),
         profile.familyName(),
         profile.picture().isEmpty() ? null : profile.picture(),
-        user.getRole());
+        user.getRole(),
+        user.isDemoAvailable());
   }
 }

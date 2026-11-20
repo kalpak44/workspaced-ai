@@ -29,11 +29,13 @@ public final class Notifications {
         NotificationKind.SYSTEM,
         NotificationTone.INFO,
         "Welcome to workspaced",
-        "Add funds, then create a workspace to get your first agent.",
+        "Take the guided tour: a free demo workspace is waiting for you.",
         greeting
-            + " A workspace is a sandbox with its own agent. Add funds to your balance first,"
-            + " then create one from the sidebar and start a session to give the agent a task.",
-        BILLING);
+            + " A workspace is a small computer of your own in the cloud, with an AI agent that"
+            + " builds and runs things for you. Your first one is free: the guided tour sets up a"
+            + " demo workspace, has its agent build a website, and shows you each step on the way."
+            + " The VM is free for four hours and then deleted. Connect your own OpenRouter account; AI usage is billed separately by OpenRouter.",
+        new NotificationAction("Start the tour", "/?tour"));
   }
 
   /**
@@ -110,22 +112,21 @@ public final class Notifications {
         new NotificationAction("Open workspace", "/workspaces/" + id));
   }
 
-  /**
-   * @param unpaid deleted because the balance could not pay its next hour, not by the user
-   */
-  public static NotificationMessage workspaceDeleted(String name, boolean unpaid) {
-    if (unpaid) {
-      return new NotificationMessage(
-          NotificationKind.WORKSPACE,
-          NotificationTone.ERROR,
-          "Workspace deleted",
-          name + " was deleted: the balance ran out.",
-          name
-              + " stayed paused without funds to start it again, so it was permanently deleted"
-              + " with its files, sessions and secrets. Add funds before creating a new"
-              + " workspace.",
-          ADD_FUNDS);
-    }
+  /** For a workspace deleted because the balance could not pay its next hour, not by the user. */
+  public static NotificationMessage workspaceDeletedUnpaid(String name) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.ERROR,
+        "Workspace deleted",
+        name + " was deleted: the balance ran out.",
+        name
+            + " stayed paused without funds to start it again, so it was permanently deleted"
+            + " with its files, sessions and secrets. Add funds before creating a new"
+            + " workspace.",
+        ADD_FUNDS);
+  }
+
+  public static NotificationMessage workspaceDeleted(String name) {
     return new NotificationMessage(
         NotificationKind.WORKSPACE,
         NotificationTone.INFO,
@@ -135,6 +136,61 @@ public final class Notifications {
             + name
             + " was deleted with its VM, files, sessions and secrets. It no longer costs anything.",
         null);
+  }
+
+  /**
+   * For an account's free demo, as its VM starts.
+   *
+   * @param expiresAt when it is deleted
+   */
+  public static NotificationMessage demoCreated(UUID id, String name, Instant expiresAt) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.SUCCESS,
+        "Your demo workspace is starting",
+        name + " is free until " + WHEN.format(expiresAt) + ", then deleted.",
+        name
+            + " is your free demo: try anything you like in it. It is not charged, and on "
+            + WHEN.format(expiresAt)
+            + " it is deleted for good with its files, sessions and anything it published, so do"
+            + " not keep anything there you need. To keep building afterwards, add funds and"
+            + " create a workspace of your own.",
+        new NotificationAction("Open workspace", "/workspaces/" + id));
+  }
+
+  /**
+   * For a demo that is deleted soon.
+   *
+   * @param minutes whole minutes it has left
+   */
+  public static NotificationMessage demoEnding(UUID id, String name, long minutes) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.WARNING,
+        name + " is deleted in " + minutes + " minutes",
+        "Your demo ends soon. Save anything you want to keep now.",
+        "Your free demo "
+            + name
+            + " is deleted in "
+            + minutes
+            + " minutes, with its files, sessions and anything it published. Download anything"
+            + " you want to keep before then. Liked it? Add funds and create a workspace of your"
+            + " own to keep building.",
+        new NotificationAction("Open workspace", "/workspaces/" + id));
+  }
+
+  public static NotificationMessage demoEnded(String name) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.INFO,
+        "Your demo has ended",
+        name + " was deleted. Create a workspace of your own to keep building.",
+        "Your free demo "
+            + name
+            + " reached its end and was deleted with its files and sessions. Thank you for trying"
+            + " workspaced! Add funds and create a workspace of your own whenever you want to keep"
+            + " building; your recipes are still here.",
+        ADD_FUNDS);
   }
 
   /** For the author of a recipe that has just turned public for the first time. */

@@ -50,14 +50,16 @@ public class WorkspaceController implements WorkspaceApi {
                 request.trimmedName(),
                 provider,
                 request.serverTypeOrNull(),
-                request.timeZoneOrUtc())
+                request.timeZoneOrUtc(),
+                request.wantsDemo())
             : service.create(
                 CurrentUser.id(),
                 request.trimmedName(),
                 provider,
                 apiKey,
                 request.serverTypeOrNull(),
-                request.timeZoneOrUtc());
+                request.timeZoneOrUtc(),
+                request.wantsDemo());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")

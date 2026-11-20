@@ -74,6 +74,12 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   @Query("select w.id from WorkspaceEntity w where w.ownerId = :ownerId")
   List<UUID> findIdsByOwnerId(UUID ownerId);
 
+  /** Demos with a VM, which count against how many may run at once. */
+  long countByDemoTrueAndDraftFalse();
+
+  /** Demos whose time has run out, and those that run out soon, oldest first. */
+  List<WorkspaceEntity> findAllByDemoTrueAndExpiresAtBeforeOrderByExpiresAtAsc(Instant before);
+
   @Query("select w.ownerId from WorkspaceEntity w where w.id = :id")
   Optional<UUID> findOwnerIdById(UUID id);
 }

@@ -4,6 +4,7 @@ export { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 export { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";
 export { RestartWorkspaceDialog } from "./RestartWorkspaceDialog";
 export { WelcomeDialog } from "./WelcomeDialog";
+export { DemoTour } from "./DemoTour";
 export { MailPanel } from "./MailPanel";
 export { McpPanel } from "./McpPanel";
 export { ModelPanel } from "./ModelPanel";

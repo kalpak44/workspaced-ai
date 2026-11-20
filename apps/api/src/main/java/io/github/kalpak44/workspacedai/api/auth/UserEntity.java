@@ -37,6 +37,10 @@ public class UserEntity {
   @Column(name = "sessions_valid_after", insertable = false, nullable = false)
   private Instant sessionsValidAfter;
 
+  // When the account's one free demo workspace started; null while it can still have one.
+  @Column(name = "demo_started_at", insertable = false, updatable = false)
+  private Instant demoStartedAt;
+
   protected UserEntity() {
     // For JPA.
   }
@@ -56,6 +60,10 @@ public class UserEntity {
 
   public Role getRole() {
     return role;
+  }
+
+  public boolean isDemoAvailable() {
+    return demoStartedAt == null;
   }
 
   public Instant getCreatedAt() {

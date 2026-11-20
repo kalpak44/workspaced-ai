@@ -1,8 +1,8 @@
-import { Layers, MessageSquare, Plus, SearchX, Store } from "lucide-react";
+import { Layers, MessageSquare, Plus, SearchX, Sparkles, Store } from "lucide-react";
 import { useState } from "react";
 import { navigate } from "../../hooks/useRoute";
 import { DEFAULT_NAME, type Workspace } from "../../hooks/useWorkspaces";
-import { Skeleton } from "../atoms";
+import { Button, Skeleton } from "../atoms";
 import { EmptyState, PageHeader, SearchField, WorkspaceCard } from "../molecules";
 
 interface Props {
@@ -13,6 +13,8 @@ interface Props {
   readonly onRename: (id: string, name: string) => void;
   readonly onRestart: (id: string) => void;
   readonly onDelete: (id: string) => void;
+  /** Offers the guided tour of a free demo; absent once the account has had its demo. */
+  readonly onStartTour?: () => void;
 }
 
 // What a first-time user is about to do, so the empty page explains the product.
@@ -26,7 +28,7 @@ const ONBOARDING = [
 const SEARCH_FROM = 7;
 
 /** Home: every workspace as a card with its state and a way straight into each of its tools. */
-export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRename, onRestart, onDelete }: Props) {
+export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRename, onRestart, onDelete, onStartTour }: Props) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const shown = workspaces.filter((workspace) => workspace.name.toLowerCase().includes(needle));
@@ -37,6 +39,7 @@ export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRen
       <>
         <PageHeader title="Workspaces" />
         <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
+          {onStartTour && <TourInvitation onStart={onStartTour} />}
           <EmptyState icon={Layers} title="No workspaces" hint="A workspace is a sandbox with its own agent. Create one to get started."
             action={{ label: DEFAULT_NAME, onClick: onNew }} />
           <ol aria-label="How it works" className="mt-2 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
@@ -102,5 +105,21 @@ export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRen
         )}
       </div>
     </>
+  );
+}
+
+/** The first thing a new account sees: a free demo, shown rather than explained. */
+function TourInvitation({ onStart }: { readonly onStart: () => void }) {
+  return (
+    <section aria-label="Guided tour" className="card mb-8 flex w-full max-w-3xl flex-col gap-4 border-amber-200 bg-amber-50/60 p-5 sm:flex-row sm:items-center dark:border-amber-900/60 dark:bg-amber-950/20">
+      <Sparkles aria-hidden className="size-6 shrink-0 text-amber-500" />
+      <div className="flex min-w-0 flex-1 flex-col gap-1">
+        <h2 className="text-base font-semibold">Try it free with a guided tour</h2>
+        <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          We set up a free demo workspace and its agent builds a blog while you watch. You only click Next, and the demo deletes itself after 4 hours.
+        </p>
+      </div>
+      <Button label="Start the tour" icon={Sparkles} onClick={onStart} />
+    </section>
   );
 }

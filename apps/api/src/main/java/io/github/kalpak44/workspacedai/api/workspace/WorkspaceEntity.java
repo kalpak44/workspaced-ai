@@ -62,6 +62,26 @@ public class WorkspaceEntity {
   @Column(nullable = false)
   private boolean draft;
 
+  // An account's free demo: never charged, and deleted at expiresAt.
+  @Column(nullable = false, updatable = false)
+  private boolean demo;
+
+  // Set when a demo's VM starts; null for every other workspace.
+  @Column(name = "expires_at")
+  private Instant expiresAt;
+
+  public boolean isDemo() {
+    return demo;
+  }
+
+  public Instant getExpiresAt() {
+    return expiresAt;
+  }
+
+  public void setExpiresAt(Instant expiresAt) {
+    this.expiresAt = expiresAt;
+  }
+
   public boolean isDraft() {
     return draft;
   }
@@ -100,16 +120,27 @@ public class WorkspaceEntity {
   }
 
   public WorkspaceEntity(UUID ownerId, String name, String modelProvider, String timeZone) {
+    this(ownerId, name, modelProvider, timeZone, false);
+  }
+
+  public WorkspaceEntity(
+      UUID ownerId, String name, String modelProvider, String timeZone, boolean demo) {
     this.ownerId = ownerId;
     this.name = name;
     this.modelProvider = modelProvider;
     this.timeZone = timeZone;
+    this.demo = demo;
   }
 
   /** One without a VM yet, which holds the size it will be launched as. */
   public static WorkspaceEntity draft(
-      UUID ownerId, String name, String modelProvider, String serverType, String timeZone) {
-    var entity = new WorkspaceEntity(ownerId, name, modelProvider, timeZone);
+      UUID ownerId,
+      String name,
+      String modelProvider,
+      String serverType,
+      String timeZone,
+      boolean demo) {
+    var entity = new WorkspaceEntity(ownerId, name, modelProvider, timeZone, demo);
     entity.serverType = serverType;
     entity.draft = true;
     return entity;

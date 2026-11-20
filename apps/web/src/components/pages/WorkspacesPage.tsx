@@ -1,10 +1,12 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { useAccount } from "../../hooks/useAccount";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
 import { useWorkspaces } from "../../hooks/useWorkspaces";
-import { EmptyState, ErrorBanner, PageHeader } from "../molecules";
+import { setTourProgress, useTourProgress } from "../../lib/tour";
+import { DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
-import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, RestartWorkspaceDialog, TopBar, WelcomeDialog, WorkspaceHeader, type WorkspaceView } from "../organisms";
+import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, DemoTour, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -49,9 +51,18 @@ export function WorkspacesPage() {
   const [restartId, setRestartId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
-  // The API sends a new account's first sign-in to `/?welcome`; read before any redirect drops it.
-  const [welcome, setWelcome] = useState(() => new URLSearchParams(globalThis.location.search).has("welcome"));
+  // The API sends a new account's first sign-in to `/?welcome`, and its welcome mail links to
+  // `/?tour`; both are read before any redirect drops them.
+  const [tourAsked, setTourAsked] = useState(() => ["welcome", "tour"].some((parameter) => new URLSearchParams(globalThis.location.search).has(parameter)));
   const openNew = () => setNewName(suggestName());
+  const { account } = useAccount();
+  const tour = useTourProgress();
+  const demo = workspaces.find((w) => w.demo) ?? null;
+  // The account says whether its demo is used; a demo listed here is the same answer, sooner.
+  const demoAvailable = account?.demoAvailable === true && !demo;
+  const startTour = () => {
+    setTourProgress({ step: 0 });
+  };
 
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
@@ -68,10 +79,18 @@ export function WorkspacesPage() {
 
   // Dropped once read, so a reload does not welcome the user again.
   useEffect(() => {
-    if (new URLSearchParams(globalThis.location.search).has("welcome")) {
+    const params = new URLSearchParams(globalThis.location.search);
+    if (params.has("welcome") || params.has("tour")) {
       globalThis.history.replaceState(globalThis.history.state, "", globalThis.location.pathname);
     }
   }, []);
+
+  useEffect(() => {
+    if (tourAsked && !loading && account) {
+      setTourAsked(false);
+      if (demoAvailable && !tour) setTourProgress({ step: 0 });
+    }
+  }, [tourAsked, loading, account, demoAvailable, tour]);
 
   const onSessionTitle = useCallback((title: string) => setPageTitle(title), []);
 
@@ -103,7 +122,8 @@ export function WorkspacesPage() {
     tabTitle = "Workspaces";
     page = (
       <WorkspacesOverview workspaces={workspaces} loading={loading} deleting={deleting} onNew={openNew}
-        onRename={rename} onRestart={setRestartId} onDelete={setDeleteId} />
+        onRename={rename} onRestart={setRestartId} onDelete={setDeleteId}
+        onStartTour={demoAvailable && !tour ? startTour : undefined} />
     );
   } else if (!workspace) {
     tabTitle = "Workspaces";
@@ -172,7 +192,12 @@ export function WorkspacesPage() {
     <AppLayout
       header={<TopBar theme={theme} onThemeChange={setTheme} storeOpen={route.name === "store" || route.name === "recipe"} onSearch={() => setPaletteOpen(true)}
         workspacesOpen={route.name === "home"} onNewWorkspace={openNew} />}
-      notice={error && <ErrorBanner message={error} onDismiss={dismissError} />}
+      notice={(demo || error) && (
+        <>
+          {demo && <DemoBanner name={demo.name} expiresAt={demo.expiresAt ?? null} />}
+          {error && <ErrorBanner message={error} onDismiss={dismissError} />}
+        </>
+      )}
     >
       {page}
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} workspaces={workspaces} current={workspace}
@@ -193,10 +218,7 @@ export function WorkspacesPage() {
           onClose={() => setNewName(null)}
         />
       )}
-      {welcome && (
-        <WelcomeDialog onClose={() => setWelcome(false)}
-          onAddFunds={() => { setWelcome(false); navigate({ name: "billing" }); }} />
-      )}
+      <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key) => launch(id, key)} />
       {restartTarget && (
         <RestartWorkspaceDialog
           name={restartTarget.name}

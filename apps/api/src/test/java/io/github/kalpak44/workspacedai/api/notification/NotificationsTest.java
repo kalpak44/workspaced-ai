@@ -66,13 +66,13 @@ class NotificationsTest {
     assertThat(welcome.get("kind").asString()).isEqualTo("SYSTEM");
     assertThat(welcome.get("body").asString()).startsWith("Welcome!");
     assertThat(welcome.get("read").asBoolean()).isFalse();
-    assertThat(welcome.get("action").get("path").asString()).isEqualTo("/billing");
+    assertThat(welcome.get("action").get("path").asString()).isEqualTo("/?tour");
   }
 
   @Test
   void marksItsOwnNotificationsReadAndUnreadAndLeavesOthersAlone() throws Exception {
     var own = notifications.list(user).getFirst().id();
-    notifications.send(TestUsers.ADMIN, Notifications.workspaceDeleted("theirs", false));
+    notifications.send(TestUsers.ADMIN, Notifications.workspaceDeleted("theirs"));
     var others = notifications.list(TestUsers.ADMIN).getFirst().id();
 
     var read = read(send("PUT", "/notifications/read", body(List.of(own, others), true)));

@@ -12,6 +12,8 @@ export interface Account {
   readonly avatar: string | null;
   /** An admin also manages the platform's mail. */
   readonly role: Role;
+  /** Whether the account can still start its one free demo workspace. */
+  readonly demoAvailable?: boolean;
 }
 
 export type Role = "USER" | "ADMIN";

@@ -16,6 +16,10 @@ export interface Workspace {
   readonly status: WorkspaceStatus;
   /** Settings changed since its runtime started; they apply only once it restarts. */
   readonly restartRequired: boolean;
+  /** The account's free demo, which is never charged and is deleted at expiresAt. */
+  readonly demo?: boolean;
+  /** ISO 8601; null until a demo's VM has started, and for every other workspace. */
+  readonly expiresAt?: string | null;
 }
 
 /** The key is checked with the provider before anything is created, and never shown again. */
@@ -28,6 +32,8 @@ export interface NewWorkspace {
   readonly apiKey: string;
   /** The IANA zone its agent reads times in; the API uses UTC when it is missing. */
   readonly timeZone?: string;
+  /** The account's one free demo: the API ignores serverType and charges nothing. */
+  readonly demo?: boolean;
 }
 
 /** Sent once a workspace's deletion has committed, to every open stream. */
