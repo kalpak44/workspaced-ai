@@ -11,7 +11,7 @@ import java.time.Instant;
 @Table(name = "auth0_token")
 public class Auth0TokenEntity {
 
-  static final short ID = 1;
+  static final short SINGLETON_ID = 1;
 
   @Id private Short id;
 
@@ -26,7 +26,7 @@ public class Auth0TokenEntity {
   }
 
   Auth0TokenEntity(String accessToken, Instant expiresAt) {
-    this.id = ID;
+    this.id = SINGLETON_ID;
     this.accessToken = accessToken;
     this.expiresAt = expiresAt;
   }

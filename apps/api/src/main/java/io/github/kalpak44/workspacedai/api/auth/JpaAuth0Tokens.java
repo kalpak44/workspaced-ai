@@ -45,10 +45,11 @@ public class JpaAuth0Tokens implements Auth0Tokens {
         .set(row.get(Auth0TokenEntity_.accessToken), sealed)
         .set(row.get(Auth0TokenEntity_.expiresAt), token.expiresAt())
         .where(
-            cb.equal(row.get(Auth0TokenEntity_.id), Auth0TokenEntity.ID),
+            cb.equal(row.get(Auth0TokenEntity_.id), Auth0TokenEntity.SINGLETON_ID),
             cb.lessThan(row.get(Auth0TokenEntity_.expiresAt), token.expiresAt()));
     var updated = entityManager.createQuery(update).executeUpdate();
-    if (updated == 0 && entityManager.find(Auth0TokenEntity.class, Auth0TokenEntity.ID) == null) {
+    if (updated == 0
+        && entityManager.find(Auth0TokenEntity.class, Auth0TokenEntity.SINGLETON_ID) == null) {
       entityManager.persist(new Auth0TokenEntity(sealed, token.expiresAt()));
     }
   }
@@ -65,12 +66,13 @@ public class JpaAuth0Tokens implements Auth0Tokens {
     var delete = cb.createCriteriaDelete(Auth0TokenEntity.class);
     var row = delete.from(Auth0TokenEntity.class);
     delete.where(
-        cb.equal(row.get(Auth0TokenEntity_.id), Auth0TokenEntity.ID),
+        cb.equal(row.get(Auth0TokenEntity_.id), Auth0TokenEntity.SINGLETON_ID),
         cb.equal(row.get(Auth0TokenEntity_.accessToken), stored.get().getAccessToken()));
     entityManager.createQuery(delete).executeUpdate();
   }
 
   private Optional<Auth0TokenEntity> row() {
-    return Optional.ofNullable(entityManager.find(Auth0TokenEntity.class, Auth0TokenEntity.ID));
+    return Optional.ofNullable(
+        entityManager.find(Auth0TokenEntity.class, Auth0TokenEntity.SINGLETON_ID));
   }
 }
