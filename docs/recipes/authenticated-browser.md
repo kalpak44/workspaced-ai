@@ -194,9 +194,15 @@ Test a full open → human handoff → verified outcome → close cycle and an e
 Confirm viewer disconnection, absent firewall rule, revoked token/session grants and removed access
 container, and the same browser tab/session still available to Playwright.
 
-## 5. Build and register browser MCP tools
+## 5. Expose full browser control to OpenCode through MCP
 
-Build a real local MCP server in `~/mcp/shared-browser/`; the following is an implementation
+Build a real local MCP server in `~/mcp/shared-browser/` that gives OpenCode in the harness
+full control of this same visible browser. Routine browser work must be possible entirely
+through MCP calls, without asking the agent to generate Python or use a terminal. Keep the
+private wrapper as an internal implementation and diagnostic fallback. This is full browser
+control for the user's authorized tasks; the human handoff is available whenever needed.
+
+The following is an implementation
 specification for the agent applying this recipe, not a claim that tools already exist.
 Create `server.py`, the browser-worker module, a dependency lockfile, an executable stdio
 launcher and `check.py`. Use the official Python MCP SDK, choose a supported version from
@@ -213,19 +219,66 @@ unavailable, report the prerequisite and stop rather than expose a debug port as
 Write a browser worker that receives validated JSON over stdin and emits JSON results, not
 arbitrary Python generated from tool inputs. Use argument arrays, no shell interpolation.
 Keep tab IDs stable across requests and invalidate stale element references after navigation.
-All MCP instances share the same handoff state and interprocess lock.
+All MCP instances share the same handoff state and interprocess lock. Keep a persistent
+browser worker attached to Chromium so dialogs, downloads, popups, frame references and
+keyboard/mouse state survive individual tool calls. Use a private Unix-domain control socket
+inside the browser container for the worker; access it through the fixed-argument wrapper,
+not a published network port. Reconnect safely after worker restarts, invalidating references
+that can no longer be resolved. Do not close Chromium when an MCP client disconnects.
 
-Implement these tools with descriptions explaining when and how the agent should use them:
+Implement these tools with explicit schemas, examples and descriptions. Do not ship just
+`navigate`, `snapshot` and a narrow click helper and call that full control. The listed tool
+names are the required public interface of this recipe's server; implement them with the
+installed Playwright APIs rather than assuming an upstream package has identical schemas.
+Microsoft's Playwright MCP is a useful implementation reference. If adapting it, keep all
+calls behind the shared handoff lock and attach it to this existing browser through the
+private bridge; never register a second, unrestricted browser server that bypasses the lock.
 
 | Tool | Required behavior |
 | --- | --- |
-| `browser_status()` | Browser health, available tab IDs, sanitized site URLs and active handoff status/expiry. No tokens or cookies. |
-| `browser_navigate(tab_id, url)` | Navigate an existing tab, or explicitly create one, using the shared default context. Permit HTTP(S) UI navigation and return the final sanitized location and a bounded page snapshot. |
-| `browser_snapshot(tab_id)` | Return bounded visible text/accessibility information and locatable element references; redact password inputs and secret values. No profile/cookie export. |
-| `browser_interact(tab_id, action, target, value?)` | Allow a documented set of actions such as click, fill, select, press and scroll. Resolve targets using stable references or Playwright role/label locators. Reject stale/ambiguous targets and any credential-field entry requiring a user handoff. Do not expose arbitrary eval, shell or code-execution tools. |
-| `browser_request_user_help(tab_id, reason, instructions, expected_result)` | Define the human step and its verifiable result, pause automation, call handoff-open, and return `waiting_for_user`, a handoff ID, private one-time link, expiry and the exact message the agent should show. Do not wait inside a long-running tool call or pretend the tool itself contacted the user. |
-| `browser_verify_user_step(handoff_id)` | After actual user confirmation, check the stored expected result in the original browser tab. On a pass, run cleanup and independently verify port closure, VNC removal and grant revocation before returning `completed`. Otherwise return `needs_more_help`, `inconclusive`, `expired` or `cleanup_failed` with non-secret evidence and next action. |
-| `browser_cancel_user_help(handoff_id)` | Revoke the grant, close its port, stop/remove VNC, verify cleanup and release the automation lock while preserving Chromium. |
+| `browser_status()` | Browser health, tab IDs, sanitized site URLs, pending dialogs/downloads and active handoff status/expiry. No tokens or cookies. |
+| `browser_tabs(action, tab_id?, url?)` | List, create, select or close a tab in the existing default context. Track popups as new tab IDs. Closing a tab must not close Chromium or its default context. |
+| `browser_navigate(tab_id, url)` | HTTP(S) navigation in the selected existing tab; return final sanitized location and a bounded snapshot. |
+| `browser_history(tab_id, action)` | Back, forward or reload, with bounded completion waits and updated page state. |
+| `browser_snapshot(tab_id, frame_id?, target?)` | Visible text/accessibility snapshot with element references, optionally scoped to an element or frame. Redact secret inputs. |
+| `browser_frames(tab_id)` | List the frame tree with stable frame IDs, including nested/cross-origin frames supported by Playwright. Let interaction tools target a frame explicitly. |
+| `browser_click(tab_id, target, frame_id?, button?, click_count?, modifiers?)` | Single/double/right click through a snapshot reference or unambiguous locator, including modifier keys. |
+| `browser_fill_form(tab_id, fields, frame_id?)` | Fill text, checkbox/radio and select fields using typed field descriptors. Distinguish replace from typing; preserve handoff for website credentials and human checks. |
+| `browser_keyboard(tab_id, action, key?, text?)` | Type text and press shortcuts, or key-down/key-up where needed. Release held keys on cancellation/error. |
+| `browser_mouse(tab_id, action, x?, y?, button?, delta_x?, delta_y?)` | Move, down/up, click and wheel with screenshot-relative viewport coordinates. Validate coordinate bounds and release held buttons on cancellation/error. |
+| `browser_hover(tab_id, target, frame_id?)` | Hover a located element and report the resulting page state. |
+| `browser_drag(tab_id, source, destination, frame_id?)` | Drag/drop using locators or explicit viewport coordinates. Support ordinary UI drag interactions without requiring VNC. |
+| `browser_screenshot(tab_id, frame_id?, target?, full_page?)` | Return an actual MCP image result plus its dimensions, or a controlled artifact reference if too large. Support viewport, full-page and element capture. Do not capture secrets or the user's manual-input phase. |
+| `browser_resize(tab_id, width, height)` | Resize the real headed browser/viewport coherently with the shared desktop; return the actual resulting dimensions. |
+| `browser_wait(tab_id, condition, timeout_ms)` | Bounded waits for a declared UI/URL condition; return timeout details rather than hang or claim success. |
+| `browser_dialog(tab_id, action, prompt_text?)` | Inspect, accept or dismiss alert/confirm/prompt/beforeunload dialogs. Capture dialog events without blocking a tool call indefinitely. |
+| `browser_upload(tab_id, files, target?, frame_id?)` | Set file inputs or satisfy a pending file chooser using user-authorized files staged into a dedicated transfer volume. Support multiple files. |
+| `browser_downloads(action, tab_id?, download_id?)` | List, wait for, save or cancel actual browser downloads. Return size, status and a workspace artifact path; never silently discard downloads when a client disconnects. |
+| `browser_evaluate(tab_id, function, argument?, target?, frame_id?)` | Evaluate page/element JavaScript for DOM inspection and UI interaction when structured tools are insufficient. Bound time/output and return structured values. This is page JavaScript, not host Python or shell execution. |
+| `browser_console(tab_id, level?, limit?)` | Bounded console/page-error diagnostics with secret redaction. |
+| `browser_network(tab_id, limit?)` | Bounded metadata about requests made by the UI: sanitized URL, method, status, type and timing. Do not export authorization headers, cookies or secret bodies or turn this into direct website API access. |
+| `browser_request_user_help(tab_id, reason, instructions, expected_result)` | Pause automation, call handoff-open, and return `waiting_for_user`, a handoff ID, private one-time link, expiry and the message the agent must actually deliver. Do not wait inside the tool call or pretend it contacted the user itself. |
+| `browser_verify_user_step(handoff_id)` | After real user confirmation, check the stored expected result. On a pass, clean up and verify port closure, VNC removal and grant revocation before returning `completed`. Otherwise return `needs_more_help`, `inconclusive`, `expired` or `cleanup_failed` with evidence. |
+| `browser_cancel_user_help(handoff_id)` | Revoke grants, close its port, remove VNC, verify cleanup and release the lock while preserving Chromium. |
+
+For targets, support fresh snapshot references plus typed role/name, label, text, test-id
+and CSS locators with frame scope. Do not silently choose the first match when a target is
+ambiguous. Return new state/references after actions, and give the agent actionable stale-ref
+errors. Downloads, popup tabs and pending dialogs need stable IDs across calls. Keep binary
+results out of JSON text dumps and use proper MCP image/resource results for screenshots/files.
+
+Transfer files between harness and browser with a fixed-argument helper and a dedicated
+named volume; their filesystem paths are different. Validate relative paths, resolve symlinks,
+reject traversal outside the transfer/artifact roots, avoid overwriting existing files, and
+stream bytes through the bridge rather than mounting the entire home or profile. Preserve
+original user files. Document the tested staging and artifact retrieval commands.
+
+Page JavaScript must obey the same user-task scope and handoff rules as clicks: do not use
+it to read credentials/cookies, automate a human check, bypass the handoff lock, or replace
+website UI work with fetch/XHR/API calls. This is an instruction constraint, not a claim that
+page JavaScript is incapable of those actions. Navigation, tab changes, evaluation, uploads,
+dialogs, downloads, keyboard and mouse all acquire the shared lock. A human handoff releases
+held keys/buttons and blocks automation from every client; no tool offers a bypass flag.
 
 `expected_result` must be a bounded declarative schema, not arbitrary executable code: target
 origin/tab plus supported UI predicates such as a visible role/text, expected URL path or
@@ -264,12 +317,21 @@ Use the actual absolute launcher path, for example:
 
 Do not replace the whole existing configuration or edit `opencode.json`, which is rebuilt
 on startup. The launcher must work from any directory and use the pinned virtualenv. Verify
-OpenCode loads the server and lists the tools under **Settings → MCP**. Reconnect the client
+OpenCode loads the server and lists the full tool set under **Settings → MCP**. Verify
+there is no tool allowlist or permission configuration unintentionally hiding the control
+tools; preserve the user's existing permission choices. The MCP connection stays private and
+usable while the VNC port is closed. Reconnect the client
 or ask the user to restart only if needed by this installation; preserve the browser profile.
 
 Use a real MCP client in `check.py` to initialize the stdio server, list its tool schemas and
-call them. Test browser navigation/snapshots/actions against a local fixture page in the
-same shared context. Test request-help, rejection of actions during handoff, a failed expected
+call them. Use a local fixture site with nested frames, popup tabs, forms, keyboard shortcuts,
+hover/drag targets, dialogs, file upload/download and a page requiring JS-based DOM inspection.
+Exercise every tool family through the actual MCP client, including screenshots as image
+results, coordinate actions, frame selection, history, waits and bounded diagnostics. Verify
+the resulting UI and file bytes rather than merely checking tool-call success. Test wrong
+targets, stale references, missing files, traversal, timeouts and worker reconnects. Confirm
+OpenCode can complete a multi-step browser task entirely through MCP while VNC stays off.
+Test request-help, rejection of actions during handoff, a failed expected
 result, a successful UI result followed by cleanup, replay/expired token refusal, cancellation,
 timeout and cleanup failure. Simulate user completion on the fixture, then perform one actual
 user handoff; do not label a simulation as real user approval. Verify two clients cannot race
@@ -286,7 +348,10 @@ not an optional suggestion. Write it after verifying the installation; use actua
 service names and tested commands rather than placeholders. Include these sections:
 
 - **MCP tools:** server name and install path, all tool names and their tested argument
-  examples. Prefer these browser tools for routine work. Explain the request-help → actual
+  examples for tabs, navigation, frame/element selection, forms, keys/mouse, screenshots,
+  dialogs, uploads/downloads and DOM evaluation. State that OpenCode can fully operate the
+  shared browser through MCP while VNC is stopped; prefer these tools for routine work.
+  Explain the request-help → actual
   user reply → verify-step → cleanup sequence, pending/error statuses, and when to cancel.
 - **Browser available:** a shared visible Chromium browser is installed and available to the
   agent through Playwright. Its profile and website sessions belong to this workspace.
@@ -334,7 +399,8 @@ Finish setup with public desktop access closed and VNC stopped. Tell the user th
 will provide a temporary one-time link whenever it needs their help, verify their
 step, then remove desktop access and continue.
 
-References: https://github.com/modelcontextprotocol/python-sdk,
+References: https://github.com/microsoft/playwright-mcp,
+https://github.com/modelcontextprotocol/python-sdk,
 https://playwright.dev/python/docs/docker,
 https://playwright.dev/python/docs/api/class-browsertype#browser-type-connect-over-cdp,
 https://github.com/novnc/noVNC/wiki/Proxying-with-nginx,
