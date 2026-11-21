@@ -3,7 +3,7 @@ title: Ciela legal research for your agent
 summary: Build, install and test an MCP server for Ciela, the Bulgarian legal reference system, so the agent searches legislation and case law there and answers with quotes and source links.
 category: data
 tags: [ciela, mcp, legal, bulgaria, research]
-visibility: public
+visibility: private
 ---
 
 # Ciela legal research for your agent

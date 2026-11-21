@@ -77,9 +77,9 @@ class AuthTest {
   }
 
   @Test
-  void assignsSeededRecipesOnlyToTheirVerifiedPublisher() {
+  void assignsOnlyCielaToItsVerifiedPublisher() {
     var seed = UUID.fromString("00000000-0000-4000-8000-000000000a01");
-    var recipe = UUID.fromString("00000000-0000-4000-8000-00000000b001");
+    var recipe = UUID.fromString("00000000-0000-4000-8000-00000000b008");
     jdbc.update(
         "INSERT INTO app_user (id, idp_subject, role) VALUES (?, 'system|workspaced', 'USER')",
         seed);
@@ -110,7 +110,7 @@ class AuthTest {
     assertThat(
             jdbc.queryForObject(
                 "SELECT count(*) FROM recipe WHERE author_id = ?", Integer.class, owner))
-        .isEqualTo(7);
+        .isEqualTo(1);
     assertThat(
             jdbc.queryForObject(
                 "SELECT author_id FROM recipe WHERE id = '00000000-0000-4000-8000-00000000b002'",

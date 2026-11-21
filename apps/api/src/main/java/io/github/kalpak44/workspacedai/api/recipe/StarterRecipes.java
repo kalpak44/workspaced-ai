@@ -4,9 +4,7 @@ import java.util.UUID;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
-/**
- * Links the seeded tutorial and optional recipes to their publisher on their next verified sign-in.
- */
+/** Links the private Ciela recipe to its publisher on their next verified sign-in. */
 @Component
 public class StarterRecipes {
   private final JdbcTemplate jdbc;
@@ -23,13 +21,7 @@ public class StarterRecipes {
     jdbc.update(
         """
         UPDATE recipe SET author_id = ?
-        WHERE id IN ('00000000-0000-4000-8000-00000000b001',
-                     '00000000-0000-4000-8000-00000000b006',
-                     '00000000-0000-4000-8000-00000000b007',
-                     '00000000-0000-4000-8000-00000000b008',
-                     '00000000-0000-4000-8000-00000000b009',
-                     '00000000-0000-4000-8000-00000000b00a',
-                     '00000000-0000-4000-8000-00000000b00b')
+        WHERE id = '00000000-0000-4000-8000-00000000b008'
           AND author_id = '00000000-0000-4000-8000-000000000a01'
         """,
         userId);

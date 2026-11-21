@@ -1,9 +1,12 @@
 package io.github.kalpak44.workspacedai.api.recipe;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
+import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -13,6 +16,9 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.server.ResponseStatusException;
 
 /**
  * A separate database context keeps the catalogue intact while CRUD tests delete their fixtures.
@@ -37,23 +43,69 @@ class StarterRecipesTest {
           "godaddy-domain",
           "b00b");
 
+  private static final UUID CIELA = UUID.fromString("00000000-0000-4000-8000-00000000b008");
+  private static final UUID PUBLISHER = UUID.fromString("00000000-0000-4000-8000-000000000a01");
+
   @Autowired RecipeService recipes;
+  @Autowired StarterRecipes starterRecipes;
+  @Autowired UserRepository users;
 
   @Test
-  void publishesEverySourceRecipeWithItsCodeUnchanged() throws IOException {
+  void seedsEverySourceRecipeWithItsCodeUnchanged() throws IOException {
     var viewer = UUID.randomUUID();
     var publicRecipes = recipes.list(viewer, "public", "", null, "newest", 0, 100);
+    assertThat(publicRecipes.getContent())
+        .noneMatch(
+            recipe ->
+                java.util.List.of("Photo gallery", "Personal links page", "Morning news digest")
+                    .contains(recipe.title()));
+    assertThat(publicRecipes.getContent())
+        .filteredOn(recipe -> recipe.title().equals("Telegram bot for your workspace"))
+        .hasSize(1);
     for (var entry : SOURCES.entrySet()) {
       var id = UUID.fromString("00000000-0000-4000-8000-00000000" + entry.getValue());
       var source = Files.readString(Path.of("../../docs/recipes", entry.getKey() + ".md"));
       var headerEnd = source.indexOf("\n---", 3);
       var body = source.substring(headerEnd + 4).strip();
-      var recipe = recipes.get(id, viewer);
+      var recipe = recipes.get(id, PUBLISHER);
       assertThat(recipe.content()).as(entry.getKey()).isEqualTo(body);
-      assertThat(recipe.visibility()).isEqualTo(Visibility.PUBLIC);
-      assertThat(recipe.author().firstName()).isEqualTo("Pavel");
-      assertThat(recipe.author().lastName()).isEqualTo("Usanli");
-      assertThat(publicRecipes.getContent()).anyMatch(item -> item.id().equals(id));
+      assertThat(recipe.visibility())
+          .isEqualTo(id.equals(CIELA) ? Visibility.PRIVATE : Visibility.PUBLIC);
+      assertThat(recipe.author().firstName()).isEqualTo(id.equals(CIELA) ? "Pavel" : "workspaced");
+      assertThat(recipe.author().lastName()).isEqualTo(id.equals(CIELA) ? "Usanli" : "");
+      if (id.equals(CIELA)) {
+        assertThat(publicRecipes.getContent()).noneMatch(item -> item.id().equals(id));
+      } else {
+        assertThat(publicRecipes.getContent()).anyMatch(item -> item.id().equals(id));
+      }
     }
+  }
+
+  @Test
+  @Transactional
+  void cielaIsPrivateAndClaimedOnlyByTheVerifiedPublisher() {
+    var pavel = users.saveAndFlush(TestUsers.newUser("pavel.usanli@gmail.com"));
+    var other = users.saveAndFlush(TestUsers.newUser("other@example.com"));
+
+    starterRecipes.claimPublisher(other.getId(), "other@example.com");
+    assertThat(recipes.get(CIELA, PUBLISHER).mine()).isTrue();
+    starterRecipes.claimPublisher(pavel.getId(), "Pavel.Usanli@gmail.com");
+
+    var wordpress =
+        recipes.get(UUID.fromString("00000000-0000-4000-8000-00000000b001"), pavel.getId());
+    assertThat(wordpress.mine()).isFalse();
+    assertThat(wordpress.author().firstName()).isEqualTo("workspaced");
+    assertThat(recipes.get(CIELA, pavel.getId()).mine()).isTrue();
+    assertThat(recipes.get(CIELA, pavel.getId()).visibility()).isEqualTo(Visibility.PRIVATE);
+    assertThat(recipes.list(pavel.getId(), "private", "", null, "newest", 0, 100).getContent())
+        .anyMatch(recipe -> recipe.id().equals(CIELA));
+    assertThat(recipes.list(pavel.getId(), "public", "", null, "newest", 0, 100).getContent())
+        .noneMatch(recipe -> recipe.id().equals(CIELA));
+    assertThat(recipes.list(other.getId(), "private", "", null, "newest", 0, 100).getContent())
+        .noneMatch(recipe -> recipe.id().equals(CIELA));
+    assertThatThrownBy(() -> recipes.get(CIELA, other.getId()))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
   }
 }
