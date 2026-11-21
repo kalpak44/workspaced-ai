@@ -41,9 +41,12 @@ class StarterRecipesTest {
           "telegram-personal-account",
           "b00a",
           "godaddy-domain",
-          "b00b");
+          "b00b",
+          "authenticated-browser",
+          "b00c");
 
   private static final UUID CIELA = UUID.fromString("00000000-0000-4000-8000-00000000b008");
+  private static final UUID BROWSER = UUID.fromString("00000000-0000-4000-8000-00000000b00c");
   private static final UUID PUBLISHER = UUID.fromString("00000000-0000-4000-8000-000000000a01");
 
   @Autowired RecipeService recipes;
@@ -69,11 +72,11 @@ class StarterRecipesTest {
       var body = source.substring(headerEnd + 4).strip();
       var recipe = recipes.get(id, PUBLISHER);
       assertThat(recipe.content()).as(entry.getKey()).isEqualTo(body);
-      assertThat(recipe.visibility())
-          .isEqualTo(id.equals(CIELA) ? Visibility.PRIVATE : Visibility.PUBLIC);
-      assertThat(recipe.author().firstName()).isEqualTo(id.equals(CIELA) ? "Pavel" : "workspaced");
-      assertThat(recipe.author().lastName()).isEqualTo(id.equals(CIELA) ? "Usanli" : "");
-      if (id.equals(CIELA)) {
+      boolean isPrivate = id.equals(CIELA) || id.equals(BROWSER);
+      assertThat(recipe.visibility()).isEqualTo(isPrivate ? Visibility.PRIVATE : Visibility.PUBLIC);
+      assertThat(recipe.author().firstName()).isEqualTo(isPrivate ? "Pavel" : "workspaced");
+      assertThat(recipe.author().lastName()).isEqualTo(isPrivate ? "Usanli" : "");
+      if (isPrivate) {
         assertThat(publicRecipes.getContent()).noneMatch(item -> item.id().equals(id));
       } else {
         assertThat(publicRecipes.getContent()).anyMatch(item -> item.id().equals(id));
@@ -83,18 +86,29 @@ class StarterRecipesTest {
 
   @Test
   @Transactional
-  void cielaIsPrivateAndClaimedOnlyByTheVerifiedPublisher() {
+  void privateRecipesAreClaimedOnlyByTheVerifiedPublisher() {
     var pavel = users.saveAndFlush(TestUsers.newUser("pavel.usanli@gmail.com"));
     var other = users.saveAndFlush(TestUsers.newUser("other@example.com"));
 
     starterRecipes.claimPublisher(other.getId(), "other@example.com");
     assertThat(recipes.get(CIELA, PUBLISHER).mine()).isTrue();
+    assertThat(recipes.get(BROWSER, PUBLISHER).mine()).isTrue();
     starterRecipes.claimPublisher(pavel.getId(), "Pavel.Usanli@gmail.com");
 
     var wordpress =
         recipes.get(UUID.fromString("00000000-0000-4000-8000-00000000b001"), pavel.getId());
     assertThat(wordpress.mine()).isFalse();
     assertThat(wordpress.author().firstName()).isEqualTo("workspaced");
+    assertThat(recipes.get(BROWSER, pavel.getId()).mine()).isTrue();
+    assertThat(recipes.get(BROWSER, pavel.getId()).visibility()).isEqualTo(Visibility.PRIVATE);
+    assertThat(recipes.list(pavel.getId(), "private", "", null, "newest", 0, 100).getContent())
+        .anyMatch(recipe -> recipe.id().equals(BROWSER));
+    assertThat(recipes.list(pavel.getId(), "public", "", null, "newest", 0, 100).getContent())
+        .noneMatch(recipe -> recipe.id().equals(BROWSER));
+    assertThatThrownBy(() -> recipes.get(BROWSER, other.getId()))
+        .isInstanceOfSatisfying(
+            ResponseStatusException.class,
+            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
     assertThat(recipes.get(CIELA, pavel.getId()).mine()).isTrue();
     assertThat(recipes.get(CIELA, pavel.getId()).visibility()).isEqualTo(Visibility.PRIVATE);
     assertThat(recipes.list(pavel.getId(), "private", "", null, "newest", 0, 100).getContent())
