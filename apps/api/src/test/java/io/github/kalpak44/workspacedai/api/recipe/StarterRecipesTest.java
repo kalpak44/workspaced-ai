@@ -60,7 +60,11 @@ class StarterRecipesTest {
     assertThat(publicRecipes.getContent())
         .noneMatch(
             recipe ->
-                java.util.List.of("Photo gallery", "Personal links page", "Morning news digest")
+                java.util.List.of(
+                        "Photo gallery",
+                        "Personal links page",
+                        "Morning news digest",
+                        "Website uptime monitor")
                     .contains(recipe.title()));
     assertThat(publicRecipes.getContent())
         .filteredOn(recipe -> recipe.title().equals("Telegram bot for your workspace"))
