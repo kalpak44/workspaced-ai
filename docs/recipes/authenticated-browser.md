@@ -3,7 +3,7 @@ title: A browser you and the agent share
 summary: Let the agent work in a browser and hand control to you whenever it needs help. MCP tools open temporary VNC access with a one-time link, verify your step, then remove access and continue.
 category: automation
 tags: [browser,playwright,vnc,mcp,automation]
-visibility: private
+visibility: public
 ---
 
 # A browser you and the agent share

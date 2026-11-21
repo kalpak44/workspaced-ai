@@ -72,7 +72,7 @@ class StarterRecipesTest {
       var body = source.substring(headerEnd + 4).strip();
       var recipe = recipes.get(id, PUBLISHER);
       assertThat(recipe.content()).as(entry.getKey()).isEqualTo(body);
-      boolean isPrivate = id.equals(CIELA) || id.equals(BROWSER);
+      boolean isPrivate = id.equals(CIELA);
       assertThat(recipe.visibility()).isEqualTo(isPrivate ? Visibility.PRIVATE : Visibility.PUBLIC);
       assertThat(recipe.author().firstName()).isEqualTo(isPrivate ? "Pavel" : "workspaced");
       assertThat(recipe.author().lastName()).isEqualTo(isPrivate ? "Usanli" : "");
@@ -86,7 +86,7 @@ class StarterRecipesTest {
 
   @Test
   @Transactional
-  void privateRecipesAreClaimedOnlyByTheVerifiedPublisher() {
+  void privateCielaIsClaimedAndPublicBrowserRemainsOwnedByWorkspaced() {
     var pavel = users.saveAndFlush(TestUsers.newUser("pavel.usanli@gmail.com"));
     var other = users.saveAndFlush(TestUsers.newUser("other@example.com"));
 
@@ -99,16 +99,16 @@ class StarterRecipesTest {
         recipes.get(UUID.fromString("00000000-0000-4000-8000-00000000b001"), pavel.getId());
     assertThat(wordpress.mine()).isFalse();
     assertThat(wordpress.author().firstName()).isEqualTo("workspaced");
-    assertThat(recipes.get(BROWSER, pavel.getId()).mine()).isTrue();
-    assertThat(recipes.get(BROWSER, pavel.getId()).visibility()).isEqualTo(Visibility.PRIVATE);
+    var browser = recipes.get(BROWSER, pavel.getId());
+    assertThat(browser.mine()).isFalse();
+    assertThat(browser.visibility()).isEqualTo(Visibility.PUBLIC);
+    assertThat(browser.author().firstName()).isEqualTo("workspaced");
+    assertThat(browser.author().lastName()).isEmpty();
+    assertThat(recipes.get(BROWSER, other.getId()).visibility()).isEqualTo(Visibility.PUBLIC);
     assertThat(recipes.list(pavel.getId(), "private", "", null, "newest", 0, 100).getContent())
-        .anyMatch(recipe -> recipe.id().equals(BROWSER));
-    assertThat(recipes.list(pavel.getId(), "public", "", null, "newest", 0, 100).getContent())
         .noneMatch(recipe -> recipe.id().equals(BROWSER));
-    assertThatThrownBy(() -> recipes.get(BROWSER, other.getId()))
-        .isInstanceOfSatisfying(
-            ResponseStatusException.class,
-            error -> assertThat(error.getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND));
+    assertThat(recipes.list(other.getId(), "public", "", null, "newest", 0, 100).getContent())
+        .anyMatch(recipe -> recipe.id().equals(BROWSER));
     assertThat(recipes.get(CIELA, pavel.getId()).mine()).isTrue();
     assertThat(recipes.get(CIELA, pavel.getId()).visibility()).isEqualTo(Visibility.PRIVATE);
     assertThat(recipes.list(pavel.getId(), "private", "", null, "newest", 0, 100).getContent())
