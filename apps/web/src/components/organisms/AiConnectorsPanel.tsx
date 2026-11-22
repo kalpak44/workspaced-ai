@@ -52,13 +52,13 @@ export function AiConnectorsPanel() {
   };
 
   return <section aria-label="AI connectors" className="space-y-6">
-    <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">Workspaced does not provide its own AI models. AI connectors use third-party providers through OpenRouter, under their terms and privacy policies. Connect your own provider account for ongoing use; provider charges are separate from workspace hosting. The Trial connector has a $1 lifetime budget with no automatic refill.</p>
+    <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">Workspaced does not provide its own AI models. AI connectors use third-party providers through OpenRouter, under their terms and privacy policies. Connect your own provider account for ongoing use; provider charges are separate from workspace hosting. The Trial connector has a small one-time budget with no automatic refill.</p>
     <div className="card overflow-hidden">
       <div className="border-b border-zinc-200 p-5 dark:border-zinc-800">
         <h2 className="font-semibold">Your AI connectors</h2>
         <p className="mt-1 text-sm text-zinc-500">Named connections you can reuse across your workspaces. Select one to see its usage and limits. Keys are encrypted and never shown again.</p>
       </div>
-      {trial && <div aria-label="Default Trial connector" className="space-y-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800"><div className="flex items-center gap-2"><h3 className="font-medium">{trial.name}</h3><span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Default · $1 lifetime</span></div><TrialConnectorBudget id={trial.id} /></div>}
+      {trial && <div aria-label="Default Trial connector" className="space-y-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800"><div className="flex items-center gap-2"><h3 className="font-medium">{trial.name}</h3><span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Default · Trial</span></div><TrialConnectorBudget id={trial.id} /></div>}
       {loading ? <div className="p-5"><Spinner label="Loading AI connectors" /></div> : <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {connectors.length === 0 && <p className="p-5 text-sm text-zinc-500">No connectors yet. Add your first connection below.</p>}
         {personalConnectors.map(connector => <div key={connector.id} className={`flex items-center gap-3 px-5 py-3 ${selected?.id === connector.id ? "bg-zinc-50 dark:bg-zinc-900" : ""}`}>
@@ -107,7 +107,7 @@ export function AiConnectorsPanel() {
     {deleting && <Modal title="Remove AI connector?" description={deleting.name} onClose={() => { if (!removing) setDeleteId(null); }}>
       <ModalBody>
         <p>This removes <strong>{deleting.name}</strong> from your Workspaced account only.</p>
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">The API key will stay active in your OpenRouter account. Workspaces using this connector will switch to Trial and require a restart. Trial shares your remaining $1 lifetime budget; removing a connector does not refill it. To revoke the personal key, delete it separately in OpenRouter.</p>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">The API key will stay active in your OpenRouter account. Workspaces using this connector will switch to Trial and require a restart. Trial uses whatever is left of its one-time budget; removing a connector does not refill it. To revoke the personal key, delete it separately in OpenRouter.</p>
         <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-4">Open OpenRouter key settings</a>
         {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
       </ModalBody>

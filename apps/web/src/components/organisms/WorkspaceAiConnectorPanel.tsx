@@ -18,7 +18,7 @@ export function WorkspaceAiConnectorPanel({ workspace, onChanged }: { readonly w
       AI connector <code className="ml-1 font-mono text-xs text-zinc-500">{workspace.modelProvider === "openrouter" ? "OPENROUTER_API_KEY" : "Provider API key"}</code>
     </label>
     <Select id="workspace-ai-connector" aria-label="Saved connector" className="w-full" value={selected} disabled={loading || reading || busy || available.length === 0} onChange={event => setSelected(event.target.value)}>
-      {available.map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default · $1 lifetime" : ""}</option>)}
+      {available.map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}
     </Select>
     <p className="text-xs text-zinc-500 dark:text-zinc-400">{!loading && available.length === 0 ? "No connectors available. Create one in General settings." : "Choose a saved connector. Changes apply after a restart."} <a href="/settings/ai-connectors" className="underline underline-offset-4">Manage AI connectors in General settings</a>.</p>
     <div className="flex justify-end"><Button label="Save connector" type="submit" busy={busy} disabled={!selected || selected === current || reading || loading} /></div>

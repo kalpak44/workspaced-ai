@@ -345,7 +345,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         <label className="block text-sm font-medium">AI connector
           <select aria-label="AI connector" className="mt-1.5 block w-full rounded-lg border border-zinc-300 bg-transparent p-2 dark:border-zinc-700" value={connectorId} disabled={pending || connectors.loading} onChange={event => { setConnectorId(event.target.value); setRejected(false); }}>
             <option value="">Connect or paste a key</option>
-            {connectors.connectors.filter(c => c.provider === providerId).map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default · $1 lifetime" : ""}</option>)}
+            {connectors.connectors.filter(c => c.provider === providerId).map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}
           </select>
         </label>
         {connectors.error && <p role="alert" className="text-sm text-rose-600">{connectors.error}</p>}

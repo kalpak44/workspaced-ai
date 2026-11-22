@@ -93,7 +93,7 @@ it("shows Trial as the protected default and removes personal connectors with fa
   api.workspaceConnectors.set(api.rows[0].id, "personal");
   const user = userEvent.setup();
   render(<GeneralSettingsPage section="ai-connectors" />);
-  await screen.findByText("Default · $1 lifetime");
+  await screen.findByText("Default · Trial");
   const defaultRow = screen.getByLabelText("Default Trial connector");
   expect(defaultRow.compareDocumentPosition(screen.getByRole("button", { name: /^Personal/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   expect(screen.queryByRole("button", { name: "Delete Trial" })).not.toBeInTheDocument();

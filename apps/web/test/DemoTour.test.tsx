@@ -113,7 +113,7 @@ describe("guided public-page workflow", () => {
     const onDraft = vi.fn().mockResolvedValue({ id: "trial" });
     const onLaunch = vi.fn().mockResolvedValue("created");
     render(<DemoTour workspaces={[workspace]} loading={false} onDraft={onDraft} onLaunch={onLaunch} />);
-    await waitFor(() => expect(screen.getByRole("combobox", { name: "Trial AI connector" })).toHaveDisplayValue("Trial — $1 lifetime"));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Trial AI connector" })).toHaveDisplayValue("Trial"));
     expect(within(guide()).getByRole("button", { name: "Next" })).toBeDisabled();
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
     await next();

@@ -20,7 +20,7 @@ describe("welcome", () => {
     const dialog = await screen.findByRole("region", { name: "Guided tour" });
     expect(dialog).toHaveTextContent("Guided tour");
     expect(dialog).toHaveTextContent("Just click Next");
-    expect(dialog).toHaveTextContent("your personal Trial connector provides up to $1 of AI usage");
+    expect(dialog).toHaveTextContent("your personal Trial connector covers the AI usage to get started");
     expect(globalThis.location.pathname + globalThis.location.search).toBe("/");
     await userEvent.setup().click(screen.getByRole("button", { name: "Skip tour" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
