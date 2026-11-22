@@ -89,6 +89,21 @@ public class VmSecretService {
     return new VmSecret(name, false);
   }
 
+  /** The API may rotate the protected key after validating a user's saved connector. */
+  public void replaceProviderKey(UUID vmId, String value) {
+    requireVm(vmId);
+    if (value == null || value.isBlank())
+      throw new SecretRefusedException("provider key must not be blank");
+    store.update(
+        vmId,
+        Entry.SECRETS,
+        current -> {
+          var next = new HashMap<>(current);
+          next.put(SYSTEM_SECRET, value);
+          return next;
+        });
+  }
+
   /**
    * @throws SecretRefusedException when it is the system secret
    * @throws SecretNotFoundException when the VM has no secret of that name

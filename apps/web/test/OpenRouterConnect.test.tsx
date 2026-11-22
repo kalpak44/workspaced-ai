@@ -1,6 +1,7 @@
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { GeneralSettingsPage } from "../src/components/pages/GeneralSettingsPage";
 import { CreateWorkspaceDialog } from "../src/components/organisms/CreateWorkspaceDialog";
 import { useWorkspaces } from "../src/hooks/useWorkspaces";
 import { OPENROUTER_CHANNEL, relayOpenRouterCallback } from "../src/lib/openRouterCallback";
@@ -69,10 +70,33 @@ async function openProviderStep() {
   await screen.findByRole("radio", { name: /cx23/ });
   await user.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByLabelText("OpenRouter API key");
+  await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
   return user;
 }
 
 describe("Connect OpenRouter", () => {
+  it("creates an account connector after acknowledgement with suggested limit and expiry", async () => {
+    const user = userEvent.setup();
+    render(<GeneralSettingsPage section="ai-connectors" />);
+    await user.type(screen.getByRole("textbox", { name: "Connector name" }), "Team");
+    await user.type(screen.getByRole("textbox", { name: "Suggested spending limit (USD)" }), "12.50");
+    await user.selectOptions(screen.getByRole("combobox", { name: "Suggested expiry" }), "30-days");
+    expect(screen.getByRole("button", { name: "Connect OpenRouter" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+    await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
+    const url = await authorization();
+    expect(url.searchParams.get("limit")).toBe("12.50");
+    expect(url.searchParams.get("expiration")).toBe("30-days");
+    expect(url.searchParams.get("key_label")).toBe("workspaced: Team");
+    callBack("approved-code", url.searchParams.get("state"));
+    await waitFor(() => expect(api.connectors).toHaveLength(1));
+    expect(api.connectors[0].name).toBe("Team");
+    expect(api.rows).toHaveLength(1);
+    const creation = api.fetchFn.mock.calls.find(([url, init]) => String(url).endsWith("/ai-connectors") && init?.method === "POST");
+    expect(JSON.parse(String(creation?.[1]?.body))).toMatchObject({ providerNoticeAccepted: true, apiKey: "sk-or-v1-issued" });
+    expect(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ })).not.toBeChecked();
+  });
+
   it("labels and saves a personal connector before creating its workspace", async () => {
     const user = await openProviderStep();
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));

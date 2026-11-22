@@ -3,6 +3,7 @@ import { useState } from "react";
 import { type Memory, type Metric, type MetricId, type MetricsRange, RANGE_SPAN_MS, useMetrics } from "../../hooks/useMetrics";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { Select } from "../atoms";
+import { MetricTile } from "../molecules/MetricTile";
 import { EmptyState } from "../molecules";
 import { formatMetric, MetricChart } from "../organisms";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
@@ -92,13 +93,7 @@ export function MonitoringPage({ workspace, deleting }: Props) {
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-4 px-4 pt-4 pb-10 sm:px-6">
             <ul aria-label="Now" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
               {tiles?.map(({ label, icon: Icon, value, detail }) => (
-                <li key={label} className="card flex min-w-0 flex-col gap-1 p-4">
-                  <span className="flex items-center gap-2 text-xs font-medium text-zinc-500 dark:text-zinc-400">
-                    <span className="flex size-6 items-center justify-center rounded-md bg-zinc-100 text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300"><Icon aria-hidden className="size-3.5" /></span>{label}
-                  </span>
-                  <span className="mt-1 truncate text-xl font-semibold tracking-tight tabular-nums sm:text-2xl">{value}</span>
-                  {detail && <span className="truncate text-xs text-zinc-500 dark:text-zinc-400">{detail}</span>}
-                </li>
+                <MetricTile key={label} label={label} icon={Icon} value={value ?? "—"} detail={detail} />
               ))}
             </ul>
             <div className="grid gap-4 xl:grid-cols-2">

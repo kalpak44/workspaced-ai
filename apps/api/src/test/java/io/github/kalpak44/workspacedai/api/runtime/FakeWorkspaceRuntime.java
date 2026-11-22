@@ -63,6 +63,11 @@ public class FakeWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public void replaceProviderKey(UUID workspaceId, String value) {
+    // Nothing runs that could read it, so the value is not kept anywhere.
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     // Nothing runs that could read it, so the value is not kept anywhere.
   }

@@ -36,6 +36,24 @@ class VmSecretServiceTest {
   }
 
   @Test
+  void replacesOnlyTheProviderKeyAndLeavesOrdinaryRoutesProtected() {
+    service.add(vm, "GITHUB_TOKEN", "keep");
+    service.replaceProviderKey(vm, "new-provider-key");
+    assertThat(service.environment(vm))
+        .containsEntry("OPENROUTER_API_KEY", "new-provider-key")
+        .containsEntry("GITHUB_TOKEN", "keep")
+        .containsEntry("PW", "x");
+    assertThatThrownBy(() -> service.add(vm, "OPENROUTER_API_KEY", "bad"))
+        .isInstanceOf(SecretRefusedException.class);
+    assertThatThrownBy(() -> service.remove(vm, "OPENROUTER_API_KEY"))
+        .isInstanceOf(SecretRefusedException.class);
+    assertThatThrownBy(() -> service.replaceProviderKey(vm, " "))
+        .isInstanceOf(SecretRefusedException.class);
+    assertThatThrownBy(() -> service.replaceProviderKey(UUID.randomUUID(), "key"))
+        .isInstanceOf(VmNotFoundException.class);
+  }
+
+  @Test
   void setsAndRemovesASystemVariableOverASecretOfTheSameName() {
     service.add(vm, "USER_TIMEZONE", "Mars/Olympus");
 

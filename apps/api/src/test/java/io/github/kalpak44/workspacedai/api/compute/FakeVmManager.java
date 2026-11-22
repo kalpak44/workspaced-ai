@@ -98,6 +98,22 @@ class FakeVmManager implements AutoCloseable {
             .forEach(list::add);
         answer(exchange, 200, list.toString());
       }
+      case "PUT" -> {
+        if (!path.endsWith("/secrets/provider-key")) {
+          answer(exchange, 405, "{}");
+          return;
+        }
+        var id = UUID.fromString(path.split("/")[4]);
+        if (!vms.containsKey(id)) {
+          answer(exchange, 404, "{}");
+          return;
+        }
+        var value = JSON.readTree(exchange.getRequestBody()).path("value").asString();
+        secrets
+            .computeIfAbsent(id, _ -> new ConcurrentHashMap<>())
+            .put("OPENROUTER_API_KEY", value);
+        answer(exchange, 204, "");
+      }
       case "POST" -> {
         if (path.endsWith("/secrets")) {
           var id = UUID.fromString(path.split("/")[4]);

@@ -13,12 +13,19 @@ it("saves a named key under account settings, hides it, and deletes the connecto
   await screen.findByText("No connectors yet. Add your first connection below.");
   await user.type(screen.getByRole("textbox", { name: "Connector name" }), "Work");
   await user.type(screen.getByLabelText("API key"), "sk-private");
+  await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
   await user.click(screen.getByRole("button", { name: "Save connector" }));
   await screen.findByText("Work");
   expect(api.connectors).toEqual([{ id: "connector-1", name: "Work", provider: "openrouter" }]);
   expect(screen.getByLabelText("API key")).toHaveValue("");
   expect(screen.queryByText("sk-private")).not.toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Delete Work" }));
+  expect(screen.getByRole("dialog", { name: "Remove AI connector?" })).toHaveTextContent("The API key will stay active in your OpenRouter account");
+  expect(api.connectors).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(api.connectors).toHaveLength(1);
+  await user.click(screen.getByRole("button", { name: "Delete Work" }));
+  await user.click(screen.getByRole("button", { name: "Remove connector" }));
   await waitFor(() => expect(api.connectors).toHaveLength(0));
 });
 it("applies a saved connector and requests a workspace restart", async () => {
@@ -34,4 +41,49 @@ it("applies a saved connector and requests a workspace restart", async () => {
   await user.click(screen.getByRole("button", { name: "Save connector" }));
   await waitFor(() => expect(changed).toHaveBeenCalledWith({ restartRequired: true }));
   expect(api.workspaceConnectors.get(api.rows[0].id)).toBe("connector-1");
+});
+
+it("requires explicit acknowledgement for pasted keys and OAuth, with policy links", async () => {
+  const user = userEvent.setup();
+  render(<GeneralSettingsPage section="ai-connectors" />);
+  await user.type(screen.getByRole("textbox", { name: "Connector name" }), "Personal");
+  await user.type(screen.getByLabelText("API key"), "sk-private");
+  expect(screen.getByRole("button", { name: "Save connector" })).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Connect OpenRouter" })).toBeDisabled();
+  expect(screen.getByRole("link", { name: "Terms of service" })).toHaveAttribute("href", "https://workspaced.online/terms");
+  expect(screen.getByRole("link", { name: "Privacy policy" })).toHaveAttribute("href", "https://workspaced.online/privacy");
+  await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+  expect(screen.getByRole("button", { name: "Save connector" })).toBeEnabled();
+  expect(screen.getByRole("button", { name: "Connect OpenRouter" })).toBeEnabled();
+});
+
+it("shows each selected key's usage and links to provider limit management", async () => {
+  api.connectors.push({ id: "connector-1", name: "Personal", provider: "openrouter" }, { id: "connector-2", name: "Work", provider: "openrouter" });
+  const user = userEvent.setup();
+  render(<GeneralSettingsPage section="ai-connectors" />);
+  await screen.findByRole("region", { name: "Usage for Personal" });
+  await screen.findAllByText("$2.50");
+  await user.click(screen.getByRole("button", { name: /^Work/ }));
+  await screen.findByRole("region", { name: "Usage for Work" });
+  await screen.findByText("$7.00");
+  expect(screen.queryByRole("region", { name: "Usage for Personal" })).not.toBeInTheDocument();
+  expect(screen.getByRole("link", { name: "Manage limits in OpenRouter" })).toHaveAttribute("href", "https://openrouter.ai/settings/keys");
+});
+
+it("uses separate System secrets and Secrets cards and shows the shared restart banner", async () => {
+  api.connectors.push({ id: "connector-1", name: "Personal", provider: "openrouter" });
+  const restart = vi.fn();
+  const changed = vi.fn();
+  const workspace = api.rows[0];
+  const { rerender } = render(<SettingsPage section="secrets" workspace={workspace} onChanged={changed} onRestart={restart} />);
+  expect(screen.getByRole("region", { name: "System secrets" })).not.toBe(screen.getByRole("region", { name: "Secrets" }));
+  await waitFor(() => expect(screen.getByRole("combobox", { name: "Saved connector" })).toBeEnabled());
+  const user = userEvent.setup();
+  await user.selectOptions(screen.getByRole("combobox", { name: "Saved connector" }), "connector-1");
+  await user.click(screen.getByRole("button", { name: "Save connector" }));
+  await waitFor(() => expect(changed).toHaveBeenCalledWith({ restartRequired: true }));
+  rerender(<SettingsPage section="secrets" workspace={{ ...workspace, restartRequired: true }} onChanged={changed} onRestart={restart} />);
+  expect(screen.getByRole("status", { name: "Restart required" })).toHaveTextContent("Settings changed");
+  await user.click(screen.getByRole("button", { name: "Restart workspace" }));
+  expect(restart).toHaveBeenCalledOnce();
 });

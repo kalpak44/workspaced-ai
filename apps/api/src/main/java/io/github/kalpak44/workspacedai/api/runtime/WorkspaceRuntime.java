@@ -47,6 +47,9 @@ public interface WorkspaceRuntime {
    */
   void putSecret(UUID workspaceId, String name, String value);
 
+  /** Replaces the protected model-provider key, without allowing user secrets to overwrite it. */
+  void replaceProviderKey(UUID workspaceId, String value);
+
   /** One secret's value; empty when the workspace has no such secret, or none at all. */
   Optional<String> secret(UUID workspaceId, String name);
 

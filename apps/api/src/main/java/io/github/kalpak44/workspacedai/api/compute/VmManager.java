@@ -83,6 +83,9 @@ public interface VmManager {
    */
   void putSecret(UUID workspaceId, String name, String value);
 
+  /** Replaces the protected model-provider key, without allowing user secrets to overwrite it. */
+  void replaceProviderKey(UUID workspaceId, String value);
+
   /** Removes a secret from the workspace's VM; one it does not have, or no VM, is not an error. */
   void removeSecret(UUID workspaceId, String name);
 

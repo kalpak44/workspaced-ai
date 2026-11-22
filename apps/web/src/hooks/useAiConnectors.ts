@@ -15,8 +15,8 @@ export function useAiConnectors() {
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, []);
-  const add = async (name: string, provider: string, key: string) => {
-    const saved = await createAiConnector(name, provider, key);
+  const add = async (name: string, provider: string, key: string, accepted: boolean) => {
+    const saved = await createAiConnector(name, provider, key, accepted);
     setConnectors(current => [...current, saved]);
     return saved;
   };

@@ -76,6 +76,11 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public void replaceProviderKey(UUID workspaceId, String value) {
+    vmManager.replaceProviderKey(workspaceId, value);
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     vmManager.putSecret(workspaceId, name, value);
   }

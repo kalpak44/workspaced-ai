@@ -34,6 +34,16 @@ class HttpVmManagerTest {
   }
 
   @Test
+  void rotatesTheProtectedKeyThroughTheDedicatedRoute() {
+    var vm = vmManager.create(workspace, user, "cx23", "old-key", Map.of());
+    vmManager.putSecret(workspace, "OTHER", "kept");
+    vmManager.replaceProviderKey(workspace, "new-key");
+    assertThat(fake.secrets.get(vm.id()))
+        .containsEntry("OPENROUTER_API_KEY", "new-key")
+        .containsEntry("OTHER", "kept");
+  }
+
+  @Test
   void readsTheSizesOnOffer() {
     var sizes = vmManager.sizes();
 

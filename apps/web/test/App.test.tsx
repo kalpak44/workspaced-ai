@@ -61,6 +61,7 @@ async function chooseVmType(user: User, type?: string) {
 async function enterKey(user: User, key = "sk-or-v1-test") {
   await user.click(screen.getByRole("button", { name: "Next" }));
   const field = await screen.findByLabelText("OpenRouter API key");
+  await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
   await user.type(field, key);
 }
 
@@ -76,8 +77,10 @@ function visit(url: string) {
 async function openSettings(user: User, section: "mcp" | "secrets" = "secrets") {
   await user.click(screen.getByRole("button", { name: "Actions for Starter" }));
   await user.click(screen.getByRole("menuitem", { name: "Settings" }));
-  await screen.findByText("OPENROUTER_API_KEY");
-  if (section === "secrets") await user.click(screen.getByRole("button", { name: "Secrets" }));
+  if (section === "secrets") {
+    await user.click(screen.getByRole("button", { name: "Secrets" }));
+    await screen.findByText("OPENROUTER_API_KEY");
+  }
   return screen.getByRole("region", { name: section === "mcp" ? "MCP servers" : "Secrets" });
 }
 
@@ -118,7 +121,9 @@ describe("App", () => {
     await screen.findByRole("radio", { name: /cx23/ });
     await user.keyboard("{Enter}");
     await waitFor(() => expect(screen.getByLabelText("OpenRouter API key")).toHaveFocus());
-    await user.keyboard("sk-or-v1-test{Enter}");
+    await user.keyboard("sk-or-v1-test");
+    await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
 
     await user.click(screen.getByRole("button", { name: "New workspace" }));
@@ -586,8 +591,8 @@ describe("App", () => {
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).not.toBeInTheDocument();
     expect(path()).toBe("/workspaces/starter/settings/secrets");
     expect(document.title).toBe("Settings · Starter — workspaced-ai");
-    expect(within(secrets).getByRole("combobox", { name: "Saved connector" })).toBeInTheDocument();
-    expect(within(secrets).getByRole("link", { name: "Manage AI connectors in General settings" })).toHaveAttribute("href", "/settings/ai-connectors");
+    expect(screen.getByRole("combobox", { name: "Saved connector" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Manage AI connectors in General settings" })).toHaveAttribute("href", "/settings/ai-connectors");
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Sessions" }));
@@ -653,12 +658,12 @@ describe("App", () => {
     const user = userEvent.setup();
     await renderLoaded();
     const secrets = await openSettings(user);
-    expect(within(secrets).queryByRole("status", { name: "Restart required" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("status", { name: "Restart required" })).not.toBeInTheDocument();
     await user.type(within(secrets).getByRole("textbox", { name: "Name" }), "GITHUB_TOKEN");
     await user.type(within(secrets).getByLabelText("Value"), "ghp_secret");
     await user.click(within(secrets).getByRole("button", { name: "Add" }));
 
-    const warning = await within(secrets).findByRole("status", { name: "Restart required" });
+    const warning = await screen.findByRole("status", { name: "Restart required" });
     expect(warning).toHaveTextContent("only after it restarts");
     await user.click(within(warning).getByRole("button", { name: "Restart workspace" }));
     const dialog = screen.getByRole("dialog", { name: "Restart Starter?" });
@@ -666,7 +671,7 @@ describe("App", () => {
 
     await waitFor(() => expect(api.restarted).toEqual(["starter"]));
     await waitFor(() =>
-      expect(within(secrets).queryByRole("status", { name: "Restart required" })).not.toBeInTheDocument(),
+      expect(screen.queryByRole("status", { name: "Restart required" })).not.toBeInTheDocument(),
     );
   });
 
@@ -674,8 +679,8 @@ describe("App", () => {
     api.rows[0] = { ...api.rows[0], restartRequired: true };
     const user = userEvent.setup();
     await renderLoaded();
-    const secrets = await openSettings(user);
-    expect(within(secrets).getByRole("status", { name: "Restart required" })).toBeInTheDocument();
+    await openSettings(user);
+    expect(screen.getByRole("status", { name: "Restart required" })).toBeInTheDocument();
   });
 
   it("refuses a name that is not an environment variable, or one already set", async () => {

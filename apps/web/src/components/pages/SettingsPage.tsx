@@ -10,7 +10,7 @@ import { FirewallPanel } from "../organisms/FirewallPanel";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { VariablesPanel } from "../organisms/VariablesPanel";
 import { Spinner } from "../atoms";
-import { SectionNav } from "../molecules";
+import { RestartRequiredBanner, SectionNav } from "../molecules";
 import { TOUR_STEP, useTourProgress } from "../../lib/tour";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 import { ContextLayout } from "../templates/ContextLayout";
@@ -96,18 +96,19 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
             onRemove={mcp.remove}
           />
         </div>
-        <div hidden={section !== "secrets"}>
+        <div hidden={section !== "secrets"} className="space-y-6">
+          {workspace.restartRequired && <RestartRequiredBanner restartDisabled={workspace.status === "INITIALIZING" || workspace.status === "PAUSED"} onRestart={onRestart} />}
+          {section === "secrets" && <WorkspaceAiConnectorPanel key={workspace.id} workspace={workspace} onChanged={onChanged} />}
           <SecretsPanel
             workspaceId={workspace.id}
-            aiConnector={section === "secrets" ? <WorkspaceAiConnectorPanel key={workspace.id} workspace={workspace} onChanged={onChanged} /> : undefined}
-            secrets={secrets.secrets}
+            secrets={secrets.secrets.filter(secret => !secret.managed)}
             loading={secrets.loading}
             removing={secrets.removing}
             error={secrets.error}
             onDismissError={secrets.dismissError}
             onAdd={secrets.add}
             onRemove={secrets.remove}
-            restartRequired={workspace.restartRequired}
+            restartRequired={false}
             restartDisabled={workspace.status === "INITIALIZING" || workspace.status === "PAUSED"}
             onRestart={onRestart}
           />

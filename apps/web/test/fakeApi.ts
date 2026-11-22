@@ -468,10 +468,16 @@ export function installFakeApi(
     if (state.fail) {
       return new Response(null, { status: state.fail });
     }
+    const connectorMetricsRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/metrics$/.exec(url);
+    if (connectorMetricsRoute) {
+      if (!connectors.some(connector => connector.id === connectorMetricsRoute[1])) return json({}, 404);
+      return json({ usage: connectorMetricsRoute[1] === "connector-2" ? 7 : 2.5, usageDaily: 0.5, usageWeekly: 1.5, usageMonthly: 2.5, limit: 10, limitRemaining: 7.5, limitReset: "monthly", expiresAt: null, includeByokInLimit: false, byokUsage: 0, freeTier: false, freeRequestsLimit: 50, freeRequestsRemaining: 40 });
+    }
     const connectorRoute = /\/api\/v1\/ai-connectors(?:\/([^/]+))?$/.exec(url);
     if (connectorRoute) {
       if (init?.method === "POST") {
         const input = JSON.parse(String(init.body));
+        if (input.providerNoticeAccepted !== true) return json({}, 400);
         if (input.apiKey === REJECTED_KEY) return json({}, 422);
         const connector = { id: `connector-${connectors.length + 1}`, name: input.name, provider: input.provider };
         connectors.push(connector); connectorKeys.set(connector.id, input.apiKey);

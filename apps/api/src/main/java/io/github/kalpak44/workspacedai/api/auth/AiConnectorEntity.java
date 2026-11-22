@@ -6,6 +6,7 @@ import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
+import java.time.Instant;
 import java.util.UUID;
 
 @Entity
@@ -27,9 +28,17 @@ public class AiConnectorEntity {
   @Column(name = "encrypted_key", nullable = false, columnDefinition = "text")
   private String encryptedKey;
 
+  @Column(name = "provider_notice_accepted_at")
+  private Instant providerNoticeAcceptedAt;
+
+  @Column(name = "provider_notice_version", length = 100)
+  private String providerNoticeVersion;
+
   protected AiConnectorEntity() {}
 
   AiConnectorEntity(UUID ownerId, String name, String provider, String encryptedKey) {
+    this.providerNoticeAcceptedAt = Instant.now();
+    this.providerNoticeVersion = "ai-provider-notice-v1";
     this.ownerId = ownerId;
     this.name = name;
     this.provider = provider;

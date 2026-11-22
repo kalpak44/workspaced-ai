@@ -1,6 +1,8 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import io.github.kalpak44.workspacedai.api.provider.OpenRouterKeyMetrics;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.AssertTrue;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
@@ -22,7 +24,9 @@ public class AiConnectorController {
   public record Create(
       @NotBlank @Size(max = 100) String name,
       @NotBlank String provider,
-      @NotBlank @Size(max = 1000) String apiKey) {}
+      @NotBlank @Size(max = 1000) String apiKey,
+      @NotNull @AssertTrue(message = "Acknowledge the third-party AI notice")
+          Boolean providerNoticeAccepted) {}
 
   public record Selection(@NotNull UUID connectorId) {}
 
@@ -41,6 +45,13 @@ public class AiConnectorController {
   @ResponseStatus(HttpStatus.CREATED)
   public AiConnectorService.Connector create(@Valid @RequestBody Create request) {
     return service.create(request.name().strip(), request.provider(), request.apiKey().strip());
+  }
+
+  @GetMapping("/ai-connectors/{id}/metrics")
+  public ResponseEntity<OpenRouterKeyMetrics> metrics(@PathVariable UUID id) {
+    return ResponseEntity.ok()
+        .cacheControl(org.springframework.http.CacheControl.noStore())
+        .body(service.metrics(id));
   }
 
   @DeleteMapping("/ai-connectors/{id}")

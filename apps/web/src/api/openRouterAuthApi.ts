@@ -19,8 +19,13 @@ export interface OpenRouterAuthorization {
   readonly state: string;
 }
 
+export interface OpenRouterKeyOptions {
+  readonly limit?: string;
+  readonly expiration?: string;
+}
+
 /** A fresh PKCE verifier and state per attempt, so a code from an older one is refused. */
-export async function authorizeOpenRouter(callbackUrl: string, keyLabel: string): Promise<OpenRouterAuthorization> {
+export async function authorizeOpenRouter(callbackUrl: string, keyLabel: string, options: OpenRouterKeyOptions = {}): Promise<OpenRouterAuthorization> {
   const verifier = randomToken();
   const state = randomToken();
   const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier));
@@ -31,6 +36,11 @@ export async function authorizeOpenRouter(callbackUrl: string, keyLabel: string)
     key_label: keyLabel,
     state,
   });
+  if (options.limit) {
+    const amount = Number(options.limit);
+    if (Number.isFinite(amount) && amount > 0 && amount < 1_000_000 && /^\d+(\.\d{1,2})?$/.test(options.limit)) params.set("limit", options.limit);
+  }
+  if (options.expiration && ["1-hour", "1-day", "7-days", "30-days", "90-days", "180-days", "1-year", "never"].includes(options.expiration)) params.set("expiration", options.expiration);
   return { url: `${AUTH_URL}?${params}`, verifier, state };
 }
 

@@ -2,6 +2,8 @@ package io.github.kalpak44.workspacedai.api.auth;
 
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
+import io.github.kalpak44.workspacedai.api.provider.OpenRouterKeyMetrics;
+import io.github.kalpak44.workspacedai.api.provider.OpenRouterMetrics;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.ApiKeyRejectedException;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -19,6 +21,7 @@ public class AiConnectorService {
   private final AiConnectorRepository repository;
   private final ApiKeyCheck check;
   private final SecretBox box;
+  private final OpenRouterMetrics metrics;
   private final WorkspaceRepository workspaces;
   private final WorkspaceRuntime runtime;
 
@@ -27,11 +30,13 @@ public class AiConnectorService {
       ApiKeyCheck check,
       AuthProperties properties,
       WorkspaceRepository workspaces,
-      WorkspaceRuntime runtime) {
+      WorkspaceRuntime runtime,
+      OpenRouterMetrics metrics) {
     this.repository = repository;
     this.check = check;
     this.workspaces = workspaces;
     this.runtime = runtime;
+    this.metrics = metrics;
     box = new SecretBox(properties.jwtSecret(), "workspaced-ai-connectors");
   }
 
@@ -72,6 +77,14 @@ public class AiConnectorService {
                     HttpStatus.CONFLICT, "Reconnect this AI connector before using it"));
   }
 
+  public OpenRouterKeyMetrics metrics(UUID id) {
+    var connector = owned(id);
+    if (!connector.getProvider().equals(ModelProvider.OPENROUTER.id()))
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Usage metrics are unavailable for this provider");
+    return metrics.read(key(id, connector.getProvider()));
+  }
+
   @Transactional
   public void delete(UUID id) {
     repository.delete(owned(id));
@@ -90,7 +103,7 @@ public class AiConnectorService {
     var key = key(connectorId, workspace.getModelProvider());
     validate(provider(workspace.getModelProvider()), key);
     try {
-      runtime.putSecret(workspaceId, provider(workspace.getModelProvider()).apiKeyVariable(), key);
+      runtime.replaceProviderKey(workspaceId, key);
     } catch (IllegalStateException e) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace has no VM yet", e);
     }

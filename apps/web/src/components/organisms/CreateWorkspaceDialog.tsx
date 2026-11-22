@@ -14,6 +14,8 @@ import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../m
 
 import { isRejectedConnectorKey, useAiConnectors } from "../../hooks/useAiConnectors";
 
+import { AiProviderNotice } from "../molecules/AiProviderNotice";
+
 const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
 
 // The API rejects anything longer, so the field never lets the user type past it.
@@ -129,6 +131,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const [providerId, setProviderId] = useState("");
   const [apiKey, setApiKey] = useState("");
   const [connectorId, setConnectorId] = useState("");
+  const [accepted, setAccepted] = useState(false);
   const [connectorName, setConnectorName] = useState("");
   const [connectorError, setConnectorError] = useState("");
   const connectors = useAiConnectors();
@@ -217,6 +220,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
 
   // Every new key becomes a named personal connector before the workspace uses it.
   const finish = async (key: string) => {
+    if (!connectorId && !accepted) return;
     setPending(true);
     setRejected(false);
     setNoFunds(false);
@@ -224,7 +228,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     try {
       let savedId = connectorId;
       if (!savedId) {
-        const saved = await connectors.add(connectorName.trim() || name.trim(), providerId, key);
+        const saved = await connectors.add(connectorName.trim() || name.trim(), providerId, key, accepted);
         savedId = saved.id;
         setConnectorId(savedId);
       }
@@ -338,6 +342,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         {!connectorId && provider && <TextField id="workspace-connector-name" label="Connector name" placeholder={name} maxLength={100} value={connectorName} disabled={pending} hint="Saved to your account so other workspaces can use it." onChange={event => setConnectorName(event.target.value)} />}
         {connectorError && <p role="alert" className="text-sm text-rose-600">{connectorError}</p>}
         {connectorId && rejected && <p role="alert" className="text-sm text-rose-600">The provider rejected this connector's key. Select another connector.</p>}
+        {!connectorId && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || openRouter.status === "waiting" || openRouter.status === "exchanging"} />}
         {!connectorId && provider?.id === "openrouter" && (
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-3">
@@ -346,7 +351,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
                 variant="secondary"
                 icon={openRouter.status === "connected" ? Check : Plug}
                 busy={openRouter.status === "exchanging"}
-                disabled={pending}
+                disabled={pending || !accepted}
                 onClick={() => openRouter.connect(keyLabel)}
               />
               <span className="text-sm text-zinc-500 dark:text-zinc-400">or paste a key below</span>
@@ -403,7 +408,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         type="submit"
         icon={ArrowRight}
         busy={pending}
-        disabled={!provider || (!connectorId && !apiKey.trim()) || rejected}
+        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || rejected}
       />
     );
   }

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { authorizeOpenRouter, exchangeOpenRouterCode } from "../api/openRouterAuthApi";
+import { authorizeOpenRouter, exchangeOpenRouterCode, type OpenRouterKeyOptions } from "../api/openRouterAuthApi";
 import { OPENROUTER_CALLBACK_PATH, OPENROUTER_CHANNEL, type OpenRouterCallback } from "../lib/openRouterCallback";
 
 export type OpenRouterConnectStatus = "idle" | "waiting" | "exchanging" | "connected" | "blocked" | "failed";
@@ -41,7 +41,7 @@ export function useOpenRouterConnect(onKey: (key: string) => void) {
    * `keyLabel` names the key in the user's OpenRouter account; it may have to create something
    * first, and null gives up, closing the window.
    */
-  const connect = (keyLabel: () => Promise<string | null>) => {
+  const connect = (keyLabel: () => Promise<string | null>, options?: OpenRouterKeyOptions) => {
     // Opened before anything is awaited, or the browser no longer counts it as the user's click.
     const popup = globalThis.open("", "openrouter", "popup,width=520,height=720");
     if (!popup) {
@@ -56,7 +56,7 @@ export function useOpenRouterConnect(onKey: (key: string) => void) {
           setStatus("idle");
           return;
         }
-        return authorizeOpenRouter(`${globalThis.location.origin}${OPENROUTER_CALLBACK_PATH}`, label).then(
+        return authorizeOpenRouter(`${globalThis.location.origin}${OPENROUTER_CALLBACK_PATH}`, label, options).then(
           ({ url, verifier, state }) => {
             attempt.current = { verifier, state };
             popup.location.href = url;

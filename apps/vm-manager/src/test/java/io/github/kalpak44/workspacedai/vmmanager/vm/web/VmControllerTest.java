@@ -268,6 +268,13 @@ class VmControllerTest {
             "[{\"name\":\"OPENROUTER_API_KEY\",\"system\":true},"
                 + "{\"name\":\"GITHUB_TOKEN\",\"system\":false}]");
 
+    assertThat(send("PUT", secrets + "/provider-key", "{\"value\":\"rotated-key\"}").statusCode())
+        .isEqualTo(204);
+    assertThat(VAULT.entries.get("workspaced-ai/vms/" + vm.id()))
+        .containsEntry("OPENROUTER_API_KEY", "rotated-key")
+        .containsEntry("GITHUB_TOKEN", "ghp_x");
+    assertThat(send("PUT", secrets + "/provider-key", "{\"value\":\" \"}").statusCode())
+        .isEqualTo(400);
     assertThat(send("DELETE", secrets + "/OPENROUTER_API_KEY", null).statusCode()).isEqualTo(409);
     assertThat(send("DELETE", secrets + "/GITHUB_TOKEN", null).statusCode()).isEqualTo(204);
     assertThat(send("DELETE", secrets + "/GITHUB_TOKEN", null).statusCode()).isEqualTo(404);

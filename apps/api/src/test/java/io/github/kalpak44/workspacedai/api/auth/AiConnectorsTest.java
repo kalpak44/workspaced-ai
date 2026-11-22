@@ -2,13 +2,19 @@ package io.github.kalpak44.workspacedai.api.auth;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.provider.OpenRouterKeyMetrics;
+import io.github.kalpak44.workspacedai.api.provider.OpenRouterMetrics;
+import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.*;
 import java.util.UUID;
@@ -30,6 +36,8 @@ class AiConnectorsTest {
   @Autowired UserRepository users;
   @Autowired JdbcTemplate jdbc;
   @MockitoBean ApiKeyCheck check;
+  @MockitoBean OpenRouterMetrics metrics;
+  @org.springframework.test.context.bean.override.mockito.MockitoSpyBean WorkspaceRuntime runtime;
   final HttpClient http = HttpClient.newHttpClient();
   final JsonMapper json = JsonMapper.builder().build();
 
@@ -47,7 +55,7 @@ class AiConnectorsTest {
             "POST",
             "/ai-connectors",
             """
-        {"name":" Work ","provider":"openrouter","apiKey":" private-key "}
+        {"name":" Work ","provider":"openrouter","providerNoticeAccepted":true,"apiKey":" private-key "}
         """,
             TestUsers.bearer(port));
     assertThat(created.statusCode()).isEqualTo(201);
@@ -66,6 +74,9 @@ class AiConnectorsTest {
     var other = users.saveAndFlush(TestUsers.newUser(UUID.randomUUID() + "@example.com"));
     var auth = TestUsers.bearer(other);
     assertThat(send("GET", "/ai-connectors", null, auth).body()).isEqualTo("[]");
+    assertThat(send("GET", "/ai-connectors/" + id + "/metrics", null, auth).statusCode())
+        .isEqualTo(404);
+    verify(metrics, never()).read(any());
     assertThat(send("DELETE", "/ai-connectors/" + id, null, auth).statusCode()).isEqualTo(404);
     assertThat(
             send(
@@ -108,6 +119,8 @@ class AiConnectorsTest {
         .isEqualTo(204);
     assertThat(send("GET", path, null, TestUsers.bearer(port)).statusCode()).isEqualTo(204);
     assertThat(workspaces.existsById(UUID.fromString(workspaceId))).isTrue();
+    verify(runtime).replaceProviderKey(UUID.fromString(workspaceId), "private-key");
+    verify(runtime, never()).putSecret(any(), any(), any());
   }
 
   @Test
@@ -117,7 +130,7 @@ class AiConnectorsTest {
             send(
                     "POST",
                     "/ai-connectors",
-                    "{\"name\":\"Bad\",\"provider\":\"openrouter\",\"apiKey\":\"bad\"}",
+                    "{\"name\":\"Bad\",\"provider\":\"openrouter\",\"providerNoticeAccepted\":true,\"apiKey\":\"bad\"}",
                     TestUsers.bearer(port))
                 .statusCode())
         .isEqualTo(422);
@@ -126,7 +139,7 @@ class AiConnectorsTest {
             send(
                     "POST",
                     "/ai-connectors",
-                    "{\"name\":\" \",\"provider\":\"openrouter\",\"apiKey\":\"bad\"}",
+                    "{\"name\":\" \",\"provider\":\"openrouter\",\"providerNoticeAccepted\":true,\"apiKey\":\"bad\"}",
                     TestUsers.bearer(port))
                 .statusCode())
         .isEqualTo(400);
@@ -144,12 +157,67 @@ class AiConnectorsTest {
         .isEqualTo(400);
   }
 
+  @Test
+  void requiresAcknowledgementAndRecordsItsVersion() throws Exception {
+    var body =
+        """
+      {"name":"Key","provider":"openrouter","apiKey":"private-key"}
+      """;
+    assertThat(send("POST", "/ai-connectors", body, TestUsers.bearer(port)).statusCode())
+        .isEqualTo(400);
+    assertThat(
+            send(
+                    "POST",
+                    "/ai-connectors",
+                    body.replace("\"name\":", "\"providerNoticeAccepted\":false,\"name\":"),
+                    TestUsers.bearer(port))
+                .statusCode())
+        .isEqualTo(400);
+    assertThat(connectors.count()).isZero();
+    create();
+    assertThat(
+            jdbc.queryForObject(
+                "select provider_notice_accepted_at is not null from ai_connector", Boolean.class))
+        .isTrue();
+    assertThat(
+            jdbc.queryForObject("select provider_notice_version from ai_connector", String.class))
+        .isEqualTo("ai-provider-notice-v1");
+  }
+
+  @Test
+  void readsOnlyTheOwnersUsageWithoutReturningCredentials() throws Exception {
+    var id = create();
+    when(metrics.read("private-key"))
+        .thenReturn(
+            new OpenRouterKeyMetrics(
+                new BigDecimal("2.5"),
+                null,
+                null,
+                null,
+                new BigDecimal("10"),
+                new BigDecimal("7.5"),
+                "monthly",
+                null,
+                false,
+                BigDecimal.ZERO,
+                false,
+                null,
+                null));
+    var response = send("GET", "/ai-connectors/" + id + "/metrics", null, TestUsers.bearer(port));
+    assertThat(response.statusCode()).isEqualTo(200);
+    assertThat(response.headers().firstValue("Cache-Control")).hasValue("no-store");
+    assertThat(json.readTree(response.body()).get("usage").decimalValue())
+        .isEqualByComparingTo("2.5");
+    assertThat(response.body()).doesNotContain("private-key", "encryptedKey");
+    verify(metrics).read("private-key");
+  }
+
   String create() throws Exception {
     var response =
         send(
             "POST",
             "/ai-connectors",
-            "{\"name\":\"Work\",\"provider\":\"openrouter\",\"apiKey\":\"private-key\"}",
+            "{\"name\":\"Work\",\"provider\":\"openrouter\",\"providerNoticeAccepted\":true,\"apiKey\":\"private-key\"}",
             TestUsers.bearer(port));
     assertThat(response.statusCode()).isEqualTo(201);
     return json.readTree(response.body()).get("id").asString();

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { ApiError } from "../api/http";
 import { selectedAiConnector, selectAiConnector } from "../api/aiConnectorsApi";
 import type { Workspace } from "./useWorkspaces";
 
@@ -13,7 +14,11 @@ export function useWorkspaceAiConnector(workspace: Workspace, onChanged: (change
   const save = async () => {
     setBusy(true); setError("");
     try { await selectAiConnector(workspace.id, selected); setCurrent(selected); onChanged({ restartRequired: true }); }
-    catch { setError("Could not change the connector. Check that its key is valid and try again."); }
+    catch (cause) {
+      setError(cause instanceof ApiError && cause.status === 422 ? "OpenRouter rejected this key. It may have expired or been revoked."
+        : cause instanceof ApiError && cause.status === 409 ? "The workspace is not ready to change its key. Try again after it starts."
+        : "Could not update the workspace's provider key. Please try again.");
+    }
     finally { setBusy(false); }
   };
   return { selected, setSelected, current, reading, busy, error, save };

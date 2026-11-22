@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmSecret;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmSecretService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmSecretDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.ProviderKeyDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmSecretDto;
 import java.util.List;
 import java.util.UUID;
@@ -21,6 +22,12 @@ public class VmSecretController implements VmSecretApi {
 
   public VmSecretController(VmSecretService service) {
     this.service = service;
+  }
+
+  @Override
+  public ResponseEntity<Void> replaceProviderKey(UUID id, ProviderKeyDto body) {
+    service.replaceProviderKey(id, body.value().strip());
+    return ResponseEntity.noContent().build();
   }
 
   @Override

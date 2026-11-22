@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmSecretDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.ProviderKeyDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmSecretDto;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 
@@ -30,6 +32,16 @@ import org.springframework.web.bind.annotation.RequestMapping;
 @Tag(name = "VM secrets", description = "The secrets each VM keeps in Vault")
 @RequestMapping("/vms/{id}/secrets")
 public interface VmSecretApi {
+
+  @Operation(
+      operationId = "replaceVmProviderKey",
+      summary = "Replace the protected model-provider key",
+      description =
+          "Internal API operation. Replaces only OPENROUTER_API_KEY in Vault, preserving all other secrets and harness settings. The new key applies after a harness restart.")
+  @ApiResponse(responseCode = "204", description = "Provider key replaced.")
+  @PutMapping(value = "/provider-key", consumes = "application/json")
+  ResponseEntity<Void> replaceProviderKey(
+      @PathVariable UUID id, @Valid @RequestBody ProviderKeyDto body);
 
   String JSON = "application/json";
   String PROBLEM_JSON = "application/problem+json";
