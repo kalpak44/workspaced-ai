@@ -5,6 +5,7 @@ import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
 import io.github.kalpak44.workspacedai.api.harness.ModelCatalogue;
+import io.github.kalpak44.workspacedai.api.harness.ModelCatalogues;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -32,16 +33,19 @@ public class SettingsService {
   private final WorkspaceRuntime runtime;
   private final Harness harness;
   private final ClusterLocks locks;
+  private final ModelCatalogues catalogues;
 
   public SettingsService(
       WorkspaceRepository workspaces,
       WorkspaceRuntime runtime,
       Harness harness,
-      ClusterLocks locks) {
+      ClusterLocks locks,
+      ModelCatalogues catalogues) {
     this.workspaces = workspaces;
     this.runtime = runtime;
     this.harness = harness;
     this.locks = locks;
+    this.catalogues = catalogues;
   }
 
   @Transactional(readOnly = true)
@@ -71,7 +75,7 @@ public class SettingsService {
   /** The catalogue lives in the harness, so it needs one running. */
   public ModelCatalogue models(UUID workspaceId) {
     var workspace = workspace(workspaceId);
-    return harness.models(endpoint(workspaceId), workspace.getModelProvider());
+    return catalogues.of(endpoint(workspaceId), workspace.getModelProvider());
   }
 
   /**

@@ -118,8 +118,10 @@ class SettingsControllerTest {
   @Test
   void listsTheAgentModelsAndKeepsTheOneChosen() throws Exception {
     var catalogue = JSON.readTree(send("GET", "/models", null).body());
+    // The cheapest at OpenRouter's live prices, though OpenCode's own copy says otherwise.
     assertThat(catalogue.get("defaultModel").asString()).isEqualTo("anthropic/claude-sonnet-5.5");
     assertThat(catalogue.get("models")).hasSize(2);
+    assertThat(catalogue.get("models").get(1).get("inputCost").asDouble()).isEqualTo(0.5);
 
     var chosen = send("PUT", "/model", "{\"model\":\"anthropic/claude-haiku-5.5\"}");
     assertThat(chosen.statusCode()).isEqualTo(200);

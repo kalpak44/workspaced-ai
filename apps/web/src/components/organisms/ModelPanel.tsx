@@ -123,7 +123,7 @@ export function ModelPanel(props: Props) {
           {!query && current === null && (
             <Row
               label={`Default${defaultName ? ` — ${defaultName}` : ""}`}
-              detail="Whatever the agent is set up with"
+              detail="The cheapest model available"
               selected={current === null}
               disabled={saving !== undefined}
               saving={saving === null}
@@ -145,7 +145,7 @@ export function ModelPanel(props: Props) {
           {!query && current !== null && (
             <Row
               label={`Default${defaultName ? ` — ${defaultName}` : ""}`}
-              detail="Whatever the agent is set up with"
+              detail="The cheapest model available"
               selected={false}
               disabled={saving !== undefined}
               saving={saving === null}

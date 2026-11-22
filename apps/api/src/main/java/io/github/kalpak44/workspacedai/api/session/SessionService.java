@@ -6,6 +6,7 @@ import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.harness.HarnessSession;
 import io.github.kalpak44.workspacedai.api.harness.HarnessUnavailableException;
+import io.github.kalpak44.workspacedai.api.harness.ModelCatalogues;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.util.List;
@@ -36,18 +37,21 @@ public class SessionService {
   private final WorkspaceRuntime runtime;
   private final Harness harness;
   private final TransactionTemplate transactions;
+  private final ModelCatalogues catalogues;
 
   public SessionService(
       WorkspaceRepository workspaces,
       WorkspaceSessionRepository sessions,
       WorkspaceRuntime runtime,
       Harness harness,
-      TransactionTemplate transactions) {
+      TransactionTemplate transactions,
+      ModelCatalogues catalogues) {
     this.workspaces = workspaces;
     this.sessions = sessions;
     this.runtime = runtime;
     this.harness = harness;
     this.transactions = transactions;
+    this.catalogues = catalogues;
   }
 
   /** Reconciles the durable index with OpenCode before returning it. */
@@ -233,7 +237,7 @@ public class SessionService {
     return workspace.getModel() == null
         ? new Harness.ModelRef(
             workspace.getModelProvider(),
-            harness.models(endpoint(workspaceId), workspace.getModelProvider()).defaultModel())
+            catalogues.of(endpoint(workspaceId), workspace.getModelProvider()).defaultModel())
         : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
   }
 
