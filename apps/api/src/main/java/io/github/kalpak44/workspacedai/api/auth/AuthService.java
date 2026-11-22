@@ -108,7 +108,7 @@ public class AuthService {
         Your first one is on us: the guided tour sets up a free demo workspace, has its agent \
         build a website and schedule work on it, and explains every step. You only click \
         Next, review the AI-provider notice and choose your WordPress credentials. Your protected \
-        Trial AI connector has a $1 lifetime budget, paid by Workspaced, with no automatic refill. \
+        Trial AI connector has a small one-time budget, paid by Workspaced, with no automatic refill. \
         The VM is free for four hours and then deleted. Add your own connector to pay for further \
         AI usage through your provider account.
 

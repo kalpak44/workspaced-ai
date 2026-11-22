@@ -538,8 +538,8 @@ web app, a workspace, or the VM manager. Unset configuration disables new trial-
 existing trial keys remain usable. No key value is returned in connector responses.
 
 After a verified new account commits, the API issues its Trial connector through
-`POST https://openrouter.ai/api/v1/keys`, with `limit: 1`, `limit_reset: null`, and
-`include_byok_in_limit: true`. This is a **$1 lifetime spending cap per key**, not a recurring
+`POST https://openrouter.ai/api/v1/keys`, with a fixed `limit` (set in `HttpOpenRouterManagement`),
+`limit_reset: null`, and `include_byok_in_limit: true`. This is a **lifetime spending cap per key**, not a recurring
 allowance and not a deposit of OpenRouter credits. The platform account must have credits.
 The issued inference key is encrypted at rest separately from the backend management credential.
 The provider key hash is retained for operational cleanup; no user route can reset, refill,

@@ -105,7 +105,7 @@ The 19-step tour starts on a new account’s first successful sign-in (`/?welcom
 real forms and chat, with a full-screen explanation, spotlight and Next demonstration.
 User-written values are preserved and typing stops when the user edits or leaves.
 
-The default name is **My first workspace**. The protected Trial connector has a $1 lifetime
+The default name is **My first workspace**. The protected Trial connector has a small one-time
 budget with no automatic refill. AI-provider acknowledgement and explicit four-hour permanent
 deletion consent remain required. Only trial connector and machine selection are custom;
 the cheapest available VM is selected again by the server at launch.

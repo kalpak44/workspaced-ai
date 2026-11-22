@@ -35,7 +35,7 @@ public final class Notifications {
             + " A workspace is a small computer of your own in the cloud, with an AI agent that"
             + " builds and runs things for you. Your first one is free: the guided tour sets up a"
             + " demo workspace, has its agent build a website, and shows you each step on the way."
-            + " The VM is free for four hours and then deleted. Your protected Trial connector includes a $1 lifetime AI budget, funded by Workspaced. Connect your own OpenRouter account when you need more AI usage.",
+            + " The VM is free for four hours and then deleted. Your protected Trial connector includes a small one-time AI budget, funded by Workspaced. Connect your own OpenRouter account when you need more AI usage.",
         new NotificationAction("Start the tour", "/?tour"));
   }
 

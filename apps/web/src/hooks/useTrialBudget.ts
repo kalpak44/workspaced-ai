@@ -1,7 +1,7 @@
 import { useAiConnectors } from "./useAiConnectors";
 import { useConnectorMetrics } from "./useConnectorMetrics";
 
-/** Remaining OpenRouter credit on the account's one $1 lifetime trial key, never a token estimate. */
+/** Remaining OpenRouter credit on the account's one lifetime-capped trial key, never a token estimate. */
 export function useTrialConnectorBudget(id: string) {
   const usage = useConnectorMetrics(id, 30_000);
   const reported = usage.metrics?.limitRemaining

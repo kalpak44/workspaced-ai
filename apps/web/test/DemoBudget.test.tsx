@@ -18,7 +18,7 @@ it.each([
   expect(bar).toHaveAttribute("aria-valuenow", String(percentage));
   expect(bar.firstChild).toHaveClass(color as string);
   expect(screen.getByRole("status", { name: "Demo workspace" })).toHaveTextContent("It is deleted in");
-  expect(bar).toHaveAttribute("aria-valuetext", `$${Number(remaining).toFixed(2)} of $1.00 remaining`);
+  expect(bar).toHaveAttribute("aria-valuetext", `${Math.round(Number(remaining) * 100)}% remaining`);
 });
 
 it("does not invent a full budget when OpenRouter does not report usage", async () => {
