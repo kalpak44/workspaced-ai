@@ -35,8 +35,59 @@ public final class Notifications {
             + " A workspace is a small computer of your own in the cloud, with an AI agent that"
             + " builds and runs things for you. Your first one is free: the guided tour sets up a"
             + " demo workspace, has its agent build a website, and shows you each step on the way."
-            + " The VM is free for four hours and then deleted. Connect your own OpenRouter account; AI usage is billed separately by OpenRouter.",
+            + " The VM is free for four hours and then deleted. Your protected Trial connector includes a $1 lifetime AI budget, funded by Workspaced. Connect your own OpenRouter account when you need more AI usage.",
         new NotificationAction("Start the tour", "/?tour"));
+  }
+
+  public static NotificationMessage connectorBudget(
+      String name, java.math.BigDecimal remaining, java.math.BigDecimal cap, int level) {
+    var amount = "$" + remaining.setScale(2, java.math.RoundingMode.DOWN).toPlainString();
+    var limit = "$" + cap.setScale(2, java.math.RoundingMode.DOWN).toPlainString();
+    var title =
+        level == 3
+            ? "AI budget used up: " + name
+            : level == 2 ? "AI budget almost used up: " + name : "AI budget running low: " + name;
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        level == 1 ? NotificationTone.WARNING : NotificationTone.ERROR,
+        title,
+        name + " has " + amount + " of its " + limit + " budget remaining.",
+        "Your AI connector \""
+            + name
+            + "\" has "
+            + amount
+            + " of its "
+            + limit
+            + " budget remaining. "
+            + (level == 3
+                ? "AI requests using this key cannot continue until its budget is available again. "
+                : "Connect your own funded account before this key's budget runs out. ")
+            + "Go to General settings → AI connectors to connect OpenRouter or paste another key. Select the new connector in workspace Settings → Secrets, then restart the workspace to use it.",
+        new NotificationAction("Connect your AI account", "/settings/ai-connectors"));
+  }
+
+  public static NotificationMessage connectorExpired(String name) {
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.ERROR,
+        "AI connector expired: " + name,
+        "The key for " + name + " has expired. Connect your AI account to continue.",
+        "Your AI connector \""
+            + name
+            + "\" has expired. Go to General settings → AI connectors to connect your OpenRouter account or add a valid key. Select it in workspace Settings → Secrets and restart the workspace to continue using AI.",
+        new NotificationAction("Connect your AI account", "/settings/ai-connectors"));
+  }
+
+  public static NotificationMessage connectorUnavailable(String name) {
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.ERROR,
+        "AI connector needs attention: " + name,
+        "OpenRouter no longer accepts the key for " + name + ". Check your connection.",
+        "OpenRouter rejected the key for your AI connector \""
+            + name
+            + "\". It may have expired, been revoked, or been restricted. Go to General settings → AI connectors to connect your account or add a valid key, then select it in workspace Settings → Secrets and restart. This does not mean your workspace has been deleted.",
+        new NotificationAction("Connect your AI account", "/settings/ai-connectors"));
   }
 
   /**

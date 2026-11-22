@@ -40,6 +40,47 @@ public class AiConnectorEntity {
   @Column(name = "provider_key_hash", length = 200, updatable = false)
   private String providerKeyHash;
 
+  @Column(name = "status_checked_at")
+  private Instant statusCheckedAt;
+
+  @Column(name = "observed_expires_at")
+  private Instant observedExpiresAt;
+
+  @Column(name = "budget_notice_cycle", length = 200)
+  private String budgetNoticeCycle;
+
+  @Column(name = "budget_notice_level", nullable = false)
+  private int budgetNoticeLevel;
+
+  public UUID getOwnerId() {
+    return ownerId;
+  }
+
+  public Instant getObservedExpiresAt() {
+    return observedExpiresAt;
+  }
+
+  public void setObservedExpiresAt(Instant at) {
+    observedExpiresAt = at;
+  }
+
+  public void checkedAt(Instant at) {
+    statusCheckedAt = at;
+  }
+
+  public String getBudgetNoticeCycle() {
+    return budgetNoticeCycle;
+  }
+
+  public int getBudgetNoticeLevel() {
+    return budgetNoticeLevel;
+  }
+
+  public void budgetNotice(String cycle, int level) {
+    budgetNoticeCycle = cycle;
+    budgetNoticeLevel = level;
+  }
+
   public void acknowledgeProviderNotice() {
     if (providerNoticeAcceptedAt == null) {
       providerNoticeAcceptedAt = Instant.now();

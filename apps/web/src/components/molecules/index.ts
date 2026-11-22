@@ -17,7 +17,7 @@ export { WorkspaceStatusIcon } from "./WorkspaceStatusIcon";
 export { RatingInput } from "./RatingInput";
 export { RecipeCard } from "./RecipeCard";
 export { Tabs } from "./Tabs";
-export { NOTIFICATION_ICONS, NOTIFICATION_TONES, NotificationItem } from "./NotificationItem";
+export { NOTIFICATION_ICONS, NOTIFICATION_TONES, NotificationItem, notificationIcon } from "./NotificationItem";
 export { FilterChips } from "./FilterChips";
 export { Pagination } from "./Pagination";
 export { SearchField } from "./SearchField";

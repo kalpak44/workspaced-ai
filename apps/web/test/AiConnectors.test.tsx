@@ -106,3 +106,19 @@ it("shows Trial as the protected default and removes personal connectors with fa
   expect(api.workspaceConnectors.get(api.rows[0].id)).toBe("trial-key");
   expect(api.rows[0].restartRequired).toBe(true);
 });
+
+it("offers only the user's real connectors, with Trial first and no placeholder entries", async () => {
+  api.connectors.push(
+    { id: "personal", name: "My key", provider: "openrouter" },
+    { id: "trial", name: "Trial", provider: "openrouter", trial: true },
+    { id: "other-provider", name: "Different provider", provider: "another" },
+  );
+  api.workspaceConnectors.set(api.rows[0].id, "personal");
+  render(<SettingsPage section="secrets" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} />);
+  const select = screen.getByRole("combobox", { name: "Saved connector" });
+  await waitFor(() => expect(select).toBeEnabled());
+  expect([...select.querySelectorAll("option")].map(option => option.value)).toEqual(["trial", "personal"]);
+  expect(select).toHaveValue("personal");
+  expect(screen.queryByRole("option", { name: "Choose a connector" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("option", { name: "Current workspace key" })).not.toBeInTheDocument();
+});

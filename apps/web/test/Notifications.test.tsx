@@ -115,3 +115,15 @@ describe("notifications", () => {
     expect(location.pathname).toBe("/notifications");
   });
 });
+
+it("names the depleted key, shows an urgent icon and opens AI connector settings", async () => {
+  const api = installFakeApi();
+  api.notifications.rows = [{ id: "key-low", kind: "SYSTEM", tone: "ERROR", title: "AI budget almost used up: My work key", summary: "My work key has $0.10 of its $1.00 budget remaining.", body: "Go to General settings → AI connectors to connect your account.", createdAt: "2026-11-22T12:00:00Z", read: false, action: { label: "Connect your AI account", path: "/settings/ai-connectors" } }];
+  globalThis.history.replaceState(null, "", "/notifications");
+  render(<App />);
+  await screen.findByText("AI budget almost used up: My work key");
+  expect(screen.getByRole("img", { name: "Urgent notification" })).toBeInTheDocument();
+  await userEvent.setup().click(screen.getByRole("button", { name: "Connect your AI account" }));
+  expect(globalThis.location.pathname).toBe("/settings/ai-connectors");
+  expect(await screen.findByRole("heading", { name: "Your AI connectors" })).toBeInTheDocument();
+});

@@ -23,6 +23,7 @@ public class AiConnectorService {
   private final SecretBox box;
   private final OpenRouterMetrics metrics;
   private final TrialConnectors trials;
+  private final ConnectorAlerts alerts;
   private final UserRepository users;
   private final WorkspaceRepository workspaces;
   private final WorkspaceRuntime runtime;
@@ -35,7 +36,8 @@ public class AiConnectorService {
       WorkspaceRuntime runtime,
       OpenRouterMetrics metrics,
       TrialConnectors trials,
-      UserRepository users) {
+      UserRepository users,
+      ConnectorAlerts alerts) {
     this.repository = repository;
     this.check = check;
     this.workspaces = workspaces;
@@ -43,6 +45,7 @@ public class AiConnectorService {
     this.metrics = metrics;
     this.trials = trials;
     this.users = users;
+    this.alerts = alerts;
     box = new SecretBox(properties.jwtSecret(), "workspaced-ai-connectors");
   }
 
@@ -99,7 +102,14 @@ public class AiConnectorService {
     if (!connector.getProvider().equals(ModelProvider.OPENROUTER.id()))
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "Usage metrics are unavailable for this provider");
-    return metrics.read(key(id, connector.getProvider()));
+    try {
+      var usage = metrics.read(key(id, connector.getProvider()));
+      alerts.observe(id, usage);
+      return usage;
+    } catch (ApiKeyRejectedException refused) {
+      alerts.rejected(id);
+      throw refused;
+    }
   }
 
   /**

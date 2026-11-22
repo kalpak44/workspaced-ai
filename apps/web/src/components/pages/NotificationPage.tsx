@@ -3,7 +3,7 @@ import { useEffect, useRef } from "react";
 import { useNotifications } from "../../hooks/useNotifications";
 import { navigate } from "../../hooks/useRoute";
 import { Button, IconButton } from "../atoms";
-import { EmptyState, NOTIFICATION_ICONS, NOTIFICATION_TONES, PageHeader } from "../molecules";
+import { EmptyState, notificationIcon, NOTIFICATION_TONES, PageHeader } from "../molecules";
 
 const DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "long", timeStyle: "short" });
 const KIND_LABEL = { billing: "Billing", workspace: "Workspace", domain: "Domain", recipe: "Recipe", system: "System" };
@@ -39,7 +39,7 @@ export function NotificationPage({ notificationId }: { readonly notificationId: 
     );
   }
 
-  const Icon = NOTIFICATION_ICONS[notification.kind];
+  const Icon = notificationIcon(notification);
   return (
     <>
       <PageHeader variant="bar" title={notification.title} crumbs={crumbs} actions={<>

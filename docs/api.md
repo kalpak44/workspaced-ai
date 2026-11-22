@@ -563,3 +563,30 @@ Draft launch accepts exactly one of `apiKey` or `connectorId`; a saved connector
 for its owner and must match the workspace's provider. The tour launches with the Trial connector
 ID. `POST /ai-connectors/{id}/acknowledgement` with `{"accepted":true}` records the provider notice
 before the tour or workspace creator uses the pre-provisioned key.
+
+## AI connector budget and expiry notifications
+
+Every saved OpenRouter connector, including Trial and personal keys, is checked for low budget
+and expiry. Alerts are in-app only, identify the connector by its user-visible name, and link to
+`/settings/ai-connectors` with **Connect your AI account**. The text explains selecting the new key
+under workspace Settings → Secrets and restarting the workspace.
+
+- At 50% through 20% remaining: a WARNING notification.
+- Below 20%, above zero: an ERROR notification with an urgent icon.
+- Zero or negative remaining: an ERROR notification that the named key's budget is used up.
+- Confirmed provider expiry: an ERROR notification that the named key expired. A rejected key
+  without a previously observed expiry is described as needing attention, not falsely declared
+  expired or exhausted.
+
+Each budget threshold is sent once per key and provider budget window. A row lock and the
+notification deduplication key prevent concurrent page refreshes and background checks from
+sending duplicates. Daily, weekly and monthly budgets use UTC windows (weeks begin Monday);
+a spending-cap change also starts a new notification cycle. Skipped thresholds do not generate
+multiple warnings at once. Keys without a spending cap or reported remaining amount do not get
+invented percentage warnings. Provider outages and rate limits do not imply expiry.
+
+Usage reads check thresholds immediately. A ShedLock-protected background sweep also checks up
+to 50 least-recently-checked keys per run, starting after one minute and repeating one minute after
+a sweep finishes. Configure `workspaced.openrouter.alert-interval` and `alert-batch-size` to tune
+this; batches are capped at 100. Checks use each user's own encrypted inference key, including when
+no browser is open, and never return or log credentials. No additional email is sent.

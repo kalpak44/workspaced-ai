@@ -1,4 +1,4 @@
-import { ArrowRight, Circle, CircleCheck, Info, type LucideIcon, Server, Store, Wallet } from "lucide-react";
+import { ArrowRight, CircleAlert, TriangleAlert, Circle, CircleCheck, Info, type LucideIcon, Server, Store, Wallet } from "lucide-react";
 import type { Notification, NotificationKind, NotificationTone } from "../../hooks/useNotifications";
 import { timeAgo } from "../../lib/time";
 
@@ -19,6 +19,11 @@ export const NOTIFICATION_TONES: Record<NotificationTone, string> = {
 
 const FULL_DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short" });
 
+/** Warning and error tones have an explicit alert icon in the menu and detail page. */
+export function notificationIcon(notification: Pick<Notification, "kind" | "tone">): LucideIcon {
+  return notification.tone === "error" ? CircleAlert : notification.tone === "warning" ? TriangleAlert : NOTIFICATION_ICONS[notification.kind];
+}
+
 interface Props {
   readonly notification: Notification;
   readonly onOpen: () => void;
@@ -34,11 +39,11 @@ interface Props {
  * separate buttons beside it, since a button cannot hold another.
  */
 export function NotificationItem({ notification, onOpen, onToggleRead, onAction, role }: Props) {
-  const Icon = NOTIFICATION_ICONS[notification.kind];
+  const Icon = notificationIcon(notification);
   const { read, title, summary, createdAt, action } = notification;
   return (
     <div className={`group relative flex items-start gap-3 px-4 py-3 hover:bg-zinc-50 dark:hover:bg-zinc-800/60 ${read ? "" : "bg-sky-50/50 dark:bg-sky-950/20"}`}>
-      <span className={`flex size-9 shrink-0 items-center justify-center rounded-full ${NOTIFICATION_TONES[notification.tone]}`}>
+      <span role={notification.tone === "warning" || notification.tone === "error" ? "img" : undefined} aria-label={notification.tone === "error" ? "Urgent notification" : notification.tone === "warning" ? "Warning notification" : undefined} className={`flex size-9 shrink-0 items-center justify-center rounded-full ${NOTIFICATION_TONES[notification.tone]}`}>
         <Icon aria-hidden className="size-4" />
       </span>
       <div className="min-w-0 flex-1">
