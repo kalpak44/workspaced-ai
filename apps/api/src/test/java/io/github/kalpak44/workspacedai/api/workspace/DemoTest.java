@@ -200,8 +200,9 @@ class DemoTest {
 
     assertThat(again.id()).isEqualTo(first.id());
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).hasSize(1);
-    assertThat(send("POST", "/workspaces/" + again.id() + "/launch", "{\"apiKey\":\"sk-2\"}")
-            .statusCode())
+    assertThat(
+            send("POST", "/workspaces/" + again.id() + "/launch", "{\"apiKey\":\"sk-2\"}")
+                .statusCode())
         .isEqualTo(200);
     assertThat(send("POST", "/workspaces", demo(null)).statusCode()).isEqualTo(409);
   }
@@ -228,8 +229,7 @@ class DemoTest {
     assertThat(send("PUT", "/account/tour", "{}").statusCode()).isEqualTo(400);
     var longName = "x".repeat(101);
     assertThat(
-            send("PUT", "/account/tour", "{\"step\":1,\"name\":\"" + longName + "\"}")
-                .statusCode())
+            send("PUT", "/account/tour", "{\"step\":1,\"name\":\"" + longName + "\"}").statusCode())
         .isEqualTo(400);
     assertThat(account().get("tour").isNull()).isTrue();
   }
