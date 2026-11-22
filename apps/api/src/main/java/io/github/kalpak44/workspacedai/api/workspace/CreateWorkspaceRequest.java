@@ -6,8 +6,8 @@ import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 
 /**
- * The key is checked with the provider and handed to the workspace's VM, never stored here. Without
- * one the workspace is a draft, launched once its key arrives.
+ * A saved personal connector or a one-off key for the workspace's VM. Without either the workspace
+ * is a draft, launched once its key arrives.
  */
 @Schema(description = "A new workspace: its name, its VM size and its model provider")
 public record CreateWorkspaceRequest(
@@ -39,7 +39,19 @@ public record CreateWorkspaceRequest(
                 "The account's one free demo: the cheapest available size, never charged, and deleted a few"
                     + " hours after it starts. serverType is ignored",
             example = "false")
-        Boolean demo) {
+        Boolean demo,
+    @Schema(description = "A saved connector owned by this user, instead of apiKey")
+        java.util.UUID connectorId) {
+
+  public CreateWorkspaceRequest(
+      String name,
+      String modelProvider,
+      String apiKey,
+      String serverType,
+      String timeZone,
+      Boolean demo) {
+    this(name, modelProvider, apiKey, serverType, timeZone, demo, null);
+  }
 
   /** Omitted means a workspace the balance pays for. */
   boolean wantsDemo() {

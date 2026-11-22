@@ -38,7 +38,6 @@ export function WorkspacesPage() {
     create,
     draft,
     launch,
-    discardDraft,
     suggestName,
     rename,
     restart,
@@ -219,11 +218,6 @@ export function WorkspacesPage() {
               navigate({ name: "workspace", workspaceId: created.id }),
             )
           }
-          onDraft={draft}
-          onLaunch={(id, key) =>
-            launch(id, key, (created) => navigate({ name: "workspace", workspaceId: created.id }))
-          }
-          onDiscard={discardDraft}
           onClose={() => { setNewName(null); reportTourAction({ type: "workspace-form-closed" }); }}
         />
       )}

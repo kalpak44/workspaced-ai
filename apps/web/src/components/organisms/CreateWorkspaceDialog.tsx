@@ -8,9 +8,11 @@ import { navigate } from "../../hooks/useRoute";
 import { formatMoney } from "../../lib/format";
 import { routePath } from "../../lib/routes";
 import { type VmSize, useVmSizes } from "../../hooks/useVmSizes";
-import type { CreateResult, DraftResult, NewWorkspace } from "../../hooks/useWorkspaces";
+import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
 import { Button, ChoiceCard, Spinner, TextField } from "../atoms";
 import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../molecules";
+
+import { isRejectedConnectorKey, useAiConnectors } from "../../hooks/useAiConnectors";
 
 const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
 
@@ -116,32 +118,20 @@ interface Props {
   readonly onNameChosen?: (name: string) => void;
   /** Resolves "created" once it exists; on anything else the dialog stays and keeps its input. */
   readonly onCreate: (workspace: NewWorkspace) => Promise<CreateResult>;
-  /** Reserves the id OpenRouter's key is labelled with, before the key exists. */
-  readonly onDraft: (workspace: Omit<NewWorkspace, "apiKey">) => Promise<DraftResult>;
-  /** Creates the draft's VM with its key, resolving as `onCreate` does. */
-  readonly onLaunch: (id: string, apiKey: string) => Promise<CreateResult>;
-  /** Drops a draft the dialog will not launch. */
-  readonly onDiscard: (id: string) => void;
   readonly onClose: () => void;
 }
 
-/**
- * Three steps: the name, the size of the VM it runs on, then the model provider and its key. The
- * sizes are fetched as the dialog opens, since they come from Hetzner and can change, and the
- * default one starts out chosen while Hetzner has it; so does the provider while there is only one.
- * A size that sells out before the create brings the dialog back to the sizes. The API checks the
- * key before it creates anything, so a wrong one is reported here rather than as a broken
- * workspace. OpenRouter can also issue the key itself, from the user's own account, so nobody has
- * to find and copy one: the workspace is drafted first, so the key is labelled with its id, and
- * launched once the key arrives. A draft the dialog leaves without launching is discarded. A user who pays for workspaces sees, with the size, how long the balance
- * lasts with it among their others, since the API refuses one the balance cannot pay a month of.
- */
-export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onDraft, onLaunch, onDiscard, onClose }: Props) {
+/** Name and size the workspace, then choose or save a reusable personal AI connector. */
+export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onClose }: Props) {
   const [step, setStep] = useState(0);
   const [name, setName] = useState(initialName);
   const [serverType, setServerType] = useState("");
   const [providerId, setProviderId] = useState("");
   const [apiKey, setApiKey] = useState("");
+  const [connectorId, setConnectorId] = useState("");
+  const [connectorName, setConnectorName] = useState("");
+  const [connectorError, setConnectorError] = useState("");
+  const connectors = useAiConnectors();
   const [rejected, setRejected] = useState(false);
   const [pending, setPending] = useState(false);
   const [soldOut, setSoldOut] = useState<string | null>(null);
@@ -157,14 +147,6 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
   const nameInput = useRef<HTMLInputElement>(null);
   const types = useRef<HTMLFieldSetElement>(null);
   const keyInput = useRef<HTMLInputElement>(null);
-  // A draft holds the name and size it was made with, so it is dropped whenever those may change.
-  const draftId = useRef<string | null>(null);
-  const discardDraft = () => {
-    if (draftId.current) {
-      onDiscard(draftId.current);
-      draftId.current = null;
-    }
-  };
   const openRouter = useOpenRouterConnect((key) => {
     setApiKey(key);
     setRejected(false);
@@ -212,12 +194,11 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
   // Closing mid-request would hide whether the workspace was made, so it waits.
   const close = () => {
     if (!pending) {
-      discardDraft();
       onClose();
     }
   };
 
-  // What the create, the draft or the launch refused, shown where the user can act on it.
+  // Show refusals where the user can act on them.
   const refused = (result: Exclude<CreateResult, "created">) => {
     if (result === "rejected") {
       setRejected(true);
@@ -225,7 +206,6 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
     } else if (result === "noFunds") {
       setNoFunds(true);
     } else if (result === "soldOut") {
-      discardDraft();
       setSoldOut(serverType);
       setServerType("");
       setStep(1);
@@ -233,37 +213,30 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
     }
   };
 
-  /** The id to label OpenRouter's key with, drafting the workspace the first time. */
-  const keyLabel = async (): Promise<string | null> => {
-    if (!draftId.current) {
-      setNoFunds(false);
-      const result = await onDraft({ name, serverType, modelProvider: providerId }).catch((): DraftResult => "failed");
-      if (typeof result === "string") {
-        refused(result);
-        return null;
-      }
-      draftId.current = result.id;
-    }
-    return `workspaced: ${draftId.current}`;
-  };
+  const keyLabel = async (): Promise<string | null> => `workspaced: ${connectorName.trim() || name.trim()}`;
 
-  // A draft is launched with the key; without one, the workspace is created in one go.
+  // Every new key becomes a named personal connector before the workspace uses it.
   const finish = async (key: string) => {
     setPending(true);
     setRejected(false);
     setNoFunds(false);
+    setConnectorError("");
     try {
-      const draft = draftId.current;
-      const result = await (draft
-        ? onLaunch(draft, key)
-        : onCreate({ name, serverType, modelProvider: providerId, apiKey: key })
-      ).catch((): CreateResult => "failed");
+      let savedId = connectorId;
+      if (!savedId) {
+        const saved = await connectors.add(connectorName.trim() || name.trim(), providerId, key);
+        savedId = saved.id;
+        setConnectorId(savedId);
+      }
+      const result = await onCreate({ name, serverType, modelProvider: providerId, apiKey: "", connectorId: savedId }).catch((): CreateResult => "failed");
       if (result === "created") {
-        draftId.current = null;
         onClose();
       } else {
         refused(result);
       }
+    } catch (cause) {
+      if (isRejectedConnectorKey(cause)) setRejected(true);
+      else setConnectorError("Could not save the AI connector. Please try again.");
     } finally {
       setPending(false);
     }
@@ -309,6 +282,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
         disabled={pending}
         onChange={(id) => {
           setProviderId(id);
+          setConnectorId("");
           setRejected(false);
         }}
       />
@@ -354,7 +328,17 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
           <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">Model provider</legend>
           {providerChoices}
         </fieldset>
-        {provider?.id === "openrouter" && (
+        <label className="block text-sm font-medium">AI connector
+          <select aria-label="AI connector" className="mt-1.5 block w-full rounded-lg border border-zinc-300 bg-transparent p-2 dark:border-zinc-700" value={connectorId} disabled={pending || connectors.loading} onChange={event => { setConnectorId(event.target.value); setRejected(false); }}>
+            <option value="">Connect or paste a key</option>
+            {connectors.connectors.filter(c => c.provider === providerId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </select>
+        </label>
+        {connectors.error && <p role="alert" className="text-sm text-rose-600">{connectors.error}</p>}
+        {!connectorId && provider && <TextField id="workspace-connector-name" label="Connector name" placeholder={name} maxLength={100} value={connectorName} disabled={pending} hint="Saved to your account so other workspaces can use it." onChange={event => setConnectorName(event.target.value)} />}
+        {connectorError && <p role="alert" className="text-sm text-rose-600">{connectorError}</p>}
+        {connectorId && rejected && <p role="alert" className="text-sm text-rose-600">The provider rejected this connector's key. Select another connector.</p>}
+        {!connectorId && provider?.id === "openrouter" && (
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-3">
               <Button
@@ -377,7 +361,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
             )}
           </div>
         )}
-        {provider && (
+        {!connectorId && provider && (
           <TextField
             ref={keyInput}
             id="workspace-api-key"
@@ -389,7 +373,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
             value={apiKey}
             maxLength={MAX_KEY}
             disabled={pending}
-            hint={`Checked with ${provider.name} before the workspace is created, then kept as a workspace secret that cannot be removed.`}
+            hint={`Checked with ${provider.name} before the workspace is created, then saved as a personal AI connector for reuse.`}
             error={rejected ? `${provider.name} did not accept this key` : null}
             onChange={(e) => {
               setApiKey(e.currentTarget.value);
@@ -419,7 +403,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
         type="submit"
         icon={ArrowRight}
         busy={pending}
-        disabled={!provider || !apiKey.trim() || rejected}
+        disabled={!provider || (!connectorId && !apiKey.trim()) || rejected}
       />
     );
   }
@@ -470,7 +454,6 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onD
               variant="secondary"
               icon={ArrowLeft}
               onClick={() => {
-                discardDraft();
                 setStep(step - 1);
               }}
               disabled={pending}

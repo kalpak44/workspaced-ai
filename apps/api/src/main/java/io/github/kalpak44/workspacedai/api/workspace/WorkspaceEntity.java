@@ -31,6 +31,17 @@ public class WorkspaceEntity {
   @Column(name = "model_provider", nullable = false, length = 50)
   private String modelProvider;
 
+  @Column(name = "ai_connector_id")
+  private UUID aiConnectorId;
+
+  public UUID getAiConnectorId() {
+    return aiConnectorId;
+  }
+
+  public void setAiConnectorId(UUID id) {
+    aiConnectorId = id;
+  }
+
   // The VM size it was created as; null where nothing runs it.
   @Column(name = "server_type", length = 20)
   private String serverType;

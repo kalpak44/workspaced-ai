@@ -144,12 +144,12 @@ describe("App", () => {
     expect(path()).toBe("/workspaces/ws-1");
     await sessionsHere();
     expect(api.rows.at(-1)).toMatchObject({ name: "Research", modelProvider: "openrouter" });
-    const [, init] = api.fetchFn.mock.calls.find(([, i]) => i?.method === "POST")!;
+    const [, init] = api.fetchFn.mock.calls.find(([url, i]) => String(url).endsWith("/api/v1/workspaces") && i?.method === "POST")!;
     expect(JSON.parse(String(init?.body))).toEqual({
       name: "Research",
       serverType: "cx33",
       modelProvider: "openrouter",
-      apiKey: "sk-or-v1-test",
+      connectorId: "connector-1",
       // The browser's zone, so the agent starts on the clock of whoever made it.
       timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     });
@@ -266,7 +266,7 @@ describe("App", () => {
     expect(create).toHaveAttribute("aria-busy", "true");
     expect(create).toBeDisabled();
     expect(screen.getByRole("button", { name: "Back" })).toBeDisabled();
-    expect(screen.getByLabelText("OpenRouter API key")).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "AI connector" })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(screen.getByRole("dialog")).toBeInTheDocument();
 
@@ -282,7 +282,7 @@ describe("App", () => {
     await enterKey(user);
     api.state.fail = 503;
     await user.keyboard("{Enter}");
-    expect(await screen.findByRole("alert")).toHaveTextContent("Could not create the workspace");
+    expect(await screen.findByRole("alert")).toHaveTextContent("Could not save the AI connector");
     expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-v1-test");
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("radio", { name: /cx33/ })).toBeChecked();
@@ -578,7 +578,7 @@ describe("App", () => {
   });
 
 
-  it("lists the provider key in settings as managed, with no way to remove it", async () => {
+  it("shows the provider connector dropdown in Secrets with no way to remove its key", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     const secrets = await openSettings(user);
@@ -586,7 +586,8 @@ describe("App", () => {
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).not.toBeInTheDocument();
     expect(path()).toBe("/workspaces/starter/settings/secrets");
     expect(document.title).toBe("Settings · Starter — workspaced-ai");
-    expect(within(secrets).getByText("Model provider")).toBeInTheDocument();
+    expect(within(secrets).getByRole("combobox", { name: "Saved connector" })).toBeInTheDocument();
+    expect(within(secrets).getByRole("link", { name: "Manage AI connectors in General settings" })).toHaveAttribute("href", "/settings/ai-connectors");
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Sessions" }));

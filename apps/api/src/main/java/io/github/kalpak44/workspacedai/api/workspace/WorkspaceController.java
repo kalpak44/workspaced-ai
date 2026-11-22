@@ -17,10 +17,15 @@ public class WorkspaceController implements WorkspaceApi {
 
   private final WorkspaceService service;
   private final WorkspaceEvents events;
+  private final io.github.kalpak44.workspacedai.api.auth.AiConnectorService connectors;
 
-  public WorkspaceController(WorkspaceService service, WorkspaceEvents events) {
+  public WorkspaceController(
+      WorkspaceService service,
+      WorkspaceEvents events,
+      io.github.kalpak44.workspacedai.api.auth.AiConnectorService connectors) {
     this.service = service;
     this.events = events;
+    this.connectors = connectors;
   }
 
   @Override
@@ -42,7 +47,14 @@ public class WorkspaceController implements WorkspaceApi {
                     new ResponseStatusException(
                         HttpStatus.BAD_REQUEST,
                         "unknown model provider " + request.modelProvider()));
-    var apiKey = request.trimmedApiKey();
+    if (request.connectorId() != null && request.apiKey() != null) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "choose a connector or supply an API key");
+    }
+    var apiKey =
+        request.connectorId() == null
+            ? request.trimmedApiKey()
+            : connectors.key(request.connectorId(), provider.id());
     var workspace =
         apiKey == null
             ? service.createDraft(
@@ -60,6 +72,7 @@ public class WorkspaceController implements WorkspaceApi {
                 request.serverTypeOrNull(),
                 request.timeZoneOrUtc(),
                 request.wantsDemo());
+    if (request.connectorId() != null) connectors.remember(workspace.id(), request.connectorId());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")

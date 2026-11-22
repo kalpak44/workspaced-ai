@@ -25,6 +25,8 @@ interface Props {
   readonly onRestart: () => void;
 }
 
+import { WorkspaceAiConnectorPanel } from "../organisms/WorkspaceAiConnectorPanel";
+
 const SECTIONS = [
   { id: "mcp", label: "MCP servers", Icon: Plug },
   { id: "secrets", label: "Secrets", Icon: KeyRound },
@@ -97,6 +99,7 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
         <div hidden={section !== "secrets"}>
           <SecretsPanel
             workspaceId={workspace.id}
+            aiConnector={section === "secrets" ? <WorkspaceAiConnectorPanel key={workspace.id} workspace={workspace} onChanged={onChanged} /> : undefined}
             secrets={secrets.secrets}
             loading={secrets.loading}
             removing={secrets.removing}

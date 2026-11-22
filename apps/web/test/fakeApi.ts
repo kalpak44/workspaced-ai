@@ -110,6 +110,9 @@ export function installFakeApi(
   ],
 ) {
   const rows = [...initial];
+  const connectors: { id: string; name: string; provider: string }[] = [];
+  const connectorKeys = new Map<string, string>();
+  const workspaceConnectors = new Map<string, string>();
   // Created without a key: unlisted until launched, as the API keeps them.
   const drafts = new Map<string, Omit<Workspace, "status">>();
   const launched: { id: string; apiKey: string }[] = [];
@@ -465,6 +468,34 @@ export function installFakeApi(
     if (state.fail) {
       return new Response(null, { status: state.fail });
     }
+    const connectorRoute = /\/api\/v1\/ai-connectors(?:\/([^/]+))?$/.exec(url);
+    if (connectorRoute) {
+      if (init?.method === "POST") {
+        const input = JSON.parse(String(init.body));
+        if (input.apiKey === REJECTED_KEY) return json({}, 422);
+        const connector = { id: `connector-${connectors.length + 1}`, name: input.name, provider: input.provider };
+        connectors.push(connector); connectorKeys.set(connector.id, input.apiKey);
+        return json(connector, 201);
+      }
+      if (init?.method === "DELETE") {
+        const index = connectors.findIndex(c => c.id === connectorRoute[1]);
+        if (index < 0) return json({}, 404);
+        connectors.splice(index, 1); return new Response(null, { status: 204 });
+      }
+      return json(connectors);
+    }
+    const selectionRoute = /\/api\/v1\/workspaces\/([^/]+)\/ai-connector$/.exec(url);
+    if (selectionRoute) {
+      const id = selectionRoute[1];
+      if (init?.method === "PUT") {
+        const connectorId = JSON.parse(String(init.body)).connectorId;
+        const connector = connectors.find(c => c.id === connectorId);
+        if (!connector) return json({}, 404);
+        workspaceConnectors.set(id, connectorId); markRestartRequired(id, true); return json(connector);
+      }
+      const current = connectors.find(c => c.id === workspaceConnectors.get(id));
+      return current ? json(current) : new Response(null, { status: 204 });
+    }
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
     }
@@ -681,7 +712,7 @@ export function installFakeApi(
     }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
-      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; timeZone?: string; serverType?: string; demo?: boolean })
+      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; connectorId?: string; timeZone?: string; serverType?: string; demo?: boolean })
       : undefined;
     const index = rows.findIndex((w) => w.id === id);
     switch (init?.method ?? "GET") {
@@ -691,7 +722,7 @@ export function installFakeApi(
         if (state.vmSizes.some((size) => size.serverType === body!.serverType && !size.available)) return json({ status: 409 }, 409);
         if (body!.demo && !auth.account.demoAvailable) return json({ status: 409 }, 409);
         if (state.noFunds && !body!.demo) return json({ status: 402, detail: "add funds" }, 402);
-        if (body!.apiKey === undefined) {
+        if (body!.apiKey === undefined && !body!.connectorId) {
           const draft = {
             id: `ws-${state.nextId++}`,
             name: body!.name,
@@ -715,6 +746,7 @@ export function installFakeApi(
           ...demoFields(body!.demo === true),
         };
         rows.push(created);
+        if (body!.connectorId) workspaceConnectors.set(created.id, body!.connectorId);
         return json(created, 201);
       }
       case "PUT":
@@ -894,5 +926,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { connectors, connectorKeys, workspaceConnectors, drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

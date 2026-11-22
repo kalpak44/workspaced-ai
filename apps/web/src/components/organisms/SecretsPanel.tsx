@@ -1,6 +1,6 @@
 import { reportTourAction, TOUR_STEP, useTourProgress } from "../../lib/tour";
 import { Plus } from "lucide-react";
-import { type SubmitEvent, useState } from "react";
+import { type ReactNode, type SubmitEvent, useState } from "react";
 import { type AddResult, MAX_SECRETS, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
 import { Button, Spinner, TextField } from "../atoms";
 import { ErrorBanner, RestartRequiredBanner, SecretItem, SettingsSection } from "../molecules";
@@ -10,6 +10,7 @@ const MAX_VALUE = 65536;
 
 interface Props {
   readonly workspaceId?: string;
+  readonly aiConnector?: ReactNode;
   readonly secrets: readonly Secret[];
   readonly loading: boolean;
   readonly removing: ReadonlySet<string>;
@@ -27,6 +28,7 @@ interface Props {
 /** A workspace's secrets by name, and a form to add one; values are write-only. */
 export function SecretsPanel({
   workspaceId,
+  aiConnector,
   secrets,
   loading,
   removing,
@@ -50,6 +52,7 @@ export function SecretsPanel({
   const [pending, setPending] = useState(false);
   const used = secrets.filter((s) => !s.managed).length;
   const full = used >= MAX_SECRETS;
+  const visibleSecrets = secrets.filter(secret => !aiConnector || !secret.managed);
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
@@ -83,6 +86,7 @@ export function SecretsPanel({
     >
       {error && <ErrorBanner message={error} onDismiss={onDismissError} />}
       {restartRequired && <RestartRequiredBanner restartDisabled={restartDisabled} onRestart={onRestart} />}
+      {aiConnector}
       {loading ? (
         <Spinner label="Loading secrets" className="size-5 text-zinc-400" />
       ) : (
@@ -94,9 +98,9 @@ export function SecretsPanel({
           {full && ". Remove one to add another."}
         </p>
       )}
-      {!loading && (
+      {!loading && visibleSecrets.length > 0 && (
         <ul className="divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-          {secrets.map((secret) => (
+          {visibleSecrets.map((secret) => (
             <SecretItem
               key={secret.name}
               secret={secret}

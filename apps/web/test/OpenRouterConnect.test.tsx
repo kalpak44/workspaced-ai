@@ -39,14 +39,11 @@ afterEach(() => {
 
 /** The dialog working through the real hook, so drafts and launches reach the fake API. */
 function Dialog() {
-  const { create, draft, launch, discardDraft } = useWorkspaces();
+  const { create } = useWorkspaces();
   return (
     <CreateWorkspaceDialog
       initialName="Research"
       onCreate={(workspace) => create(workspace)}
-      onDraft={draft}
-      onLaunch={(id, key) => launch(id, key)}
-      onDiscard={discardDraft}
       onClose={closed}
     />
   );
@@ -76,24 +73,24 @@ async function openProviderStep() {
 }
 
 describe("Connect OpenRouter", () => {
-  it("labels the key with a draft's id and launches that draft with it", async () => {
+  it("labels and saves a personal connector before creating its workspace", async () => {
     const user = await openProviderStep();
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     expect(screen.getByRole("status")).toHaveTextContent("Approve the key in the OpenRouter window.");
 
     const url = await authorization();
-    const [draftId] = [...api.drafts.keys()];
+    expect(api.drafts.size).toBe(0);
     expect(url.origin + url.pathname).toBe("https://openrouter.ai/auth");
     expect(url.searchParams.get("callback_url")).toBe(`${globalThis.location.origin}/connect/openrouter`);
     expect(url.searchParams.get("code_challenge_method")).toBe("S256");
-    expect(url.searchParams.get("key_label")).toBe(`workspaced: ${draftId}`);
+    expect(url.searchParams.get("key_label")).toBe("workspaced: Research");
     // A draft is not a workspace yet: nothing is listed until it is launched.
-    expect(api.rows.map((w) => w.id)).not.toContain(draftId);
+    expect(api.rows).toHaveLength(1);
 
     callBack("the-code", url.searchParams.get("state"));
     await waitFor(() => expect(closed).toHaveBeenCalled());
-    expect(api.launched).toEqual([{ id: draftId, apiKey: "sk-or-v1-issued" }]);
-    expect(api.rows.map((w) => w.id)).toContain(draftId);
+    expect(api.connectorKeys.get(api.connectors[0].id)).toBe("sk-or-v1-issued");
+    expect(api.rows).toHaveLength(2);
 
     // The verifier must hash to the challenge OpenRouter was given, or it refuses the code.
     const [exchange] = exchanges;
@@ -106,51 +103,51 @@ describe("Connect OpenRouter", () => {
     expect(url.searchParams.get("code_challenge")).toBe(challenge);
   });
 
-  it("keeps one draft across retries and launches it with a pasted key instead", async () => {
+  it("saves a pasted key after retrying OAuth without creating drafts", async () => {
     const user = await openProviderStep();
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await authorization();
     popup!.location.href = "";
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await authorization();
-    expect(api.drafts.size).toBe(1);
+    expect(api.drafts.size).toBe(0);
 
     await user.type(screen.getByLabelText("OpenRouter API key"), "sk-or-v1-pasted");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(closed).toHaveBeenCalled());
-    expect(api.launched).toEqual([{ id: expect.any(String), apiKey: "sk-or-v1-pasted" }]);
+    expect(api.connectorKeys.get(api.connectors[0].id)).toBe("sk-or-v1-pasted");
     expect(api.drafts.size).toBe(0);
   });
 
-  it("keeps the draft when the issued key is rejected, so it can be launched again", async () => {
+  it("keeps the form and saves nothing when the issued key is rejected", async () => {
     issuedKey = REJECTED_KEY;
     const user = await openProviderStep();
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     callBack("the-code", (await authorization()).searchParams.get("state"));
 
     expect(await screen.findByText("OpenRouter did not accept this key")).toBeInTheDocument();
-    expect(api.drafts.size).toBe(1);
+    expect(api.drafts.size).toBe(0);
     expect(closed).not.toHaveBeenCalled();
   });
 
-  it("discards the draft when the dialog is left without launching it", async () => {
+  it("creates nothing when the dialog is left without approving OAuth", async () => {
     const user = await openProviderStep();
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     await authorization();
-    expect(api.drafts.size).toBe(1);
+    expect(api.drafts.size).toBe(0);
 
     await user.click(screen.getByRole("button", { name: "Back" }));
     await waitFor(() => expect(api.drafts.size).toBe(0));
   });
 
-  it("closes the window and says why when no draft can be made", async () => {
+  it("keeps a saved connector when the account cannot pay for the workspace", async () => {
     api.state.noFunds = true;
     const user = await openProviderStep();
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
-
-    await waitFor(() => expect(popup!.close).toHaveBeenCalled());
-    expect(popup!.location.href).toBe("");
+    callBack("the-code", (await authorization()).searchParams.get("state"));
     expect(await screen.findByText(/does not cover/)).toBeInTheDocument();
+    expect(api.connectors).toHaveLength(1);
+    expect(closed).not.toHaveBeenCalled();
   });
 
   it("ignores a code returned for another attempt", async () => {

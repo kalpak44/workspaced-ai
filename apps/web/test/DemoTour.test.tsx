@@ -73,7 +73,7 @@ describe("full-screen guided WordPress workflow", () => {
     const name = await screen.findByRole("textbox", { name: "Name" });
     await user.type(name, "My own project");
     await next();
-    await title("Connect your own OpenRouter account");
+    await title("Your trial AI token");
     expect(localStorage.getItem("workspaced.tour.v4")).toContain("My own project");
     expect(api.launched).toHaveLength(0);
   });
@@ -87,26 +87,24 @@ describe("full-screen guided WordPress workflow", () => {
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue(tour.TOUR_WORKSPACE_NAME);
     expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
     await next();
-    await title("Connect your own OpenRouter account");
+    await title("Your trial AI token");
   });
 
-  it("keeps OpenRouter and one affordable machine custom, requiring deletion acknowledgement", async () => {
+  it("offers only a placeholder trial token and prevents continuing or provisioning", async () => {
     tour.setTourProgress({ step: S.OPENROUTER, name: "My chosen name" });
-    const onDraft = vi.fn().mockResolvedValue({ id: "trial" });
-    const onLaunch = vi.fn().mockResolvedValue("created");
+    const onDraft = vi.fn();
+    const onLaunch = vi.fn();
     render(<DemoTour workspaces={[workspace]} loading={false} onDraft={onDraft} onLaunch={onLaunch} />);
-    await next();
-    await title("Choose the machine for this trial");
-    await screen.findByRole("radio", { name: "cx23" });
-    expect(screen.getByRole("radio", { name: "cx23" })).toBeEnabled();
-    expect(screen.getByRole("radio", { name: "cx33" })).toBeDisabled();
-    expect(onDraft).toHaveBeenCalledWith(expect.objectContaining({ name: "My chosen name", demo: true }));
-    const create = within(guide()).getByRole("button", { name: "Create free workspace" });
-    expect(create).toBeDisabled();
-    await user.click(screen.getByRole("checkbox", { name: /permanently deleted after four hours/ }));
-    await next("Create free workspace");
-    expect(onLaunch).toHaveBeenCalledWith("trial", "private-openrouter-key");
-    expect(localStorage.getItem("workspaced.tour.v4")).not.toContain("private-openrouter-key");
+    await title("Your trial AI token");
+    const select = screen.getByRole("combobox", { name: "Trial AI connector" });
+    expect(within(select).getAllByRole("option")).toHaveLength(1);
+    expect(select).toHaveDisplayValue("TRIAL token — $1");
+    const button = within(guide()).getByRole("button", { name: "Next" });
+    expect(button).toBeDisabled();
+    await user.click(button);
+    expect(onDraft).not.toHaveBeenCalled();
+    expect(onLaunch).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Connect OpenRouter" })).not.toBeInTheDocument();
   });
 
   it("uses the real Store, Apply, secrets, firewall, task and instruction forms", async () => {
