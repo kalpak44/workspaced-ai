@@ -34,6 +34,18 @@ public class AccountController implements AccountApi {
   }
 
   @Override
+  public ResponseEntity<Void> saveTour(TourProgress progress) {
+    service.saveTour(CurrentUser.id(), progress);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
+  public ResponseEntity<Void> endTour() {
+    service.saveTour(CurrentUser.id(), null);
+    return ResponseEntity.noContent().build();
+  }
+
+  @Override
   public ResponseEntity<Void> sendPasswordReset() {
     service.sendPasswordReset(CurrentUser.profile());
     return ResponseEntity.noContent().build();

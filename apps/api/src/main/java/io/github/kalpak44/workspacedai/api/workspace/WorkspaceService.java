@@ -169,7 +169,9 @@ public class WorkspaceService {
 
   /**
    * A workspace with an id but no VM, for a key that is issued only once the id exists. It is
-   * checked as {@link #create} checks one, so its launch fails only on the key or on Hetzner.
+   * checked as {@link #create} checks one, so its launch fails only on the key or on Hetzner. An
+   * account has one demo draft at most: a tour started again, in another browser say, gets the one
+   * it already has back, renamed, rather than a second free workspace.
    *
    * @param serverType null for the default size
    */
@@ -189,9 +191,22 @@ public class WorkspaceService {
     }
     var entity =
         transactions.execute(
-            _ ->
-                repository.saveAndFlush(
-                    WorkspaceEntity.draft(ownerId, name, provider.id(), size, timeZone, demo)));
+            _ -> {
+              if (demo) {
+                users.lockById(ownerId).orElseThrow();
+                var existing =
+                    repository.findFirstByOwnerIdAndModelProviderAndDemoTrueAndDraftTrue(
+                        ownerId, provider.id());
+                if (existing.isPresent()) {
+                  var draft = existing.get();
+                  draft.setName(name);
+                  draft.setTimeZone(timeZone);
+                  return repository.saveAndFlush(draft);
+                }
+              }
+              return repository.saveAndFlush(
+                  WorkspaceEntity.draft(ownerId, name, provider.id(), size, timeZone, demo));
+            });
     return Workspace.of(entity, WorkspaceStatus.DRAFT);
   }
 

@@ -41,6 +41,25 @@ public class UserEntity {
   @Column(name = "demo_started_at", insertable = false, updatable = false)
   private Instant demoStartedAt;
 
+  // Where the guided tour is; tourStep is null while no tour is under way.
+  @Column(name = "tour_step")
+  private Integer tourStep;
+
+  @Column(name = "tour_workspace_id", length = 100)
+  private String tourWorkspaceId;
+
+  @Column(name = "tour_session_id", length = 100)
+  private String tourSessionId;
+
+  @Column(name = "tour_draft_id", length = 100)
+  private String tourDraftId;
+
+  @Column(name = "tour_name", length = 100)
+  private String tourName;
+
+  @Column(name = "tour_paused", nullable = false)
+  private boolean tourPaused;
+
   protected UserEntity() {
     // For JPA.
   }
@@ -76,6 +95,24 @@ public class UserEntity {
    */
   public void signOutEverywhere(Instant now) {
     this.sessionsValidAfter = now.truncatedTo(ChronoUnit.SECONDS);
+  }
+
+  /** Null while no tour is under way. */
+  public TourProgress getTourProgress() {
+    return tourStep == null
+        ? null
+        : new TourProgress(
+            tourStep, tourWorkspaceId, tourSessionId, tourDraftId, tourName, tourPaused);
+  }
+
+  /** Null ends the tour, finished or no longer possible. */
+  public void setTourProgress(TourProgress progress) {
+    tourStep = progress == null ? null : progress.step();
+    tourWorkspaceId = progress == null ? null : progress.workspaceId();
+    tourSessionId = progress == null ? null : progress.sessionId();
+    tourDraftId = progress == null ? null : progress.draftId();
+    tourName = progress == null ? null : progress.name();
+    tourPaused = progress != null && progress.paused();
   }
 
   /** Takes the role Auth0 assigns the user at this sign-in. */

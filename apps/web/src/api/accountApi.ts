@@ -1,3 +1,4 @@
+import type { TourProgress } from "../lib/tour";
 import { ApiError, send } from "./http";
 
 const ACCOUNT_URL = "/api/v1/account";
@@ -14,6 +15,8 @@ export interface Account {
   readonly role: Role;
   /** Whether the account can still start its one free demo workspace. */
   readonly demoAvailable?: boolean;
+  /** Where the guided tour is, so any browser resumes it; null while none is under way. */
+  readonly tour?: TourProgress | null;
 }
 
 export type Role = "USER" | "ADMIN";
@@ -93,6 +96,13 @@ export function endAuth0Session(): void {
 export async function updateProfile(profile: Profile): Promise<Account> {
   const body = JSON.stringify({ firstName: profile.firstName, lastName: profile.lastName });
   return (await send(`${ACCOUNT_URL}/profile`, { method: "PUT", body })).json();
+}
+
+/** Saves where the guided tour is; null ends it. */
+export async function saveTour(progress: TourProgress | null): Promise<void> {
+  await send(`${ACCOUNT_URL}/tour`, progress
+    ? { method: "PUT", body: JSON.stringify(progress) }
+    : { method: "DELETE" });
 }
 
 /** Auth0 emails the signed-in user a link to set a new password. */

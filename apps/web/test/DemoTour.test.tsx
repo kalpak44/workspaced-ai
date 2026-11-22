@@ -74,8 +74,28 @@ describe("guided public-page workflow", () => {
     await user.type(name, "My own project");
     await next();
     await title("Your trial AI token");
-    expect(localStorage.getItem("workspaced.tour.v6")).toContain("My own project");
+    await waitFor(() => expect(api.auth.account.tour?.name).toBe("My own project"));
     expect(api.launched).toHaveLength(0);
+  });
+
+  it("resumes the account's tour in a browser that has never seen it", async () => {
+    api = installFakeApi([]);
+    api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: true, tour: { step: S.OPENROUTER, name: "From elsewhere", draftId: "d-1" } };
+    render(<App />);
+    await title("Your trial AI token");
+  });
+
+  it("keeps the place when skipped and resumes there rather than starting again", async () => {
+    api = installFakeApi([]);
+    api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: true, tour: { step: S.OPENROUTER, name: "Mine", draftId: "d-1" } };
+    render(<App />);
+    await title("Your trial AI token");
+    await user.click(within(guide()).getByRole("button", { name: "Skip tour" }));
+    await waitFor(() => expect(api.auth.account.tour).toEqual({ step: S.OPENROUTER, name: "Mine", draftId: "d-1", paused: true }));
+    expect(screen.queryByRole("region", { name: "Guided tour controls" })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole("button", { name: "Resume the tour" }));
+    await title("Your trial AI token");
+    await waitFor(() => expect(api.auth.account.tour?.paused).toBe(false));
   });
 
   it("demonstrates a default name in the real form without submitting until the next click", async () => {

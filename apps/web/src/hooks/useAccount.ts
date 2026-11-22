@@ -1,6 +1,7 @@
 import { useEffect, useSyncExternalStore } from "react";
 import * as api from "../api/accountApi";
 import { UNAUTHORIZED } from "../api/http";
+import { adoptTourProgress, saveTourWith } from "../lib/tour";
 
 export type { Account, Profile, ResendResult } from "../api/accountApi";
 
@@ -32,11 +33,16 @@ function subscribe(listener: () => void) {
 
 function load() {
   loading ??= api.fetchAccount().then(
-    (account) => set(account ? { status: "signed-in", account } : { status: "signed-out" }),
+    (account) => {
+      if (account) adoptTourProgress(account.tour ?? null);
+      set(account ? { status: "signed-in", account } : { status: "signed-out" });
+    },
     () => set({ status: "signed-out", reason: "unreachable" }),
   );
   return loading;
 }
+
+saveTourWith(api.saveTour);
 
 globalThis.addEventListener(UNAUTHORIZED, () => {
   if (state.status === "signed-in") set({ status: "signed-out" });

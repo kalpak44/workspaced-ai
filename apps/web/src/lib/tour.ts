@@ -12,20 +12,27 @@ export const TOUR_PUBLIC_PROMPT = "Yes, make this page public so anyone can open
 export const TOUR_DESIGN_PROMPT = "Change the heading to Welcome to my first workspace and use a warm cream background. Keep the page public at the same address.";
 export const TOUR_DOCS_URL = "https://workspaced.online/docs";
 
-/** Only non-secret identifiers and names are persisted. */
+/** Kept on the account, so any browser resumes it. Only non-secret identifiers and names. */
 export interface TourProgress {
   readonly step: number;
   readonly workspaceId?: string;
   readonly sessionId?: string;
   readonly draftId?: string;
   readonly name?: string;
+  /** Skipped for now: hidden until the user resumes it, rather than started again. */
+  readonly paused?: boolean;
 }
 
 // Public Workspaced demo recipe, seeded by the API with a fixed id.
 export const TOUR_RECIPE_ID = "00000000-0000-4000-8000-00000000b00d";
 
+// Where this browser kept the tour before the account did; read once and moved to the account.
 const KEY = "workspaced.tour.v6";
 let progress: TourProgress | null = load();
+let adopted = false;
+let save: (progress: TourProgress | null) => Promise<void> = async () => undefined;
+/** How the tour reaches the account; the account hook provides it. */
+export function saveTourWith(saver: typeof save): void { save = saver; }
 const listeners = new Set<() => void>();
 const actionListeners = new Set<(action: TourAction) => void>();
 
@@ -71,10 +78,31 @@ function load(): TourProgress | null {
 }
 function emit() { listeners.forEach((listener) => listener()); }
 function subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; }
-export function useTourProgress(): TourProgress | null { return useSyncExternalStore(subscribe, () => progress); }
+const active = () => (progress?.paused ? null : progress);
+/** The tour under way; null while none is, or it is paused. */
+export function useTourProgress(): TourProgress | null { return useSyncExternalStore(subscribe, active); }
+/** The tour as the account keeps it, paused or not. */
+export function useStoredTour(): TourProgress | null { return useSyncExternalStore(subscribe, () => progress); }
 export function setTourProgress(next: TourProgress | null): void {
   progress = next;
-  writeStored(KEY, next ? JSON.stringify(next) : "");
+  emit();
+  void save(next).catch(() => undefined);
+}
+/**
+ * Takes the account's tour once it loads. With none there, a tour this browser already has, from
+ * before the account kept it, is moved onto the account instead.
+ */
+export function adoptTourProgress(stored: TourProgress | null): void {
+  if (adopted) return;
+  adopted = true;
+  writeStored(KEY, "");
+  if (stored) { progress = stored; emit(); }
+  else if (progress) setTourProgress(progress);
+}
+/** Forgets the tour in this tab without telling the account; for tests. */
+export function resetTour(): void {
+  progress = null;
+  adopted = false;
   emit();
 }
 
@@ -87,7 +115,7 @@ export interface TourAction {
   readonly value?: string;
 }
 export function reportTourAction(action: TourAction): void {
-  if (progress) actionListeners.forEach((listener) => listener(action));
+  if (active()) actionListeners.forEach((listener) => listener(action));
 }
 export function subscribeTourActions(listener: (action: TourAction) => void): () => void {
   actionListeners.add(listener);

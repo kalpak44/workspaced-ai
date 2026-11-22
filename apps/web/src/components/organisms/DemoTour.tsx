@@ -69,6 +69,8 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
   const typing = useRef<AbortController | null>(null);
   const cheapest = sizes?.filter((size) => size.available).toSorted((a, b) => a.monthlyGross - b.monthlyGross || a.serverType.localeCompare(b.serverType))[0];
   const exit = () => { typing.current?.abort(); onExit?.(); setTourProgress(null); };
+  // Skipping keeps the place, so the tour resumes there rather than with a second demo.
+  const pause = () => { typing.current?.abort(); onExit?.(); setTourProgress({ ...progress, paused: true }); };
   const go = (next: number, extra: Partial<TourProgress> = {}) => {
     if (!active.current) return;
     setProblem(null); setNote(null);
@@ -228,7 +230,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
     catch { if (active.current) setProblem("Could not complete this step. Check the highlighted control and try again."); }
     finally { if (active.current) setActing(false); }
   };
-  return <TourFrame step={step} card={{ ...card, next: runNext }} working={working || acting} problem={problem} note={note} onSkip={exit} custom={custom ? customContent : undefined} />;
+  return <TourFrame step={step} card={{ ...card, next: runNext }} working={working || acting} problem={problem} note={note} onSkip={pause} custom={custom ? customContent : undefined} />;
 }
 
 interface Card {

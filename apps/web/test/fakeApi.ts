@@ -433,6 +433,9 @@ export function installFakeApi(
       if (auth.failProfile) return json({}, 500);
       const { firstName, lastName } = JSON.parse(String(init?.body));
       auth.account = { ...auth.account, firstName, lastName };
+    } else if (url.endsWith("/account/tour")) {
+      auth.account = { ...auth.account, tour: init?.method === "PUT" ? JSON.parse(String(init.body)) : null };
+      return new Response(null, { status: 204 });
     } else if (url.endsWith("/account/password-reset")) {
       if (auth.failReset) return json({}, 500);
       auth.resetRequests++;

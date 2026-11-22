@@ -4,13 +4,13 @@ import { afterEach, vi } from "vitest";
 import { resetCsrfToken } from "../src/api/http";
 import { resetAccount } from "../src/hooks/useAccount";
 import { resetNotifications } from "../src/hooks/useNotifications";
-import { setTourProgress } from "../src/lib/tour";
+import { resetTour } from "../src/lib/tour";
 
 afterEach(() => {
   cleanup();
   resetAccount();
   resetNotifications();
-  setTourProgress(null);
+  resetTour();
   resetCsrfToken();
   localStorage.clear();
   document.documentElement.className = "";

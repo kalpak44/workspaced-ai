@@ -3,7 +3,7 @@ import { useAccount } from "../../hooks/useAccount";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useTheme } from "../../hooks/useTheme";
 import { useWorkspaces } from "../../hooks/useWorkspaces";
-import { reportTourAction, setTourProgress, TOUR_STEP, useTourProgress } from "../../lib/tour";
+import { reportTourAction, setTourProgress, TOUR_STEP, useStoredTour, useTourProgress } from "../../lib/tour";
 import { DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
 import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, DemoTour, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
@@ -60,11 +60,16 @@ export function WorkspacesPage() {
   const openRestart = (id: string) => { setRestartId(id); reportTourAction({ type: "restart-dialog-opened", workspaceId: id }); };
   const { account } = useAccount();
   const tour = useTourProgress();
+  const stored = useStoredTour();
   const demo = workspaces.find((w) => w.demo) ?? null;
   // The account says whether its demo is used; a demo listed here is the same answer, sooner.
   const demoAvailable = account?.demoAvailable === true && !demo;
+  // A skipped tour resumes where it was, while its demo is still to come or still here.
+  const resumable = stored?.paused === true
+    && (demoAvailable || (!!stored.workspaceId && workspaces.some((w) => w.id === stored.workspaceId)));
+  const canTour = resumable || (demoAvailable && !stored);
   const startTour = () => {
-    setTourProgress({ step: 0 });
+    setTourProgress(resumable && stored ? { ...stored, paused: false } : { step: 0 });
   };
 
   useEffect(() => {
@@ -95,9 +100,9 @@ export function WorkspacesPage() {
   useEffect(() => {
     if (tourAsked && !loading && account) {
       setTourAsked(false);
-      if (demoAvailable && !tour) setTourProgress({ step: 0 });
+      if (canTour) startTour();
     }
-  }, [tourAsked, loading, account, demoAvailable, tour]);
+  }, [tourAsked, loading, account, canTour]);
 
   const onSessionTitle = useCallback((title: string) => setPageTitle(title), []);
 
@@ -130,7 +135,7 @@ export function WorkspacesPage() {
     page = (
       <WorkspacesOverview workspaces={workspaces} loading={loading} deleting={deleting} onNew={openNew}
         onRename={rename} onRestart={openRestart} onDelete={setDeleteId}
-        onStartTour={demoAvailable && !tour ? startTour : undefined} />
+        onStartTour={canTour ? startTour : undefined} resumeTour={resumable} />
     );
   } else if (!workspace) {
     tabTitle = "Workspaces";
@@ -222,7 +227,7 @@ export function WorkspacesPage() {
         />
       )}
       <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key, connectorId) => launch(id, key, undefined, connectorId)}
-        onExit={() => { setNewName(null); setTourProgress(null); }} />
+        onExit={() => setNewName(null)} />
       {restartTarget && (
         <RestartWorkspaceDialog
           name={restartTarget.name}

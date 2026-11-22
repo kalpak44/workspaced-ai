@@ -15,6 +15,8 @@ interface Props {
   readonly onDelete: (id: string) => void;
   /** Offers the guided tour of a free demo; absent once the account has had its demo. */
   readonly onStartTour?: () => void;
+  /** The tour was skipped part way, so the offer is to carry on. */
+  readonly resumeTour?: boolean;
 }
 
 // What a first-time user is about to do, so the empty page explains the product.
@@ -28,7 +30,7 @@ const ONBOARDING = [
 const SEARCH_FROM = 7;
 
 /** Home: every workspace as a card with its state and a way straight into each of its tools. */
-export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRename, onRestart, onDelete, onStartTour }: Props) {
+export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRename, onRestart, onDelete, onStartTour, resumeTour }: Props) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
   const shown = workspaces.filter((workspace) => workspace.name.toLowerCase().includes(needle));
@@ -39,7 +41,7 @@ export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRen
       <>
         <PageHeader title="Workspaces" />
         <div className="flex flex-1 flex-col items-center justify-center px-4 py-10">
-          {onStartTour && <TourInvitation onStart={onStartTour} />}
+          {onStartTour && <TourInvitation onStart={onStartTour} resume={resumeTour} />}
           <EmptyState icon={Layers} title="No workspaces" hint="A workspace is a sandbox with its own agent. Create one to get started."
             action={{ label: DEFAULT_NAME, onClick: onNew }} />
           <ol aria-label="How it works" className="mt-2 grid w-full max-w-3xl gap-3 sm:grid-cols-3">
@@ -67,6 +69,7 @@ export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRen
           <SearchField label="Search workspaces" placeholder="Search workspaces…" value={query} onChange={setQuery} className="w-full sm:w-64" />
         )} />
       <div className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 pt-6 pb-10 sm:px-6">
+        {onStartTour && resumeTour && <TourInvitation onStart={onStartTour} resume />}
 
         {loading ? (
           <ul aria-hidden aria-busy="true" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -109,17 +112,19 @@ export function WorkspacesOverview({ workspaces, loading, deleting, onNew, onRen
 }
 
 /** The first thing a new account sees: a free demo, shown rather than explained. */
-function TourInvitation({ onStart }: { readonly onStart: () => void }) {
+function TourInvitation({ onStart, resume }: { readonly onStart: () => void; readonly resume?: boolean }) {
   return (
     <section aria-label="Guided tour" className="card mb-8 flex w-full max-w-3xl flex-col gap-4 border-amber-200 bg-amber-50/60 p-5 sm:flex-row sm:items-center dark:border-amber-900/60 dark:bg-amber-950/20">
       <Sparkles aria-hidden className="size-6 shrink-0 text-amber-500" />
       <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 className="text-base font-semibold">Try it free with a guided tour</h2>
+        <h2 className="text-base font-semibold">{resume ? "Carry on with the guided tour" : "Try it free with a guided tour"}</h2>
         <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">
-          We set up a free demo workspace and its agent builds a blog while you watch. You only click Next, and the demo deletes itself after 4 hours.
+          {resume
+            ? "You skipped the tour part way. It picks up where you left off, with the same free demo."
+            : "We set up a free demo workspace and its agent builds a blog while you watch. You only click Next, and the demo deletes itself after 4 hours."}
         </p>
       </div>
-      <Button label="Start the tour" icon={Sparkles} onClick={onStart} />
+      <Button label={resume ? "Resume the tour" : "Start the tour"} icon={Sparkles} onClick={onStart} />
     </section>
   );
 }

@@ -16,7 +16,9 @@ public record Account(
         String avatar,
     @Schema(description = "An admin also manages the platform's mail") Role role,
     @Schema(description = "Whether the account can still start its one free demo workspace")
-        boolean demoAvailable) {
+        boolean demoAvailable,
+    @Schema(description = "Where the guided tour is; null while no tour is under way")
+        TourProgress tour) {
 
   static Account of(UserEntity user, Auth0Users.Profile profile) {
     return new Account(
@@ -26,6 +28,7 @@ public record Account(
         profile.familyName(),
         profile.picture().isEmpty() ? null : profile.picture(),
         user.getRole(),
-        user.isDemoAvailable());
+        user.isDemoAvailable(),
+        user.getTourProgress());
   }
 }

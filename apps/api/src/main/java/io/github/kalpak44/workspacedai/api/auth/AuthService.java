@@ -128,6 +128,12 @@ public class AuthService {
     return Account.of(user(userId), profile);
   }
 
+  /** Null ends the tour. */
+  @Transactional
+  public void saveTour(UUID userId, TourProgress progress) {
+    user(userId).setTourProgress(progress);
+  }
+
   public record ProfileUpdate(Account account, TokenService.Token token) {}
 
   /**

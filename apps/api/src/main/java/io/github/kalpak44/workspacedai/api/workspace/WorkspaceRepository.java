@@ -35,6 +35,10 @@ public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID
   /** As above, without the drafts, which nobody but the dialog that made them knows of. */
   List<WorkspaceEntity> findAllByOwnerIdAndDraftFalseOrderByCreatedAtAscIdAsc(UUID ownerId);
 
+  /** The account's demo that has not been launched yet, which a second tour picks up again. */
+  Optional<WorkspaceEntity> findFirstByOwnerIdAndModelProviderAndDemoTrueAndDraftTrue(
+      UUID ownerId, String modelProvider);
+
   /**
    * Takes a draft for launching; 0 when it is not one, or another launch took it first. Its own
    * transaction, committed before the VM is asked for.

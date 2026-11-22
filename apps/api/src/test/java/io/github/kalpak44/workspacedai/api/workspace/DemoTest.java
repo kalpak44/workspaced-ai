@@ -193,6 +193,48 @@ class DemoTest {
   }
 
   @Test
+  void keepsOneDemoDraftWhenTheTourStartsAgainElsewhere() throws Exception {
+    var first = JSON.readValue(send("POST", "/workspaces", demo(null)).body(), Workspace.class);
+
+    var again = JSON.readValue(send("POST", "/workspaces", demo(null)).body(), Workspace.class);
+
+    assertThat(again.id()).isEqualTo(first.id());
+    assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).hasSize(1);
+    assertThat(send("POST", "/workspaces/" + again.id() + "/launch", "{\"apiKey\":\"sk-2\"}")
+            .statusCode())
+        .isEqualTo(200);
+    assertThat(send("POST", "/workspaces", demo(null)).statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void keepsTheTourOnTheAccountSoAnyBrowserResumesIt() throws Exception {
+    assertThat(account().get("tour").isNull()).isTrue();
+    var progress =
+        "{\"step\":3,\"draftId\":\"d-1\",\"name\":\"My first workspace\",\"paused\":true}";
+
+    assertThat(send("PUT", "/account/tour", progress).statusCode()).isEqualTo(204);
+
+    var tour = account().get("tour");
+    assertThat(tour.get("step").asInt()).isEqualTo(3);
+    assertThat(tour.get("draftId").asString()).isEqualTo("d-1");
+    assertThat(tour.get("paused").asBoolean()).isTrue();
+    assertThat(send("DELETE", "/account/tour", null).statusCode()).isEqualTo(204);
+    assertThat(account().get("tour").isNull()).isTrue();
+  }
+
+  @Test
+  void refusesTourProgressOutsideItsBounds() throws Exception {
+    assertThat(send("PUT", "/account/tour", "{\"step\":101}").statusCode()).isEqualTo(400);
+    assertThat(send("PUT", "/account/tour", "{}").statusCode()).isEqualTo(400);
+    var longName = "x".repeat(101);
+    assertThat(
+            send("PUT", "/account/tour", "{\"step\":1,\"name\":\"" + longName + "\"}")
+                .statusCode())
+        .isEqualTo(400);
+    assertThat(account().get("tour").isNull()).isTrue();
+  }
+
+  @Test
   void refusesADemoWhileEveryDemoIsTaken() throws Exception {
     for (var i = 0; i < 2; i++) {
       var other = users.save(TestUsers.newUser("other-" + UUID.randomUUID()));
