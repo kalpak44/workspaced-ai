@@ -52,6 +52,7 @@ export function AiConnectorsPanel() {
   };
 
   return <section aria-label="AI connectors" className="space-y-6">
+    <p className="text-sm leading-6 text-zinc-600 dark:text-zinc-400">Workspaced does not provide its own AI models. AI connectors use third-party providers through OpenRouter, under their terms and privacy policies. Connect your own provider account for ongoing use; provider charges are separate from workspace hosting. The Trial connector has a $1 lifetime budget with no automatic refill.</p>
     <div className="card overflow-hidden">
       <div className="border-b border-zinc-200 p-5 dark:border-zinc-800">
         <h2 className="font-semibold">Your AI connectors</h2>

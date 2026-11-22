@@ -4,7 +4,7 @@ import { useAccount } from "../../hooks/useAccount";
 import { startRecipeSession, useRecipe } from "../../hooks/useRecipes";
 import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { reportTourAction } from "../../lib/tour";
+import { reportTourAction, TOUR_RECIPE_ID } from "../../lib/tour";
 import { applyPrompt, authorName, draftName, revisePrompt, serializeDraft } from "../../lib/recipes";
 import { Button, CategoryTile, Stars, Tag, categoryLabel } from "../atoms";
 import { EmptyState, Markdown, Modal, ModalBody, ModalFooter, PageHeader, RatingInput } from "../molecules";
@@ -59,7 +59,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
       />
       <div className="min-h-0 flex-1 overflow-y-auto">
         <article className="mx-auto flex w-full max-w-5xl flex-col gap-6 px-4 py-6 sm:px-6">
-          <header className="flex flex-col gap-4">
+          <header data-tour="recipe-overview" className="flex flex-col gap-4">
             <div className="flex items-start gap-4">
               <CategoryTile category={recipe.category} large />
               <div className="min-w-0 flex-1">
@@ -131,9 +131,13 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
 
           <section aria-label="Steps" className="rounded-xl border border-zinc-200 dark:border-zinc-800">
             <h3 className="border-b border-zinc-200 px-4 py-3 text-sm font-medium dark:border-zinc-800">What the agent will do</h3>
-            <div className="px-4 py-4 text-sm">
-              <Markdown text={recipe.content} />
-            </div>
+            {recipe.id === TOUR_RECIPE_ID ? <div className="space-y-4 p-4 text-sm">
+              <p>Create a welcoming page that is ready to make your own. Your assistant will ask before sharing it publicly, then give you a link to open in your browser. Ask for new words, colours or anything you want to try.</p>
+              <details className="rounded-lg border border-zinc-200 p-4 dark:border-zinc-800">
+                <summary className="cursor-pointer font-medium">Read the full recipe and code</summary>
+                <div className="mt-4"><Markdown text={recipe.content} /></div>
+              </details>
+            </div> : <div className="px-4 py-4 text-sm"><Markdown text={recipe.content} /></div>}
           </section>
         </article>
       </div>

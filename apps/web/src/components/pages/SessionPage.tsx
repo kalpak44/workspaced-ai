@@ -41,12 +41,11 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   // The guided tour waits on the agent finishing; this page is where that is known.
   useEffect(() => {
     // Idle before history arrives, or after an error, is not a completed deployment.
-    const answered = chat.messages.some((message) => message.role === "assistant" && message.parts.some((part) => part.type === "text" && part.text?.trim()));
-    const waiting = !ready || chat.loading || chat.busy || !!chat.error || !answered;
-    reportChatBusy(sessionId, waiting);
     const lastUser = chat.messages.findLastIndex((message) => message.role === "user");
     const reply = chat.messages.slice(lastUser + 1).filter((message) => message.role === "assistant")
       .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text ?? "")).join("\n");
+    const waiting = !ready || chat.loading || chat.busy || !!chat.error || !reply.trim();
+    reportChatBusy(sessionId, waiting);
     reportChatCheckpoint(sessionId, waiting ? "" : reply);
   }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages]);
 

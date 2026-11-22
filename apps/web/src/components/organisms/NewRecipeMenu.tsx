@@ -1,5 +1,6 @@
 import { ChevronDown, FileInput, PencilLine, Plus } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { TOUR_STEP, useTourProgress } from "../../lib/tour";
 import { useDismiss } from "../../hooks/useDismiss";
 import { Menu, MenuItem } from "../molecules";
 
@@ -12,19 +13,21 @@ const ROW = "gap-3 px-3 py-2.5";
 
 /** The two ways to make a recipe: by hand in the editor, or from a Markdown file. */
 export function NewRecipeMenu({ onWrite, onImport }: Props) {
+  const preview = useTourProgress()?.step === TOUR_STEP.OWN;
   const [open, setOpen] = useState(false);
   const root = useRef<HTMLDivElement>(null);
   const picker = useRef<HTMLInputElement>(null);
   const close = useCallback(() => setOpen(false), []);
   useDismiss(root, open, close);
+  useEffect(() => { if (!preview) setOpen(false); }, [preview]);
 
   return (
     <div ref={root} className="relative">
       <button data-tour="new-recipe"
         type="button"
         aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen(!open)}
+        aria-expanded={preview || open}
+        onClick={() => { if (!preview) setOpen(!open); }}
         className="flex items-center gap-2 rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-white dark:text-zinc-900 dark:hover:bg-zinc-200"
       >
         <Plus aria-hidden className="size-4" />
@@ -38,12 +41,12 @@ export function NewRecipeMenu({ onWrite, onImport }: Props) {
           event.target.value = "";
           if (file) onImport(file);
         }} />
-      {open && (
+      {(preview || open) && (
         <Menu className="mt-2 w-72 rounded-lg shadow-xl">
-          <MenuItem className={ROW} onClick={() => { close(); onWrite(); }}>
+          <MenuItem className={ROW} disabled={preview} onClick={() => { close(); onWrite(); }}>
             <MenuRow icon={PencilLine} title="Write it yourself" detail="Fill in the steps in an editor" />
           </MenuItem>
-          <MenuItem className={ROW} onClick={() => { close(); picker.current?.click(); }}>
+          <MenuItem className={ROW} disabled={preview} onClick={() => { close(); picker.current?.click(); }}>
             <MenuRow icon={FileInput} title="Import a file" detail="Publish a recipe from a Markdown file" />
           </MenuItem>
         </Menu>

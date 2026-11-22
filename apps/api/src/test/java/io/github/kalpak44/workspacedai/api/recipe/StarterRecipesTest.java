@@ -28,6 +28,8 @@ import org.springframework.web.server.ResponseStatusException;
 class StarterRecipesTest {
   private static final Map<String, String> SOURCES =
       Map.of(
+          "simple-web-page",
+          "b00d",
           "wordpress",
           "b001",
           "gmail",

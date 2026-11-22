@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="A practical guide to AI connectors, workspaces, recipes and workspace settings in workspaced-ai." />
+    <link rel="canonical" href="https://workspaced.online/docs" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="workspaced-ai" />
+    <meta property="og:url" content="https://workspaced.online/docs" />
+    <meta property="og:title" content="Docs - workspaced-ai" />
+    <meta property="og:description" content="A practical guide to AI connectors, workspaces, recipes and workspace settings in workspaced-ai." />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>Docs - workspaced-ai</title>
+
+  </head>
+  <body class="flex min-h-dvh flex-col bg-zinc-50 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
+    <header class="sticky top-0 z-10 border-b border-zinc-200/70 bg-zinc-50/80 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80">
+      <div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+        <a href="/" class="flex items-center gap-2" aria-label="workspaced-ai home">
+          <svg viewBox="0 0 24 24" class="size-6" fill="none" aria-hidden="true"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z" fill="currentColor" fill-opacity="0.04" /><path d="m12 12 9-5v10l-9 5V12Z" fill="currentColor" fill-opacity="0.12" /><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10 9-5M12 12 3 7m9 5v10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <span class="font-semibold tracking-tight">workspaced<span class="text-zinc-400">-ai</span></span>
+        </a>
+        <nav class="flex items-center gap-1 text-sm sm:gap-2">
+          <a href="/#features" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Features</a>
+          <a href="/docs" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Docs</a>
+          <a href="/support" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Support</a>
+          <a href="https://ai.workspaced.online/" class="rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Sign in</a>
+          <a href="https://ai.workspaced.online/api/v1/oauth2/authorization/auth0?signup" class="btn btn-primary">Start building</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="flex-1">
+      <div class="mx-auto max-w-4xl px-4 py-14 sm:py-20">
+        <p class="text-sm font-medium text-emerald-700 dark:text-emerald-400">WORKSPACED DOCS</p>
+        <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">From your first page to your next idea.</h1>
+        <p class="mt-4 max-w-2xl text-zinc-600 dark:text-zinc-400">Build through chat, reuse a recipe, and get to know the settings when you need them.</p>
+        <nav aria-label="On this page" class="my-8 flex flex-wrap gap-2"><a href="#ai-connectors" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">AI connectors</a>
+<a href="#workspaces" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Workspaces</a>
+<a href="#recipes" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Recipes</a>
+<a href="#mcp" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">MCP servers</a>
+<a href="#secrets" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Secrets</a>
+<a href="#variables" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Variables</a>
+<a href="#sessions" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Sessions</a>
+<a href="#firewall" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Firewall</a>
+<a href="#instructions" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Instructions</a>
+<a href="#tasks" class="rounded-lg border border-zinc-200 bg-white px-3 py-2 text-sm hover:bg-zinc-100 dark:border-zinc-800 dark:bg-zinc-900 dark:hover:bg-zinc-800">Tasks</a></nav>
+        <article class="legal space-y-10"><section id="ai-connectors" class="scroll-mt-24"><h2>AI connectors</h2><p>Workspaced does not provide its own AI models. Your assistant uses third-party models through OpenRouter, under those providers’ terms and privacy policies. Open <a href="https://ai.workspaced.online/settings/ai-connectors">Settings → AI connectors</a> to add a named connection, then select it for a workspace. Your own provider usage is charged separately from workspace hosting. The protected Trial connector has a $1 lifetime budget with no automatic refill. Prompts and relevant context go to the selected providers; review their policies and check the assistant’s work.</p></section>
+<section id="workspaces" class="scroll-mt-24"><h2>Workspaces</h2><p>A workspace is your own computer in the cloud. Its assistant can install software, edit files and run apps while you talk through chat. Sessions in the same workspace share its files and running services. Your apps can keep running when you close the browser. A free trial lasts four hours; when it expires, its machine, files and data are permanently deleted. Keep a copy of anything you need.</p></section>
+<section id="recipes" class="scroll-mt-24"><h2>Recipes</h2><p>A recipe is a reusable set of instructions for the assistant. In the Store, choose a public recipe or keep your own private ones; New recipe lets you write instructions or import Markdown. Read the steps and check the author before applying. Apply starts a session in the workspace you choose. For a first project, search for <strong>Simple web page</strong> by workspaced: it builds a welcoming demo page, asks you to confirm public access in chat, handles publishing, and gives you a link. You can then ask for any change in chat.</p></section>
+<section id="mcp" class="scroll-mt-24"><h2>MCP servers</h2><p>MCP (Model Context Protocol) lets the assistant use tools supplied by another service, such as searching connected information or working with an external app. Workspace Settings → MCP servers is where you configure those connections and review their state. Only connect services you trust, review their access, and keep credentials in Secrets. A recipe can help set up a connection; the service may need its own account or subscription.</p></section>
+<section id="secrets" class="scroll-mt-24"><h2>Secrets</h2><p>Secrets hold sensitive values such as passwords and API keys. Add them in workspace Settings → Secrets using the exact name your app or recipe needs. Saved values are hidden and become available to the assistant’s tools as environment variables after a restart. Never paste secret values into chat, public recipes or your page’s HTML. A restart applies the updated environment while keeping workspace files and conversations.</p></section>
+<section id="variables" class="scroll-mt-24"><h2>Variables</h2><p>Variables are named settings for your apps, such as a preferred language or another non-sensitive option. Use workspace Settings → Variables to manage them, and Secrets for credentials. The workspace time zone is configured here too; the assistant uses it when interpreting your local times. Restart when the app indicates that changes need to be applied.</p></section>
+<section id="sessions" class="scroll-mt-24"><h2>Sessions</h2><p>A session is one conversation with the assistant. Start a new session for another piece of work or reopen an existing conversation to continue with its history. All sessions in a workspace share its files, so a change made in one can affect another. Workspace Settings → Sessions controls conversation retention; review it if you want to change how long inactive sessions are kept.</p></section>
+<section id="firewall" class="scroll-mt-24"><h2>Firewall</h2><p>A firewall decides which ports people can reach from outside the workspace. Starting a server does not automatically make it public. In Settings → Firewall, an open TCP port with From left empty allows anyone on the internet to reach the service listening there. The demo page uses port 80 and plain HTTP, which is unencrypted. Close a port when it is no longer needed. You can also let the assistant manage ports through chat using the permission on this screen. Keep private tools and credentials out of public pages.</p></section>
+<section id="instructions" class="scroll-mt-24"><h2>Instructions</h2><p>Instructions are lasting preferences and working notes shared across a workspace’s conversations. Use Settings → Instructions to save guidance you want the assistant to reuse, such as your writing style or how an app is operated. You can ask the assistant to maintain these notes through chat too. They guide its behaviour but should never contain passwords or API keys. You do not need to create any instructions to build the demo page.</p></section>
+<section id="tasks" class="scroll-mt-24"><h2>Tasks</h2><p>Tasks ask the assistant to do something later or on a recurring schedule while the workspace is running. Ask in chat, for example, “In 30 minutes, check my page” or “Every weekday at 9 am, write a summary.” Review, change or remove the prompt and schedule in Settings → Tasks, and see runs in Sessions. Runs use your AI connector’s budget. Tasks stop when their workspace is deleted; creating them is optional and is not part of the first-page tour.</p></section></article>
+        <div class="card mt-12 p-6"><h2 class="text-lg font-semibold">Try it in your workspace</h2><p class="mt-2 text-zinc-600 dark:text-zinc-400">Open the Store and search for Simple web page. Apply it, ask the assistant to make it public in chat, then ask for any change to the page.</p><a href="https://ai.workspaced.online/store/00000000-0000-4000-8000-00000000b00d" class="btn btn-primary mt-4">Open Simple web page</a></div>
+      </div>
+    </main>
+
+    <footer class="border-t border-zinc-200 py-10 text-sm dark:border-zinc-800">
+      <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="font-semibold tracking-tight">workspaced<span class="text-zinc-400">-ai</span></p>
+          <p class="mt-1 text-zinc-500">© 2026 Workspaced AI. Public beta.</p>
+        </div>
+        <nav class="grid grid-cols-2 gap-x-10 gap-y-2 text-zinc-600 dark:text-zinc-400" aria-label="Footer">
+          <a href="https://ai.workspaced.online/" class="hover:text-zinc-900 dark:hover:text-zinc-100">Open app</a>
+          <a href="/docs" class="hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
+          <a href="/support" class="hover:text-zinc-900 dark:hover:text-zinc-100">Support</a>
+          <a href="/privacy" class="hover:text-zinc-900 dark:hover:text-zinc-100">Privacy policy</a>
+          <a href="/terms" class="hover:text-zinc-900 dark:hover:text-zinc-100">Terms of service</a>
+        </nav>
+      </div>
+    </footer>
+
+    <!-- Hidden until the script below finds no earlier dismissal, so a returning visitor never sees it flash. -->
+    <section id="privacy-notice" hidden aria-label="Cookies and privacy" class="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-xl">
+      <div class="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-xl sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+        <p class="min-w-0 flex-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          This site sets no cookies and runs no analytics or tracking. The app uses only the cookies needed to keep you
+          signed in. Your data is handled under the GDPR as described in our
+          <a href="/privacy" class="font-medium text-zinc-900 underline underline-offset-2 dark:text-zinc-100">Privacy policy</a>.
+        </p>
+        <button type="button" id="privacy-notice-dismiss" class="btn btn-secondary shrink-0">I agree</button>
+      </div>
+    </section>
+    <script src="/privacy-notice.js"></script>
+  </body>
+</html>

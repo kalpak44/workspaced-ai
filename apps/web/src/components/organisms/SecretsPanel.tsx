@@ -1,4 +1,4 @@
-import { reportTourAction, TOUR_STEP, useTourProgress } from "../../lib/tour";
+import { reportTourAction } from "../../lib/tour";
 import { Plus } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { type AddResult, MAX_SECRETS, type Secret, SECRET_NAME } from "../../hooks/useSecrets";
@@ -38,13 +38,7 @@ export function SecretsPanel({
   restartDisabled,
   onRestart,
 }: Props) {
-  const tour = useTourProgress();
-  const requiredName = tour && tour.workspaceId === workspaceId
-    ? tour.step === TOUR_STEP.ADMIN_USER ? "WORDPRESS_ADMIN_USER"
-      : tour.step === TOUR_STEP.ADMIN_PASSWORD ? "WORDPRESS_ADMIN_PASSWORD" : null
-    : null;
-  const [customName, setName] = useState("");
-  const name = requiredName ?? customName;
+  const [name, setName] = useState("");
   const [value, setValue] = useState("");
   const [nameError, setNameError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
@@ -116,8 +110,6 @@ export function SecretsPanel({
             autoComplete="off"
             spellCheck={false}
             value={name}
-            readOnly={!!requiredName}
-            hint={requiredName ? "The recipe needs this exact name. Enter your own Value below." : undefined}
             maxLength={MAX_NAME}
             disabled={pending || full}
             error={nameError}

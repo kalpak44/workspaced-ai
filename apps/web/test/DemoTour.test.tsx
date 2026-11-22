@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
@@ -28,14 +28,14 @@ async function next(label = "Next") {
 }
 async function title(name: string) { return screen.findByRole("heading", { name }); }
 function open(step: number, path = "/workspaces/trial") {
-  tour.setTourProgress({ step, workspaceId: workspace.id });
+  tour.setTourProgress({ step, workspaceId: workspace.id, ...(step === S.DONE ? { sessionId: "finished-change" } : {}) });
+  if (step === S.DONE) {
+    api.sessions.set(workspace.id, [{ id: "finished-change", title: "My page", path: "/home/workspace/sessions/finished-change", createdAt: new Date().toISOString() }]);
+    api.messages.set("finished-change", [{ id: "done", role: "assistant", parts: [{ id: "text", type: "text", text: "The page is updated.", tool: null, status: null }] }]);
+    tour.reportChatBusy("finished-change", false);
+  }
   globalThis.history.replaceState(null, "", path);
   render(<App />);
-}
-function clickSelector(selector: string) {
-  const node = document.querySelector<HTMLElement>(selector);
-  expect(node, selector).not.toBeNull();
-  fireEvent.click(node!);
 }
 async function answer(sessionId: string, text: string, canContinue = true) {
   const prompts = api.prompts.filter((prompt) => prompt.sessionId === sessionId);
@@ -48,7 +48,7 @@ async function answer(sessionId: string, text: string, canContinue = true) {
   ]));
   FakeEventSource.emitSession("status", { busy: false });
   await waitFor(() => {
-    const button = within(guide()).getByRole("button", { name: "Next" });
+    const button = within(guide()).getByRole("button", { name: /Next|Finish tutorial/ });
     if (canContinue) expect(button, text + " :: " + screen.getByRole("region", { name: "Guided tour" }).textContent).toBeEnabled(); else expect(button).toBeDisabled();
   });
 }
@@ -59,7 +59,7 @@ beforeEach(() => {
   vi.spyOn(tour, "typeInto").mockImplementation((field, text, _delay, signal) => actualType(field, text, 0, signal));
 });
 
-describe("full-screen guided WordPress workflow", () => {
+describe("guided public-page workflow", () => {
   it("opens the real naming form automatically and keeps a user-written name", async () => {
     api = installFakeApi([]);
     api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: true };
@@ -74,7 +74,7 @@ describe("full-screen guided WordPress workflow", () => {
     await user.type(name, "My own project");
     await next();
     await title("Your trial AI token");
-    expect(localStorage.getItem("workspaced.tour.v4")).toContain("My own project");
+    expect(localStorage.getItem("workspaced.tour.v6")).toContain("My own project");
     expect(api.launched).toHaveLength(0);
   });
 
@@ -126,137 +126,75 @@ describe("full-screen guided WordPress workflow", () => {
     expect(onLaunch).toHaveBeenCalledWith("trial", "", "trial-connector");
   });
 
-  it("uses the real Store, Apply, secrets, firewall, task and instruction forms", async () => {
-    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "WordPress blog", summary: "A repeatable HTTPS blog", category: "websites", tags: ["wordpress"], visibility: "PUBLIC", author: { id: "pavel", firstName: "Pavel", lastName: "Usanli" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: "2026-11-01T10:00:00Z", rating: { average: 0, count: 0 }, myRating: null, mine: false, content: "Check secrets, prepare Compose, ask for ports, publish with HTTPS, save blog.md." } satisfies Recipe);
+  it("builds a public page through the Store and chat, then waits for a custom change", async () => {
+    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "A little page to make your own", category: "websites", tags: ["demo"], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: "2026-11-01T10:00:00Z", rating: { average: 0, count: 0 }, myRating: null, mine: false, content: "Prepare the page, ask to make it PUBLIC, then verify the HTTP link." } satisfies Recipe);
     open(S.STORE);
     await title("Open the real recipe Store");
     await user.click(screen.getByRole("link", { name: "Store" }));
     await title("Recipes can belong just to you");
     await user.click(await screen.findByRole("tab", { name: "Private" }));
     await title("You can write or import your own");
-    expect(screen.getByRole("button", { name: "New recipe" })).toBeInTheDocument();
+    const write = screen.getByRole("menuitem", { name: /Write it yourself/ });
+    const importFile = screen.getByRole("menuitem", { name: /Import a file/ });
+    expect(write).toBeDisabled(); expect(importFile).toBeDisabled();
+    await user.click(write); await user.click(importFile);
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await next(); await next();
+    await title("Find Simple web page");
     await next();
+    expect(screen.getByRole("searchbox", { name: "Search recipes" })).toHaveValue("Simple web page");
     await next();
-    await title("Find WordPress blog");
-    await screen.findByText("A repeatable HTTPS blog");
-    clickSelector(`[data-recipe="${tour.TOUR_RECIPE_ID}"]`);
     await title("Read what the recipe will do");
-    await next();
-    await user.click(await screen.findByRole("button", { name: "Apply" }));
+    await waitFor(() => expect(document.querySelector('[data-tour="recipe-overview"]')).toHaveTextContent("Simple web page"));
+    expect(screen.getByText("Read the full recipe and code").closest("details")).not.toHaveAttribute("open");
+    await next(); await next();
     await title("Apply it in your trial workspace");
-    const picker = screen.getByRole("dialog", { name: "Apply WordPress blog" });
-    await user.click(within(picker).getByRole("button", { name: "Apply" }));
+    await user.click(within(screen.getByRole("dialog", { name: "Apply Simple web page" })).getByRole("button", { name: "Apply" }));
     await title("Watch the recipe start in chat");
     await waitFor(() => expect(api.prompts).toHaveLength(1));
-    expect(api.sent).toHaveLength(0);
-    expect(api.prompts[0].text).toContain("Check secrets");
     const sessionId = api.prompts[0].sessionId;
-    await answer(sessionId, "I am checking the workspace before starting.", false);
-    expect(screen.queryByRole("heading", { name: "Find Secrets" })).not.toBeInTheDocument();
-    await answer(sessionId, "Add WORDPRESS_ADMIN_USER and WORDPRESS_ADMIN_PASSWORD in Settings → Secrets, then restart.");
+    await answer(sessionId, "I am preparing the page.", false);
+    await answer(sessionId, "Shall I make this page PUBLIC so anyone can open it from the internet? Reply here to let me publish it.");
     await next();
+    await title("Ask the assistant to make it public");
+    expect(location.pathname).toBe(`/workspaces/trial/sessions/${sessionId}`);
+    expect(screen.queryByRole("form", { name: "Open a port" })).not.toBeInTheDocument();
     await next();
-    await title("Find Secrets");
+    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(tour.TOUR_PUBLIC_PROMPT);
     await next();
-    await title("Add the admin username as a secret");
-    await next();
-    expect(within(screen.getByRole("region", { name: "Secrets" })).getByLabelText("Name")).toHaveValue("WORDPRESS_ADMIN_USER");
-    const secretName = within(screen.getByRole("region", { name: "Secrets" })).getByLabelText("Name");
-    expect(secretName).toHaveAttribute("readonly");
-    await user.type(secretName, "WRONG_KEY");
-    expect(secretName).toHaveValue("WORDPRESS_ADMIN_USER");
-    expect(screen.getByLabelText("Value", { exact: true })).toHaveValue("blog-admin");
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    await title("Add your own admin password");
-    await next();
-    await user.type(screen.getByLabelText("Value", { exact: true }), "my-private-password");
-    await user.click(screen.getByRole("button", { name: "Add" }));
-    await title("Apply the secrets with a restart");
-    expect(localStorage.getItem("workspaced.tour.v4")).not.toContain("my-private-password");
-    expect(api.sent.filter((secret) => secret.name.startsWith("WORDPRESS_"))).toHaveLength(2);
-    await next();
-    await title("Confirm the restart");
-    await user.click(within(screen.getByRole("dialog", { name: "Restart My blog?" })).getByRole("button", { name: "Restart workspace" }));
-    await title("Wait for the workspace to return");
-    expect(screen.getByRole("status", { name: "Workspace restarting" })).toBeInTheDocument();
-    expect(within(guide()).getByRole("button", { name: "Next" })).toBeDisabled();
-    await waitFor(() => expect(api.restarted).toEqual(["trial"]));
-    FakeEventSource.emit("trial", "READY");
-    await waitFor(() => expect(screen.queryByRole("status", { name: "Workspace restarting" })).not.toBeInTheDocument());
-    await next();
-    await title("Return through Sessions");
-    await next();
-    await title("Reopen the recipe conversation");
-    await screen.findByText("New session");
-    await next();
-    await title("Tell the agent the secrets are ready");
-    await next();
-    await next();
-    await title("Watch the installation");
-    await answer(sessionId, "The private stack is ready. Open TCP ports 80 and 443 in Settings → Firewall.");
-    await next(); await next(); await next();
-    await title("Open TCP port 80 for certificate checks");
-    await next();
-    expect(screen.getByLabelText("Port", { exact: true })).toHaveValue("80");
-    await user.click(screen.getByRole("button", { name: "Open port" }));
-    await title("Open TCP port 443 for HTTPS");
-    await next(); await next();
-    await title("See what is now public");
-    expect(screen.getByRole("region", { name: "Guided tour" })).toHaveTextContent("anyone on the internet");
-    expect(api.firewalls.get("trial")?.rules.map((rule) => rule.port)).toEqual(["80", "443"]);
-    await next(); await next(); await next();
-    await title("Let the recipe finish publishing");
-    await next(); await next();
-    await title("Watch HTTPS and the first article appear");
-    api.instructions.set("trial", new Map([["blog", "# Blog\nUse docker compose run --rm cli post create to publish articles."]]));
-    await answer(sessionId, "The blog is verified at https://203.0.113.10. The blog instruction is saved.");
-    await next();
-    await next("My blog works");
-    await next(); await next();
-    await title("Create a news task");
-    await user.click(await screen.findByRole("button", { name: "New task" }));
-    await title("Name the task");
-    await next(); await next();
-    await title("Write what should run, and when");
-    await next();
-    expect(screen.getByLabelText("Cron expression")).toHaveValue("*/5 * * * *");
-    const taskPrompt = screen.getByRole("textbox", { name: "Task prompt Markdown" });
-    await user.type(taskPrompt, " Use British spelling.");
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await title("Your automation is saved");
-    expect(api.tasks.get("trial")?.get(tour.TOUR_TASK.name)?.prompt).toContain("Use British spelling.");
-    await next(); await next();
-    await title("The recipe left a CLI publishing guide");
-    await screen.findByText(/post create to publish articles/);
-    await next();
-    await title("Add a rule of your own");
-    await user.click(screen.getByRole("button", { name: "New instructions" }));
-    await title("Name your instruction");
-    await next(); await next();
-    await title("Choose how the agent should write");
-    await next(); await next();
-    await title("Your writing rule is now shared");
-    expect(api.instructions.get("trial")?.get(tour.TOUR_STYLE_NAME)).toBe(tour.TOUR_STYLE);
-    await next(); await next(); await next();
-    await title("Your turn: request a new design");
-    const beforeDesign = api.prompts.length;
-    await next();
-    await title("Make it yours, then Send");
-    expect(api.prompts).toHaveLength(beforeDesign);
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(tour.TOUR_DESIGN_PROMPT);
+    expect(api.prompts.at(-1)?.text).toBe(tour.TOUR_PUBLIC_PROMPT);
+    await title("Watch your page go live");
+    await answer(sessionId, "Your page is ready at http://203.0.113.10/. Anyone can open it from the internet.");
+    await next(); await next("My page works");
+    await title("Your turn: ask for any change");
+    await user.type(screen.getByRole("textbox", { name: "Message" }), "Add a friendly welcome for my friends.");
     await user.click(screen.getByRole("button", { name: "Send" }));
+    await title("See your change, then keep exploring");
+    expect(within(guide()).getByRole("button", { name: "Finish tutorial" })).toBeDisabled();
+    // An idle event can arrive before the new assistant reply is loaded.
+    FakeEventSource.emitSession("status", { busy: false });
+    await screen.findByRole("button", { name: "Send" });
+    expect(within(guide()).getByRole("button", { name: "Finish tutorial" })).toBeDisabled();
+    expect(api.tasks.get("trial")?.size ?? 0).toBe(0);
+    expect(api.instructions.get("trial")?.size ?? 0).toBe(0);
+    expect(api.sent).toHaveLength(0);
+    await answer(sessionId, "The welcome is updated. Refresh http://203.0.113.10/ to see it.");
     await next("Finish tutorial");
-    await waitFor(() => expect(screen.queryByRole("region", { name: "Guided tour" })).not.toBeInTheDocument());
-    expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(true);
-    expect(api.mail.sent).toHaveLength(0);
     const completion = await screen.findByRole("dialog", { name: "Tutorial completed" });
-    expect(completion).toHaveTextContent("You have finished the tour!");
-    expect(completion).toHaveTextContent("permanently deleted");
-    expect(completion).toHaveTextContent("paid workspace");
+    expect(within(completion).getByRole("link", { name: /Read the Docs/ })).toHaveAttribute("href", tour.TOUR_DOCS_URL);
+    expect(api.mail.sent).toHaveLength(0);
     await user.click(within(completion).getByRole("link", { name: "GoDaddy domains for your workspace" }));
     expect(location.pathname).toBe("/store/00000000-0000-4000-8000-00000000b00b");
-    expect(screen.queryByRole("dialog", { name: "Tutorial completed" })).not.toBeInTheDocument();
-  }, 60000);
+  }, 30000);
+
+  it("accepts a direct chat reply without a tour Next click", async () => {
+    tour.setTourProgress({ step: S.BUILD, workspaceId: workspace.id, sessionId: "direct-confirm" });
+    render(<DemoTour workspaces={[workspace]} loading={false} onDraft={vi.fn()} onLaunch={vi.fn()} />);
+    await title("Watch the recipe start in chat");
+    tour.reportTourAction({ type: "message-sent", workspaceId: workspace.id, sessionId: "direct-confirm" });
+    await title("Watch your page go live");
+    expect(location.pathname).not.toContain("settings");
+  });
 
   it("stops simulated typing when the person edits the field", async () => {
     vi.mocked(tour.typeInto).mockRestore();
@@ -267,18 +205,9 @@ describe("full-screen guided WordPress workflow", () => {
     expect(input.value).toBe("My own name"); input.remove();
   });
 
-  it("explains that tasks can be requested in chat for one-off and recurring work", async () => {
-    open(S.TASKS, "/workspaces/trial/settings");
-    await title("Find scheduled Tasks");
-    const explanation = screen.getByRole("region", { name: "Guided tour" });
-    expect(explanation).toHaveTextContent("In 30 minutes");
-    expect(explanation).toHaveTextContent("Every weekday at 9 am");
-    expect(explanation).toHaveTextContent("session chat");
-  });
-
   it("lets the user dismiss completion and keep their conversation", async () => {
     open(S.DONE);
-    await title("Make it yours, then Send");
+    await title("See your change, then keep exploring");
     const path = location.pathname;
     await next("Finish tutorial");
     const completion = await screen.findByRole("dialog", { name: "Tutorial completed" });
@@ -289,7 +218,7 @@ describe("full-screen guided WordPress workflow", () => {
 
   it("keeps the tour open when saving completion fails and allows a retry", async () => {
     open(S.DONE);
-    await title("Make it yours, then Send");
+    await title("See your change, then keep exploring");
     api.state.fail = 503;
     await next("Finish tutorial");
     expect(within(guide()).getByRole("alert")).toHaveTextContent("Could not save completion");
@@ -301,7 +230,7 @@ describe("full-screen guided WordPress workflow", () => {
 
   it("does not notify completion when the user skips", async () => {
     open(S.DONE);
-    await title("Make it yours, then Send");
+    await title("See your change, then keep exploring");
     await user.click(within(guide()).getByRole("button", { name: "Skip tour" }));
     expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(false);
     expect(screen.queryByRole("dialog", { name: "Tutorial completed" })).not.toBeInTheDocument();

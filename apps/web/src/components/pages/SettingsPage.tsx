@@ -11,8 +11,6 @@ import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
 import { VariablesPanel } from "../organisms/VariablesPanel";
 import { Spinner } from "../atoms";
 import { RestartRequiredBanner, SectionNav } from "../molecules";
-import { TOUR_STEP, useTourProgress } from "../../lib/tour";
-import { WorkspaceStatusView } from "./WorkspaceStatusView";
 import { ContextLayout } from "../templates/ContextLayout";
 
 interface Props {
@@ -53,10 +51,6 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
   const setSection = (id: SectionId) => navigate({ name: "settings", workspaceId: workspace.id, section: id }, { replace: true });
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id, () => onChanged({ restartRequired: true }));
-  const tour = useTourProgress();
-  if (workspace.status === "INITIALIZING" && tour?.workspaceId === workspace.id && tour.step === TOUR_STEP.RESTARTING) {
-    return <WorkspaceStatusView workspace={workspace} deleting={false} restarting />;
-  }
 
   return (
     <ContextLayout

@@ -99,54 +99,37 @@ and installs an interactive Bash profile with a colored prompt and `ls` output. 
 harness image before the shell defaults change.
 
 
-## Guided WordPress trial
+## Guided first-page trial
 
-The tour starts automatically on a new account's first successful sign-in (`/?welcome`), with
-no opt-in prompt. Returning sign-ins do not restart it. A full-screen guide reserves space for
-its explanation and controls, leaving the real app visible and interactive between them. It
-spotlights the current control. Users can act directly or use Next to demonstrate a click or
-type an example, edit it, and continue. User-written values are preserved; simulated typing
-stops if they edit the field, leave the screen or skip. Reduced-motion preferences disable the
-typing animation. Guide chrome and app dialogs resize together on mobile and desktop.
+The 19-step tour starts on a new account’s first successful sign-in (`/?welcome`). It uses
+real forms and chat, with a full-screen explanation, spotlight and Next demonstration.
+User-written values are preserved and typing stops when the user edits or leaves.
 
-Only Trial connector confirmation and trial machine selection are custom. The real New workspace
-name form hands off to the account’s protected Trial connector and AI-provider acknowledgement,
-followed by the cheapest available VM. The server resolves the saved connector; the browser never
-receives its key. Other sizes are
-visible but disabled. The server selects the cheapest available size again at launch. A required
-checkbox acknowledges permanent deletion after four hours and no production use. The VM is
-free; Workspaced funds a $1 lifetime AI budget on one trial key per account. There is no automatic
-refill or paid upgrade. The deletion banner also shows the remaining trial budget, refreshed from
-OpenRouter every 30 seconds: green above 50%, orange above 20% through 50%, red at 20% or below.
-Unavailable usage is shown as unavailable, never as a full budget.
+The default name is **My first workspace**. The protected Trial connector has a $1 lifetime
+budget with no automatic refill. AI-provider acknowledgement and explicit four-hour permanent
+deletion consent remain required. Only trial connector and machine selection are custom;
+the cheapest available VM is selected again by the server at launch.
 
-Everything after that uses the ordinary app controls: Store, Private, New recipe, Public,
-WordPress recipe card, Apply, workspace picker, conversation, Settings, Secrets, restart
-confirmation, Firewall, Tasks and Instructions. The guide advances on accepted mutations or
-actual navigation; a failed request does not count as completing a step. It reads saved secrets
-and firewall rules to recover after reloads and reopens transient local forms when needed.
+The guide opens Store, previews Private and New recipe, then searches Public for **Simple web
+page** by workspaced (`b00d`). The preview menu’s Write and Import actions are disabled during
+that step. A compact recipe overview is highlighted; the complete Markdown and code remain
+available in a disclosure. Apply opens the ordinary workspace picker and starts a real session.
 
-V45 replaces the WordPress recipe with the versioned `docs/recipes/wordpress.md` snapshot. It
-contains Compose/nginx templates, image-digest pinning, private database/WordPress containers,
-Let's Encrypt IP TLS, renewal, verification and a shared CLI publishing guide. It first pauses
-for secrets and restart, then pauses again for the user to open TCP 80 and 443 through Firewall.
-Only the admin username and password are entered as Secrets. The recipe generates and keeps separate database credentials in a protected Docker volume, reusing them on retries. V46 publishes this revision without changing earlier migrations. The agent does not open ports itself. The user resumes the same conversation after each pause.
-Retries keep existing content, volumes and certificates. Earlier migration checksums stay intact.
+V60 seeds `docs/recipes/simple-web-page.md` unchanged. Python serves predefined HTML while SQLite
+keeps the page content on a named Docker volume. The recipe always asks for explicit PUBLIC
+access and pauses. The user confirms public access in the same chat; the assistant opens TCP port 80 and
+continues publishing. There is no Firewall settings walkthrough. The assistant checks the HTTP page and gives
+the actual public IP link. The user confirms the page works, requests any change, and waits for
+the completed reply before finishing. No secrets, tasks, shared instructions, domain or HTTPS
+setup is part of this tour. Its final modal offers the optional GoDaddy recipe and public Docs.
 
-The user creates the news task through the real Tasks editor. Next can type the name, a five-minute
-schedule and a sourced-news prompt, leaving all values editable before Save. Each run spends
-OpenRouter credit. The user then inspects the recipe's `blog` instruction and creates their own
-`writing-style` (or custom-named) shared instruction with the ordinary name form and editor.
-A plain-language example is typed only into an empty editor. Saved instructions apply from the
-agent's next message and are available to future sessions and tasks. Finally, the user edits
-and sends a design request themselves; the tour does not auto-send it.
-
-Non-secret progress, names and workspace/session identifiers persist in `workspaced.tour.v4`.
-Active v2 and v3 tours are migrated without provisioning another workspace. Passwords and keys never
-enter tour storage. Reloading before launch requires reconnecting OpenRouter. Finishing sends
-one in-app completion notification with the deletion deadline, followed by the existing warning
-before expiry and confirmation after successful deletion. These alerts send no email. Skipping
-does not send a completion notification.
+Non-secret progress is stored in `workspaced.tour.v6`. Valid v2–v4 progress retains the workspace
+and returns to Store; old recipe sessions are never reused for the new demo. Previous v5
+page tours keep their conversation and resume removed firewall steps at the chat confirmation. Finishing saves
+one in-app completion notification, including the deletion deadline. Expiry warnings and
+successful-deletion notifications remain unchanged. No email is sent. Skipping does not send
+completion. The public site’s `/docs` page introduces AI connectors first, then workspaces,
+recipes and every workspace setting except Domains.
 
 ## Optional Store recipes
 
