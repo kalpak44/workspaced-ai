@@ -100,11 +100,14 @@
 <p>Before you apply a recipe, read its steps and check who wrote it. Applying it starts a new session in the workspace you pick.</p>
 <p>New here? Search for <strong>Simple web page</strong> by workspaced. It builds a friendly demo page, asks you in chat before making it public, publishes it and hands you the link. From there, just ask for whatever changes you like.</p></section>
 <section id="mcp" class="scroll-mt-24 border-t border-zinc-200 pt-8 first:border-0 first:pt-0 dark:border-zinc-800"><h2 class="!mt-0">MCP servers</h2><p class="!mt-2 text-sm !text-zinc-500">Find it in Workspace settings → MCP servers</p>
-<p>MCP (the Model Context Protocol) lets the assistant use tools from other services, for example to search your connected data or work inside another app. This is where you add those connections and see whether they’re working.</p>
+<p>MCP (the Model Context Protocol) is an open standard that lets an AI assistant use tools from other services. Each MCP server adds a set of abilities. One might let the assistant read and update issues in your project tracker, another might let it search your notes or query a database.</p>
+<p>Without MCP, the assistant can only work with what’s inside the workspace: its files, its terminal and the web. With MCP, it can work directly in the tools you already use.</p>
+<p>In settings you can add a server, switch it on or off, and see whether each one is connected and working.</p>
+<div class="rounded-lg border-l-2 border-emerald-500 bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"><p><strong>From chat:</strong> just ask, for example “Connect the GitHub MCP server” or “Turn off the calendar server.” The assistant sets it up and switches it on for you, and it shows up in settings like any other.</p></div>
 <ul>
 <li>Only connect services you trust, and check what access they get.</li>
-<li>Keep any credentials they need in <a href="#secrets">Secrets</a>.</li>
-<li>A recipe can walk you through the setup, though the service itself may need its own account or subscription.</li>
+<li>Keep any credentials they need in <a href="#secrets">Secrets</a>, never in the server settings or in chat.</li>
+<li>The service itself may need its own account or subscription.</li>
 </ul></section>
 <section id="secrets" class="scroll-mt-24 border-t border-zinc-200 pt-8 first:border-0 first:pt-0 dark:border-zinc-800"><h2 class="!mt-0">Secrets</h2><p class="!mt-2 text-sm !text-zinc-500">Find it in Workspace settings → Secrets</p>
 <p>Secrets store sensitive values like passwords and API keys. Give each one the exact name your app or recipe expects.</p>
@@ -120,23 +123,34 @@
 <p>A session is one conversation with the assistant. Start a new one for a separate piece of work, or reopen an old one to pick up where you left off.</p>
 <p>Because every session shares the workspace’s files, a change made in one can show up in another. Settings also control how long inactive sessions are kept.</p></section>
 <section id="firewall" class="scroll-mt-24 border-t border-zinc-200 pt-8 first:border-0 first:pt-0 dark:border-zinc-800"><h2 class="!mt-0">Firewall</h2><p class="!mt-2 text-sm !text-zinc-500">Find it in Workspace settings → Firewall</p>
-<p>The firewall decides which ports people outside the workspace can reach. Starting a server doesn’t make it public on its own.</p>
+<p>Your workspace is closed to the internet by default. The firewall decides which ports, if any, people outside it can reach. Starting a server, such as a website on port 80, doesn’t make it public on its own. It stays private until you open its port.</p>
+<p>Each rule opens one TCP port. You can also limit who can connect by filling in <strong>From</strong> with an IP address or range. Leave it empty and anyone on the internet can reach that port.</p>
+<div class="rounded-lg border-l-2 border-emerald-500 bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"><p><strong>From chat:</strong> ask things like “Make my page public” or “Close port 8080.” The assistant manages ports for you and always asks before opening one. This is on by default; switch off the permission on this screen if you’d rather handle ports yourself.</p></div>
 <ul>
-<li>An open TCP port with an empty <strong>From</strong> field is reachable by anyone on the internet.</li>
-<li>The demo page is served on port 80 over plain HTTP, which isn’t encrypted.</li>
-<li>Close ports you no longer need, and keep private tools and credentials off public pages.</li>
-</ul>
-<p>If you’d rather not do this by hand, turn on the permission on this screen and the assistant can manage ports for you from chat.</p></section>
+<li>The demo page is served on port 80 over plain HTTP, which isn’t encrypted. Don’t collect passwords or personal data on it.</li>
+<li>Close ports you no longer need.</li>
+<li>Keep private tools, admin panels and credentials off public ports.</li>
+</ul></section>
 <section id="instructions" class="scroll-mt-24 border-t border-zinc-200 pt-8 first:border-0 first:pt-0 dark:border-zinc-800"><h2 class="!mt-0">Instructions</h2><p class="!mt-2 text-sm !text-zinc-500">Find it in Workspace settings → Instructions</p>
-<p>Instructions are lasting notes the assistant reads in every conversation in a workspace: your writing style, how an app should be run, anything you’d otherwise repeat. You can edit them yourself or ask the assistant to keep them up to date.</p>
-<p>They shape how the assistant behaves, so never put passwords or API keys in them. You don’t need any to build the demo page.</p></section>
+<p>Instructions are lasting notes the assistant reads at the start of every conversation in a workspace. Think of them as a short briefing you’d give a new teammate: how you like things done, and what they need to know about your project.</p>
+<p>Good things to keep here:</p>
+<ul>
+<li>Your preferences, like “Write in British English” or “Keep replies short.”</li>
+<li>How your app works: where it lives, how to start it, how to deploy a change.</li>
+<li>Decisions you’ve made, so you don’t have to explain them again in each session.</li>
+</ul>
+<div class="rounded-lg border-l-2 border-emerald-500 bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"><p><strong>From chat:</strong> say “Remember that…” or “Add to the instructions that we deploy with ./deploy.sh.” The assistant updates them and you can review the result in settings at any time.</p></div>
+<p>Instructions shape how the assistant behaves, so never put passwords or API keys in them. They’re optional, and you don’t need any to build the demo page.</p></section>
 <section id="tasks" class="scroll-mt-24 border-t border-zinc-200 pt-8 first:border-0 first:pt-0 dark:border-zinc-800"><h2 class="!mt-0">Tasks</h2><p class="!mt-2 text-sm !text-zinc-500">Find it in Workspace settings → Tasks</p>
-<p>Tasks let the assistant do something later, or on a schedule, while the workspace is running. Just ask in chat:</p>
+<p>Tasks let the assistant work without you. A task is a prompt plus a time: run it once later, or repeat it on a schedule. Each run starts its own session, so you can open it afterwards and see exactly what the assistant did.</p>
+<p>Use tasks for things you’d otherwise have to remember: checking that your site is up, collecting the day’s news on a topic, cleaning up old files, or sending yourself a weekly report.</p>
+<div class="rounded-lg border-l-2 border-emerald-500 bg-emerald-50 px-4 py-3 dark:bg-emerald-950/30"><p><strong>From chat:</strong> this is the easiest way to create one. Ask for what you want and when:</p></div>
 <ul>
 <li>“In 30 minutes, check my page.”</li>
 <li>“Every weekday at 9 am, write me a summary.”</li>
+<li>“Stop the daily summary task.”</li>
 </ul>
-<p>You can review, edit or delete each task’s prompt and schedule in settings, and each run shows up in Sessions. Runs spend your AI connector’s budget, and tasks are deleted along with their workspace.</p></section>
+<p>In settings you can review, edit or delete each task’s prompt and schedule. Tasks only run while the workspace is running, each run spends your AI connector’s budget, and tasks are deleted along with their workspace.</p></section>
             </article>
           </div>
         </div>
