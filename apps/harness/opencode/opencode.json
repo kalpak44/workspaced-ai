@@ -4,7 +4,7 @@
     { "action": "provider.use", "resource": "*", "effect": "deny" },
     { "action": "provider.use", "resource": "openrouter", "effect": "allow" }
   ],
-  "model": "openrouter/anthropic/claude-sonnet-5.5",
+  "model": "openrouter/deepseek/deepseek-v4.1-flash",
   "agents": {
     "title": {
       "model": "openrouter/anthropic/claude-haiku-5.5"

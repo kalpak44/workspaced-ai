@@ -7,7 +7,7 @@ import java.util.List;
 public record ModelCatalogue(
     @Schema(
             description =
-                "What the agent uses when the workspace names no model: the cheapest paid one at"
-                    + " the provider's live prices")
+                "What the agent uses when the workspace names no model: the one the harness's"
+                    + " configuration names")
         String defaultModel,
     List<ModelOption> models) {}

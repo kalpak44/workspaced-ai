@@ -27,13 +27,13 @@ class ModelCataloguesTest {
   }
 
   @Test
-  void defaultsToTheCheapestPaidModelAtLivePrices() {
+  void pricesTheCatalogueAtLivePricesAndKeepsTheHarnessDefault() {
     var catalogue =
         new ModelCatalogues(harness, new FakeOpenRouterPricing()).of(null, "openrouter");
-    assertThat(catalogue.defaultModel()).isEqualTo("anthropic/claude-sonnet-5.5");
+    assertThat(catalogue.defaultModel()).isEqualTo("anthropic/claude-haiku-5.5");
     assertThat(catalogue.models().get(1))
         .isEqualTo(new ModelOption("anthropic/claude-sonnet-5.5", "Sonnet", 1L, 0.5, 2.0));
-    // OpenRouter does not price it, so the bundled price stays and it cannot be the default.
+    // OpenRouter does not price it, so the bundled price stays.
     assertThat(catalogue.models().get(3).inputCost()).isEqualTo(0.01);
   }
 

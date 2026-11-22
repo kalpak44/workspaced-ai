@@ -2,14 +2,12 @@ package io.github.kalpak44.workspacedai.api.harness;
 
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.provider.OpenRouterPricing;
-import java.util.Comparator;
 import java.util.List;
 import org.springframework.stereotype.Component;
 
 /**
  * The harness's catalogue, priced by the provider itself rather than by the copy OpenCode ships
- * with. A workspace that names no model gets the cheapest paid one: free models are rate limited
- * too tightly to drive an agent.
+ * with. A workspace that names no model gets the one the harness's configuration names.
  */
 @Component
 public class ModelCatalogues {
@@ -45,12 +43,6 @@ public class ModelCatalogues {
                           price.outputCost());
                 })
             .toList();
-    var cheapest =
-        models.stream()
-            .filter(m -> prices.containsKey(m.id()) && m.inputCost() > 0 && m.outputCost() > 0)
-            .min(Comparator.comparingDouble(m -> m.inputCost() + m.outputCost()))
-            .map(ModelOption::id)
-            .orElse(catalogue.defaultModel());
-    return new ModelCatalogue(cheapest, models);
+    return new ModelCatalogue(catalogue.defaultModel(), models);
   }
 }
