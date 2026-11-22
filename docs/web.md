@@ -109,11 +109,16 @@ type an example, edit it, and continue. User-written values are preserved; simul
 stops if they edit the field, leave the screen or skip. Reduced-motion preferences disable the
 typing animation. Guide chrome and app dialogs resize together on mobile and desktop.
 
-Only OpenRouter authentication and trial machine selection are custom. The real New workspace
-name form hands off to OpenRouter, followed by the cheapest available VM. Other sizes are
+Only Trial connector confirmation and trial machine selection are custom. The real New workspace
+name form hands off to the account’s protected Trial connector and AI-provider acknowledgement,
+followed by the cheapest available VM. The server resolves the saved connector; the browser never
+receives its key. Other sizes are
 visible but disabled. The server selects the cheapest available size again at launch. A required
 checkbox acknowledges permanent deletion after four hours and no production use. The VM is
-free; OpenRouter bills the user's own account for AI usage. There is no automatic paid upgrade.
+free; Workspaced funds a $1 lifetime AI budget on one trial key per account. There is no automatic
+refill or paid upgrade. The deletion banner also shows the remaining trial budget, refreshed from
+OpenRouter every 30 seconds: green above 50%, orange above 20% through 50%, red at 20% or below.
+Unavailable usage is shown as unavailable, never as a full budget.
 
 Everything after that uses the ordinary app controls: Store, Private, New recipe, Public,
 WordPress recipe card, Apply, workspace picker, conversation, Settings, Secrets, restart

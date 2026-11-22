@@ -15,6 +15,7 @@ import {
   type Workspace,
   type WorkspaceStatus,
 } from "../api/workspacesApi";
+import { WORKSPACE_SETTINGS_CHANGED } from "../lib/workspaceChanges";
 import { BROWSER_TIME_ZONE } from "../lib/timeZones";
 
 export type { NewWorkspace, Workspace, WorkspaceStatus } from "../api/workspacesApi";
@@ -77,6 +78,13 @@ export function useWorkspaces() {
     return () => {
       active = false;
     };
+  }, []);
+
+  useEffect(() => {
+    let active = true;
+    const refresh = () => { void listWorkspaces().then(list => { if (active) setWorkspaces(list); }).catch(() => { if (active) setError("Could not refresh workspace settings"); }); };
+    globalThis.addEventListener(WORKSPACE_SETTINGS_CHANGED, refresh);
+    return () => { active = false; globalThis.removeEventListener(WORKSPACE_SETTINGS_CHANGED, refresh); };
   }, []);
 
   // Pushed rather than polled. EventSource reconnects by itself, and every connection
@@ -143,8 +151,8 @@ export function useWorkspaces() {
     );
 
   /** Gives a draft its key and VM; it then joins the list as {@link create} would add it. */
-  const launch = (id: string, apiKey: string, onCreated?: (workspace: Workspace) => void): Promise<CreateResult> =>
-    launchWorkspace(id, apiKey.trim()).then((created) => added(created, onCreated), refusal);
+  const launch = (id: string, apiKey: string, onCreated?: (workspace: Workspace) => void, connectorId?: string): Promise<CreateResult> =>
+    launchWorkspace(id, apiKey.trim(), connectorId).then((created) => added(created, onCreated), refusal);
 
   // Best effort: the API deletes a draft nobody launched on its own after a while.
   const discardDraft = (id: string) => {

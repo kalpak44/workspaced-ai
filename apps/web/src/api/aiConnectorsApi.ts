@@ -1,6 +1,6 @@
 import { send } from "./http";
 import { workspaceUrl } from "./workspacesApi";
-export interface AiConnector { readonly id: string; readonly name: string; readonly provider: string }
+export interface AiConnector { readonly id: string; readonly name: string; readonly provider: string; readonly trial?: boolean }
 const BASE = "/api/v1/ai-connectors";
 export async function listAiConnectors(): Promise<AiConnector[]> { return (await send(BASE)).json(); }
 export async function createAiConnector(name: string, provider: string, apiKey: string, providerNoticeAccepted: boolean): Promise<AiConnector> {
@@ -32,4 +32,8 @@ export interface ConnectorMetrics {
 }
 export async function readConnectorMetrics(id: string, signal?: AbortSignal): Promise<ConnectorMetrics> {
   return (await send(`${BASE}/${encodeURIComponent(id)}/metrics`, { signal })).json();
+}
+
+export async function acknowledgeConnector(id: string): Promise<void> {
+  await send(`${BASE}/${encodeURIComponent(id)}/acknowledgement`, { method: "POST", body: JSON.stringify({ accepted: true }) });
 }

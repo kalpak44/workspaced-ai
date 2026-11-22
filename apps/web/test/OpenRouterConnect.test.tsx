@@ -75,6 +75,24 @@ async function openProviderStep() {
 }
 
 describe("Connect OpenRouter", () => {
+  it("defaults to the protected trial connector without sending its plaintext key", async () => {
+    api.connectors.push({ id: "trial-connector", name: "Trial", provider: "openrouter", trial: true });
+    const user = userEvent.setup();
+    render(<Dialog />);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await screen.findByRole("radio", { name: /cx23/ });
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "AI connector" })).toHaveValue("trial-connector"));
+    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+    expect(screen.queryByLabelText("OpenRouter API key")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+    await user.click(screen.getByRole("button", { name: "Create workspace" }));
+    await waitFor(() => expect(closed).toHaveBeenCalled());
+    const creation = api.fetchFn.mock.calls.find(([url, init]) => String(url).endsWith("/api/v1/workspaces") && init?.method === "POST");
+    expect(JSON.parse(String(creation?.[1]?.body))).toMatchObject({ connectorId: "trial-connector" });
+    expect(JSON.parse(String(creation?.[1]?.body))).not.toHaveProperty("apiKey");
+  });
+
   it("creates an account connector after acknowledgement with suggested limit and expiry", async () => {
     const user = userEvent.setup();
     render(<GeneralSettingsPage section="ai-connectors" />);

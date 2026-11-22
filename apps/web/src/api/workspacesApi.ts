@@ -80,8 +80,8 @@ export async function createDraftWorkspace(workspace: Omit<NewWorkspace, "apiKey
 }
 
 /** Creates a draft's VM with its key; a rejected key leaves it a draft to launch again. */
-export async function launchWorkspace(id: string, apiKey: string): Promise<Workspace> {
-  return (await send(`${workspaceUrl(id)}/launch`, { method: "POST", body: JSON.stringify({ apiKey }) })).json();
+export async function launchWorkspace(id: string, apiKey: string, connectorId?: string): Promise<Workspace> {
+  return (await send(`${workspaceUrl(id)}/launch`, { method: "POST", body: JSON.stringify(connectorId ? { connectorId } : { apiKey }) })).json();
 }
 
 export async function renameWorkspace(id: string, name: string): Promise<Workspace> {

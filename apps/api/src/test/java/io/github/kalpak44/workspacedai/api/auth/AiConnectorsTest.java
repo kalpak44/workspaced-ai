@@ -35,6 +35,7 @@ class AiConnectorsTest {
   @Autowired WorkspaceRepository workspaces;
   @Autowired UserRepository users;
   @Autowired JdbcTemplate jdbc;
+  @MockitoBean io.github.kalpak44.workspacedai.api.provider.OpenRouterManagement management;
   @MockitoBean ApiKeyCheck check;
   @MockitoBean OpenRouterMetrics metrics;
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean WorkspaceRuntime runtime;
@@ -92,6 +93,11 @@ class AiConnectorsTest {
 
   @Test
   void reusesConnectorAndKeepsWorkspaceWhenItIsDeleted() throws Exception {
+    when(management.configured()).thenReturn(true);
+    when(management.createTrial(any()))
+        .thenReturn(
+            new io.github.kalpak44.workspacedai.api.provider.OpenRouterManagement.IssuedKey(
+                "trial-key", "trial-hash"));
     var id = create();
     var created =
         send(
@@ -117,7 +123,8 @@ class AiConnectorsTest {
         .isTrue();
     assertThat(send("DELETE", "/ai-connectors/" + id, null, TestUsers.bearer(port)).statusCode())
         .isEqualTo(204);
-    assertThat(send("GET", path, null, TestUsers.bearer(port)).statusCode()).isEqualTo(204);
+    assertThat(send("GET", path, null, TestUsers.bearer(port)).statusCode()).isEqualTo(200);
+    assertThat(send("GET", path, null, TestUsers.bearer(port)).body()).contains("\"trial\":true");
     assertThat(workspaces.existsById(UUID.fromString(workspaceId))).isTrue();
     verify(runtime).replaceProviderKey(UUID.fromString(workspaceId), "private-key");
     verify(runtime, never()).putSecret(any(), any(), any());
@@ -210,6 +217,37 @@ class AiConnectorsTest {
         .isEqualByComparingTo("2.5");
     assertThat(response.body()).doesNotContain("private-key", "encryptedKey");
     verify(metrics).read("private-key");
+  }
+
+  @Test
+  void launchesADraftWithTheOwnersSavedTrialConnectorWithoutSendingItsKey() throws Exception {
+    when(management.configured()).thenReturn(true);
+    when(management.createTrial(any()))
+        .thenReturn(
+            new io.github.kalpak44.workspacedai.api.provider.OpenRouterManagement.IssuedKey(
+                "trial-key", "trial-hash"));
+    var listed = send("GET", "/ai-connectors", null, TestUsers.bearer(port));
+    var trialId = json.readTree(listed.body()).get(0).get("id").asString();
+    assertThat(
+            send("DELETE", "/ai-connectors/" + trialId, null, TestUsers.bearer(port)).statusCode())
+        .isEqualTo(409);
+    var draft =
+        send(
+            "POST",
+            "/workspaces",
+            "{\"name\":\"Draft\",\"modelProvider\":\"openrouter\"}",
+            TestUsers.bearer(port));
+    var workspaceId = json.readTree(draft.body()).get("id").asString();
+    var launched =
+        send(
+            "POST",
+            "/workspaces/" + workspaceId + "/launch",
+            "{\"connectorId\":\"" + trialId + "\"}",
+            TestUsers.bearer(port));
+    assertThat(launched.statusCode()).isEqualTo(200);
+    assertThat(launched.body()).doesNotContain("trial-key");
+    assertThat(workspaces.findById(UUID.fromString(workspaceId)).orElseThrow().getAiConnectorId())
+        .isEqualTo(UUID.fromString(trialId));
   }
 
   String create() throws Exception {

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { createAiConnector, deleteAiConnector, listAiConnectors, type AiConnector } from "../api/aiConnectorsApi";
+import { acknowledgeConnector, createAiConnector, deleteAiConnector, listAiConnectors, type AiConnector } from "../api/aiConnectorsApi";
+import { WORKSPACE_SETTINGS_CHANGED } from "../lib/workspaceChanges";
 import { ApiError } from "../api/http";
 
 export const isRejectedConnectorKey = (cause: unknown) => cause instanceof ApiError && cause.status === 422;
@@ -23,6 +24,7 @@ export function useAiConnectors() {
   const remove = async (id: string) => {
     await deleteAiConnector(id);
     setConnectors(current => current.filter(connector => connector.id !== id));
+    globalThis.dispatchEvent(new Event(WORKSPACE_SETTINGS_CHANGED));
   };
-  return { connectors, add, remove, loading, error };
+  return { connectors, add, remove, acknowledge: acknowledgeConnector, loading, error };
 }

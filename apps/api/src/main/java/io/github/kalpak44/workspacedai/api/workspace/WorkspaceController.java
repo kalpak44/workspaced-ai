@@ -83,10 +83,16 @@ public class WorkspaceController implements WorkspaceApi {
 
   @Override
   public ResponseEntity<Workspace> launch(UUID id, LaunchWorkspaceRequest request) {
-    return service
-        .launch(id, request.trimmedApiKey())
-        .map(ResponseEntity::ok)
-        .orElseThrow(() -> notFound(id));
+    if ((request.apiKey() == null) == (request.connectorId() == null))
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "Choose a connector or supply an API key");
+    var key =
+        request.connectorId() == null
+            ? request.trimmedApiKey()
+            : connectors.keyForWorkspace(request.connectorId(), id);
+    var launched = service.launch(id, key).orElseThrow(() -> notFound(id));
+    if (request.connectorId() != null) connectors.remember(id, request.connectorId());
+    return ResponseEntity.ok(launched);
   }
 
   @Override

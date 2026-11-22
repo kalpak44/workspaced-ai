@@ -14,6 +14,8 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface WorkspaceRepository extends JpaRepository<WorkspaceEntity, UUID> {
 
+  List<WorkspaceEntity> findAllByOwnerIdAndAiConnectorId(UUID ownerId, UUID connectorId);
+
   @Query("select w.id from WorkspaceEntity w")
   List<UUID> findAllIds();
 

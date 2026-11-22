@@ -110,7 +110,7 @@ export function installFakeApi(
   ],
 ) {
   const rows = [...initial];
-  const connectors: { id: string; name: string; provider: string }[] = [];
+  const connectors: { id: string; name: string; provider: string; trial?: boolean }[] = [];
   const connectorKeys = new Map<string, string>();
   const workspaceConnectors = new Map<string, string>();
   // Created without a key: unlisted until launched, as the API keeps them.
@@ -164,6 +164,7 @@ export function installFakeApi(
     nextId: 1,
     createStatus: "READY" as WorkspaceStatus,
     // When set, POST or DELETE waits on it, so a test can look at the UI mid-request.
+    trialRemaining: 1 as number | null,
     holdCreate: null as Promise<void> | null,
     holdDelete: null as Promise<void> | null,
     holdRestart: null as Promise<void> | null,
@@ -468,9 +469,12 @@ export function installFakeApi(
     if (state.fail) {
       return new Response(null, { status: state.fail });
     }
+    const noticeRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/acknowledgement$/.exec(url);
+    if (noticeRoute) return new Response(null, { status: connectors.some(connector => connector.id === noticeRoute[1]) ? 204 : 404 });
     const connectorMetricsRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/metrics$/.exec(url);
     if (connectorMetricsRoute) {
       if (!connectors.some(connector => connector.id === connectorMetricsRoute[1])) return json({}, 404);
+      if (connectors.find(connector => connector.id === connectorMetricsRoute[1])?.trial) return json({ usage: state.trialRemaining === null ? null : 1 - state.trialRemaining, usageDaily: 0, usageWeekly: 0, usageMonthly: 0, limit: 1, limitRemaining: state.trialRemaining, limitReset: null, expiresAt: null, includeByokInLimit: true, byokUsage: 0, freeTier: false, freeRequestsLimit: null, freeRequestsRemaining: null });
       return json({ usage: connectorMetricsRoute[1] === "connector-2" ? 7 : 2.5, usageDaily: 0.5, usageWeekly: 1.5, usageMonthly: 2.5, limit: 10, limitRemaining: 7.5, limitReset: "monthly", expiresAt: null, includeByokInLimit: false, byokUsage: 0, freeTier: false, freeRequestsLimit: 50, freeRequestsRemaining: 40 });
     }
     const connectorRoute = /\/api\/v1\/ai-connectors(?:\/([^/]+))?$/.exec(url);
@@ -486,6 +490,11 @@ export function installFakeApi(
       if (init?.method === "DELETE") {
         const index = connectors.findIndex(c => c.id === connectorRoute[1]);
         if (index < 0) return json({}, 404);
+        if (connectors[index].trial) return json({}, 409);
+        const trial = connectors.find(connector => connector.trial);
+        const affected = [...workspaceConnectors].filter(([, connectorId]) => connectorId === connectorRoute[1]);
+        if (affected.length && !trial) return json({}, 503);
+        for (const [workspaceId] of affected) { workspaceConnectors.set(workspaceId, trial!.id); markRestartRequired(workspaceId, true); }
         connectors.splice(index, 1); return new Response(null, { status: 204 });
       }
       return json(connectors);
@@ -708,7 +717,9 @@ export function installFakeApi(
     if (launchRoute) {
       const draft = drafts.get(launchRoute[1]);
       if (!draft) return json({}, 404);
-      const { apiKey } = JSON.parse(String(init!.body)) as { apiKey: string };
+      const input = JSON.parse(String(init!.body)) as { apiKey?: string; connectorId?: string };
+      const apiKey = input.connectorId ? (connectorKeys.get(input.connectorId) ?? "trial-key") : input.apiKey!;
+      if (input.connectorId) workspaceConnectors.set(draft.id, input.connectorId);
       if (apiKey === REJECTED_KEY) return json({ status: 422 }, 422);
       drafts.delete(draft.id);
       launched.push({ id: draft.id, apiKey });

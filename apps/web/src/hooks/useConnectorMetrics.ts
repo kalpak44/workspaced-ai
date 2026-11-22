@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { readConnectorMetrics, type ConnectorMetrics } from "../api/aiConnectorsApi";
 import { ApiError } from "../api/http";
-export function useConnectorMetrics(id: string) {
+export function useConnectorMetrics(id: string, refreshEveryMs?: number) {
   const [snapshot, setSnapshot] = useState<{ id: string; metrics: ConnectorMetrics; at: Date } | null>(null);
   const [failure, setFailure] = useState<{ id: string; message: string } | null>(null);
   const [pendingId, setPendingId] = useState("");
@@ -23,6 +23,11 @@ export function useConnectorMetrics(id: string) {
     }).finally(() => { if (!abort.signal.aborted) setPendingId(""); });
     return () => abort.abort();
   }, [id, revision]);
+  useEffect(() => {
+    if (!id || !refreshEveryMs) return;
+    const interval = setInterval(() => setRevision(value => value + 1), refreshEveryMs);
+    return () => clearInterval(interval);
+  }, [id, refreshEveryMs]);
   return { metrics: snapshot?.id === id ? snapshot.metrics : null, updatedAt: snapshot?.id === id ? snapshot.at : null,
     error: failure?.id === id ? failure.message : "", loading: !!id && pendingId === id, refresh: () => setRevision(value => value + 1) };
 }

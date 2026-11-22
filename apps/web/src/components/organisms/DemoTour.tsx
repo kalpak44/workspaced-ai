@@ -1,6 +1,8 @@
 import { ArrowRight, Check, Sparkles } from "lucide-react";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { finishTour, isTrialReady, loadTrialMachines, loadTrialSecretNames, trialPortIsOpen, type VmSize } from "../../hooks/useDemoTour";
+import { useAiConnectors } from "../../hooks/useAiConnectors";
+import { AiProviderNotice } from "../molecules/AiProviderNotice";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import type { CreateResult, DraftResult, NewWorkspace, Workspace } from "../../hooks/useWorkspaces";
 import {
@@ -16,7 +18,7 @@ interface Props {
   readonly workspaces: readonly Workspace[];
   readonly loading: boolean;
   readonly onDraft: (workspace: Omit<NewWorkspace, "apiKey">) => Promise<DraftResult>;
-  readonly onLaunch: (id: string, apiKey: string) => Promise<CreateResult>;
+  readonly onLaunch: (id: string, apiKey: string, connectorId?: string) => Promise<CreateResult>;
   readonly onExit?: () => void;
 }
 const SECRET_USER = "WORDPRESS_ADMIN_USER";
@@ -49,7 +51,7 @@ export function DemoTour(props: Props) {
   </>;
 }
 
-function Tour({ workspaces, loading, onLaunch, onExit, progress, onComplete }: Props & { readonly progress: TourProgress; readonly onComplete: () => void }) {
+function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComplete }: Props & { readonly progress: TourProgress; readonly onComplete: () => void }) {
   const { step, workspaceId, sessionId } = progress;
   const route = useRoute();
   const demo = workspaces.find((workspace) => workspace.id === workspaceId);
@@ -63,7 +65,9 @@ function Tour({ workspaces, loading, onLaunch, onExit, progress, onComplete }: P
   const [consent, setConsent] = useState(false);
   const [ready, setReady] = useState(false);
   const [checking, setChecking] = useState(false);
-  const key = useRef<string | null>(null);
+  const connectors = useAiConnectors();
+  const trial = connectors.connectors.find(connector => connector.trial);
+  const [accepted, setAccepted] = useState(false);
   const draft = useRef(progress.draftId);
   const active = useRef(true);
   const typing = useRef<AbortController | null>(null);
@@ -183,16 +187,31 @@ function Tour({ workspaces, loading, onLaunch, onExit, progress, onComplete }: P
     return () => { live = false; };
   }, [step, workspaceId]);
 
+  const prepareTrial = async () => {
+    if (!trial || !accepted) return;
+    setWorking(true);
+    try {
+      await connectors.acknowledge(trial.id);
+      if (!draft.current) {
+        const result = await onDraft({ name: progress.name ?? TOUR_WORKSPACE_NAME, serverType: "", modelProvider: "openrouter", demo: true });
+        if (typeof result !== "object") { setProblem("The free trial could not be prepared. It may be unavailable or already used by this account."); return; }
+        draft.current = result.id;
+      }
+      go(S.MACHINE, { draftId: draft.current });
+    } catch { setProblem("Could not prepare your trial connector. Please try again."); }
+    finally { setWorking(false); }
+  };
+
   const loadSizes = () => void loadTrialMachines().then(setSizes).catch(() => setProblem("Could not load machines. Click Refresh machines to retry."));
   useEffect(() => { if (step === S.MACHINE) loadSizes(); }, [step]);
   const launch = async () => {
-    if (!key.current || !draft.current) { go(S.OPENROUTER); return; }
+    if (!trial || !draft.current) { go(S.OPENROUTER); return; }
     if (!consent || !cheapest) return;
     setWorking(true);
     try {
-      const result = await onLaunch(draft.current, key.current);
-      if (result === "created") { key.current = null; go(S.STARTING, { workspaceId: draft.current }); navigate({ name: "workspace", workspaceId: draft.current }); }
-      else if (result === "rejected") { key.current = null; go(S.OPENROUTER); setProblem("OpenRouter refused the connection. Check your credit and reconnect."); }
+      const result = await onLaunch(draft.current, "", trial.id);
+      if (result === "created") { go(S.STARTING, { workspaceId: draft.current }); navigate({ name: "workspace", workspaceId: draft.current }); }
+      else if (result === "rejected") { go(S.OPENROUTER); setProblem("The trial key is unavailable. Check your Trial connector in General settings."); }
       else { loadSizes(); setProblem("The trial could not start. Refresh machines and try again. No paid workspace is created."); }
     } catch { setProblem("Could not start the trial. Try again."); }
     finally { setWorking(false); }
@@ -285,13 +304,13 @@ function Tour({ workspaces, loading, onLaunch, onExit, progress, onComplete }: P
   let card: Card;
   switch (step) {
     case S.WELCOME: card = { title: "Your own workspace, step by step", target: '[data-tour="new-workspace"]',
-      body: <>A workspace is your own computer in the cloud. It keeps running your apps and scheduled tasks when you close the browser. Your AI assistant can install software, change files and fix problems there: describe what you want in chat, without needing to know the commands. Just click <strong>Next</strong> to demonstrate each step, or use the highlighted controls yourself. We will build a WordPress blog on a free four-hour machine; a trial token will provide $1 of AI usage once token provisioning is available.</>, next: () => click('[data-tour="new-workspace"]') }; break;
+      body: <>A workspace is your own computer in the cloud. It keeps running your apps and scheduled tasks when you close the browser. Your AI assistant can install software, change files and fix problems there: describe what you want in chat, without needing to know the commands. Just click <strong>Next</strong> to demonstrate each step, or use the highlighted controls yourself. We will build a WordPress blog on a free four-hour machine; your personal Trial connector provides up to $1 of AI usage, with no automatic refill.</>, next: () => click('[data-tour="new-workspace"]') }; break;
     case S.NAME: card = { title: "Give your workspace a name", target: "#workspace-name",
       body: <>Type your own name for the project, or click Next and watch us enter <strong>{TOUR_WORKSPACE_NAME}</strong>. You can edit the example before continuing with the real form's Next button.</>, next: () => fillThenSubmit("#workspace-name", TOUR_WORKSPACE_NAME, '[data-tour="workspace-name-form"] button[type="submit"]') }; break;
     case S.OPENROUTER: card = { title: "Your trial AI token",
-      body: <>Each new account will receive a trial AI token with $1 for the tour. Token provisioning is not available yet, so the tour pauses here for now.</>, disabled: true, next: () => {} }; break;
+      body: <>Your account has its own Trial connector with a $1 lifetime AI budget. It is your protected default and cannot be deleted. Review the AI-provider notice before continuing.</>, disabled: !trial || !accepted || connectors.loading, next: prepareTrial }; break;
     case S.MACHINE: card = { title: "Choose the machine for this trial",
-      body: <>Your workspace runs on a computer in the cloud, called a virtual machine (VM). You use it from your browser, and it can keep working when your own computer is off. Its size determines how much it can do: CPU provides processing power, memory (RAM) gives your apps room to run together, and disk is the space for your files. For this free trial, we have selected the lowest-cost available size. The other sizes are shown for comparison. To continue after the trial, create a separate paid workspace.</>, disabled: !!key.current && (!consent || !cheapest), label: key.current ? "Create free workspace" : "Reconnect OpenRouter", next: launch }; break;
+      body: <>Your workspace runs on a computer in the cloud, called a virtual machine (VM). You use it from your browser, and it can keep working when your own computer is off. Its size determines how much it can do: CPU provides processing power, memory (RAM) gives your apps room to run together, and disk is the space for your files. For this free trial, we have selected the lowest-cost available size. The other sizes are shown for comparison. To continue after the trial, create a separate paid workspace.</>, disabled: !trial || !consent || !cheapest, label: "Create free workspace", next: launch }; break;
     case S.STARTING: card = { title: "Your workspace is starting", target: '[data-tour="demo-banner"]', body: <>We are switching on your cloud computer and getting your assistant ready. This usually takes 30–60 seconds, sometimes a little longer. There is nothing you need to do while you wait. Next becomes available when your workspace is ready. The banner shows exactly when your free trial ends and the workspace will be deleted.</>, waiting: demo?.status === "READY" ? undefined : "Preparing the workspace…", next: () => go(S.STORE) }; break;
     case S.STORE: card = { title: "Open the real recipe Store", target: '[data-tour="open-store"]', body: <>A recipe is a reusable set of instructions for the assistant, such as installing a blog or connecting a domain. It saves you explaining the same setup from scratch. Recipes can contain any instructions, including running software, changing files or connecting accounts. Read the full recipe and check who published it before applying. Only apply it if you understand and trust what it asks the assistant to do. Open Store in the top bar; Next clicks that same link.</>, next: () => click('[data-tour="open-store"]') }; break;
     case S.PRIVATE: card = { title: "Recipes can belong just to you", target: '[role="tab"][data-tab="private"]', body: <>Select Private to see recipes only you can use. You can keep your own setup instructions here and reuse them in another workspace.</>, next: () => click('[role="tab"][data-tab="private"]') }; break;
@@ -335,7 +354,7 @@ function Tour({ workspaces, loading, onLaunch, onExit, progress, onComplete }: P
   }
 
   const custom = step === S.OPENROUTER || step === S.MACHINE;
-  const customContent = step === S.OPENROUTER ? <div className="space-y-5"><h2 className="text-xl font-semibold">Trial AI connector</h2><label className="block text-sm font-medium">AI connector<select aria-label="Trial AI connector" value="trial" onChange={() => {}} className="mt-2 block w-full rounded-lg border border-zinc-300 bg-transparent p-3 dark:border-zinc-700"><option value="trial">TRIAL token — $1</option></select></label><p role="status" className="text-sm text-zinc-500">Preview only. Trial tokens are not issued yet.</p></div> : <div className="space-y-4"><h2 className="text-xl font-semibold">{progress.name ?? TOUR_WORKSPACE_NAME}</h2><fieldset className="space-y-2"><legend className="mb-2 text-sm font-medium">Trial machine</legend>{sizes?.map((size) => <label key={size.serverType} className={`flex items-start gap-3 rounded-lg border p-3 ${size.serverType === cheapest?.serverType ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "border-zinc-200 opacity-60 dark:border-zinc-700"}`}><input type="radio" name="trial-machine" aria-label={size.serverType} checked={size.serverType === cheapest?.serverType} disabled={size.serverType !== cheapest?.serverType} readOnly className="mt-1 accent-amber-600" /><span className="min-w-0 break-words text-sm"><strong>{size.serverType}</strong> · {size.cores} CPUs · {size.memoryGb} GB RAM · {size.diskGb} GB disk<span className="block text-xs">{size.serverType === cheapest?.serverType ? "Selected · free for four hours" : size.available ? "Unavailable in this free trial" : "Unavailable from the provider"}</span></span></label>)}</fieldset><Button label="Refresh machines" variant="secondary" onClick={loadSizes} /><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm leading-6 dark:border-amber-800 dark:bg-amber-950/30"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 size-5 shrink-0 accent-amber-600" /><span>I understand this workspace, its website, files, sessions, secrets and scheduled tasks will be <strong>permanently deleted after four hours</strong>. I will not use it for production or anything I need to keep.</span></label>{!sizes && <Spinner label="Loading machines" />}{sizes && !cheapest && <p role="status">No trial machine is available. Refresh to check again.</p>}</div>;
+  const customContent = step === S.OPENROUTER ? <div className="space-y-5"><h2 className="text-xl font-semibold">Trial AI connector</h2><label className="block text-sm font-medium">AI connector<select aria-label="Trial AI connector" value={trial?.id ?? ""} disabled className="mt-2 block w-full rounded-lg border border-zinc-300 bg-transparent p-3 dark:border-zinc-700"><option value={trial?.id ?? ""}>{trial ? "Trial — $1 lifetime" : connectors.loading ? "Preparing your Trial connector…" : "Trial connector unavailable"}</option></select></label>{!trial && !connectors.loading && <p role="status" className="text-sm text-zinc-500">Your trial AI key is not available yet. Refresh this page to retry. You can also manage your own connectors in General settings.</p>}{connectors.error && <p role="alert" className="text-sm text-rose-600">{connectors.error}</p>}<AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={!trial || working} /></div> : <div className="space-y-4"><h2 className="text-xl font-semibold">{progress.name ?? TOUR_WORKSPACE_NAME}</h2><fieldset className="space-y-2"><legend className="mb-2 text-sm font-medium">Trial machine</legend>{sizes?.map((size) => <label key={size.serverType} className={`flex items-start gap-3 rounded-lg border p-3 ${size.serverType === cheapest?.serverType ? "border-amber-400 bg-amber-50 dark:bg-amber-950/30" : "border-zinc-200 opacity-60 dark:border-zinc-700"}`}><input type="radio" name="trial-machine" aria-label={size.serverType} checked={size.serverType === cheapest?.serverType} disabled={size.serverType !== cheapest?.serverType} readOnly className="mt-1 accent-amber-600" /><span className="min-w-0 break-words text-sm"><strong>{size.serverType}</strong> · {size.cores} CPUs · {size.memoryGb} GB RAM · {size.diskGb} GB disk<span className="block text-xs">{size.serverType === cheapest?.serverType ? "Selected · free for four hours" : size.available ? "Unavailable in this free trial" : "Unavailable from the provider"}</span></span></label>)}</fieldset><Button label="Refresh machines" variant="secondary" onClick={loadSizes} /><label className="flex cursor-pointer items-start gap-3 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm leading-6 dark:border-amber-800 dark:bg-amber-950/30"><input type="checkbox" checked={consent} onChange={(event) => setConsent(event.target.checked)} className="mt-1 size-5 shrink-0 accent-amber-600" /><span>I understand this workspace, its website, files, sessions, secrets and scheduled tasks will be <strong>permanently deleted after four hours</strong>. I will not use it for production or anything I need to keep.</span></label>{!sizes && <Spinner label="Loading machines" />}{sizes && !cheapest && <p role="status">No trial machine is available. Refresh to check again.</p>}</div>;
   const runNext = async () => {
     if (acting || working) return;
     setActing(true);

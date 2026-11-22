@@ -16,12 +16,14 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AiConnectorService {
-  public record Connector(UUID id, String name, String provider) {}
+  public record Connector(UUID id, String name, String provider, boolean trial) {}
 
   private final AiConnectorRepository repository;
   private final ApiKeyCheck check;
   private final SecretBox box;
   private final OpenRouterMetrics metrics;
+  private final TrialConnectors trials;
+  private final UserRepository users;
   private final WorkspaceRepository workspaces;
   private final WorkspaceRuntime runtime;
 
@@ -31,21 +33,27 @@ public class AiConnectorService {
       AuthProperties properties,
       WorkspaceRepository workspaces,
       WorkspaceRuntime runtime,
-      OpenRouterMetrics metrics) {
+      OpenRouterMetrics metrics,
+      TrialConnectors trials,
+      UserRepository users) {
     this.repository = repository;
     this.check = check;
     this.workspaces = workspaces;
     this.runtime = runtime;
     this.metrics = metrics;
+    this.trials = trials;
+    this.users = users;
     box = new SecretBox(properties.jwtSecret(), "workspaced-ai-connectors");
   }
 
   private Connector view(AiConnectorEntity row) {
-    return new Connector(row.getId(), row.getName(), row.getProvider());
+    return new Connector(row.getId(), row.getName(), row.getProvider(), row.isTrial());
   }
 
   public List<Connector> list() {
+    trials.tryEnsure(CurrentUser.id());
     return repository.findAllByOwnerIdOrderByNameAscIdAsc(CurrentUser.id()).stream()
+        .sorted(java.util.Comparator.comparing(AiConnectorEntity::isTrial).reversed())
         .map(this::view)
         .toList();
   }
@@ -77,6 +85,15 @@ public class AiConnectorService {
                     HttpStatus.CONFLICT, "Reconnect this AI connector before using it"));
   }
 
+  @Transactional
+  public void acknowledge(UUID id) {
+    owned(id).acknowledgeProviderNotice();
+  }
+
+  public String keyForWorkspace(UUID connectorId, UUID workspaceId) {
+    return key(connectorId, workspace(workspaceId).getModelProvider());
+  }
+
   public OpenRouterKeyMetrics metrics(UUID id) {
     var connector = owned(id);
     if (!connector.getProvider().equals(ModelProvider.OPENROUTER.id()))
@@ -85,10 +102,67 @@ public class AiConnectorService {
     return metrics.read(key(id, connector.getProvider()));
   }
 
+  /**
+   * Update affected VM secrets before removing the row. On failure keep the connector and restore
+   * changed VMs.
+   */
   @Transactional
   public void delete(UUID id) {
-    repository.delete(owned(id));
-    repository.flush();
+    // Provision before taking the user lock in this transaction, since ensure has its own
+    // transaction.
+    var row = owned(id);
+    if (row.isTrial())
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "The Trial connector cannot be deleted");
+    var affected = workspaces.findAllByOwnerIdAndAiConnectorId(CurrentUser.id(), id);
+    var trial =
+        affected.isEmpty()
+            ? null
+            : trials
+                .ensure(CurrentUser.id())
+                .orElseThrow(
+                    () ->
+                        new ResponseStatusException(
+                            HttpStatus.SERVICE_UNAVAILABLE,
+                            "Trial fallback is unavailable; the connector was not deleted"));
+    users.lockById(CurrentUser.id()).orElseThrow();
+    row = owned(id);
+    affected = workspaces.findAllByOwnerIdAndAiConnectorId(CurrentUser.id(), id);
+    var changed = new java.util.ArrayList<UUID>();
+    var previousKey = key(id, row.getProvider());
+    try {
+      for (var workspace : affected) {
+        if (trial == null || !trial.getProvider().equals(workspace.getModelProvider()))
+          throw new ResponseStatusException(
+              HttpStatus.CONFLICT, "No compatible trial fallback is available");
+        if (!workspace.isDraft()) {
+          runtime.replaceProviderKey(workspace.getId(), open(trial));
+          changed.add(workspace.getId());
+          workspace.setSecretsPendingRestart(true);
+        }
+        workspace.setAiConnectorId(trial.getId());
+      }
+      repository.delete(row);
+      repository.flush();
+    } catch (RuntimeException failure) {
+      for (var workspaceId : changed) {
+        try {
+          runtime.replaceProviderKey(workspaceId, previousKey);
+        } catch (RuntimeException restore) {
+          failure.addSuppressed(
+              new IllegalStateException("Could not restore workspace provider key"));
+        }
+      }
+      throw failure;
+    }
+  }
+
+  private String open(AiConnectorEntity row) {
+    return box.open(row.encryptedKey())
+        .orElseThrow(
+            () ->
+                new ResponseStatusException(
+                    HttpStatus.CONFLICT, "The connector key is unavailable"));
   }
 
   @Transactional(readOnly = true)
@@ -99,6 +173,7 @@ public class AiConnectorService {
 
   @Transactional
   public Connector select(UUID workspaceId, UUID connectorId) {
+    users.lockById(CurrentUser.id()).orElseThrow();
     var workspace = workspace(workspaceId);
     var key = key(connectorId, workspace.getModelProvider());
     validate(provider(workspace.getModelProvider()), key);
@@ -114,6 +189,7 @@ public class AiConnectorService {
 
   @Transactional
   public void remember(UUID workspaceId, UUID connectorId) {
+    users.lockById(CurrentUser.id()).orElseThrow();
     var workspace = workspace(workspaceId);
     key(connectorId, workspace.getModelProvider());
     workspace.setAiConnectorId(connectorId);

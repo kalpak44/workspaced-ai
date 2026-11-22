@@ -527,3 +527,39 @@ trial and sends one in-app notification, including its scheduled deletion time. 
 It returns 204 on success (also on retries), 409 for a non-trial, draft or expired trial, and 404
 for a missing workspace. Workspace ownership and CSRF protection apply as on other workspace
 mutations. A row lock and a per-account deduplication key prevent duplicate notifications.
+
+
+## Protected Trial AI connectors
+
+Configure `WORKSPACED_OPENROUTER_MANAGEMENT_KEY` on the **API backend only**, using a secret
+from your deployment secret store. It is an OpenRouter management key belonging to the platform's
+funded OpenRouter account, not an inference key or an Auth0 management token. Never give it to the
+web app, a workspace, or the VM manager. Unset configuration disables new trial-key issuance;
+existing trial keys remain usable. No key value is returned in connector responses.
+
+After a verified new account commits, the API issues its Trial connector through
+`POST https://openrouter.ai/api/v1/keys`, with `limit: 1`, `limit_reset: null`, and
+`include_byok_in_limit: true`. This is a **$1 lifetime spending cap per key**, not a recurring
+allowance and not a deposit of OpenRouter credits. The platform account must have credits.
+The issued inference key is encrypted at rest separately from the backend management credential.
+The provider key hash is retained for operational cleanup; no user route can reset, refill,
+regenerate or delete the protected key. Database uniqueness and a per-user row lock serialize
+signup and retry requests, so successful repeated sign-ins do not mint more grants.
+
+Signup still succeeds during provider outages. Listing connectors retries provisioning, including
+for existing accounts without a Trial connector. If database persistence fails after issuance,
+the backend attempts to revoke the orphaned key. An ambiguous provider timeout cannot safely
+recover the one-time plaintext; operators can identify orphaned grants by their deterministic
+`workspaced trial: <user UUID>` labels. Errors never echo credentials or provider response bodies.
+
+Connector metadata includes `trial: true` for the protected default, listed first.
+`DELETE /ai-connectors/{id}` returns 409 for it. Deleting a personal connector reassigns every
+workspace referencing it to the owner's Trial connector, updates the protected VM secret, and
+marks running workspaces as requiring restart. It does not delete the personal key in OpenRouter.
+If fallback provisioning or a VM update fails, deletion is refused; changes to already-updated VM
+secrets are restored on a best-effort basis. Exhausting Trial does not trigger another grant.
+
+Draft launch accepts exactly one of `apiKey` or `connectorId`; a saved connector is resolved only
+for its owner and must match the workspace's provider. The tour launches with the Trial connector
+ID. `POST /ai-connectors/{id}/acknowledgement` with `{"accepted":true}` records the provider notice
+before the tour or workspace creator uses the pre-provisioned key.

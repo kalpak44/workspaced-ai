@@ -8,7 +8,7 @@ const USD = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
 const money = (value: number | null) => value === null ? "—" : USD.format(value);
 
 /** OpenRouter reports aggregate spend, so these share Monitoring's tiles without inventing a timeline. */
-export function ConnectorUsage({ id, name }: { readonly id: string; readonly name: string }) {
+export function ConnectorUsage({ id, name, trial = false }: { readonly id: string; readonly name: string; readonly trial?: boolean }) {
   const { metrics, updatedAt, loading, error, refresh } = useConnectorMetrics(id);
   const tiles = metrics && [
     { label: "Total spend", icon: CreditCard, value: metrics.usage, detail: "OpenRouter credits · USD" },
@@ -52,10 +52,10 @@ export function ConnectorUsage({ id, name }: { readonly id: string; readonly nam
       </div>
       <p className="flex items-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400"><Activity aria-hidden className="size-3.5 shrink-0" />Usage periods follow UTC. {updatedAt && `Checked ${updatedAt.toLocaleTimeString()}.`} Refresh to check again.</p>
     </>}
-    <div className="card flex min-w-0 flex-col gap-3 p-4 sm:p-5">
+    {trial ? <div className="card space-y-2 p-4 sm:p-5"><h4 className="text-sm font-medium">Your Trial connector</h4><p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">Provided by Workspaced with a $1 lifetime budget. It is your default fallback, cannot be deleted, and does not reset or refill. When it runs out, add your own AI connector to continue.</p></div> : <div className="card flex min-w-0 flex-col gap-3 p-4 sm:p-5">
       <h4 className="text-sm font-medium">Manage in OpenRouter</h4>
       <p className="text-xs leading-5 text-zinc-500 dark:text-zinc-400">Change spending limits and expiry in OpenRouter. Existing-key changes require an OpenRouter management key and cannot be made with this connector. Request rate limits are controlled by OpenRouter and the model provider.</p>
       <div className="flex flex-wrap gap-x-5 gap-y-2 text-sm"><a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline underline-offset-4">Manage limits in OpenRouter<ExternalLink aria-hidden className="size-3" /></a><a href="https://openrouter.ai/activity" target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 underline underline-offset-4">Detailed activity<ExternalLink aria-hidden className="size-3" /></a></div>
-    </div>
+    </div>}
   </section>;
 }

@@ -11,6 +11,10 @@ import org.springframework.transaction.annotation.Transactional;
 
 public interface UserRepository extends JpaRepository<UserEntity, UUID> {
 
+  @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
+  @Query("select u from UserEntity u where u.id = :id")
+  Optional<UserEntity> lockById(@Param("id") UUID id);
+
   Optional<UserEntity> findByIdpSubject(String idpSubject);
 
   /**

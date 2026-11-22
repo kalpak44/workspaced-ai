@@ -87,3 +87,22 @@ it("uses separate System secrets and Secrets cards and shows the shared restart 
   await user.click(screen.getByRole("button", { name: "Restart workspace" }));
   expect(restart).toHaveBeenCalledOnce();
 });
+
+it("shows Trial as the protected default and removes personal connectors with fallback", async () => {
+  api.connectors.push({ id: "trial-key", name: "Trial", provider: "openrouter", trial: true }, { id: "personal", name: "Personal", provider: "openrouter" });
+  api.workspaceConnectors.set(api.rows[0].id, "personal");
+  const user = userEvent.setup();
+  render(<GeneralSettingsPage section="ai-connectors" />);
+  await screen.findByText("Default · $1 lifetime");
+  const defaultRow = screen.getByLabelText("Default Trial connector");
+  expect(defaultRow.compareDocumentPosition(screen.getByRole("button", { name: /^Personal/ })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Delete Trial" })).not.toBeInTheDocument();
+  await screen.findByRole("progressbar", { name: "Trial AI budget remaining" });
+  expect(screen.queryByRole("region", { name: "Usage for Trial" })).not.toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Delete Personal" }));
+  expect(screen.getByRole("dialog")).toHaveTextContent("Workspaces using this connector will switch to Trial and require a restart");
+  await user.click(screen.getByRole("button", { name: "Remove connector" }));
+  await waitFor(() => expect(api.connectors).toHaveLength(1));
+  expect(api.workspaceConnectors.get(api.rows[0].id)).toBe("trial-key");
+  expect(api.rows[0].restartRequired).toBe(true);
+});

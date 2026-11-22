@@ -6,13 +6,16 @@ import { useOpenRouterConnect } from "../../hooks/useOpenRouterConnect";
 import { Button, IconButton, Select, Spinner, TextField } from "../atoms";
 import { AiProviderNotice } from "../molecules/AiProviderNotice";
 import { Modal, ModalBody, ModalFooter } from "../molecules/Modal";
+import { TrialConnectorBudget } from "./TrialConnectorBudget";
 import { ConnectorUsage } from "./ConnectorUsage";
 
 export function AiConnectorsPanel() {
   const { connectors, add, remove: removeConnector, loading, error: loadError } = useAiConnectors();
   const { providers } = useModelProviders();
   const [selectedId, setSelectedId] = useState("");
-  const selected = connectors.find(connector => connector.id === selectedId) ?? connectors[0];
+  const trial = connectors.find(connector => connector.trial);
+  const personalConnectors = connectors.filter(connector => !connector.trial);
+  const selected = personalConnectors.find(connector => connector.id === selectedId) ?? personalConnectors[0];
   const [name, setName] = useState("");
   const [providerId, setProviderId] = useState("openrouter");
   const [key, setKey] = useState("");
@@ -43,7 +46,7 @@ export function AiConnectorsPanel() {
   const connecting = oauth.status === "waiting" || oauth.status === "exchanging";
   const remove = async (id: string) => {
     setRemoving(id); setError("");
-    try { await removeConnector(id); setDeleteId(null); setNotice("Connector removed from Workspaced. Its OpenRouter key has not been revoked."); }
+    try { await removeConnector(id); setDeleteId(null); setNotice("Connector removed from Workspaced. Affected workspaces now use Trial and need a restart. Your OpenRouter key has not been revoked."); }
     catch { setError("Could not delete the AI connector. Please try again."); }
     finally { setRemoving(null); }
   };
@@ -54,9 +57,10 @@ export function AiConnectorsPanel() {
         <h2 className="font-semibold">Your AI connectors</h2>
         <p className="mt-1 text-sm text-zinc-500">Named connections you can reuse across your workspaces. Select one to see its usage and limits. Keys are encrypted and never shown again.</p>
       </div>
+      {trial && <div aria-label="Default Trial connector" className="space-y-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800"><div className="flex items-center gap-2"><h3 className="font-medium">{trial.name}</h3><span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Default · $1 lifetime</span></div><TrialConnectorBudget id={trial.id} /></div>}
       {loading ? <div className="p-5"><Spinner label="Loading AI connectors" /></div> : <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
         {connectors.length === 0 && <p className="p-5 text-sm text-zinc-500">No connectors yet. Add your first connection below.</p>}
-        {connectors.map(connector => <div key={connector.id} className={`flex items-center gap-3 px-5 py-3 ${selected?.id === connector.id ? "bg-zinc-50 dark:bg-zinc-900" : ""}`}>
+        {personalConnectors.map(connector => <div key={connector.id} className={`flex items-center gap-3 px-5 py-3 ${selected?.id === connector.id ? "bg-zinc-50 dark:bg-zinc-900" : ""}`}>
           <button type="button" aria-pressed={selected?.id === connector.id} onClick={() => setSelectedId(connector.id)} className="min-w-0 flex-1 rounded-lg py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
             <span className="block break-words font-medium">{connector.name}</span>
             <span className="text-sm text-zinc-500">{providers.find(provider => provider.id === connector.provider)?.name ?? connector.provider}</span>
@@ -64,7 +68,7 @@ export function AiConnectorsPanel() {
           <IconButton label={`Delete ${connector.name}`} icon={Trash2} className="shrink-0" aria-busy={removing === connector.id} disabled={removing !== null} onClick={() => { setDeleteId(connector.id); setError(""); }} />
         </div>)}
       </div>}
-      <p className="border-t border-zinc-200 px-5 py-3 text-xs text-zinc-500 dark:border-zinc-800">Deleting removes the connector from Workspaced only. It does not revoke the key in OpenRouter, and existing workspaces keep their current copy.</p>
+      <p className="border-t border-zinc-200 px-5 py-3 text-xs text-zinc-500 dark:border-zinc-800">Trial is your protected default connector and cannot be deleted. Removing a personal connector switches workspaces using it to Trial; restart them to apply the change. Your personal key stays active in OpenRouter.</p>
     </div>
     {selected?.provider === "openrouter" && <ConnectorUsage key={selected.id} id={selected.id} name={selected.name} />}
     <form aria-label="Add AI connector" className="card space-y-4 p-5" onSubmit={event => { event.preventDefault(); void save(key); }}>
@@ -102,7 +106,7 @@ export function AiConnectorsPanel() {
     {deleting && <Modal title="Remove AI connector?" description={deleting.name} onClose={() => { if (!removing) setDeleteId(null); }}>
       <ModalBody>
         <p>This removes <strong>{deleting.name}</strong> from your Workspaced account only.</p>
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">The API key will stay active in your OpenRouter account. Existing workspaces keep their current copy and can continue using it. To revoke the key, delete it separately in OpenRouter.</p>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">The API key will stay active in your OpenRouter account. Workspaces using this connector will switch to Trial and require a restart. Trial shares your remaining $1 lifetime budget; removing a connector does not refill it. To revoke the personal key, delete it separately in OpenRouter.</p>
         <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-4">Open OpenRouter key settings</a>
         {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
       </ModalBody>

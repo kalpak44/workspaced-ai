@@ -132,6 +132,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const [apiKey, setApiKey] = useState("");
   const [connectorId, setConnectorId] = useState("");
   const [accepted, setAccepted] = useState(false);
+  const defaultChosen = useRef(false);
   const [connectorName, setConnectorName] = useState("");
   const [connectorError, setConnectorError] = useState("");
   const connectors = useAiConnectors();
@@ -156,6 +157,13 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     void finish(key);
   });
   const note = connectNote(openRouter.status);
+
+  useEffect(() => {
+    if (connectors.loading || defaultChosen.current) return;
+    defaultChosen.current = true;
+    const trial = connectors.connectors.find(connector => connector.trial && connector.provider === "openrouter");
+    if (trial) { setConnectorId(trial.id); setProviderId(trial.provider); }
+  }, [connectors.loading, connectors.connectors]);
 
   // The suggested name is selected, so typing replaces it and Enter moves on.
   useEffect(() => {
@@ -220,12 +228,14 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
 
   // Every new key becomes a named personal connector before the workspace uses it.
   const finish = async (key: string) => {
-    if (!connectorId && !accepted) return;
+    const selected = connectors.connectors.find(connector => connector.id === connectorId);
+    if ((!connectorId || selected?.trial) && !accepted) return;
     setPending(true);
     setRejected(false);
     setNoFunds(false);
     setConnectorError("");
     try {
+      if (selected?.trial) await connectors.acknowledge(selected.id);
       let savedId = connectorId;
       if (!savedId) {
         const saved = await connectors.add(connectorName.trim() || name.trim(), providerId, key, accepted);
@@ -335,14 +345,14 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         <label className="block text-sm font-medium">AI connector
           <select aria-label="AI connector" className="mt-1.5 block w-full rounded-lg border border-zinc-300 bg-transparent p-2 dark:border-zinc-700" value={connectorId} disabled={pending || connectors.loading} onChange={event => { setConnectorId(event.target.value); setRejected(false); }}>
             <option value="">Connect or paste a key</option>
-            {connectors.connectors.filter(c => c.provider === providerId).map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+            {connectors.connectors.filter(c => c.provider === providerId).map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default · $1 lifetime" : ""}</option>)}
           </select>
         </label>
         {connectors.error && <p role="alert" className="text-sm text-rose-600">{connectors.error}</p>}
         {!connectorId && provider && <TextField id="workspace-connector-name" label="Connector name" placeholder={name} maxLength={100} value={connectorName} disabled={pending} hint="Saved to your account so other workspaces can use it." onChange={event => setConnectorName(event.target.value)} />}
         {connectorError && <p role="alert" className="text-sm text-rose-600">{connectorError}</p>}
         {connectorId && rejected && <p role="alert" className="text-sm text-rose-600">The provider rejected this connector's key. Select another connector.</p>}
-        {!connectorId && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || openRouter.status === "waiting" || openRouter.status === "exchanging"} />}
+        {(!connectorId || connectors.connectors.find(connector => connector.id === connectorId)?.trial) && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || openRouter.status === "waiting" || openRouter.status === "exchanging"} />}
         {!connectorId && provider?.id === "openrouter" && (
           <div className="flex flex-col gap-1.5">
             <div className="flex flex-wrap items-center gap-3">
@@ -408,7 +418,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         type="submit"
         icon={ArrowRight}
         busy={pending}
-        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || rejected}
+        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || (!!connectors.connectors.find(connector => connector.id === connectorId)?.trial && !accepted) || rejected}
       />
     );
   }

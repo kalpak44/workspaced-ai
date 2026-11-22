@@ -221,7 +221,7 @@ export function WorkspacesPage() {
           onClose={() => { setNewName(null); reportTourAction({ type: "workspace-form-closed" }); }}
         />
       )}
-      <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key) => launch(id, key)}
+      <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key, connectorId) => launch(id, key, undefined, connectorId)}
         onExit={() => { setNewName(null); setTourProgress(null); }} />
       {restartTarget && (
         <RestartWorkspaceDialog

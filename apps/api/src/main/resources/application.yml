@@ -84,6 +84,10 @@ workspaced:
     # here rather than read from the request, whose host a client can choose.
     app-url: ${WORKSPACED_APP_URL:https://ai.workspaced.online}
     site-url: ${WORKSPACED_SITE_URL:https://workspaced.online}
+  # Backend-only credential. Never pass it to web or harness containers. Each issued trial key
+  # is hard-capped at $1 for its entire lifetime; missing config leaves provisioning unavailable.
+  openrouter:
+    management-key: ${WORKSPACED_OPENROUTER_MANAGEMENT_KEY:}
   # Each account's one free demo workspace, at the cheapest available size and never charged. at-once caps
   # how many run together, since every one is a VM the platform pays for.
   demo:

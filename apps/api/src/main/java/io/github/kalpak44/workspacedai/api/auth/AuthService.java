@@ -36,6 +36,7 @@ public class AuthService {
   private final VerificationEmails verificationEmails;
   private final AuthProperties properties;
   private final StarterRecipes starterRecipes;
+  private final org.springframework.context.ApplicationEventPublisher events;
 
   public AuthService(
       UserRepository users,
@@ -47,7 +48,8 @@ public class AuthService {
       Auth0Users auth0Users,
       VerificationEmails verificationEmails,
       AuthProperties properties,
-      StarterRecipes starterRecipes) {
+      StarterRecipes starterRecipes,
+      org.springframework.context.ApplicationEventPublisher events) {
     this.users = users;
     this.tokens = tokens;
     this.decoder = decoder;
@@ -58,6 +60,7 @@ public class AuthService {
     this.verificationEmails = verificationEmails;
     this.properties = properties;
     this.starterRecipes = starterRecipes;
+    this.events = events;
   }
 
   /**
@@ -104,8 +107,10 @@ public class AuthService {
 
         Your first one is on us: the guided tour sets up a free demo workspace, has its agent \
         build a website and schedule work on it, and explains every step. You only click \
-        Next, connect your own OpenRouter account and choose your WordPress credentials. The VM \
-        is free for four hours and then deleted. OpenRouter bills your AI usage separately.
+        Next, review the AI-provider notice and choose your WordPress credentials. Your protected \
+        Trial AI connector has a $1 lifetime budget, paid by Workspaced, with no automatic refill. \
+        The VM is free for four hours and then deleted. Add your own connector to pay for further \
+        AI usage through your provider account.
 
         [Start the tour](%s)
         """
@@ -199,6 +204,7 @@ public class AuthService {
   private UserEntity create(String subject, Role role) {
     var user = users.saveAndFlush(new UserEntity(subject, role));
     notifications.send(user.getId(), Notifications.welcome(""));
+    events.publishEvent(new UserCreated(user.getId()));
     return user;
   }
 

@@ -28,6 +28,8 @@ public class AiConnectorController {
       @NotNull @AssertTrue(message = "Acknowledge the third-party AI notice")
           Boolean providerNoticeAccepted) {}
 
+  public record Acknowledgement(@NotNull @AssertTrue Boolean accepted) {}
+
   public record Selection(@NotNull UUID connectorId) {}
 
   private final AiConnectorService service;
@@ -45,6 +47,12 @@ public class AiConnectorController {
   @ResponseStatus(HttpStatus.CREATED)
   public AiConnectorService.Connector create(@Valid @RequestBody Create request) {
     return service.create(request.name().strip(), request.provider(), request.apiKey().strip());
+  }
+
+  @PostMapping("/ai-connectors/{id}/acknowledgement")
+  @ResponseStatus(HttpStatus.NO_CONTENT)
+  public void acknowledge(@PathVariable UUID id, @Valid @RequestBody Acknowledgement request) {
+    service.acknowledge(id);
   }
 
   @GetMapping("/ai-connectors/{id}/metrics")

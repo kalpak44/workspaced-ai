@@ -90,7 +90,7 @@ describe("full-screen guided WordPress workflow", () => {
     await title("Your trial AI token");
   });
 
-  it("offers only a placeholder trial token and prevents continuing or provisioning", async () => {
+  it("keeps the tour blocked when the trial connector is unavailable", async () => {
     tour.setTourProgress({ step: S.OPENROUTER, name: "My chosen name" });
     const onDraft = vi.fn();
     const onLaunch = vi.fn();
@@ -98,13 +98,32 @@ describe("full-screen guided WordPress workflow", () => {
     await title("Your trial AI token");
     const select = screen.getByRole("combobox", { name: "Trial AI connector" });
     expect(within(select).getAllByRole("option")).toHaveLength(1);
-    expect(select).toHaveDisplayValue("TRIAL token — $1");
+    await waitFor(() => expect(select).toHaveDisplayValue("Trial connector unavailable"));
     const button = within(guide()).getByRole("button", { name: "Next" });
     expect(button).toBeDisabled();
     await user.click(button);
     expect(onDraft).not.toHaveBeenCalled();
     expect(onLaunch).not.toHaveBeenCalled();
     expect(screen.queryByRole("button", { name: "Connect OpenRouter" })).not.toBeInTheDocument();
+  });
+
+  it("uses the protected trial connector after notice and deletion consent", async () => {
+    api.connectors.push({ id: "trial-connector", name: "Trial", provider: "openrouter", trial: true });
+    tour.setTourProgress({ step: S.OPENROUTER, name: "My chosen name" });
+    const onDraft = vi.fn().mockResolvedValue({ id: "trial" });
+    const onLaunch = vi.fn().mockResolvedValue("created");
+    render(<DemoTour workspaces={[workspace]} loading={false} onDraft={onDraft} onLaunch={onLaunch} />);
+    await waitFor(() => expect(screen.getByRole("combobox", { name: "Trial AI connector" })).toHaveDisplayValue("Trial — $1 lifetime"));
+    expect(within(guide()).getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+    await next();
+    await title("Choose the machine for this trial");
+    expect(onDraft).toHaveBeenCalledWith(expect.objectContaining({ name: "My chosen name", demo: true }));
+    await screen.findByRole("radio", { name: "cx23" });
+    expect(within(guide()).getByRole("button", { name: "Create free workspace" })).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /permanently deleted after four hours/ }));
+    await next("Create free workspace");
+    expect(onLaunch).toHaveBeenCalledWith("trial", "", "trial-connector");
   });
 
   it("uses the real Store, Apply, secrets, firewall, task and instruction forms", async () => {

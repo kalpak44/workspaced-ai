@@ -34,6 +34,33 @@ public class AiConnectorEntity {
   @Column(name = "provider_notice_version", length = 100)
   private String providerNoticeVersion;
 
+  @Column(nullable = false, updatable = false)
+  private boolean trial;
+
+  @Column(name = "provider_key_hash", length = 200, updatable = false)
+  private String providerKeyHash;
+
+  public void acknowledgeProviderNotice() {
+    if (providerNoticeAcceptedAt == null) {
+      providerNoticeAcceptedAt = Instant.now();
+      providerNoticeVersion = "ai-provider-notice-v1";
+    }
+  }
+
+  public boolean isTrial() {
+    return trial;
+  }
+
+  static AiConnectorEntity trial(UUID ownerId, String encryptedKey, String hash) {
+    var row = new AiConnectorEntity(ownerId, "Trial", "openrouter", encryptedKey);
+    row.trial = true;
+    row.providerKeyHash = hash;
+    // Provisioning a key does not assert that the user has read the provider notice.
+    row.providerNoticeAcceptedAt = null;
+    row.providerNoticeVersion = null;
+    return row;
+  }
+
   protected AiConnectorEntity() {}
 
   AiConnectorEntity(UUID ownerId, String name, String provider, String encryptedKey) {
