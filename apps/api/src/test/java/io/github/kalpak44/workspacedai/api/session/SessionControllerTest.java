@@ -400,7 +400,9 @@ class SessionControllerTest {
     lines.forEachRemaining(
         line -> {
           if (line.startsWith("event:")) names.add(line.substring(6));
-          if (line.startsWith("data:")) data.add(line.substring(5));
+          if (line.startsWith("data:")) {
+            data.add(line.substring(line.startsWith("data: ") ? 6 : 5));
+          }
         });
     assertThat(names).contains("message", "part", "delta", "status", "title");
     assertThat(data)
