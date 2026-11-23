@@ -82,7 +82,7 @@ describe("guided public-page workflow", () => {
     api = installFakeApi([]);
     api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: true, tour: { step: S.OPENROUTER, name: "From elsewhere", draftId: "d-1" } };
     render(<App />);
-    await title("Your trial AI token");
+    expect(await title("Your trial AI token")).toBeInTheDocument();
   });
 
   it("keeps the place when skipped and resumes there rather than starting again", async () => {
