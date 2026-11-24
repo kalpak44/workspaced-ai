@@ -54,14 +54,26 @@ export const browser = {
   },
 };
 
+/** The utm_ parameters this page was opened with, passed on so the API records where a sign-up came from. */
+function attribution(): string {
+  const params = new URLSearchParams(globalThis.location.search);
+  const kept = new URLSearchParams();
+  for (const name of ["utm_source", "utm_campaign"]) {
+    const value = params.get(name);
+    if (value) kept.set(name, value);
+  }
+  return kept.size ? `&${kept}` : "";
+}
+
 /** A full-page navigation, not a fetch: Auth0's login page has to be on screen. */
 export function signIn(): void {
-  browser.open(SIGN_IN_URL);
+  const forwarded = attribution();
+  browser.open(forwarded ? `${SIGN_IN_URL}?${forwarded.slice(1)}` : SIGN_IN_URL);
 }
 
 /** The same entry point, opened on Auth0's sign-up form instead of its login form. */
 export function signUp(): void {
-  browser.open(`${SIGN_IN_URL}?signup`);
+  browser.open(`${SIGN_IN_URL}?signup${attribution()}`);
 }
 
 /** A sign-in that sets up a second factor first; every later sign-in asks for it. */
