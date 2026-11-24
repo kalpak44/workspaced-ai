@@ -9,7 +9,7 @@ import type { CreateResult, DraftResult, NewWorkspace, Workspace } from "../../h
 import {
   setTourProgress, subscribeTourActions, TOUR_DESIGN_IDEAS, TOUR_DESIGN_PROMPT, TOUR_PUBLIC_PROMPT, TOUR_RECIPE_ID,
   TOUR_STEP as S, TOUR_WORKSPACE_NAME, type TourProgress, typeInto, useChatBusy, useChatCheckpoint,
-  useChatPageLink, useTourChatIssue, useTourProgress,
+  useChatPageLink, useChatPublicQuestion, useTourChatIssue, useTourProgress,
 } from "../../lib/tour";
 import { Button, Confetti, Spinner } from "../atoms";
 import { Modal, ModalBody, ModalFooter } from "../molecules/Modal";
@@ -99,6 +99,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
   const demo = workspaces.find((workspace) => workspace.id === workspaceId);
   const busy = useChatBusy(sessionId);
   const checkpoint = useChatCheckpoint(sessionId);
+  const publicQuestion = useChatPublicQuestion(sessionId);
   const pageLink = useChatPageLink(sessionId);
   const chatIssue = useTourChatIssue(sessionId);
   const [working, setWorking] = useState(false);
@@ -137,6 +138,7 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
     if (action.type === "store-scope" && step === S.PRIVATE && action.value === "private") go(S.OWN);
     if (action.type === "store-scope" && step === S.PUBLIC && action.value === "public") go(S.FIND_RECIPE);
     if (action.type === "recipe-apply-opened" && (step === S.REVIEW || step === S.APPLY)) go(S.PICK);
+    if (action.type === "public-confirmed" && action.sessionId === sessionId && step === S.CONFIRM_PUBLIC) go(S.DEPLOY);
     if (action.type === "message-sent" && action.sessionId === sessionId) {
       if (step === S.CONFIRM_PUBLIC) go(S.DEPLOY);
       if (step === S.DESIGN) go(S.DONE);
@@ -273,7 +275,9 @@ function Tour({ workspaces, loading, onDraft, onLaunch, onExit, progress, onComp
     case S.APPLY: card = { title: "Hand it to your assistant", target: '[data-tour="recipe-apply"]', body: <>Click <strong>Apply</strong> to give the recipe to your assistant.</>, next: () => click('[data-tour="recipe-apply"]') }; break;
     case S.PICK: card = { title: "Choose your workspace", target: '[data-tour="workspace-picker-confirm"]', body: <>Pick <strong>{demo?.name}</strong> and click Apply. Your assistant gets to work straight away.</>, next: () => { const radio = control<HTMLInputElement>(`[data-workspace-choice="${workspaceId}"]`); if (radio && !radio.checked) { radio.click(); return; } click('[data-tour="workspace-picker-confirm"]'); } }; break;
     case S.BUILD: card = { title: "Your assistant is on it", target: 'section[aria-label="Chat"]', body: <>Watch it work in the chat. In a moment it asks whether your page may be seen by anyone on the internet.</>, waiting: busy === false && checkpoint === "public" ? undefined : "Your assistant is working…", next: () => go(S.CONFIRM_PUBLIC) }; break;
-    case S.CONFIRM_PUBLIC: card = { title: "Say yes", target: 'textarea[aria-label="Message"]', body: <>Tell it the page can go public. <strong>Next</strong> writes the answer for you; click Next again to send it.</>, next: () => message(TOUR_PUBLIC_PROMPT, true) }; break;
+    case S.CONFIRM_PUBLIC: card = { title: "Say yes", target: publicQuestion ? '[data-tour="tour-public-question"]' : 'textarea[aria-label="Message"]', body: publicQuestion
+      ? <>Your assistant asks in a form. The answer is set to Yes. Click <strong>Next</strong> to confirm public access: anyone can view this demo over unencrypted HTTP.</>
+      : <>Tell it the page can go public. <strong>Next</strong> writes the answer for you; click Next again to send it.</>, next: () => publicQuestion ? click('[data-tour="tour-public-question"] button[type="submit"]') : message(TOUR_PUBLIC_PROMPT, true) }; break;
     case S.DEPLOY: card = { title: "Putting your page online", target: 'section[aria-label="Chat"]', body: <>Your assistant is setting everything up and checking it works. This usually takes a minute or two.</>, waiting: busy === false && pageLink ? undefined : busy === false ? "No public page address yet. Skip the tour to ask your assistant to retry publishing." : "Publishing your page…", next: () => go(S.VERIFY) }; break;
     case S.VERIFY: card = { title: "Your page is live!", target: 'section[aria-label="Chat"]', celebrate: true, body: pageLink
       ? <span className="flex flex-wrap items-center gap-x-3 gap-y-1"><a href={pageLink} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 font-semibold text-white hover:bg-emerald-700"><ExternalLink aria-hidden className="size-4" />Open my page</a>Anyone with this link can see it.</span>

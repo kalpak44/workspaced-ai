@@ -5,8 +5,8 @@ import { useSessions } from "../../hooks/useSessions";
 import { useSessionAgents } from "../../hooks/useSessionAgents";
 import { FileLinkContext, useSessionFiles } from "../../hooks/useSessionFiles";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { reportChatBusy, reportChatCheckpoint, reportChatPageLink, reportTourChatIssue, reportTourAction, TOUR_DESIGN_IDEAS, TOUR_DESIGN_PROMPT, TOUR_PUBLIC_PROMPT, TOUR_STEP, useTourProgress } from "../../lib/tour";
-import { recoverTourChat } from "../../hooks/useDemoTour";
+import { reportChatBusy, reportChatCheckpoint, reportChatPageLink, reportChatPublicQuestion, reportTourChatIssue, reportTourAction, TOUR_DESIGN_IDEAS, TOUR_DESIGN_PROMPT, TOUR_PUBLIC_PROMPT, TOUR_STEP, useTourProgress } from "../../lib/tour";
+import { publicTourAnswer, recoverTourChat } from "../../hooks/useDemoTour";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
 import { ChatAgentPicker } from "../organisms/ChatAgentPicker";
@@ -48,12 +48,19 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
     const lastUser = chat.messages.findLastIndex((message) => message.role === "user");
     const reply = chat.messages.slice(lastUser + 1).filter((message) => message.role === "assistant")
       .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text ?? "")).join("\n");
-    const waiting = !ready || chat.loading || chat.busy || !!chat.error || !reply.trim();
+    const question = tour && (tour.step === TOUR_STEP.BUILD || tour.step === TOUR_STEP.CONFIRM_PUBLIC) && publicTourAnswer(chat.forms);
+    reportChatPublicQuestion(sessionId, !!question);
+    const waiting = !ready || chat.loading || (chat.busy && !question) || !!chat.error || !reply.trim();
     reportChatBusy(sessionId, waiting);
     reportChatCheckpoint(sessionId, waiting ? "" : reply);
-    if (!chat.loading) reportChatPageLink(sessionId, chat.messages.filter(message => message.role === "assistant").toReversed()
-      .flatMap(message => message.parts.filter(part => part.type === "text").map(part => part.text ?? "")).join("\n"));
-  }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages]);
+    const replies = chat.messages.filter(message => message.role === "assistant");
+    if (tour?.step === TOUR_STEP.DEPLOY) {
+      // A pre-publication question may mention the address before any server is running.
+      if (!waiting) reportChatPageLink(sessionId, replies.at(-1)?.parts.filter(part => part.type === "text").map(part => part.text ?? "").join("\n") ?? "");
+    } else if (!chat.loading && (!tour || tour.step > TOUR_STEP.DEPLOY)) {
+      reportChatPageLink(sessionId, replies.toReversed().flatMap(message => message.parts.filter(part => part.type === "text").map(part => part.text ?? "")).join("\n"));
+    }
+  }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages, chat.forms, tour]);
 
   useEffect(() => {
     const issue = chat.error ?? (tour?.step === TOUR_STEP.BUILD && !chat.loading && !chat.busy && chat.messages.length === 0
@@ -88,7 +95,15 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           busy={chat.busy}
           disabled={switchingAgent || !tourCanSend}
           forms={chat.forms}
-          onAnswer={chat.answerForm}
+          onAnswer={async (id, answer) => {
+            const expected = publicTourAnswer(chat.forms);
+            const accepted = await chat.answerForm(id, answer);
+            if (accepted && tour?.step === TOUR_STEP.CONFIRM_PUBLIC && expected?.id === id
+                && JSON.stringify(answer) === JSON.stringify(expected.answer)) {
+              reportTourAction({ type: "public-confirmed", workspaceId: workspace.id, sessionId });
+            }
+            return accepted;
+          }}
           error={sessions.error ?? chat.error ?? files.linkError}
           onDismissError={() => {
             sessions.dismissError();

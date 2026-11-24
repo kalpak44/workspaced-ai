@@ -148,6 +148,15 @@ export function useTourChatIssue(sessionId: string | undefined): TourChatIssue |
   return useSyncExternalStore(subscribe, () => sessionId ? chatIssues.get(sessionId) : undefined);
 }
 
+const publicQuestions = new Map<string, boolean>();
+export function reportChatPublicQuestion(sessionId: string, present: boolean): void {
+  if (publicQuestions.get(sessionId) === present) return;
+  publicQuestions.set(sessionId, present); emit();
+}
+export function useChatPublicQuestion(sessionId: string | undefined): boolean {
+  return useSyncExternalStore(subscribe, () => !!sessionId && publicQuestions.get(sessionId) === true);
+}
+
 type ChatCheckpoint = "public";
 const checkpoints = new Map<string, ChatCheckpoint | undefined>();
 /** Wait for the assistant to explain public access before asking the user to confirm. */

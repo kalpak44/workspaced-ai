@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
 import type { Recipe } from "../src/api/recipesApi";
 import type { Workspace } from "../src/api/workspacesApi";
+import { publicTourAnswer } from "../src/hooks/useDemoTour";
 import { DemoTour } from "../src/components/organisms/DemoTour";
 import * as tour from "../src/lib/tour";
 import { FakeEventSource, installFakeApi } from "./fakeApi";
@@ -60,6 +61,24 @@ beforeEach(() => {
 });
 
 describe("guided public-page workflow", () => {
+  it("confirms a predefined public-access question through Next while the tool waits", async () => {
+    const id = "public-form";
+    api.sessions.set(workspace.id, [{ id, title: "My page", path: "/home/workspace/sessions/public-form", createdAt: new Date().toISOString() }]);
+    api.messages.set(id, [{ id: "checkpoint", role: "assistant", parts: [{ id: "text", type: "text", text: "Shall I publish this page PUBLIC so people can open it from the internet?", tool: null, status: null }] }]);
+    api.forms.set(id, [{ id: "publish-form", title: "Questions", fields: [{ key: "publish", type: "string", title: "Publish the page?", custom: true, required: true, options: [{ value: "yes", label: "Yes, publish" }, { value: "no", label: "No, keep it private" }] }] }]);
+    tour.setTourProgress({ step: S.BUILD, workspaceId: workspace.id, sessionId: id });
+    globalThis.history.replaceState(null, "", "/workspaces/trial/sessions/public-form");
+    render(<App />);
+    await title("Your assistant is on it");
+    await waitFor(() => expect(within(guide()).getByRole("button", { name: "Next" })).toBeEnabled());
+    expect(screen.getByRole("combobox", { name: /Publish the page/ })).toHaveValue("yes");
+    await next();
+    await title("Say yes");
+    await next();
+    await title("Putting your page online");
+    expect(api.answers).toEqual([expect.objectContaining({ answer: { publish: "yes" } })]);
+  });
+
   it("offers to resume an existing demo when an older browser failed to save its bookmark", async () => {
     api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: false, tour: null };
     render(<App />);
@@ -347,5 +366,17 @@ describe("guided public-page workflow", () => {
     await user.click(within(guide()).getByRole("button", { name: "Skip tour" }));
     expect(api.notifications.rows.some((notification) => notification.title === "Tutorial completed")).toBe(false);
     expect(screen.queryByRole("dialog", { name: "You built a website!" })).not.toBeInTheDocument();
+  });
+});
+
+
+describe("predefined public-access answers", () => {
+  it("supports a boolean publishing question", () => {
+    expect(publicTourAnswer([{ id: "public", title: "Publish this page?", fields: [{ key: "allow", type: "boolean" }] }]))
+      .toEqual({ id: "public", answer: { allow: true } });
+  });
+  it("does not pre-answer an unrelated or unspecified free-text question", () => {
+    expect(publicTourAnswer([{ id: "delete", title: "Delete the files?", fields: [{ key: "allow", type: "boolean" }] }])).toBeNull();
+    expect(publicTourAnswer([{ id: "public", title: "Publish?", fields: [{ key: "answer", type: "string", custom: true }] }])).toBeNull();
   });
 });

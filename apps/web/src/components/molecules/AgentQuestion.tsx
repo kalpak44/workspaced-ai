@@ -1,6 +1,8 @@
 import { MessageCircleQuestion } from "lucide-react";
 import { useId, useState } from "react";
 import type { AgentForm, FormAnswer, FormField, FormValue } from "../../hooks/useChat";
+import { publicTourAnswer } from "../../hooks/useDemoTour";
+import { TOUR_STEP, useTourProgress } from "../../lib/tour";
 import { Button } from "../atoms";
 
 const inputClass = "w-full rounded-lg border border-zinc-300 bg-transparent px-3 py-2 text-sm outline-none focus:border-zinc-500 dark:border-zinc-700";
@@ -71,9 +73,11 @@ export function AgentQuestion({ form, onAnswer }: {
   readonly onAnswer: (id: string, answer?: FormAnswer) => Promise<boolean>;
 }) {
   const headingId = useId();
-  const [draft, setDraft] = useState<Record<string, FormValue>>(() => Object.fromEntries(
+  const tour = useTourProgress();
+  const predefined = tour && (tour.step === TOUR_STEP.BUILD || tour.step === TOUR_STEP.CONFIRM_PUBLIC) ? publicTourAnswer([form]) : null;
+  const [draft, setDraft] = useState<Record<string, FormValue>>(() => ({ ...Object.fromEntries(
     form.fields.filter((field) => field.default !== undefined).map((field) => [field.key, field.default!]),
-  ));
+  ), ...predefined?.answer }));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const active = form.fields.filter((field) => field.when?.every((condition) =>
@@ -98,7 +102,7 @@ export function AgentQuestion({ form, onAnswer }: {
       setError("Could not send your response. Please try again.");
     } finally { setSaving(false); }
   };
-  return <form aria-labelledby={headingId} onSubmit={(event) => { event.preventDefault(); void submit(); }}
+  return <form data-tour={predefined ? "tour-public-question" : undefined} aria-labelledby={headingId} onSubmit={(event) => { event.preventDefault(); void submit(); }}
     className="rounded-xl border border-zinc-300 bg-zinc-50 p-4 dark:border-zinc-700 dark:bg-zinc-900">
     <div className="mb-4 flex items-start gap-2">
       <MessageCircleQuestion aria-hidden className="mt-0.5 size-4 shrink-0 text-zinc-500" />
