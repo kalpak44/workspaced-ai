@@ -71,6 +71,9 @@ before relying on newer upstream operations.
 `apiKeyVariable`, the secret the workspace receives the key in. The list is hardcoded — OpenRouter only for now —
 because each provider needs its own key check.
 
+Compute providers are the same kind of list for where a workspace's VM runs, but backend-only: no route lists them,
+and nothing the web app reads names one. See [vm-manager.md](vm-manager.md#compute-providers).
+
 ## Workspaces
 
 A workspace has an `id` (UUID, assigned by the server), a `name` (1–100 characters, surrounding whitespace trimmed),

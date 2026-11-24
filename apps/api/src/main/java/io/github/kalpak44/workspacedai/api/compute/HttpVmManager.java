@@ -76,12 +76,14 @@ public class HttpVmManager implements VmManager {
   public ProvisionedVm create(
       UUID workspaceId,
       UUID userId,
+      ComputeProvider provider,
       String serverType,
       String openRouterApiKey,
       Map<String, String> environment) {
     var body = json.createObjectNode();
     body.put("workspaceId", workspaceId.toString());
     body.put("userId", userId.toString());
+    body.put("provider", provider.id());
     body.put("openRouterApiKey", openRouterApiKey);
     var variables = body.putObject("environment");
     environment.forEach(variables::put);

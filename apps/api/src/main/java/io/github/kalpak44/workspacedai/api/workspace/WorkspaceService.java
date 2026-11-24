@@ -4,6 +4,7 @@ import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.billing.BillingService;
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
@@ -146,15 +147,24 @@ public class WorkspaceService {
     if (demo) {
       claimDemo(ownerId);
     }
-    var id =
-        transactions
-            .execute(
-                _ ->
-                    repository.saveAndFlush(
-                        new WorkspaceEntity(ownerId, name, provider.id(), timeZone, demo)))
-            .getId();
+    var created =
+        transactions.execute(
+            _ ->
+                repository.saveAndFlush(
+                    new WorkspaceEntity(ownerId, name, provider.id(), timeZone, demo)));
+    var id = created.getId();
     try {
-      return start(id, ownerId, name, provider, apiKey, size, timeZone, price, demo);
+      return start(
+          id,
+          ownerId,
+          name,
+          provider,
+          created.getComputeProvider(),
+          apiKey,
+          size,
+          timeZone,
+          price,
+          demo);
     } catch (RuntimeException e) {
       // The user sees only that it failed; this is where the reason is kept.
       log.warn("workspace {} failed to create", id, e);
@@ -252,6 +262,7 @@ public class WorkspaceService {
               ownerId,
               draft.getName(),
               provider,
+              draft.getComputeProvider(),
               apiKey,
               size,
               draft.getTimeZone(),
@@ -273,6 +284,7 @@ public class WorkspaceService {
       UUID ownerId,
       String name,
       ModelProvider provider,
+      ComputeProvider compute,
       String apiKey,
       String serverType,
       String timeZone,
@@ -282,6 +294,7 @@ public class WorkspaceService {
         runtime.start(
             id,
             ownerId,
+            compute,
             serverType,
             new WorkspaceEnvironment(
                 Map.of(

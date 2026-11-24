@@ -99,7 +99,7 @@ class DemoTest {
     assertThat(workspace.expiresAt())
         .isCloseTo(Instant.now().plus(Duration.ofHours(4)), within(1, ChronoUnit.MINUTES));
     // A size asked for is ignored: pick the cheapest available, even if it is not the default.
-    verify(runtime).start(eq(workspace.id()), eq(user), eq("cx23"), any());
+    verify(runtime).start(eq(workspace.id()), eq(user), any(), eq("cx23"), any());
     assertThat(
             jdbc.queryForObject(
                 "select count(*) from billing_usage where workspace_id = ?",
@@ -165,7 +165,7 @@ class DemoTest {
   void handsTheDemoBackWhenItsVmFailsToStart() throws Exception {
     doThrow(new IllegalStateException("Hetzner is down"))
         .when(runtime)
-        .start(any(), eq(user), any(), any());
+        .start(any(), eq(user), any(), any(), any());
 
     assertThat(send("POST", "/workspaces", demo("sk-or-1")).statusCode()).isEqualTo(500);
 
@@ -188,7 +188,7 @@ class DemoTest {
     var workspace = JSON.readValue(launched.body(), Workspace.class);
     assertThat(workspace.demo()).isTrue();
     assertThat(workspace.expiresAt()).isNotNull();
-    verify(runtime).start(eq(workspace.id()), eq(user), eq("cx33"), any());
+    verify(runtime).start(eq(workspace.id()), eq(user), any(), eq("cx33"), any());
     assertThat(account().get("demoAvailable").asBoolean()).isFalse();
   }
 

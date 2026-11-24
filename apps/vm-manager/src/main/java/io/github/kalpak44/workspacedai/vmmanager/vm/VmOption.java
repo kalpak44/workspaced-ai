@@ -26,4 +26,10 @@ public record VmOption(
     BigDecimal monthlyGross,
     boolean recommended,
     boolean available,
-    List<VmCost> costs) {}
+    List<VmCost> costs) {
+
+  /** The cloud it is sold by; every option is a Hetzner server type until a second exists. */
+  public ComputeProvider provider() {
+    return ComputeProvider.HETZNER;
+  }
+}

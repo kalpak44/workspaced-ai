@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.util.Collection;
@@ -15,10 +16,16 @@ public interface WorkspaceRuntime {
   /**
    * Starts the workspace's runtime with that environment; returns before it is ready.
    *
+   * @param provider the cloud it runs in
    * @param serverType the size to start it as; null for the runtime's default
    * @return the size it was started as; null where sizes mean nothing
    */
-  String start(UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment);
+  String start(
+      UUID workspaceId,
+      UUID ownerId,
+      ComputeProvider provider,
+      String serverType,
+      WorkspaceEnvironment environment);
 
   /**
    * Stops it and returns once it is gone, so a caller can report the workspace deleted only when it

@@ -6,6 +6,7 @@ import java.util.List;
 
 @Schema(name = "VmOption", description = "A size a VM can be created as")
 public record VmOptionDto(
+    @Schema(description = "The cloud it is created in", example = "hetzner") String provider,
     @Schema(description = "The serverType to create it with", example = "cx23") String serverType,
     @Schema(description = "Taken when a create names no serverType", example = "true")
         boolean isDefault,

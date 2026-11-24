@@ -24,6 +24,7 @@ public interface VmManager {
   /**
    * The workspace's VM. Idempotent: asking again for the same workspace returns the VM it has.
    *
+   * @param provider the cloud to create it in
    * @param serverType null for the VM manager's default
    * @param openRouterApiKey kept by the VM manager as the VM's system secret
    * @param environment the rest of what the harness starts with, kept by the VM manager apart from
@@ -34,6 +35,7 @@ public interface VmManager {
   ProvisionedVm create(
       UUID workspaceId,
       UUID userId,
+      ComputeProvider provider,
       String serverType,
       String openRouterApiKey,
       Map<String, String> environment);

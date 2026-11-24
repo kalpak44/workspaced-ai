@@ -23,6 +23,11 @@ public record CreateVmDto(
         @NotNull
         UUID userId,
     @Schema(
+            description = "The cloud to create it in; hetzner, the only one, when omitted",
+            example = "hetzner")
+        @Size(max = 50)
+        String provider,
+    @Schema(
             description = "One of the serverTypes /vm-options lists; its default when omitted",
             example = "cx23")
         @Size(max = 20)
@@ -61,6 +66,8 @@ public record CreateVmDto(
         + workspaceId
         + ", userId="
         + userId
+        + ", provider="
+        + provider
         + ", serverType="
         + serverType
         + ", environment="

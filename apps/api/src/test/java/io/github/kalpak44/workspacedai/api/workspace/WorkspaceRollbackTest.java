@@ -52,7 +52,7 @@ class WorkspaceRollbackTest {
   void keepsNoWorkspaceWhoseVmCouldNotStartAndReleasesIt() {
     doThrow(new IllegalStateException("VM manager down"))
         .when(runtime)
-        .start(any(), any(), any(), any());
+        .start(any(), any(), any(), any(), any());
     assertThatThrownBy(
             () ->
                 service.create(
@@ -71,7 +71,7 @@ class WorkspaceRollbackTest {
                     TestUsers.ADMIN, "Nope", ModelProvider.OPENROUTER, "sk-bad", null, "UTC"))
         .isInstanceOf(ApiKeyRejectedException.class);
     assertThat(repository.findAll()).isEmpty();
-    verify(runtime, never()).start(any(), any(), any(), any());
+    verify(runtime, never()).start(any(), any(), any(), any(), any());
   }
 
   @Test

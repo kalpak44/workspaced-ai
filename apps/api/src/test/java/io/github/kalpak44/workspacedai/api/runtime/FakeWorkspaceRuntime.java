@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceStatus;
 import java.net.URI;
@@ -33,7 +34,11 @@ public class FakeWorkspaceRuntime implements WorkspaceRuntime {
 
   @Override
   public String start(
-      UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment) {
+      UUID workspaceId,
+      UUID ownerId,
+      ComputeProvider provider,
+      String serverType,
+      WorkspaceEnvironment environment) {
     // Nothing runs locally; the workspace is usable as soon as it is stored.
     return null;
   }

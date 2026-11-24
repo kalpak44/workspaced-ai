@@ -16,6 +16,7 @@ public record VmDto(
             description = "Who owns the workspace",
             example = "00000000-0000-0000-0000-000000000001")
         UUID userId,
+    @Schema(description = "The cloud it runs in", example = "hetzner") String provider,
     @Schema(description = "Hetzner server type", example = "cx23") String serverType,
     @Schema(description = "The Hetzner server it runs as", example = "112233445") long serverId,
     @Schema(

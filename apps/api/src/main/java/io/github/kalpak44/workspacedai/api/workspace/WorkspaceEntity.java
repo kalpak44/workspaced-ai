@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -30,6 +31,10 @@ public class WorkspaceEntity {
   // An id from ModelProvider; stored as text so a provider can be added without a migration.
   @Column(name = "model_provider", nullable = false, length = 50)
   private String modelProvider;
+
+  // An id from ComputeProvider, fixed at creation: a VM cannot move between clouds.
+  @Column(name = "compute_provider", nullable = false, updatable = false, length = 50)
+  private String computeProvider = ComputeProvider.DEFAULT.id();
 
   @Column(name = "ai_connector_id")
   private UUID aiConnectorId;
@@ -191,6 +196,10 @@ public class WorkspaceEntity {
 
   public String getModelProvider() {
     return modelProvider;
+  }
+
+  public ComputeProvider getComputeProvider() {
+    return ComputeProvider.byId(computeProvider).orElseThrow();
   }
 
   public String getModel() {

@@ -21,6 +21,7 @@ public class VmDtoMapper {
         vm.id(),
         vm.workspaceId(),
         vm.userId(),
+        vm.provider().id(),
         vm.serverType(),
         vm.serverId(),
         vm.status().name(),
@@ -45,6 +46,7 @@ public class VmDtoMapper {
 
   public VmOptionDto toDto(VmOption option) {
     return new VmOptionDto(
+        option.provider().id(),
         option.serverType(),
         option.isDefault(),
         option.cores(),
