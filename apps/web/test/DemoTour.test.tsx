@@ -61,6 +61,26 @@ beforeEach(() => {
 });
 
 describe("guided public-page workflow", () => {
+  it.each(["chat", "form"])("recognises a public-access request delivered as %s", async kind => {
+    const id = `confirm-${kind}`;
+    api.sessions.set(workspace.id, [{ id, title: "Page", path: `/home/workspace/sessions/${id}`, createdAt: new Date().toISOString() }]);
+    api.messages.set(id, [{ id: "prepare", role: "assistant", parts: kind === "chat"
+      ? [{ id: "question", type: "text", text: "Shall I publish the page now?", tool: null, status: null }] : [] }]);
+    if (kind === "form") api.forms.set(id, [{ id: "confirm", title: "Make it public?", fields: [{ key: "allow", type: "boolean", required: true }] }]);
+    tour.setTourProgress({ step: S.BUILD, workspaceId: workspace.id, sessionId: id });
+    globalThis.history.replaceState(null, "", `/workspaces/trial/sessions/${id}`);
+    render(<App />);
+    await title("Your assistant is on it");
+    await waitFor(() => expect(within(guide()).getByRole("button", { name: "Next" })).toBeEnabled());
+    await next();
+    await title("Say yes");
+    if (kind === "chat") { await next(); await next(); }
+    else await next();
+    await title("Putting your page online");
+    if (kind === "chat") expect(api.prompts.at(-1)?.text).toBe(tour.TOUR_PUBLIC_PROMPT);
+    else expect(api.answers.at(-1)).toEqual(expect.objectContaining({ answer: { allow: true } }));
+  });
+
   it("confirms a predefined public-access question through Next while the tool waits", async () => {
     const id = "public-form";
     api.sessions.set(workspace.id, [{ id, title: "My page", path: "/home/workspace/sessions/public-form", createdAt: new Date().toISOString() }]);
@@ -256,7 +276,12 @@ describe("guided public-page workflow", () => {
     // Straight to the recipe: the Store's tabs are explained by using them, not beforehand.
     await title("Find “Simple web page”");
     await next();
-    expect(screen.getByRole("searchbox", { name: "Search recipes" })).toHaveValue("Simple web page");
+    const search = screen.getByRole("searchbox", { name: "Search recipes" });
+    expect(search).toHaveValue("Simple web page");
+    expect(search).not.toHaveAttribute("readonly");
+    await user.clear(search);
+    await user.type(search, "sImPlE WeB PaGe");
+    expect(search).toHaveValue("sImPlE WeB PaGe");
     await next();
     await title("Here's what it will make");
     await waitFor(() => expect(document.querySelector('[data-tour="recipe-overview"]')).toHaveTextContent("Simple web page"));
@@ -285,7 +310,10 @@ describe("guided public-page workflow", () => {
     await answer(sessionId, "Your page is ready at http://203.0.113.10/. Anyone can open it from the internet.");
     await next();
     await title("Your page is live!");
-    expect(within(screen.getByRole("region", { name: "Guided tour" })).getByRole("link", { name: "Open my page" })).toHaveAttribute("href", "http://203.0.113.10/");
+    const pageLink = within(screen.getByRole("region", { name: "Guided tour" })).getByRole("link", { name: "Open my page" });
+    expect(pageLink).toHaveAttribute("href", "http://203.0.113.10/");
+    expect(pageLink).toHaveAttribute("target", "_blank");
+    expect(pageLink).toHaveAttribute("rel", "noopener noreferrer");
     await next("It works");
     await title("Now make it yours");
     await user.click(screen.getByRole("button", { name: "Use calm, dark colours" }));
@@ -378,8 +406,16 @@ describe("predefined public-access answers", () => {
     expect(publicTourAnswer([{ id: "public", title: "Publish this page?", fields: [{ key: "allow", type: "boolean" }] }]))
       .toEqual({ id: "public", answer: { allow: true } });
   });
-  it("does not pre-answer an unrelated or unspecified free-text question", () => {
+  it("does not pre-answer unrelated or incompatible fields", () => {
     expect(publicTourAnswer([{ id: "delete", title: "Delete the files?", fields: [{ key: "allow", type: "boolean" }] }])).toBeNull();
-    expect(publicTourAnswer([{ id: "public", title: "Publish?", fields: [{ key: "answer", type: "string", custom: true }] }])).toBeNull();
+    expect(publicTourAnswer([{ id: "public", title: "Publish?", fields: [{ key: "answer", type: "string", custom: true, minLength: 4 }] }])).toBeNull();
   });
+});
+
+
+it("uses a predefined Yes for a free-text public question and supports affirmative option wording", () => {
+  expect(publicTourAnswer([{ id: "public", title: "Make this page public?", fields: [{ key: "reply", type: "string", custom: true }] }]))
+    .toEqual({ id: "public", answer: { reply: "Yes" } });
+  expect(publicTourAnswer([{ id: "online", title: "Put the site online?", fields: [{ key: "choice", type: "string", options: [{ value: "later", label: "Not yet" }, { value: "allow", label: "Go ahead" }] }] }]))
+    .toEqual({ id: "online", answer: { choice: "allow" } });
 });

@@ -25,7 +25,10 @@ ask before replacing anything.
 recipe or when port 80 is already open. Say: “Shall we make this page PUBLIC so people can
 open it from the internet? Reply here to let me publish it.” Explain that HTTP is unencrypted
 and anyone with the address can visit. Do not open ports or start the public server until the
-user has confirmed in chat. End your turn and wait. This is the same checkpoint every time.
+user has explicitly confirmed. Ask either as an ordinary chat question and end your turn,
+or use a question form with one boolean field titled "Make this page public?" or the choices
+"Yes, make it public" and "Not yet". Both routes must explain public internet access and
+unencrypted HTTP. Wait for the answer. This is the same checkpoint every time.
 Do not direct the user to Settings or ask them to open ports manually during the normal flow.
 
 ### index.html
@@ -142,16 +145,23 @@ inside `/app/data` on the named volume; never delete the volume to update the pa
 edits, update the source and copy changed files into the container. Restart after Python changes.
 Edit the SQLite row for heading/message changes; the HTML placeholders display that row.
 
-Check the container logs and fetch `http://$WORKSPACE_IP/` with `curl --fail --max-time 15`.
-Confirm the expected heading and message appear. Check `/app.py`, `/data/page.sqlite3` and
+Check the container logs and fetch the actual current address with bounded startup retries:
+`curl --fail --show-error --retry 5 --retry-delay 2 --retry-connrefused --max-time 15 "http://$WORKSPACE_IP/"`.
+A 200 response alone is not success: verify the body is non-empty and contains the expected
+heading and message. If it is empty or missing them, inspect the logs and files, fix the
+cause, and retry the check up to three times. Never report an empty page as ready. Check `/app.py`, `/data/page.sqlite3` and
 `/../app.py` return 404 so source files and the database are never served. If you cannot check
 from an independent internet host, say what you checked and ask the user to open the link
-in their browser; do not claim an external check you did not perform.
+in a new browser tab; do not claim an external check you did not perform. Do not use cached
+content proxies to decide whether a new page or edit is visible.
 
 ## 3. Give the user the address and invite a change
 
-Only report success after the HTTP check passes. End with a clickable `http://<actual-public-IP>/`
-link and: “Open this link in your browser to see your page. Anyone on the internet can open
+Only report success after the non-empty HTTP check passes. Never reuse an IP from an earlier
+workspace, tutorial, or example: derive the current one from `$WORKSPACE_IP` or `firewall list`.
+Print `PUBLIC_PAGE_URL=http://<actual-current-public-IP>/` with the real address substituted,
+then a clickable Markdown link to that same address. Repeat this address line and link after
+later edits so the tour can recommend opening the right page in a new tab. End with: “Open this link in your browser to see your page. Anyone on the internet can open
 it; HTTP is unencrypted. What would you like to change? Ask me for any change to this page,
 then refresh the same link.” For a trial, remind them the page and its data disappear with the
 workspace when the trial expires. Do not send email or configure tasks, shared instructions,

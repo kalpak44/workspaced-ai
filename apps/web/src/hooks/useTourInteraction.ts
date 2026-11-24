@@ -33,7 +33,8 @@ export function useTourInteraction(step: number, workspaceId?: string): void {
     const fields = new Map<HTMLInputElement | HTMLTextAreaElement, boolean>();
     const restrict = () => {
       document.querySelectorAll<HTMLElement>(INTERACTIVE).forEach(element => {
-        if ((element instanceof HTMLInputElement && ['text', 'search', 'password', 'email', 'url'].includes(element.type)) || element instanceof HTMLTextAreaElement) {
+        const search = step === S.FIND_RECIPE && element.matches('[aria-label="Search recipes"]');
+        if (!search && ((element instanceof HTMLInputElement && ['text', 'search', 'password', 'email', 'url'].includes(element.type)) || element instanceof HTMLTextAreaElement)) {
           if (!fields.has(element)) { fields.set(element, element.readOnly); element.readOnly = true; }
         }
         // Containers with a tab index must not make their permitted children inert.
@@ -51,7 +52,7 @@ export function useTourInteraction(step: number, workspaceId?: string): void {
       const keyboard = event instanceof KeyboardEvent ? event : null;
       const shortcut = keyboard && (keyboard.ctrlKey || keyboard.metaKey) && keyboard.key.toLowerCase() === 'k';
       const escape = keyboard?.key === 'Escape';
-      const typing = target instanceof HTMLTextAreaElement || (target instanceof HTMLInputElement && fields.has(target));
+      const typing = fields.has(target as HTMLInputElement);
       const editing = typing && (['beforeinput', 'paste', 'drop'].includes(event.type)
         || (keyboard && (keyboard.key === 'Enter' || keyboard.key === 'Backspace' || keyboard.key === 'Delete' || (keyboard.key.length === 1 && !keyboard.ctrlKey && !keyboard.metaKey))));
       const permitted = permits(target) || (!!labelled && permits(labelled))

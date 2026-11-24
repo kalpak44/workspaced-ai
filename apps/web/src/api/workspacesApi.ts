@@ -111,5 +111,5 @@ export async function keepWorkspace(id: string): Promise<Workspace> {
 
 /** Records tutorial completion once and sends an in-app notification, without email. */
 export async function completeWorkspaceTutorial(id: string): Promise<void> {
-  await send(`${workspaceUrl(id)}/tutorial-completed`, { method: "POST" });
+  await send(`${workspaceUrl(id)}/tutorial-completed`, { method: "POST" }, { retry: "idempotent" });
 }

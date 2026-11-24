@@ -54,3 +54,22 @@ describe("account tour requests", () => {
     expect(save.mock.calls.map(([progress]) => progress.step)).toEqual([1, 2]);
   });
 });
+
+
+describe("dynamic published page addresses", () => {
+  it.each([
+    ["Open http://203.0.113.7/.", "http://203.0.113.7/"],
+    ["Open 198.51.100.41.", "http://198.51.100.41/"],
+    ["Your page is at 198.51.100.82:8080/hello.", "http://198.51.100.82:8080/hello"],
+    ["[Open my site](https://203.0.113.21/site?q=1)", "https://203.0.113.21/site?q=1"],
+    ["An old address was http://203.0.113.1/. PUBLIC_PAGE_URL=http://198.51.100.45/", "http://198.51.100.45/"],
+    ["PUBLIC_PAGE_URL=http://[2001:db8::9]:8080/", "http://[2001:db8::9]:8080/"],
+  ])("detects the actual page in %s", async (text, expected) => {
+    const { findPublicPageLink } = await import("../src/lib/tour");
+    expect(findPublicPageLink(text)).toBe(expected);
+  });
+  it.each(["http://127.0.0.1/", "http://192.168.1.4/", "http://169.254.169.254/", "http://999.1.2.3/", "http://203.0.113.1:99999/", "http://user:secret@203.0.113.1/", "https://example.com/path/203.0.113.4", "http://[::1]/", "http://[fd00::1]/", "203.0.113.1/32"])("does not offer %s as the public page", async text => {
+    const { findPublicPageLink } = await import("../src/lib/tour");
+    expect(findPublicPageLink(text)).toBeUndefined();
+  });
+});

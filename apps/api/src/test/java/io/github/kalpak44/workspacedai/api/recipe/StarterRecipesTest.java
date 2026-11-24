@@ -91,6 +91,12 @@ class StarterRecipesTest {
   }
 
   @Test
+  void findsTheTourRecipeRegardlessOfSearchCase() {
+    var found = recipes.list(UUID.randomUUID(), "public", "sImPlE WEB pAgE", null, "top", 0, 100);
+    assertThat(found.getContent()).anyMatch(recipe -> recipe.title().equals("Simple web page"));
+  }
+
+  @Test
   @Transactional
   void privateCielaIsClaimedAndPublicBrowserRemainsOwnedByWorkspaced() {
     var pavel = users.saveAndFlush(TestUsers.newUser("pavel.usanli@gmail.com"));

@@ -161,7 +161,9 @@ type ChatCheckpoint = "public";
 const checkpoints = new Map<string, ChatCheckpoint | undefined>();
 /** Wait for the assistant to explain public access before asking the user to confirm. */
 export function reportChatCheckpoint(sessionId: string, text: string): void {
-  const checkpoint = /\bpublic\b/i.test(text) && /\binternet\b/i.test(text) ? "public" : undefined;
+  const access = /\b(public|publish|internet|online|go live|anyone|port 80)\b/i;
+  const asks = /\?|\b(confirm|confirmation|permission|shall|should|may i|can i|would you|reply|say yes|go ahead)\b/i;
+  const checkpoint = access.test(text) && asks.test(text) ? "public" : undefined;
   if (checkpoints.get(sessionId) === checkpoint) return;
   checkpoints.set(sessionId, checkpoint); emit();
 }
@@ -169,12 +171,36 @@ export function useChatCheckpoint(sessionId: string | undefined): ChatCheckpoint
   return useSyncExternalStore(subscribe, () => sessionId ? checkpoints.get(sessionId) : undefined);
 }
 
-// The address the assistant publishes a page on: its machine's IP, as the recipe instructs.
-const PAGE_LINK = /\bhttps?:\/\/\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?(?:\/[^\s)\]>"'`]*)?/;
+/** Finds the page's current address without depending on a fixed machine or reply format. */
+export function findPublicPageLink(text: string): string | undefined {
+  const marker = /PUBLIC_PAGE_URL\s*[:=]\s*([^\s<>"'`]+)/i.exec(text)?.[1];
+  const candidates = [...(marker ? [marker] : []),
+    ...(text.match(/https?:\/\/[^\s<>"'`]+/gi) ?? []),
+    ...(text.match(/(?<![\w./:@-])(?:(?:\d{1,3}\.){3}\d{1,3}(?!\d|\.\d)|\[[0-9a-fA-F:]+\])(?::\d{1,5})?(?:\/[^\s<>"'`]*)?/g) ?? [])];
+  for (const candidate of candidates) {
+    const clean = candidate.replace(/[),.;!?]+$/, "");
+    try {
+      const url = new URL(/^https?:/i.test(clean) ? clean : `http://${clean}`);
+      if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password) continue;
+      const host = url.hostname;
+      if (host.startsWith('[')) {
+        if (!host.includes(':') || /^\[(::|::1|f[cd]|fe[89ab]|ff)/i.test(host)) continue;
+      } else {
+        if (!/^\d+\.\d+\.\d+\.\d+$/.test(host)) continue;
+        const [a, b, ...rest] = host.split('.').map(Number);
+        if ([a, b, ...rest].some(part => part > 255) || a === 0 || a === 10 || a === 127 || a >= 224
+            || (a === 169 && b === 254) || (a === 172 && b >= 16 && b <= 31) || (a === 192 && b === 168)) continue;
+      }
+      if (url.port === '0' || /^\/\d{1,3}$/.test(url.pathname)) continue;
+      return url.href;
+    } catch { /* A malformed address is not a page link. */ }
+  }
+  return undefined;
+}
 const pageLinks = new Map<string, string>();
 /** The last public page address the assistant gave in this conversation, once it gives one. */
 export function reportChatPageLink(sessionId: string, text: string): void {
-  const link = PAGE_LINK.exec(text)?.[0].replace(/[.,;:!?]+$/, "");
+  const link = findPublicPageLink(text);
   if (!link || pageLinks.get(sessionId) === link) return;
   pageLinks.set(sessionId, link); emit();
 }

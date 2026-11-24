@@ -126,7 +126,7 @@ export async function updateMailPreferences(preferences: MailPreferences): Promi
 export async function saveTour(progress: TourProgress | null): Promise<void> {
   await send(`${ACCOUNT_URL}/tour`, progress
     ? { method: "PUT", body: JSON.stringify({ ...progress, paused: progress.paused ?? false }) }
-    : { method: "DELETE" });
+    : { method: "DELETE" }, { retry: "idempotent" });
 }
 
 /** Auth0 emails the signed-in user a link to set a new password. */

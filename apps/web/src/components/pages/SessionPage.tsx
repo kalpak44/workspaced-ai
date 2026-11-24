@@ -50,9 +50,9 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
       .flatMap((message) => message.parts.filter((part) => part.type === "text").map((part) => part.text ?? "")).join("\n");
     const question = tour && (tour.step === TOUR_STEP.BUILD || tour.step === TOUR_STEP.CONFIRM_PUBLIC) && publicTourAnswer(chat.forms);
     reportChatPublicQuestion(sessionId, !!question);
-    const waiting = !ready || chat.loading || (chat.busy && !question) || !!chat.error || !reply.trim();
+    const waiting = !ready || chat.loading || (chat.busy && !question) || !!chat.error || (!reply.trim() && !question);
     reportChatBusy(sessionId, waiting);
-    reportChatCheckpoint(sessionId, waiting ? "" : reply);
+    reportChatCheckpoint(sessionId, waiting ? "" : question ? "Confirm making this page public on the internet?" : reply);
     const replies = chat.messages.filter(message => message.role === "assistant");
     if (tour?.step === TOUR_STEP.DEPLOY) {
       // A pre-publication question may mention the address before any server is running.

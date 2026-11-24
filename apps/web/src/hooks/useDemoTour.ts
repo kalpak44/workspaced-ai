@@ -34,8 +34,14 @@ export function publicTourAnswer(forms: readonly AgentForm[]): { id: string; ans
   const form = forms[0];
   if (form.fields.length !== 1) return null;
   const field = form.fields[0];
-  if (field.hidden || field.when?.length || !/\b(public|publish)\b/i.test(`${form.title} ${field.title ?? ""} ${field.description ?? ""}`)) return null;
+  if (field.hidden || field.when?.length || !/\b(public|publish|online|go live|internet|anyone)\b/i.test(`${form.title} ${field.title ?? ""} ${field.description ?? ""}`)) return null;
   if (field.type === "boolean") return { id: form.id, answer: { [field.key]: true } };
-  const yes = field.type === "string" ? field.options?.find(option => /^yes\b/i.test(option.label)) : undefined;
-  return yes ? { id: form.id, answer: { [field.key]: yes.value } } : null;
+  if (field.type !== "string") return null;
+  const yes = field.options?.find(option => /^(yes|publish|allow|go ahead|proceed|confirm)\b/i.test(option.label)
+    && !/\b(no|not|private|later|cancel)\b/i.test(option.label));
+  if (yes) return { id: form.id, answer: { [field.key]: yes.value } };
+  if (!field.options?.length && !field.pattern && (field.minLength ?? 0) <= 3 && (field.maxLength ?? 3) >= 3) {
+    return { id: form.id, answer: { [field.key]: "Yes" } };
+  }
+  return null;
 }
