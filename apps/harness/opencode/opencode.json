@@ -25,6 +25,10 @@
     "openrouter": {
       "settings": {
         "baseURL": "{env:OPENROUTER_BASE_URL}"
+      },
+      "headers": {
+        "HTTP-Referer": "https://workspaced.online",
+        "X-Title": "workspaced"
       }
     }
   }
