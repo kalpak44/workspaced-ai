@@ -10,7 +10,7 @@ export const TOUR_STEP_COUNT = Object.keys(TOUR_STEP).length;
 export const TOUR_WORKSPACE_NAME = "My first workspace";
 export const TOUR_PUBLIC_PROMPT = "Yes, make this page public so anyone can open it from the internet. Open the website port, publish the page, and give me its clickable address.";
 export const TOUR_DESIGN_IDEAS: readonly string[] = ["Make it about my bakery, with opening hours", "Use calm, dark colours", "Add a short section about me", "Make it more playful"];
-export const TOUR_DESIGN_PROMPT = "Change the heading to Welcome to my first workspace and use a warm cream background. Keep the page public at the same address.";
+export const TOUR_DESIGN_PROMPT = "Change the heading to Welcome to my first workspace and use a warm cream background with dark, readable text in both light and dark browser themes. Keep the page public at the same address.";
 
 /** Kept on the account, so any browser resumes it. Only non-secret identifiers and names. */
 export interface TourProgress {
