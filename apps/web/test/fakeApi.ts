@@ -173,6 +173,8 @@ export function installFakeApi(
     nextSession: 1,
     nextTerminal: 1,
     failTerminalDelete: false,
+    // What a week of the demo's plan costs; keeping it needs that much balance.
+    keepCostCents: 246,
     failTerminalCreate: false,
     failAgentList: false,
     failAgentSwitch: false,
@@ -695,6 +697,17 @@ export function installFakeApi(
       if (state.fail) return json({}, state.fail);
       const { timeZone } = JSON.parse(String(init?.body)) as { timeZone: string };
       if (timeZone !== rows[index].timeZone) rows[index] = { ...rows[index], timeZone, restartRequired: true };
+      return json(rows[index]);
+    }
+    const keepRoute = /\/api\/v1\/workspaces\/([^/]+)\/keep$/.exec(url);
+    if (keepRoute && init?.method === "POST") {
+      const index = rows.findIndex((item) => item.id === keepRoute[1]);
+      if (index < 0) return json({}, 404);
+      if (!rows[index].demo) return json({ detail: "only a running demo can be kept" }, 409);
+      if (billing.balanceCents < state.keepCostCents) {
+        return json({ detail: "add funds to keep it", shortCents: state.keepCostCents - billing.balanceCents }, 402);
+      }
+      rows[index] = { ...rows[index], demo: false, expiresAt: null };
       return json(rows[index]);
     }
     const tutorialRoute = /\/api\/v1\/workspaces\/([^/]+)\/tutorial-completed$/.exec(url);

@@ -24,6 +24,10 @@
   @keyframes sheet-in {
     from { opacity: 0; transform: translateY(16px); }
   }
+  @keyframes confetti-fall {
+    from { opacity: 1; transform: translateY(-10vh) rotate(0deg); }
+    to { opacity: 0; transform: translateY(70vh) rotate(540deg); }
+  }
 }
 
 /* Draw attention to the newly available tour action without moving the button. */

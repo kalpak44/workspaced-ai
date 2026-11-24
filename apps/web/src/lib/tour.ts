@@ -10,7 +10,6 @@ export const TOUR_STEP_COUNT = Object.keys(TOUR_STEP).length;
 export const TOUR_WORKSPACE_NAME = "My first workspace";
 export const TOUR_PUBLIC_PROMPT = "Yes, make this page public so anyone can open it from the internet. Open the website port, publish the page, and give me its clickable address.";
 export const TOUR_DESIGN_PROMPT = "Change the heading to Welcome to my first workspace and use a warm cream background. Keep the page public at the same address.";
-export const TOUR_DOCS_URL = "https://workspaced.online/docs";
 
 /** Kept on the account, so any browser resumes it. Only non-secret identifiers and names. */
 export interface TourProgress {
@@ -141,6 +140,19 @@ export function reportChatCheckpoint(sessionId: string, text: string): void {
 }
 export function useChatCheckpoint(sessionId: string | undefined): ChatCheckpoint | undefined {
   return useSyncExternalStore(subscribe, () => sessionId ? checkpoints.get(sessionId) : undefined);
+}
+
+// The address the assistant publishes a page on: its machine's IP, as the recipe instructs.
+const PAGE_LINK = /\bhttps?:\/\/\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?(?:\/[^\s)\]>"'`]*)?/;
+const pageLinks = new Map<string, string>();
+/** The last public page address the assistant gave in this conversation, once it gives one. */
+export function reportChatPageLink(sessionId: string, text: string): void {
+  const link = PAGE_LINK.exec(text)?.[0].replace(/[.,;:!?]+$/, "");
+  if (!link || pageLinks.get(sessionId) === link) return;
+  pageLinks.set(sessionId, link); emit();
+}
+export function useChatPageLink(sessionId: string | undefined): string | undefined {
+  return useSyncExternalStore(subscribe, () => sessionId ? pageLinks.get(sessionId) : undefined);
 }
 
 /** Uses React's native value setter. Stops if the user edits or moves away during a demonstration. */

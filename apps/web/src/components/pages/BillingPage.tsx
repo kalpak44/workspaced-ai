@@ -7,6 +7,8 @@ import { centsFor, perDay } from "../../lib/pricing";
 import { Button, IconButton, TextField } from "../atoms";
 import { EmptyState, PageHeader, Pagination, SettingsSection, Toast } from "../molecules";
 import { AddFundsDialog } from "../organisms";
+import { keep, takeKeepAfterTopUp } from "../../hooks/useKeepWorkspace";
+import type { Workspace } from "../../hooks/useWorkspaces";
 
 const DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 const DAY = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
@@ -156,8 +158,12 @@ function returnedTopUp(): { readonly id: string; readonly cancelled: boolean } |
   return id ? { id, cancelled: query.get("outcome") === "cancelled" } : null;
 }
 
-/** The account's balance, a way to top it up, and every top-up with its invoice. */
-export function BillingPage() {
+/**
+ * The account's balance, a way to top it up, and every top-up with its invoice.
+ *
+ * @param onKept called once a top-up made to keep the demo has kept it
+ */
+export function BillingPage({ onKept }: { readonly onKept?: (workspace: Workspace) => void }) {
   const { billing, status, pay: startPayment, confirm, openInvoice, saveCard, confirmCard, removeCard, setAutoTopUp } = useBilling();
   const [adding, setAdding] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -200,13 +206,23 @@ export function BillingPage() {
       return;
     }
     // The webhook may not have arrived yet, so the API is asked to read the payment back itself.
+    // Taken whatever the outcome, so a payment that did not clear never keeps the demo later.
+    const keeping = takeKeepAfterTopUp();
     confirm(returned.id).then(
-      (topUp) => setNotice(topUp.status === "PAID"
-        ? `${formatMoney(topUp.amountCents)} was added to your balance.`
-        : "Your payment is being confirmed. The balance updates once it clears."),
+      async (topUp) => {
+        if (topUp.status !== "PAID") {
+          setNotice("Your payment is being confirmed. The balance updates once it clears.");
+          return;
+        }
+        setNotice(`${formatMoney(topUp.amountCents)} was added to your balance.`);
+        if (!keeping) return;
+        const kept = await keep(keeping);
+        if (kept.kind === "kept") onKept?.(kept.workspace);
+        else setNotice(`${formatMoney(topUp.amountCents)} was added to your balance, but your demo could not be kept: ${kept.kind === "short" ? "the balance still does not cover its first week." : kept.reason}`);
+      },
       () => setNotice("Your payment could not be confirmed yet. Check back in a minute."),
     );
-  }, [confirm]);
+  }, [confirm, onKept]);
 
   const pay = (cents: number) => {
     setPaying(true);

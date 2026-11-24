@@ -5,7 +5,7 @@ import { useSessions } from "../../hooks/useSessions";
 import { useSessionAgents } from "../../hooks/useSessionAgents";
 import { FileLinkContext, useSessionFiles } from "../../hooks/useSessionFiles";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { reportChatBusy, reportChatCheckpoint, reportTourAction } from "../../lib/tour";
+import { reportChatBusy, reportChatCheckpoint, reportChatPageLink, reportTourAction } from "../../lib/tour";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
 import { ChatAgentPicker } from "../organisms/ChatAgentPicker";
@@ -47,6 +47,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
     const waiting = !ready || chat.loading || chat.busy || !!chat.error || !reply.trim();
     reportChatBusy(sessionId, waiting);
     reportChatCheckpoint(sessionId, waiting ? "" : reply);
+    if (!waiting) reportChatPageLink(sessionId, reply);
   }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages]);
 
   // A session that is not in the list was deleted, or the link was wrong.

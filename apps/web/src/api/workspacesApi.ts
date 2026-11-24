@@ -18,6 +18,8 @@ export interface Workspace {
   readonly restartRequired: boolean;
   /** The account's free demo, which is never charged and is deleted at expiresAt. */
   readonly demo?: boolean;
+  /** The plan's server type its VM runs on; null while it has none. */
+  readonly serverType?: string | null;
   /** ISO 8601; null until a demo's VM has started, and for every other workspace. */
   readonly expiresAt?: string | null;
 }
@@ -100,6 +102,11 @@ export async function restartWorkspace(id: string): Promise<void> {
 
 export async function deleteWorkspace(id: string): Promise<void> {
   await send(workspaceUrl(id), { method: "DELETE" });
+}
+
+/** Turns the free demo into a workspace the balance pays for, on the same VM. */
+export async function keepWorkspace(id: string): Promise<Workspace> {
+  return (await send(`${workspaceUrl(id)}/keep`, { method: "POST" })).json();
 }
 
 /** Records tutorial completion once and sends an in-app notification, without email. */
