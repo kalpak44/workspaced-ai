@@ -108,10 +108,10 @@ class Auth0SignIn {
         .attributes(
             attributes -> {
               if (attribution.source() != null) {
-                attributes.put(Attribution.SOURCE, attribution.source());
+                attributes.put(Attribution.SOURCE_PARAM, attribution.source());
               }
               if (attribution.campaign() != null) {
-                attributes.put(Attribution.CAMPAIGN, attribution.campaign());
+                attributes.put(Attribution.CAMPAIGN_PARAM, attribution.campaign());
               }
             })
         .additionalParameters(

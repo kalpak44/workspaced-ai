@@ -15,8 +15,8 @@ public record Attribution(String source, String campaign) {
 
   public static final Attribution NONE = new Attribution(null, null);
 
-  static final String SOURCE = "utm_source";
-  static final String CAMPAIGN = "utm_campaign";
+  static final String SOURCE_PARAM = "utm_source";
+  static final String CAMPAIGN_PARAM = "utm_campaign";
 
   // Carries it from the callback's cookie to the success handler on the same request.
   static final String REQUEST_ATTRIBUTE = Attribution.class.getName();
@@ -26,7 +26,7 @@ public record Attribution(String source, String campaign) {
 
   /** From the parameters of a link, or of the authorization request that kept them. */
   static Attribution of(Map<String, ?> values) {
-    return new Attribution(clean(values.get(SOURCE)), clean(values.get(CAMPAIGN)));
+    return new Attribution(clean(values.get(SOURCE_PARAM)), clean(values.get(CAMPAIGN_PARAM)));
   }
 
   boolean isEmpty() {
