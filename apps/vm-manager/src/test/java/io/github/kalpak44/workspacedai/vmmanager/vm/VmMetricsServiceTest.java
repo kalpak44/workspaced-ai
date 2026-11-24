@@ -34,7 +34,8 @@ class VmMetricsServiceTest {
           "ubuntu-24.04",
           List.of(),
           Duration.ofSeconds(1),
-          null);
+          null,
+          List.of());
   final VmService vmService =
       new VmService(
           vms,
