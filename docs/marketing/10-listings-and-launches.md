@@ -5,9 +5,10 @@ a spike of visitors is not wasted on a demo that ends and deletes their work.
 
 ## OpenRouter app rankings
 
-OpenRouter lists apps by token usage, attributed by the `HTTP-Referer` and `X-Title` headers on requests. Set both on
-traffic that goes through trial keys (`https://workspaced.online`, `workspaced`), in the harness's OpenRouter provider
-config. Check whether requests made with users' own keys can carry the headers too; that is most of the traffic.
+OpenRouter lists apps by token usage, attributed by the `HTTP-Referer` and `X-Title` headers on requests. **Done:** the
+harness sends `https://workspaced.online` and `workspaced` on every OpenRouter request, trial keys and users' own keys
+alike (`apps/harness/opencode/opencode.json`). Once workspaces run the new harness image, check that workspaced appears
+on openrouter.ai/rankings.
 
 ## Directories
 

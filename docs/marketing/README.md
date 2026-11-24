@@ -12,13 +12,16 @@ costs and the guard that keeps every program inside that.
 | Fixed-price plans (Starter, Builder, Pro) with a margin guard, replacing the markup | [06-billing.md](06-billing.md) | `0d46950` |
 | Pricing page at `/pricing` | [09-comparison-pages.md](09-comparison-pages.md) | `0d46950` |
 | Plans fall back to another Hetzner location, then to Starter Flex, when sold out | [01-plan-availability.md](01-plan-availability.md) | `90df731`, `c0f5398` |
+| Model provider step defaults to Connect OpenRouter, with a two-line AI notice | [04-demo-conversion.md](04-demo-conversion.md) | `f43af16` |
+| OpenRouter attribution headers on every agent request | [10-listings-and-launches.md](10-listings-and-launches.md) | `f4eed5a` |
+| Admins are told when no plan has been available for 15 minutes, and when one is back | [01-plan-availability.md](01-plan-availability.md) | `bbcf259` |
 
 ## Next, in order
 
 | # | File | What | Why here | Effort |
 |---|---|---|---|---|
-| 1 | [01-plan-availability.md](01-plan-availability.md) | Keep the plans in stock, alert when they are not | Nothing below matters if no workspace can be created | Small |
-| 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Add the VAT ID to Hetzner | No code, and it decides whether every reward program can pay out | None |
+| 1 | [01-plan-availability.md](01-plan-availability.md) | "Tell me when it's back" on a sold-out plan | Nothing below matters if no workspace can be created | Small |
+| 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Add the VAT ID to Hetzner, settle OSS with an accountant | No code, and it decides whether every reward program can pay out | None |
 | 3 | [03-analytics.md](03-analytics.md) | Measure the funnel from visit to paying user | Everything after this is a guess until it exists | Small |
 | 4 | [04-demo-conversion.md](04-demo-conversion.md) | Keep the demo's work by paying | The demo is the most expensive acquisition, and its work is deleted today | Medium |
 | 5 | [05-tour.md](05-tour.md) | Record where users stop, end on "keep this workspace" | Same moment as 4; the step history is half of the measuring | Small |

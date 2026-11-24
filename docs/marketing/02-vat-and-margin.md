@@ -16,6 +16,13 @@ programs below can pay out without losing money in the worst case (see [economic
 No code changes: the plan guard in `compute/VmPricing` reads Hetzner's `monthlyGross`, which then equals the net price,
 so the guard's margins rise on their own.
 
+## Ask the accountant as well: VAT on what we sell
+
+Top-ups are charged a flat 20%, Bulgaria's rate (`workspaced.billing.vat-percent`). Once sales to consumers in other EU
+countries pass €10,000 a year, each must be charged their own country's rate and declared through OSS (the EU's One-Stop
+Shop). Ask whether that threshold is near, and whether a business customer with a valid VAT ID should be charged under
+reverse charge instead. Either answer is a change to how `BillingService` computes VAT, and to `terms.html`.
+
 ## What it unlocks
 
 | | Today (VAT paid) | With the VAT ID |
