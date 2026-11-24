@@ -11,7 +11,7 @@ costs and the guard that keeps every program inside that.
 | Prices say they exclude VAT, daily price first, €10 first top-up, a week of balance to create | [06-billing.md](06-billing.md) | `220271f` |
 | Fixed-price plans (Starter, Builder, Pro) with a margin guard, replacing the markup | [06-billing.md](06-billing.md) | `0d46950` |
 | Pricing page at `/pricing` | [09-comparison-pages.md](09-comparison-pages.md) | `0d46950` |
-| Plans fall back to another Hetzner location when sold out | [01-plan-availability.md](01-plan-availability.md) | not yet deployed |
+| Plans fall back to another Hetzner location, then to Starter Flex, when sold out | [01-plan-availability.md](01-plan-availability.md) | this push |
 
 ## Next, in order
 

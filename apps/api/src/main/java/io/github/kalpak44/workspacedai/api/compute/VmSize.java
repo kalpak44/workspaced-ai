@@ -31,10 +31,31 @@ public record VmSize(
             example = "10.645833")
         BigDecimal monthlyGross,
     @Schema(
-            description = "One of the low-cost sizes, rather than a pricier stand-in",
+            description =
+                "False for a plan offered only while every other plan is sold out, on a pricier"
+                    + " server",
             example = "true")
         boolean recommended,
     @Schema(
             description = "False while Hetzner has it sold out, when a create is refused",
             example = "true")
-        boolean available) {}
+        boolean available) {
+
+  /** The same size, marked as the default or not. */
+  VmSize withDefault(boolean isDefault) {
+    return new VmSize(
+        plan,
+        serverType,
+        isDefault,
+        cores,
+        memoryGb,
+        diskGb,
+        cpuType,
+        architecture,
+        location,
+        monthlyNet,
+        monthlyGross,
+        recommended,
+        available);
+  }
+}

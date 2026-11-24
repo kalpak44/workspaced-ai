@@ -15,6 +15,8 @@ export interface VmSize {
   readonly architecture: string;
   /** What the user pays a month, in EUR before the VAT charged on a top-up. */
   readonly monthlyGross: number;
+  /** False for a plan offered only while every other plan is sold out, on a pricier server. */
+  readonly recommended: boolean;
   /** False while Hetzner has it sold out, when a create would be refused. */
   readonly available: boolean;
 }

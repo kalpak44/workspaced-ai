@@ -2,8 +2,10 @@ package io.github.kalpak44.workspacedai.api.compute;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -17,8 +19,8 @@ import org.springframework.stereotype.Component;
 public class VmPricing {
 
   private static final Logger LOG = LoggerFactory.getLogger(VmPricing.class);
-  private static final BigDecimal DAYS_PER_MONTH =
-      BigDecimal.valueOf(730).divide(BigDecimal.valueOf(24), 6, RoundingMode.HALF_UP);
+  private static final BigDecimal HOURS_PER_MONTH = BigDecimal.valueOf(730);
+  private static final BigDecimal HOURS_PER_DAY = BigDecimal.valueOf(24);
   private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
 
   private final VmManager vmManager;
@@ -30,18 +32,39 @@ public class VmPricing {
   }
 
   /**
-   * Every plan Hetzner still offers the server for, in the configured order, priced for the user.
+   * Every plan Hetzner still offers the server for, in the configured order, priced for the user. A
+   * fallback plan is offered, as the default, only while no other plan is available.
    */
   public List<VmSize> sizes(boolean admin) {
     var sizes = vmManager.sizes();
-    var first = plans.offered().getFirst();
-    return plans.offered().stream()
+    var regular = priced(plans.offered().stream().filter(plan -> !plan.fallback()), sizes, admin);
+    if (regular.stream().anyMatch(VmSize::available)) {
+      return regular;
+    }
+    var fallbacks =
+        priced(plans.offered().stream().filter(PlanProperties.Plan::fallback), sizes, admin)
+            .stream()
+            .filter(VmSize::available)
+            .toList();
+    if (fallbacks.isEmpty()) {
+      return regular;
+    }
+    var all = new ArrayList<VmSize>();
+    regular.forEach(size -> all.add(size.withDefault(false)));
+    fallbacks.forEach(size -> all.add(size.withDefault(size == fallbacks.getFirst())));
+    return List.copyOf(all);
+  }
+
+  private List<VmSize> priced(
+      Stream<PlanProperties.Plan> offered, List<VmSize> sizes, boolean admin) {
+    var chosen = offered.toList();
+    return chosen.stream()
         .flatMap(
             plan ->
                 sizes.stream()
                     .filter(size -> size.serverType().equals(plan.serverType()))
                     .findFirst()
-                    .map(size -> priced(plan, size, plan == first, admin))
+                    .map(size -> priced(plan, size, plan == chosen.getFirst(), admin))
                     .stream())
         .toList();
   }
@@ -63,7 +86,8 @@ public class VmPricing {
   }
 
   private VmSize priced(PlanProperties.Plan plan, VmSize size, boolean isDefault, boolean admin) {
-    var monthly = plan.dailyPrice().multiply(DAYS_PER_MONTH).setScale(6, RoundingMode.HALF_UP);
+    var monthly =
+        plan.dailyPrice().multiply(HOURS_PER_MONTH).divide(HOURS_PER_DAY, 6, RoundingMode.HALF_UP);
     var covered = covers(plan, monthly, size);
     return new VmSize(
         plan.name(),
@@ -77,7 +101,7 @@ public class VmPricing {
         size.location(),
         admin ? size.monthlyNet() : monthly,
         admin ? size.monthlyGross() : monthly,
-        true,
+        !plan.fallback(),
         size.available() && covered);
   }
 

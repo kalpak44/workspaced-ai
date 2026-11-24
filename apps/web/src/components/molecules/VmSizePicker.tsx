@@ -65,9 +65,10 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
     );
   }
   const allSoldOut = !sizes.some((size) => size.available);
+  const standIn = sizes.find((size) => !size.recommended && size.available);
   return (
     <>
-      {(allSoldOut || soldOut) && (
+      {(allSoldOut || standIn || soldOut) && (
         <div
           role="status"
           aria-label="Sizes unavailable"
@@ -79,7 +80,9 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
               {soldOut ? `${soldOut} is no longer available. ` : ""}
               {allSoldOut
                 ? "Every plan is sold out right now. They usually come back within a few hours, so check again in a while."
-                : "Pick another plan, or check again in a while."}
+                : standIn
+                  ? `Every plan is sold out right now, so ${standIn.plan} is offered in their place until they are back, usually within a few hours. It costs more, so you can also wait and check again.`
+                  : "Pick another plan, or check again in a while."}
             </p>
           </div>
           <div>

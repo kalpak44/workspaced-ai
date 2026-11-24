@@ -93,7 +93,8 @@ the order they were created.
 
 `/vm-sizes` lists the plans in `workspaced.plans.offered`: Starter (cx23), Builder (cx33) and Pro (cx43), each a fixed
 daily price before VAT. An admin sees what the plan's VM costs, server and IPv4 address; everyone else sees the plan's
-price. A plan is listed as unavailable while its server is sold out, and also while its price, less Stripe's fee, no
+price. A plan marked `fallback` (Starter Flex, cpx22) is listed, as the default and with `recommended` false, only
+while every other plan is sold out. A plan is listed as unavailable while its server is sold out, and also while its price, less Stripe's fee, no
 longer keeps `min-margin-percent` over the server's cost with VAT times `hourly-billing-factor`; the API logs an error
 then, so a Hetzner price rise withholds the plan instead of selling it at a loss. The site's `pricing.html` states the
 same prices, so a change to one is a change to both.

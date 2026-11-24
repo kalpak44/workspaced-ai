@@ -25,9 +25,9 @@ export const OPENROUTER = {
 
 /** The plans the fake API offers, in the order shown: Starter, Builder and Pro. */
 export const VM_SIZES = [
-  { plan: "Starter", serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 10.645833, monthlyGross: 10.645833, available: true },
-  { plan: "Builder", serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 16.729167, monthlyGross: 16.729167, available: true },
-  { plan: "Pro", serverType: "cx43", isDefault: false, cores: 8, memoryGb: 16, diskGb: 160, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 28.895833, monthlyGross: 28.895833, available: true },
+  { plan: "Starter", serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 10.645833, monthlyGross: 10.645833, recommended: true, available: true },
+  { plan: "Builder", serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 16.729167, monthlyGross: 16.729167, recommended: true, available: true },
+  { plan: "Pro", serverType: "cx43", isDefault: false, cores: 8, memoryGb: 16, diskGb: 160, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 28.895833, monthlyGross: 28.895833, recommended: true, available: true },
 ];
 
 /** What the fake API has told the user, newest first, three of them unread. */

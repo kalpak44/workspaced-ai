@@ -50,7 +50,8 @@ workspaced:
   vm-manager:
     url: ${WORKSPACED_VM_MANAGER_URL:}
   # What a workspace can be created as: a fixed daily price, before VAT, for one Hetzner server
-  # type each. The first is the default. The site's pricing.html states these prices too.
+  # type each. The first is the default; a fallback plan is offered only while every other plan
+  # is sold out. The site's pricing.html states these prices too.
   plans:
     offered:
       - name: Starter
@@ -62,6 +63,12 @@ workspaced:
       - name: Pro
         server-type: cx43
         daily-price: 0.95
+      # Hetzner sells the cx line out everywhere for hours at a time; cpx22 is the same size,
+      # usually in stock, and priced to pass the margin check below.
+      - name: Starter Flex
+        server-type: cpx22
+        daily-price: 1.10
+        fallback: true
     # A plan is withheld unless, after Stripe's fee, its price keeps this margin over its server's
     # cost with VAT, raised by Hetzner's hourly billing before the monthly cap.
     hourly-billing-factor: 1.155
