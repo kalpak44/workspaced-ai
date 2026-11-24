@@ -158,7 +158,7 @@ export function installFakeApi(
   const state = {
     // Each test's own copy, so one can sell a size out.
     vmSizes: VM_SIZES.map((size) => ({ ...size })),
-    // When set, a create is refused as the balance not covering a month of the size.
+    // When set, a create is refused as the balance not covering the required days of the size.
     noFunds: false,
     fail: 0,
     nextId: 1,
@@ -210,6 +210,7 @@ export function installFakeApi(
     balanceCents: 1240,
     reactivationFeeCents: 500,
     pausedForHours: 72,
+    requiredHours: 168,
     card: null as string | null,
     autoTopUp: { enabled: false, belowCents: 1000, amountCents: 2000 },
     // The card a setup session returning with this id saved.
@@ -247,8 +248,8 @@ export function installFakeApi(
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
-      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps } = billing;
-      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps });
+      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, requiredHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps } = billing;
+      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, requiredHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps });
     }
     if (url.endsWith("/api/v1/billing/card") && init?.method === "POST") {
       if (billing.failStart) return json({}, billing.failStart);

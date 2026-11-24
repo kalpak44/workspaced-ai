@@ -6,6 +6,7 @@ import { useModelProviders } from "../../hooks/useModelProviders";
 import { type OpenRouterConnectStatus, useOpenRouterConnect } from "../../hooks/useOpenRouterConnect";
 import { navigate } from "../../hooks/useRoute";
 import { formatMoney } from "../../lib/format";
+import { centsFor, formatHours, lasts, perDay } from "../../lib/pricing";
 import { routePath } from "../../lib/routes";
 import { type VmSize, useVmSizes } from "../../hooks/useVmSizes";
 import type { CreateResult, NewWorkspace } from "../../hooks/useWorkspaces";
@@ -15,8 +16,6 @@ import { initialVmSize, Modal, ModalBody, ModalFooter, VmSizePicker } from "../m
 import { isRejectedConnectorKey, useAiConnectors } from "../../hooks/useAiConnectors";
 
 import { AiProviderNotice } from "../molecules/AiProviderNotice";
-
-const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
 
 // The API rejects anything longer, so the field never lets the user type past it.
 const MAX_NAME = 100;
@@ -35,30 +34,26 @@ function hostOf(url: string): string {
 }
 
 /**
- * A month of every workspace the user has with one of this size, which the balance must cover for
- * the API to create it, and how much the balance falls short of that.
+ * What every workspace the user has costs with one of this size over the period the API requires
+ * the balance to cover before it creates one, and how much the balance falls short of that.
  */
-function monthWith(billing: Billing, size: VmSize) {
+function coverWith(billing: Billing, size: VmSize) {
   const monthCents = billing.monthlySpendCents + Math.round(size.monthlyGross * 100);
-  return { monthCents, shortCents: Math.max(0, monthCents - billing.balanceCents) };
+  const neededCents = Math.ceil(centsFor(monthCents, billing.requiredHours));
+  return { monthCents, neededCents, shortCents: Math.max(0, neededCents - billing.balanceCents) };
 }
 
 /** Why the balance cannot pay for the size: by how much, once the balance and the size are known. */
 function shortfall(billing: Billing | null, size: VmSize | undefined, serverType: string): string {
-  if (!billing || !size || monthWith(billing, size).shortCents === 0) {
-    return `Your balance does not cover a month of ${serverType}${size ? ` (${PRICE.format(size.monthlyGross)} a month)` : ""}. Add funds, then create the workspace.`;
+  if (!billing || !size || coverWith(billing, size).shortCents === 0) {
+    return `Your balance does not cover ${serverType}${size ? ` (${perDay(size.monthlyGross * 100)})` : ""}. Add funds, then create the workspace.`;
   }
-  const { monthCents, shortCents } = monthWith(billing, size);
-  const month = billing.monthlySpendCents === 0
-    ? `a month of ${serverType} (${formatMoney(monthCents)})`
-    : `a month of your workspaces with this one (${formatMoney(monthCents)})`;
-  return `Your balance of ${formatMoney(billing.balanceCents)} does not cover ${month}. Add ${formatMoney(shortCents)}, then create the workspace.`;
-}
-
-/** "about 1.4 months", "about 12 months": how long a balance of at least a month lasts. */
-function coverage(balanceCents: number, monthCents: number): string {
-  const months = balanceCents / monthCents;
-  return `about ${months >= 10 ? Math.floor(months) : Number(months.toFixed(1))} months`;
+  const { neededCents, shortCents } = coverWith(billing, size);
+  const span = formatHours(billing.requiredHours);
+  const what = billing.monthlySpendCents === 0
+    ? `${span} of ${serverType} (${formatMoney(neededCents)})`
+    : `${span} of your workspaces with this one (${formatMoney(neededCents)})`;
+  return `Your balance of ${formatMoney(billing.balanceCents)} does not cover ${what}. Add ${formatMoney(shortCents)}, then create the workspace.`;
 }
 
 /** What the OpenRouter popup is doing, once the user has started it; null while there is nothing to say. */
@@ -97,7 +92,7 @@ function AddFundsLink({ onClose }: { readonly onClose: () => void }) {
 
 /** How long the balance lasts with the size, or what it lacks for the API to create it. */
 function BalanceHint({ billing, size, onClose }: { readonly billing: Billing; readonly size: VmSize; readonly onClose: () => void }) {
-  const { monthCents, shortCents } = monthWith(billing, size);
+  const { monthCents, shortCents } = coverWith(billing, size);
   if (shortCents > 0) {
     return (
       <div role="status" aria-label="Balance" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
@@ -108,8 +103,8 @@ function BalanceHint({ billing, size, onClose }: { readonly billing: Billing; re
   }
   return (
     <p role="status" aria-label="Balance" className="text-sm text-zinc-500 dark:text-zinc-400">
-      {billing.monthlySpendCents === 0 ? "It costs" : "With it, your workspaces cost"} {formatMoney(monthCents)} a month.
-      Your balance of {formatMoney(billing.balanceCents)} lasts {coverage(billing.balanceCents, monthCents)}.
+      {billing.monthlySpendCents === 0 ? "It costs" : "With it, your workspaces cost"} {perDay(monthCents)} ({formatMoney(monthCents)} a month).
+      Your balance of {formatMoney(billing.balanceCents)} lasts {lasts(billing.balanceCents, monthCents)}.
     </p>
   );
 }

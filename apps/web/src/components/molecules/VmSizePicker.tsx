@@ -1,12 +1,11 @@
 import { RotateCw, Server, TriangleAlert } from "lucide-react";
 import type { VmSize } from "../../hooks/useVmSizes";
+import { formatMoney } from "../../lib/format";
+import { HOURS_PER_MONTH, perDay } from "../../lib/pricing";
 import { Button, ChoiceCard, Spinner } from "../atoms";
 
-const PRICE = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR" });
 // Three decimals, since an hour of a small VM costs about a cent.
 const HOURLY = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 3, maximumFractionDigits: 3 });
-// The API spreads the monthly price over the hours of an average month.
-const HOURS_PER_MONTH = 730;
 
 /** What the VM is: cores, memory and disk. */
 function detailOf(size: VmSize): string {
@@ -14,15 +13,16 @@ function detailOf(size: VmSize): string {
 }
 
 /**
- * The monthly price with VAT and what it comes to an hour, which is how it is charged; set apart
- * so it is never cut off with the specs.
+ * The price a day first, then a month, then the hour it is charged by; set apart so it is never
+ * cut off with the specs.
  */
 function PriceTag({ size }: { readonly size: VmSize }) {
+  const monthlyCents = size.monthlyGross * 100;
   return (
     <span className="flex shrink-0 flex-col items-end leading-tight">
-      <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{PRICE.format(size.monthlyGross)}</span>
-      <span className="text-xs text-zinc-500 dark:text-zinc-400">per month</span>
-      <span className="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{HOURLY.format(size.monthlyGross / HOURS_PER_MONTH)}/hour</span>
+      <span className="text-sm font-semibold tabular-nums text-zinc-900 dark:text-zinc-100">{perDay(monthlyCents)}</span>
+      <span className="text-xs tabular-nums text-zinc-500 dark:text-zinc-400">{formatMoney(monthlyCents)} a month</span>
+      <span className="text-xs tabular-nums text-zinc-400 dark:text-zinc-500">{HOURLY.format(size.monthlyGross / HOURS_PER_MONTH)}/hour</span>
     </span>
   );
 }
@@ -104,7 +104,7 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
           onChange={onChange}
         />
       ))}
-      <p className="text-xs text-zinc-500 dark:text-zinc-400">Billed by the hour from your balance. Delete the workspace any time and its charges stop.</p>
+      <p className="text-xs text-zinc-500 dark:text-zinc-400">Prices exclude VAT, which is added when you top up. Billed by the hour from your balance; delete the workspace any time and its charges stop.</p>
     </>
   );
 }

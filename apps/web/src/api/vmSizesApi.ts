@@ -11,7 +11,7 @@ export interface VmSize {
   /** shared or dedicated */
   readonly cpuType: string;
   readonly architecture: string;
-  /** Per month with VAT, in EUR. */
+  /** What the user pays a month, in EUR before the VAT charged on a top-up. */
   readonly monthlyGross: number;
   /** One of the low-cost sizes, rather than a pricier stand-in. */
   readonly recommended: boolean;

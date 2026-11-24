@@ -36,8 +36,8 @@ describe("VM sizes", () => {
     const radios = screen.getAllByRole("radio");
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cpx22"]);
     expect(screen.getByRole("radio", { name: /cx23/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€6\.59.*per month.*€0\.009\/hour/ })).toBeInTheDocument();
-    expect(screen.getByText("Billed by the hour from your balance. Delete the workspace any time and its charges stop.")).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€0\.22 a day.*€6\.59 a month.*€0\.009\/hour/ })).toBeInTheDocument();
+    expect(screen.getByText("Prices exclude VAT, which is added when you top up. Billed by the hour from your balance; delete the workspace any time and its charges stop.")).toBeInTheDocument();
     expect(screen.getByRole("radio", { name: /cpx22/ })).toBeEnabled();
     expect(warning()).not.toBeInTheDocument();
   });
@@ -82,20 +82,21 @@ describe("VM sizes", () => {
     await openSizes(user);
 
     expect(await screen.findByRole("status", { name: "Balance" })).toHaveTextContent(
-      "With it, your workspaces cost €15.49 a month. Your balance of €50.00 lasts about 3.2 months.",
+      "With it, your workspaces cost €0.51 a day (€15.49 a month). Your balance of €50.00 lasts about 3.2 months.",
     );
   });
 
-  it("warns a paying user before the create when the balance is short of a month of everything", async () => {
+  it("warns a paying user before the create when the balance is short of a week of everything", async () => {
     const api = installFakeApi();
     api.auth.account = { ...api.auth.account, role: "USER" };
+    api.billing.balanceCents = 300;
     api.billing.monthlySpendCents = 890;
     const user = userEvent.setup();
     await openSizes(user);
 
     const hint = await screen.findByRole("status", { name: "Balance" });
     expect(hint).toHaveTextContent(
-      "Your balance of €12.40 does not cover a month of your workspaces with this one (€15.49). Add €3.09, then create the workspace.",
+      "Your balance of €3.00 does not cover 7 days of your workspaces with this one (€3.57). Add €0.57, then create the workspace.",
     );
     expect(within(hint).getByRole("link", { name: "Add funds" })).toBeInTheDocument();
   });
@@ -111,7 +112,7 @@ describe("VM sizes", () => {
   it("says when the balance is short and links to adding funds", async () => {
     const api = installFakeApi();
     api.state.noFunds = true;
-    api.billing.balanceCents = 500;
+    api.billing.balanceCents = 100;
     const user = userEvent.setup();
     await openSizes(user);
     await user.click(screen.getByRole("button", { name: "Next" }));
@@ -121,7 +122,7 @@ describe("VM sizes", () => {
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Your balance of €5.00 does not cover a month of cx23 (€6.59). Add €1.59, then create the workspace.");
+    expect(alert).toHaveTextContent("Your balance of €1.00 does not cover 7 days of cx23 (€1.52). Add €0.52, then create the workspace.");
     await user.click(within(alert).getByRole("link", { name: "Add funds" }));
     expect(globalThis.location.pathname).toBe("/billing");
     expect(api.rows.map((w) => w.name)).not.toContain("Research");

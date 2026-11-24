@@ -137,7 +137,7 @@ public class WorkspaceService {
     validTimeZone(timeZone);
     var size = demo ? cheapestDemoSize() : serverType;
     var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
-    price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     if (demo) {
       requireDemoAvailable(ownerId);
     }
@@ -197,7 +197,7 @@ public class WorkspaceService {
     if (demo) {
       requireDemoAvailable(ownerId);
     } else {
-      priceFor(ownerId, size).ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+      priceFor(ownerId, size).ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     }
     var entity =
         transactions.execute(
@@ -238,7 +238,7 @@ public class WorkspaceService {
     var provider = ModelProvider.byId(draft.getModelProvider()).orElseThrow();
     var size = demo ? cheapestDemoSize() : draft.getServerType();
     var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
-    price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     if (demo) {
       requireDemoAvailable(ownerId);
     }

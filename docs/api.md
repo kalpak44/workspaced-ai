@@ -94,8 +94,9 @@ the order they were created.
 A size's price is what the VM costs, server and IPv4 address, for an admin, and that plus
 `workspaced.vm-pricing.markup-percent` (`WORKSPACED_VM_MARKUP_PERCENT`, 35 by default) for everyone else.
 
-A user who is not an admin pays for workspaces from their balance. Creating one needs a balance that covers a month of
-the size at their price, or answers `402` saying how much, and nothing is created. From then on each workspace is
+A user who is not an admin pays for workspaces from their balance. Creating one needs a balance that covers
+`WORKSPACED_BILLING_REQUIRE_COVERED` (7 days by default, returned as `requiredHours`) of every workspace they have plus
+the new one at their price, or answers `402` saying how much, and nothing is created. From then on each workspace is
 charged by the hour, its monthly price over 730 hours, for every hour as it starts; the price is fixed when the
 workspace is created. When the balance cannot pay a workspace's next hour, the workspace is deleted. An admin's
 workspaces are never charged.
@@ -483,8 +484,8 @@ with `automatic` set. Every step is keyed by the top-up's id, so one Stripe coul
 is finished on the next run without charging twice. A declined card voids the invoice, marks the top-up `FAILED`,
 turns automatic top-ups off and notifies the user. An admin's card is never charged.
 
-A user who is not an admin needs a balance covering a month of every workspace they have plus the new one to create
-one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even
+A user who is not an admin needs a balance covering `WORKSPACED_BILLING_REQUIRE_COVERED` (7 days) of every workspace
+they have plus the new one to create one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even
 those made before the user became one. When the balance cannot pay a workspace's next hour, its VM is shut down and it
 is `PAUSED`: it is not charged, nor can it be restarted. Once the balance pays `WORKSPACED_BILLING_REACTIVATION_FEE`
 (5.00 by default, returned as `reactivationFeeCents`) and an hour, it starts again within the charge interval, the fee is

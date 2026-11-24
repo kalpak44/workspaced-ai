@@ -109,6 +109,9 @@ workspaced:
     # How long a workspace the balance cannot pay for stays paused, its VM shut down, before it
     # is deleted for good.
     paused-for: ${WORKSPACED_BILLING_PAUSED_FOR:3d}
+    # How long the balance must pay for every workspace, a new one included, before that one can
+    # be created. Short, since the balance is prepaid and a shortfall only pauses workspaces.
+    require-covered: ${WORKSPACED_BILLING_REQUIRE_COVERED:7d}
     # How often started hours of workspaces are charged; each is charged once, however late.
     charge-interval: ${WORKSPACED_BILLING_CHARGE_INTERVAL:PT5M}
     stripe:

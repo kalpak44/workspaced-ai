@@ -49,7 +49,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * A user who is not an admin pays for a workspace from the balance: a month of it and of every
+ * A user who is not an admin pays for a workspace from the balance: a week of it and of every
  * workspace they already have up front to create one, then by the hour, until the balance runs out
  * and the workspace goes.
  */
@@ -75,6 +75,7 @@ class UsageChargingTest {
           true);
   private static final long HOURLY = 12_192;
   private static final long MONTH = 8_900_000;
+  private static final long WEEK = 168 * HOURLY;
   private static final long FEE = 5_000_000;
 
   @LocalServerPort int port;
@@ -108,26 +109,26 @@ class UsageChargingTest {
   }
 
   @Test
-  void refusesWithoutAMonthOfBalanceAndSaysHowMuch() throws Exception {
-    fund(MONTH - 1);
+  void refusesWithoutAWeekOfBalanceAndSaysHowMuch() throws Exception {
+    fund(WEEK - 1);
 
     var refused = create(bearer);
 
     assertThat(refused.statusCode()).isEqualTo(402);
-    assertThat(refused.body()).contains("costs 8.90 EUR a month").contains("add funds");
+    assertThat(refused.body()).contains("costs 2.04 EUR for 7 days").contains("add funds");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
   }
 
   @Test
-  void refusesUnlessTheBalanceCoversAMonthOfEveryWorkspaceWithTheNewOne() throws Exception {
-    fund(2 * MONTH - 1);
+  void refusesUnlessTheBalanceCoversAWeekOfEveryWorkspaceWithTheNewOne() throws Exception {
+    fund(2 * WEEK - 1);
     created(create(bearer));
 
     var refused = create(bearer);
 
     assertThat(refused.statusCode()).isEqualTo(402);
     assertThat(refused.body())
-        .contains("Your workspaces cost 8.90 EUR a month and this size adds 8.90 EUR");
+        .contains("Your workspaces cost 2.04 EUR for 7 days and this size adds 2.04 EUR");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).hasSize(1);
   }
 
@@ -261,6 +262,7 @@ class UsageChargingTest {
 
     assertThat(billing.get("reactivationFeeCents").asLong()).isEqualTo(500);
     assertThat(billing.get("pausedForHours").asLong()).isEqualTo(72);
+    assertThat(billing.get("requiredHours").asLong()).isEqualTo(168);
     assertThat(billing.get("monthlySpendCents").asLong()).isZero();
     assertThat(billing.get("fundedUntil").isNull()).isTrue();
     var deletesAt = Instant.parse(billing.get("workspaces").get(0).get("deletesAt").asString());
