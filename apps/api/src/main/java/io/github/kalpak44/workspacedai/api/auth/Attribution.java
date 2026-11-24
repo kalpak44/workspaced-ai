@@ -38,7 +38,15 @@ public record Attribution(String source, String campaign) {
       return null;
     }
     var token = UNSAFE.matcher(text.strip().toLowerCase(Locale.ROOT)).replaceAll("-");
-    token = token.replaceAll("^-+|-+$", "");
+    int start = 0;
+    int end = token.length();
+    while (start < end && token.charAt(start) == '-') {
+      start++;
+    }
+    while (end > start && token.charAt(end - 1) == '-') {
+      end--;
+    }
+    token = token.substring(start, end);
     if (token.isEmpty()) {
       return null;
     }
