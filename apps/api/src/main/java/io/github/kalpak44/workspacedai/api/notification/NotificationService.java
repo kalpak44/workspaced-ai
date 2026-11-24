@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.api.notification;
 
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -13,14 +14,23 @@ import org.springframework.transaction.annotation.Transactional;
 public class NotificationService {
 
   private final NotificationRepository repository;
+  private final ApplicationEventPublisher events;
 
-  NotificationService(NotificationRepository repository) {
+  NotificationService(NotificationRepository repository, ApplicationEventPublisher events) {
     this.repository = repository;
+    this.events = events;
   }
 
   @Transactional
   public void send(UUID user, NotificationMessage message) {
     repository.save(new NotificationEntity(user, message, null));
+  }
+
+  /** Sends it, and mails it to the user once the transaction commits. */
+  @Transactional
+  public void sendAndMail(UUID user, NotificationMessage message) {
+    send(user, message);
+    events.publishEvent(new NotificationMail(user, message));
   }
 
   /**
@@ -29,9 +39,23 @@ public class NotificationService {
    */
   @Transactional
   public void sendOnce(UUID user, String key, NotificationMessage message) {
-    if (!repository.existsByUserIdAndDedupeKey(user, key)) {
-      repository.save(new NotificationEntity(user, message, key));
+    saveOnce(user, key, message);
+  }
+
+  /** As {@link #sendOnce}, and mails what it sends to the user once the transaction commits. */
+  @Transactional
+  public void sendOnceAndMail(UUID user, String key, NotificationMessage message) {
+    if (saveOnce(user, key, message)) {
+      events.publishEvent(new NotificationMail(user, message));
     }
+  }
+
+  private boolean saveOnce(UUID user, String key, NotificationMessage message) {
+    if (repository.existsByUserIdAndDedupeKey(user, key)) {
+      return false;
+    }
+    repository.save(new NotificationEntity(user, message, key));
+    return true;
   }
 
   /** The user's newest notifications, newest first. */

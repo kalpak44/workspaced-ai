@@ -129,7 +129,7 @@ public class FundsReminder {
                 .findAllById(byWorkspace.keySet())
                 .forEach(
                     workspace ->
-                        notifications.sendOnce(
+                        notifications.sendOnceAndMail(
                             user,
                             key.apply(workspace),
                             message.apply(workspace, byWorkspace.get(workspace.getId())))));

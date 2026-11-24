@@ -30,6 +30,11 @@ public class FakeAuth0Users implements Auth0Users {
   }
 
   @Override
+  public String email(String subject) {
+    return profile(subject).email();
+  }
+
+  @Override
   public void updateNames(String subject, String givenName, String familyName) {
     name(subject, givenName, familyName);
   }

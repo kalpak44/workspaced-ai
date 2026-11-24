@@ -134,6 +134,11 @@ class HttpAuth0UsersTest {
   }
 
   @Test
+  void readsTheUsersEmailFromTheManagementApi() {
+    assertThat(users.email("auth0|ada")).isEqualTo("ada@example.com");
+  }
+
+  @Test
   void refusesATokenAnswerWithoutALifetime() {
     tokenLifetime = 0;
     assertThatThrownBy(() -> users.updateNames("auth0|ada", "Ada", "Byron"))

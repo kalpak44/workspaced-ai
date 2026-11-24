@@ -2,6 +2,8 @@ package io.github.kalpak44.workspacedai.api.billing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
@@ -11,6 +13,8 @@ import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
+import io.github.kalpak44.workspacedai.api.mail.Mailer;
+import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.NotificationTone;
@@ -33,6 +37,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
@@ -74,6 +79,7 @@ class UsageChargingTest {
   @LocalServerPort int port;
   @MockitoBean VmManager vmManager;
   @MockitoBean ApiKeyCheck keyCheck;
+  @MockitoBean Mailer mailer;
   @Autowired UserRepository users;
   @Autowired WorkspaceRepository workspaces;
   @Autowired UsageRepository usage;
@@ -87,6 +93,7 @@ class UsageChargingTest {
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
+  private String email;
   private String bearer;
 
   @BeforeEach
@@ -94,8 +101,9 @@ class UsageChargingTest {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     var name = "payer-" + UUID.randomUUID();
-    user = users.save(TestUsers.newUser(name)).getId();
-    bearer = TestUsers.bearer(users.findByIdpSubject(TestUsers.subject(name)).orElseThrow());
+    email = name + "@example.com";
+    user = users.save(TestUsers.newUser(email)).getId();
+    bearer = TestUsers.bearer(users.findByIdpSubject(TestUsers.subject(email)).orElseThrow());
   }
 
   @Test
@@ -191,6 +199,15 @@ class UsageChargingTest {
     assertThat(notice.title()).endsWith("is paused");
     assertThat(notice.tone()).isEqualTo(NotificationTone.ERROR);
     assertThat(notice.body()).contains("5.00 EUR reactivation fee");
+    assertThat(mails())
+        .singleElement()
+        .satisfies(
+            mail -> {
+              assertThat(mail.to()).extracting(Mailer.Address::email).containsExactly(email);
+              assertThat(mail.subject()).isEqualTo(notice.title());
+              assertThat(mail.text()).contains("5.00 EUR reactivation fee", "[Add funds](");
+              assertThat(mail.html()).contains("cid:logo");
+            });
 
     charger.charge(workspace, Instant.now().plus(Duration.ofHours(5)));
     assertThat(balance()).isEqualTo(HOURLY / 2);
@@ -211,6 +228,7 @@ class UsageChargingTest {
     assertThat(notifications.list(user).getFirst())
         .extracting(Notification::title, Notification::summary)
         .containsExactly("Workspace deleted", name + " was deleted: the balance ran out.");
+    assertThat(mails()).extracting(Mail::subject).endsWith("Workspace deleted");
   }
 
   @Test
@@ -231,6 +249,7 @@ class UsageChargingTest {
     assertThat(balance()).isEqualTo(HOURLY);
     assertThat(runtime.statuses(Set.of(workspace))).containsEntry(workspace, WorkspaceStatus.READY);
     assertThat(notifications.list(user).getFirst().title()).endsWith("is running again");
+    assertThat(mails()).extracting(Mail::subject).noneMatch(s -> s.endsWith("running again"));
   }
 
   @Test
@@ -286,8 +305,15 @@ class UsageChargingTest {
         .contains("costs a 5.00 EUR fee")
         .endsWith("deleted about 3 days later.");
 
+    assertThat(mails())
+        .singleElement()
+        .extracting(Mail::subject)
+        .asString()
+        .endsWith("will be paused in about 3 days");
+
     reminder.remind(now.plus(Duration.ofDays(1)));
     assertThat(reminders()).hasSize(2);
+    assertThat(mails()).hasSize(2);
     assertThat(workspaces.findById(workspace)).isPresent();
   }
 
@@ -306,6 +332,12 @@ class UsageChargingTest {
     assertThat(deletionReminders())
         .singleElement()
         .extracting(Notification::title)
+        .asString()
+        .endsWith("will be deleted in about 2 days");
+    assertThat(mails())
+        .extracting(Mail::subject)
+        .filteredOn(s -> s.contains("will be deleted"))
+        .singleElement()
         .asString()
         .endsWith("will be deleted in about 2 days");
   }
@@ -337,6 +369,15 @@ class UsageChargingTest {
   private List<Notification> reminders() {
     return notifications.list(user).stream()
         .filter(n -> n.title().contains("will be paused"))
+        .toList();
+  }
+
+  // The mail this test's user was sent; a reminder also reaches users earlier tests left behind.
+  private List<Mail> mails() {
+    var mail = ArgumentCaptor.forClass(Mail.class);
+    verify(mailer, atLeast(0)).send(mail.capture());
+    return mail.getAllValues().stream()
+        .filter(m -> m.to().stream().anyMatch(to -> to.email().equals(email)))
         .toList();
   }
 

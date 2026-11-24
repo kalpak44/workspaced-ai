@@ -427,7 +427,7 @@ public class WorkspaceService {
    * not stop the row is kept, so the delete can be retried. False when no workspace has that id.
    */
   public boolean delete(UUID id) {
-    return delete(id, Notifications::workspaceDeleted);
+    return delete(id, false, Notifications::workspaceDeleted);
   }
 
   /**
@@ -435,7 +435,7 @@ public class WorkspaceService {
    * could no longer keep it; the owner is told that was why.
    */
   public boolean deleteUnpaid(UUID id) {
-    return delete(id, Notifications::workspaceDeletedUnpaid);
+    return delete(id, true, Notifications::workspaceDeletedUnpaid);
   }
 
   /** Records completion once, using a row lock so concurrent retries cannot duplicate it. */
@@ -461,10 +461,13 @@ public class WorkspaceService {
 
   /** Deletes a demo whose time is up; the owner is told that was why. */
   public boolean deleteExpiredDemo(UUID id) {
-    return delete(id, Notifications::demoEnded);
+    return delete(id, false, Notifications::demoEnded);
   }
 
-  private boolean delete(UUID id, Function<String, NotificationMessage> reason) {
+  /**
+   * @param mail whether the owner is mailed the reason as well as notified
+   */
+  private boolean delete(UUID id, boolean mail, Function<String, NotificationMessage> reason) {
     var owner = repository.findOwnerIdById(id);
     if (owner.isEmpty()) {
       return false;
@@ -480,7 +483,14 @@ public class WorkspaceService {
           repository
               .findById(id)
               .ifPresent(
-                  workspace -> notifications.send(owner.get(), reason.apply(workspace.getName())));
+                  workspace -> {
+                    var note = reason.apply(workspace.getName());
+                    if (mail) {
+                      notifications.sendAndMail(owner.get(), note);
+                    } else {
+                      notifications.send(owner.get(), note);
+                    }
+                  });
           repository.deleteById(id);
           events.publishEvent(new WorkspaceDeleted(id, owner.get()));
         });
