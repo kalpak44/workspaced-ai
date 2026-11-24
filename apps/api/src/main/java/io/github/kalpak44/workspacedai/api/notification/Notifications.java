@@ -408,6 +408,39 @@ public final class Notifications {
   }
 
   // "about 3 days", in whole days.
+  /** For admins, once no plan has been available to create for a while. */
+  public static NotificationMessage plansSoldOut(Instant since) {
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.ERROR,
+        "No plan can be created",
+        "Every plan has been sold out at Hetzner since " + WHEN.format(since) + ".",
+        "Every plan, the fallback plan included, has been sold out at Hetzner in every configured"
+            + " location since "
+            + WHEN.format(since)
+            + ". Until one is back, no one can create a workspace or start the free demo. Adding a"
+            + " fallback location or plan to the API's configuration is the only fix on our side;"
+            + " you will be told when a plan is available again.",
+        null);
+  }
+
+  /** For admins, once a plan can be created again after they were told none could. */
+  public static NotificationMessage plansBack(Duration outage) {
+    var minutes = Math.max(outage.toMinutes(), 1);
+    var lasted =
+        minutes < 120 ? minutes + " minutes" : "about " + Math.round(minutes / 60.0) + " hours";
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.SUCCESS,
+        "Plans can be created again",
+        "A plan is available again after " + lasted + " with none.",
+        "Hetzner has a plan's server in stock again, so workspaces and free demos can be created."
+            + " No plan was available for "
+            + lasted
+            + ".",
+        null);
+  }
+
   private static String span(Duration duration) {
     var days = Math.max(duration.toDays(), 1);
     return "about " + days + (days == 1 ? " day" : " days");

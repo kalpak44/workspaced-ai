@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -16,6 +17,10 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID> {
   Optional<UserEntity> lockById(@Param("id") UUID id);
 
   Optional<UserEntity> findByIdpSubject(String idpSubject);
+
+  /** Everyone with the role as of their last sign-in, which is when Auth0's roles are copied. */
+  @Query("select u.id from UserEntity u where u.role = :role")
+  List<UUID> findIdsByRole(@Param("role") Role role);
 
   /**
    * Takes the account's one demo; 0 when it already had it, or another start took it first. Its own
