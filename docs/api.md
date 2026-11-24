@@ -91,8 +91,12 @@ the order they were created.
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its VM is deleted, or `404`          |
 | `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM or while `PAUSED` |
 
-A size's price is what the VM costs, server and IPv4 address, for an admin, and that plus
-`workspaced.vm-pricing.markup-percent` (`WORKSPACED_VM_MARKUP_PERCENT`, 35 by default) for everyone else.
+`/vm-sizes` lists the plans in `workspaced.plans.offered`: Starter (cx23), Builder (cx33) and Pro (cx43), each a fixed
+daily price before VAT. An admin sees what the plan's VM costs, server and IPv4 address; everyone else sees the plan's
+price. A plan is listed as unavailable while its server is sold out, and also while its price, less Stripe's fee, no
+longer keeps `min-margin-percent` over the server's cost with VAT times `hourly-billing-factor`; the API logs an error
+then, so a Hetzner price rise withholds the plan instead of selling it at a loss. The site's `pricing.html` states the
+same prices, so a change to one is a change to both.
 
 A user who is not an admin pays for workspaces from their balance. Creating one needs a balance that covers
 `WORKSPACED_BILLING_REQUIRE_COVERED` (7 days by default, returned as `requiredHours`) of every workspace they have plus

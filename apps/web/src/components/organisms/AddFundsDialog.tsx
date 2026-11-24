@@ -16,15 +16,15 @@ const MAX_CENTS = 100000;
 // Whole euros without decimals, as someone would type them.
 const euros = (cents: number) => (cents % 100 === 0 ? String(cents / 100) : (cents / 100).toFixed(2));
 
-/** "€10 lasts about 7 weeks of cx23 at €0.21 a day": what a first top-up buys, on the cheapest size on offer. */
+/** "€10 lasts about 4 weeks of a Starter workspace at €0.35 a day": what a first top-up buys, on the default plan. */
 function FirstTopUpHint({ amountCents }: { readonly amountCents: number }) {
   const { sizes } = useVmSizes();
-  const cheapest = sizes.find((size) => size.available) ?? sizes[0];
-  if (!cheapest) return null;
-  const monthlyCents = cheapest.monthlyGross * 100;
+  const plan = sizes.find((size) => size.isDefault) ?? sizes[0];
+  if (!plan) return null;
+  const monthlyCents = plan.monthlyGross * 100;
   return (
     <p role="status" aria-label="What it buys" className="text-sm text-zinc-500 dark:text-zinc-400">
-      {formatMoney(amountCents)} lasts {lasts(amountCents, monthlyCents)} of a {cheapest.serverType} workspace at {perDay(monthlyCents)}.
+      {formatMoney(amountCents)} lasts {lasts(amountCents, monthlyCents)} of a {plan.plan} workspace at {perDay(monthlyCents)}.
     </p>
   );
 }

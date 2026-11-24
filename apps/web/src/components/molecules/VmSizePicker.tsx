@@ -7,9 +7,9 @@ import { Button, ChoiceCard, Spinner } from "../atoms";
 // Three decimals, since an hour of a small VM costs about a cent.
 const HOURLY = new Intl.NumberFormat(undefined, { style: "currency", currency: "EUR", minimumFractionDigits: 3, maximumFractionDigits: 3 });
 
-/** What the VM is: cores, memory and disk. */
+/** What the VM is: cores, memory, disk and the Hetzner server type behind the plan. */
 function detailOf(size: VmSize): string {
-  return `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk`;
+  return `${size.cores} vCPU · ${size.memoryGb} GB RAM · ${size.diskGb} GB disk · ${size.serverType}`;
 }
 
 /**
@@ -44,9 +44,8 @@ interface Props {
 }
 
 /**
- * The VM sizes on offer, cheapest first, each with its price. A low-cost size that is unavailable
- * shows but cannot be chosen, and a pricier one only shows while it can be had; while every
- * low-cost one is unavailable, a warning says so and offers to wait.
+ * The plans on offer, each with its price. A sold-out plan shows but cannot be chosen; while every
+ * plan is sold out, a warning says so and offers to check again.
  */
 export function VmSizePicker({ sizes, status, value, disabled = false, soldOut = null, onChange, onReload }: Props) {
   if (status === "loading") {
@@ -65,11 +64,10 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
       </div>
     );
   }
-  const cheapSoldOut = sizes.some((size) => size.recommended) && !sizes.some((size) => size.recommended && size.available);
-  const shown = sizes.filter((size) => size.recommended || size.available);
+  const allSoldOut = !sizes.some((size) => size.available);
   return (
     <>
-      {(cheapSoldOut || soldOut) && (
+      {(allSoldOut || soldOut) && (
         <div
           role="status"
           aria-label="Sizes unavailable"
@@ -79,9 +77,9 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
             <TriangleAlert aria-hidden className="mt-0.5 size-4.5 shrink-0 text-amber-600 dark:text-amber-400" />
             <p className="text-sm leading-6 text-zinc-700 dark:text-zinc-300">
               {soldOut ? `${soldOut} is no longer available. ` : ""}
-              {cheapSoldOut
-                ? "The low-cost sizes are unavailable right now. They usually come back within a few hours, so you can wait and check again, or pick one of the larger sizes below, which cost more."
-                : "Pick another size, or check again in a while."}
+              {allSoldOut
+                ? "Every plan is sold out right now. They usually come back within a few hours, so check again in a while."
+                : "Pick another plan, or check again in a while."}
             </p>
           </div>
           <div>
@@ -89,12 +87,12 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
           </div>
         </div>
       )}
-      {shown.map((size) => (
+      {sizes.map((size) => (
         <ChoiceCard
           key={size.serverType}
           name="workspace-vm-type"
           value={size.serverType}
-          label={size.available ? size.serverType : `${size.serverType} · unavailable`}
+          label={size.available ? size.plan : `${size.plan} · unavailable`}
           detail={detailOf(size)}
           wrapDetail
           aside={<PriceTag size={size} />}

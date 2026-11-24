@@ -298,6 +298,7 @@ class DemoTest {
 
   private static VmSize size(String type, boolean isDefault, boolean available, String price) {
     return new VmSize(
+        null,
         type,
         isDefault,
         2,

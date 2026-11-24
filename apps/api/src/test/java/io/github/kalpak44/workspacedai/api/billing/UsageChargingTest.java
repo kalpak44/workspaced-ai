@@ -58,9 +58,10 @@ import tools.jackson.databind.json.JsonMapper;
 class UsageChargingTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
-  // 6.59 a month costs a user 8.90 with the 35% markup, which is 8.90 / 730 an hour.
+  // Starter, the plan behind cx23, costs a user 0.35 a day, which is 0.35 / 24 an hour.
   private static final VmSize CX23 =
       new VmSize(
+          null,
           "cx23",
           true,
           2,
@@ -73,8 +74,8 @@ class UsageChargingTest {
           new BigDecimal("6.59"),
           true,
           true);
-  private static final long HOURLY = 12_192;
-  private static final long MONTH = 8_900_000;
+  private static final long HOURLY = 14_583;
+  private static final long MONTH = 730 * HOURLY;
   private static final long WEEK = 168 * HOURLY;
   private static final long FEE = 5_000_000;
 
@@ -115,7 +116,7 @@ class UsageChargingTest {
     var refused = create(bearer);
 
     assertThat(refused.statusCode()).isEqualTo(402);
-    assertThat(refused.body()).contains("costs 2.04 EUR for 7 days").contains("add funds");
+    assertThat(refused.body()).contains("costs 2.44 EUR for 7 days").contains("add funds");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
   }
 
@@ -128,7 +129,7 @@ class UsageChargingTest {
 
     assertThat(refused.statusCode()).isEqualTo(402);
     assertThat(refused.body())
-        .contains("Your workspaces cost 2.04 EUR for 7 days and this size adds 2.04 EUR");
+        .contains("Your workspaces cost 2.44 EUR for 7 days and this size adds 2.44 EUR");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).hasSize(1);
   }
 
@@ -142,21 +143,21 @@ class UsageChargingTest {
 
     var billing = JSON.readTree(billing().body());
 
-    assertThat(billing.get("monthlySpendCents").asLong()).isEqualTo(890);
+    assertThat(billing.get("monthlySpendCents").asLong()).isEqualTo(1065);
     assertThat(billing.get("workspaces"))
         .singleElement()
         .satisfies(
             spend -> {
               assertThat(spend.get("id").asString()).isEqualTo(workspace.toString());
-              assertThat(spend.get("monthlyCents").asLong()).isEqualTo(890);
+              assertThat(spend.get("monthlyCents").asLong()).isEqualTo(1065);
             });
-    // Two hours are paid, which leaves 727 whole hours of the balance.
+    // Two hours are paid, which leaves 728 whole hours of the balance.
     var fundedUntil = Instant.parse(billing.get("fundedUntil").asString());
     assertThat(fundedUntil)
-        .isBetween(now.plus(Duration.ofHours(726)), now.plus(Duration.ofHours(727)));
+        .isBetween(now.plus(Duration.ofHours(727)), now.plus(Duration.ofHours(728)));
     assertThat(billing.get("usage"))
         .singleElement()
-        .satisfies(day -> assertThat(day.get("amountCents").asLong()).isEqualTo(2));
+        .satisfies(day -> assertThat(day.get("amountCents").asLong()).isEqualTo(3));
   }
 
   @Test
@@ -236,7 +237,8 @@ class UsageChargingTest {
   @Test
   void startsAPausedWorkspaceAgainOnceTheBalancePaysTheFeeAndAnHour() throws Exception {
     var workspace = paused();
-    fund(FEE + HOURLY / 2 - 1);
+    // Paused with half an hour left, so the next hour drove it the other half below zero.
+    fund(FEE + (HOURLY - HOURLY / 2) - 1);
 
     charger.settlePaused(workspace, Instant.now());
     assertThat(usage.findById(workspace).orElseThrow().getPausedAt()).isNotNull();

@@ -228,7 +228,7 @@ describe("billing", () => {
     expect(amounts.map((amount) => amount.textContent)).toEqual(["€10.00", "€25.00", "€50.00"]);
     expect(screen.getByRole("radio", { name: "€10.00" })).toHaveAttribute("aria-checked", "true");
     expect(await screen.findByRole("status", { name: "What it buys" })).toHaveTextContent(
-      "€10.00 lasts about 6 weeks of a cx23 workspace at €0.22 a day.",
+      "€10.00 lasts about 4 weeks of a Starter workspace at €0.35 a day.",
     );
   });
 

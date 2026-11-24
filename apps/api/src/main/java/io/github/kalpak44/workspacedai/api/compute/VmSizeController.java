@@ -15,7 +15,7 @@ public class VmSizeController implements VmSizeApi {
     this.pricing = pricing;
   }
 
-  /** An admin sees what a VM costs; everyone else sees the price they pay, with the markup. */
+  /** An admin sees what each plan's VM costs; everyone else sees the plan's price. */
   @Override
   public ResponseEntity<List<VmSize>> list() {
     return ResponseEntity.ok(pricing.sizes(CurrentUser.admin()));

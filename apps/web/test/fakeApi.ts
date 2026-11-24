@@ -23,11 +23,11 @@ export const OPENROUTER = {
   apiKeyVariable: "OPENROUTER_API_KEY",
 };
 
-/** What the fake VM manager offers, cheapest first: two low-cost sizes and a pricier stand-in. */
+/** The plans the fake API offers, in the order shown: Starter, Builder and Pro. */
 export const VM_SIZES = [
-  { serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 5.49, monthlyGross: 6.59, recommended: true, available: true },
-  { serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 8.49, monthlyGross: 10.19, recommended: true, available: true },
-  { serverType: "cpx22", isDefault: false, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 19.49, monthlyGross: 23.39, recommended: false, available: true },
+  { plan: "Starter", serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 10.645833, monthlyGross: 10.645833, available: true },
+  { plan: "Builder", serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 16.729167, monthlyGross: 16.729167, available: true },
+  { plan: "Pro", serverType: "cx43", isDefault: false, cores: 8, memoryGb: 16, diskGb: 160, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 28.895833, monthlyGross: 28.895833, available: true },
 ];
 
 /** What the fake API has told the user, newest first, three of them unread. */

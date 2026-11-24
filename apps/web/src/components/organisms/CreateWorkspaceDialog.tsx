@@ -38,7 +38,7 @@ function hostOf(url: string): string {
  * the balance to cover before it creates one, and how much the balance falls short of that.
  */
 function coverWith(billing: Billing, size: VmSize) {
-  const monthCents = billing.monthlySpendCents + Math.round(size.monthlyGross * 100);
+  const monthCents = billing.monthlySpendCents + size.monthlyGross * 100;
   const neededCents = Math.ceil(centsFor(monthCents, billing.requiredHours));
   return { monthCents, neededCents, shortCents: Math.max(0, neededCents - billing.balanceCents) };
 }
@@ -46,12 +46,12 @@ function coverWith(billing: Billing, size: VmSize) {
 /** Why the balance cannot pay for the size: by how much, once the balance and the size are known. */
 function shortfall(billing: Billing | null, size: VmSize | undefined, serverType: string): string {
   if (!billing || !size || coverWith(billing, size).shortCents === 0) {
-    return `Your balance does not cover ${serverType}${size ? ` (${perDay(size.monthlyGross * 100)})` : ""}. Add funds, then create the workspace.`;
+    return `Your balance does not cover ${size?.plan ?? serverType}${size ? ` (${perDay(size.monthlyGross * 100)})` : ""}. Add funds, then create the workspace.`;
   }
   const { neededCents, shortCents } = coverWith(billing, size);
   const span = formatHours(billing.requiredHours);
   const what = billing.monthlySpendCents === 0
-    ? `${span} of ${serverType} (${formatMoney(neededCents)})`
+    ? `${span} of ${size.plan} (${formatMoney(neededCents)})`
     : `${span} of your workspaces with this one (${formatMoney(neededCents)})`;
   return `Your balance of ${formatMoney(billing.balanceCents)} does not cover ${what}. Add ${formatMoney(shortCents)}, then create the workspace.`;
 }
@@ -212,7 +212,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     } else if (result === "noFunds") {
       setNoFunds(true);
     } else if (result === "soldOut") {
-      setSoldOut(serverType);
+      setSoldOut(chosen?.plan ?? serverType);
       setServerType("");
       setStep(1);
       reload();

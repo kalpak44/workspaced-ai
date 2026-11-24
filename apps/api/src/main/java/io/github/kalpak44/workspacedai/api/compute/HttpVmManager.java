@@ -47,6 +47,7 @@ public class HttpVmManager implements VmManager {
     for (var option : read(response)) {
       sizes.add(
           new VmSize(
+              null,
               option.path("serverType").asString(),
               option.path("isDefault").asBoolean(),
               option.path("cores").asInt(),

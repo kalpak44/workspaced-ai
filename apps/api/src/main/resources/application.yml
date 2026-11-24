@@ -49,9 +49,24 @@ workspaced:
   # locally, workspace routes answer 503.
   vm-manager:
     url: ${WORKSPACED_VM_MANAGER_URL:}
-  vm-pricing:
-    # Added, in percent, to a VM's cost in the prices users who are not admins see.
-    markup-percent: ${WORKSPACED_VM_MARKUP_PERCENT:35}
+  # What a workspace can be created as: a fixed daily price, before VAT, for one Hetzner server
+  # type each. The first is the default. The site's pricing.html states these prices too.
+  plans:
+    offered:
+      - name: Starter
+        server-type: cx23
+        daily-price: 0.35
+      - name: Builder
+        server-type: cx33
+        daily-price: 0.55
+      - name: Pro
+        server-type: cx43
+        daily-price: 0.95
+    # A plan is withheld unless, after Stripe's fee, its price keeps this margin over its server's
+    # cost with VAT, raised by Hetzner's hourly billing before the monthly cap.
+    hourly-billing-factor: 1.155
+    stripe-fee-percent: 7
+    min-margin-percent: 10
   # Every harness is reached through this service's tunnel to its VM. Left unset, as it is
   # locally, no workspace's harness answers.
   agent-hub:

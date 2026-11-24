@@ -1,7 +1,9 @@
 import { send } from "./http";
 
-/** A size a workspace's VM can be created as, with its specs as Hetzner sells it now. */
+/** A plan a workspace can be created as, with the specs of the Hetzner server behind it. */
 export interface VmSize {
+  /** What users choose it by, e.g. Starter. */
+  readonly plan: string;
   readonly serverType: string;
   /** Taken when a create names no size. */
   readonly isDefault: boolean;
@@ -13,8 +15,6 @@ export interface VmSize {
   readonly architecture: string;
   /** What the user pays a month, in EUR before the VAT charged on a top-up. */
   readonly monthlyGross: number;
-  /** One of the low-cost sizes, rather than a pricier stand-in. */
-  readonly recommended: boolean;
   /** False while Hetzner has it sold out, when a create would be refused. */
   readonly available: boolean;
 }

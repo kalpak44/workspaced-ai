@@ -28,49 +28,45 @@ async function openSizes(user: User) {
 const warning = () => screen.queryByRole("status", { name: "Sizes unavailable" });
 
 describe("VM sizes", () => {
-  it("shows each size with its price, cheapest first, and starts on the default", async () => {
+  it("shows each plan with its price, in order, and starts on the default", async () => {
     installFakeApi();
     const user = userEvent.setup();
     await openSizes(user);
 
     const radios = screen.getAllByRole("radio");
-    expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cpx22"]);
-    expect(screen.getByRole("radio", { name: /cx23/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€0\.22 a day.*€6\.59 a month.*€0\.009\/hour/ })).toBeInTheDocument();
+    expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cx43"]);
+    expect(screen.getByRole("radio", { name: /Starter/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Starter.*2 vCPU · 4 GB RAM · 40 GB disk · cx23.*€0\.35 a day.*€10\.65 a month.*€0\.015\/hour/ })).toBeInTheDocument();
     expect(screen.getByText("Prices exclude VAT, which is added when you top up. Billed by the hour from your balance; delete the workspace any time and its charges stop.")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /cpx22/ })).toBeEnabled();
     expect(warning()).not.toBeInTheDocument();
   });
 
-  it("warns while the low-cost sizes are sold out, picks nothing pricier for you, and checks again", async () => {
+  it("shows a sold-out plan but does not let it be chosen", async () => {
     const api = installFakeApi();
-    for (const size of api.state.vmSizes.filter((s) => s.recommended)) size.available = false;
+    api.state.vmSizes[0].available = false;
     const user = userEvent.setup();
     await openSizes(user);
 
-    expect(warning()).toHaveTextContent("The low-cost sizes are unavailable right now.");
-    expect(warning()).not.toHaveTextContent(/hetzner/i);
-    expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: /cx23 · unavailable/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Starter · unavailable/ })).toBeDisabled();
     expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(warning()).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("radio", { name: /cpx22/ }));
-    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  it("warns while every plan is sold out, and checks again", async () => {
+    const api = installFakeApi();
+    for (const size of api.state.vmSizes) size.available = false;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    expect(warning()).toHaveTextContent("Every plan is sold out right now.");
+    expect(warning()).not.toHaveTextContent(/hetzner/i);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
     for (const size of api.state.vmSizes) size.available = true;
     await user.click(within(warning()!).getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(warning()).not.toBeInTheDocument());
-    expect(screen.getByRole("radio", { name: /cpx22/ })).toBeChecked();
-  });
-
-  it("leaves out a pricier size while it is unavailable", async () => {
-    const api = installFakeApi();
-    api.state.vmSizes[2].available = false;
-    const user = userEvent.setup();
-    await openSizes(user);
-
-    expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33"]);
+    await user.click(screen.getByRole("radio", { name: /Builder/ }));
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
   it("tells a paying user how long the balance lasts with the size among their workspaces", async () => {
@@ -82,7 +78,7 @@ describe("VM sizes", () => {
     await openSizes(user);
 
     expect(await screen.findByRole("status", { name: "Balance" })).toHaveTextContent(
-      "With it, your workspaces cost €0.51 a day (€15.49 a month). Your balance of €50.00 lasts about 3.2 months.",
+      "With it, your workspaces cost €0.64 a day (€19.55 a month). Your balance of €50.00 lasts about 2.6 months.",
     );
   });
 
@@ -96,7 +92,7 @@ describe("VM sizes", () => {
 
     const hint = await screen.findByRole("status", { name: "Balance" });
     expect(hint).toHaveTextContent(
-      "Your balance of €3.00 does not cover 7 days of your workspaces with this one (€3.57). Add €0.57, then create the workspace.",
+      "Your balance of €3.00 does not cover 7 days of your workspaces with this one (€4.50). Add €1.50, then create the workspace.",
     );
     expect(within(hint).getByRole("link", { name: "Add funds" })).toBeInTheDocument();
   });
@@ -122,7 +118,7 @@ describe("VM sizes", () => {
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Your balance of €1.00 does not cover 7 days of cx23 (€1.52). Add €0.52, then create the workspace.");
+    expect(alert).toHaveTextContent("Your balance of €1.00 does not cover 7 days of Starter (€2.45). Add €1.45, then create the workspace.");
     await user.click(within(alert).getByRole("link", { name: "Add funds" }));
     expect(globalThis.location.pathname).toBe("/billing");
     expect(api.rows.map((w) => w.name)).not.toContain("Research");
@@ -139,7 +135,7 @@ describe("VM sizes", () => {
 
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
-    expect(await screen.findByRole("status", { name: "Sizes unavailable" })).toHaveTextContent("cx23 is no longer available.");
+    expect(await screen.findByRole("status", { name: "Sizes unavailable" })).toHaveTextContent("Starter is no longer available.");
     await waitFor(() => expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled());
     expect(api.rows.map((w) => w.name)).not.toContain("Research");
   });

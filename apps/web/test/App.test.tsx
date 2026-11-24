@@ -204,7 +204,7 @@ describe("App", () => {
     expect(within(types).getByRole("radio", { name: /cx23/ })).toBeChecked();
     expect(within(types).getByRole("radio", { name: /2 vCPU · 4 GB RAM · 40 GB disk/ })).toBeInTheDocument();
     expect(within(types).getByRole("radio", { name: /4 vCPU · 8 GB RAM · 80 GB disk/ })).not.toBeChecked();
-    expect(types).toHaveTextContent("€0.22 a day€6.59 a month");
+    expect(types).toHaveTextContent("€0.35 a day€10.65 a month");
     expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
   });
 

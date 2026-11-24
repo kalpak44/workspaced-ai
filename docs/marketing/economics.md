@@ -4,8 +4,10 @@ How much each paid euro leaves after costs, and the rule that keeps every bonus,
 
 ## Where the money comes from
 
-- A VM's price is Hetzner's monthly price with VAT times 1.35 (`workspaced.vm-pricing.markup-percent`, default 35, in
-  `apps/api/src/main/resources/application.yml`; read by `compute/VmPricing`).
+- A workspace is sold as a plan at a fixed daily price (`workspaced.plans` in
+  `apps/api/src/main/resources/application.yml`): Starter €0.35, Builder €0.55, Pro €0.95. `compute/VmPricing` withholds
+  a plan whose price, less a 7% Stripe fee, keeps under 10% over its server's cost with VAT × 1.155 for hourly billing.
+  The margin tables below still assume the old 35% markup.
 - A top-up is charged with 20% VAT on top (`workspaced.billing.vat-percent`); the balance receives the amount before VAT.
   The minimum top-up is €5 (`BillingService.MIN_TOP_UP_CENTS`).
 - Workspaces are charged by the hour from the balance; a month is 730 hours.
