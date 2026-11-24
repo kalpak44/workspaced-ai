@@ -128,7 +128,8 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const [connectorId, setConnectorId] = useState("");
   const [accepted, setAccepted] = useState(false);
   const defaultChosen = useRef(false);
-  const [connectorName, setConnectorName] = useState("");
+  // OpenRouter's own approval screen is the default; pasting a key is the fallback.
+  const [pasting, setPasting] = useState(false);
   const [connectorError, setConnectorError] = useState("");
   const connectors = useAiConnectors();
   const [rejected, setRejected] = useState(false);
@@ -152,6 +153,10 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     void finish(key);
   });
   const note = connectNote(openRouter.status);
+  const selected = connectors.connectors.find(connector => connector.id === connectorId);
+  const ownConnectors = connectors.connectors.filter(c => c.provider === providerId);
+  const connecting = !connectorId && provider?.id === "openrouter" && !pasting;
+  const popupOpen = openRouter.status === "waiting" || openRouter.status === "exchanging";
 
   useEffect(() => {
     if (connectors.loading || defaultChosen.current) return;
@@ -184,10 +189,10 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
 
   // The key is what is left to type once a provider is chosen, so focus waits there.
   useEffect(() => {
-    if (step === LAST && provider) {
+    if (step === LAST && provider && !connecting) {
       keyInput.current?.focus();
     }
-  }, [step, provider]);
+  }, [step, provider, connecting]);
 
   // The name field is gone once the step moves on, so focus follows to the chosen type and
   // Enter creates the workspace from there.
@@ -219,11 +224,10 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     }
   };
 
-  const keyLabel = async (): Promise<string | null> => `workspaced: ${connectorName.trim() || name.trim()}`;
+  const keyLabel = async (): Promise<string | null> => `workspaced: ${name.trim()}`;
 
   // Every new key becomes a named personal connector before the workspace uses it.
   const finish = async (key: string) => {
-    const selected = connectors.connectors.find(connector => connector.id === connectorId);
     if ((!connectorId || selected?.trial) && !accepted) return;
     setPending(true);
     setRejected(false);
@@ -233,7 +237,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
       if (selected?.trial) await connectors.acknowledge(selected.id);
       let savedId = connectorId;
       if (!savedId) {
-        const saved = await connectors.add(connectorName.trim() || name.trim(), providerId, key, accepted);
+        const saved = await connectors.add(name.trim(), providerId, key, accepted);
         savedId = saved.id;
         setConnectorId(savedId);
       }
@@ -259,6 +263,14 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     }
     if (step < LAST) {
       setStep(step + 1);
+      return;
+    }
+    if (connecting) {
+      // A popup the user lost behind the page can be opened again; an exchange in flight cannot.
+      if (accepted && openRouter.status !== "exchanging") {
+        setRejected(false);
+        openRouter.connect(keyLabel);
+      }
       return;
     }
     await finish(apiKey);
@@ -331,66 +343,67 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
       </fieldset>
     );
   } else {
+    const switchTo = (paste: boolean) => (
+      <button type="button" disabled={pending} onClick={() => { setPasting(paste); setRejected(false); }} className="w-fit text-sm font-medium text-zinc-600 underline underline-offset-4 hover:text-zinc-900 disabled:opacity-50 dark:text-zinc-400 dark:hover:text-zinc-100">
+        {paste ? "Paste a key instead" : "Connect OpenRouter instead"}
+      </button>
+    );
     stepBody = (
       <>
-        <fieldset className="flex min-w-0 flex-col gap-2">
-          <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">Model provider</legend>
-          {providerChoices}
-        </fieldset>
-        <label className="block text-sm font-medium">AI connector
-          <select aria-label="AI connector" className="mt-1.5 block w-full rounded-lg border border-zinc-300 bg-transparent p-2 dark:border-zinc-700" value={connectorId} disabled={pending || connectors.loading} onChange={event => { setConnectorId(event.target.value); setRejected(false); }}>
-            <option value="">Connect or paste a key</option>
-            {connectors.connectors.filter(c => c.provider === providerId).map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}
-          </select>
-        </label>
+        {/* A single provider is no choice, so the card shows only while there is something to say. */}
+        {(providers.status !== "ready" || providers.providers.length !== 1) && (
+          <fieldset className="flex min-w-0 flex-col gap-2">
+            <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">Model provider</legend>
+            {providerChoices}
+          </fieldset>
+        )}
+        {ownConnectors.length > 0 && (
+          <label className="block text-sm font-medium">AI connector
+            <select aria-label="AI connector" className="mt-1.5 block w-full rounded-lg border border-zinc-300 bg-transparent p-2 dark:border-zinc-700" value={connectorId} disabled={pending || connectors.loading} onChange={event => { setConnectorId(event.target.value); setRejected(false); }}>
+              {ownConnectors.map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}
+              <option value="">New {provider?.name ?? "provider"} key</option>
+            </select>
+          </label>
+        )}
         {connectors.error && <p role="alert" className="text-sm text-rose-600">{connectors.error}</p>}
-        {!connectorId && provider && <TextField id="workspace-connector-name" label="Connector name" placeholder={name} maxLength={100} value={connectorName} disabled={pending} hint="Saved to your account so other workspaces can use it." onChange={event => setConnectorName(event.target.value)} />}
         {connectorError && <p role="alert" className="text-sm text-rose-600">{connectorError}</p>}
         {connectorId && rejected && <p role="alert" className="text-sm text-rose-600">The provider rejected this connector's key. Select another connector.</p>}
-        {(!connectorId || connectors.connectors.find(connector => connector.id === connectorId)?.trial) && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || openRouter.status === "waiting" || openRouter.status === "exchanging"} />}
-        {!connectorId && provider?.id === "openrouter" && (
-          <div className="flex flex-col gap-1.5">
-            <div className="flex flex-wrap items-center gap-3">
-              <Button
-                label={openRouter.status === "connected" ? "Connected to OpenRouter" : "Connect OpenRouter"}
-                variant="secondary"
-                icon={openRouter.status === "connected" ? Check : Plug}
-                busy={openRouter.status === "exchanging"}
-                disabled={pending || !accepted}
-                onClick={() => openRouter.connect(keyLabel)}
-              />
-              <span className="text-sm text-zinc-500 dark:text-zinc-400">or paste a key below</span>
-            </div>
+        {connecting && (
+          <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-400">
+            <p>Sign in to OpenRouter and approve a key for this workspace. It is saved to your account, so later workspaces can reuse it.</p>
+            {rejected && <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">OpenRouter did not accept this key</p>}
             {note && (
-              <p
-                role={note.error ? "alert" : "status"}
-                className={note.error ? "text-xs text-rose-600 dark:text-rose-400" : "text-xs text-zinc-500 dark:text-zinc-400"}
-              >
+              <p role={note.error ? "alert" : "status"} className={note.error ? "text-xs text-rose-600 dark:text-rose-400" : "text-xs text-zinc-500 dark:text-zinc-400"}>
                 {note.text}
               </p>
             )}
+            {switchTo(true)}
           </div>
         )}
-        {!connectorId && provider && (
-          <TextField
-            ref={keyInput}
-            id="workspace-api-key"
-            label={`${provider.name} API key`}
-            type="password"
-            placeholder="Paste your key"
-            autoComplete="off"
-            spellCheck={false}
-            value={apiKey}
-            maxLength={MAX_KEY}
-            disabled={pending}
-            hint={`Checked with ${provider.name} before the workspace is created, then saved as a personal AI connector for reuse.`}
-            error={rejected ? `${provider.name} did not accept this key` : null}
-            onChange={(e) => {
-              setApiKey(e.currentTarget.value);
-              setRejected(false);
-            }}
-          />
+        {!connectorId && provider && !connecting && (
+          <div className="flex flex-col gap-2">
+            <TextField
+              ref={keyInput}
+              id="workspace-api-key"
+              label={`${provider.name} API key`}
+              type="password"
+              placeholder="Paste your key"
+              autoComplete="off"
+              spellCheck={false}
+              value={apiKey}
+              maxLength={MAX_KEY}
+              disabled={pending}
+              hint={`Checked with ${provider.name}, then saved to your account so later workspaces can reuse it.`}
+              error={rejected ? `${provider.name} did not accept this key` : null}
+              onChange={(e) => {
+                setApiKey(e.currentTarget.value);
+                setRejected(false);
+              }}
+            />
+            {provider.id === "openrouter" && switchTo(false)}
+          </div>
         )}
+        {(!connectorId || selected?.trial) && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || popupOpen} />}
         {noFunds && (
           <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
             <p>{shortfall(billing, chosen, serverType)}</p>
@@ -406,6 +419,16 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!name.trim()} />;
   } else if (step === 1) {
     next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!serverType || status !== "ready"} />;
+  } else if (connecting) {
+    next = (
+      <Button
+        label={openRouter.status === "connected" ? "Connected to OpenRouter" : "Connect OpenRouter"}
+        type="submit"
+        icon={openRouter.status === "connected" ? Check : Plug}
+        busy={pending || openRouter.status === "exchanging"}
+        disabled={!accepted || openRouter.status === "exchanging"}
+      />
+    );
   } else {
     next = (
       <Button
@@ -413,7 +436,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         type="submit"
         icon={ArrowRight}
         busy={pending}
-        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || (!!connectors.connectors.find(connector => connector.id === connectorId)?.trial && !accepted) || rejected}
+        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || (!!selected?.trial && !accepted) || rejected}
       />
     );
   }
@@ -421,7 +444,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   return (
     <Modal
       title="New workspace"
-      description={onNameChosen ? "Name it, connect OpenRouter, then confirm the free trial machine." : "Name it, choose the VM it runs on, then connect the model provider its agent will use."}
+      description={onNameChosen ? "Name it, connect OpenRouter, then confirm the free trial machine." : undefined}
       onClose={close}
     >
       <form data-tour="workspace-name-form" onSubmit={submit} className="flex min-h-0 flex-col overflow-hidden">

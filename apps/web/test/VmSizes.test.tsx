@@ -125,7 +125,8 @@ describe("VM sizes", () => {
     const user = userEvent.setup();
     await openSizes(user);
     await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.type(await screen.findByLabelText("OpenRouter API key"), "sk-or-v1-test");
+    await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
+    await user.type(screen.getByLabelText("OpenRouter API key"), "sk-or-v1-test");
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
 
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
@@ -142,7 +143,8 @@ describe("VM sizes", () => {
     const user = userEvent.setup();
     await openSizes(user);
     await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.type(await screen.findByLabelText("OpenRouter API key"), "sk-or-v1-test");
+    await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
+    await user.type(screen.getByLabelText("OpenRouter API key"), "sk-or-v1-test");
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
     api.state.vmSizes[0].available = false;
 

@@ -60,7 +60,8 @@ async function chooseVmType(user: User, type?: string) {
 /** The last step: move on from the VM type, and paste a key for the preselected provider. */
 async function enterKey(user: User, key = "sk-or-v1-test") {
   await user.click(screen.getByRole("button", { name: "Next" }));
-  const field = await screen.findByLabelText("OpenRouter API key");
+  await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
+  const field = screen.getByLabelText("OpenRouter API key");
   await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
   await user.type(field, key);
 }
@@ -120,6 +121,7 @@ describe("App", () => {
     await user.keyboard("{Enter}");
     await screen.findByRole("radio", { name: /cx23/ });
     await user.keyboard("{Enter}");
+    await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
     await waitFor(() => expect(screen.getByLabelText("OpenRouter API key")).toHaveFocus());
     await user.keyboard("sk-or-v1-test");
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
@@ -160,7 +162,7 @@ describe("App", () => {
     });
   });
 
-  it("offers OpenRouter as the provider, chosen already, and asks for its key", async () => {
+  it("connects OpenRouter by default once the notice is acknowledged", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     await user.click(screen.getByRole("button", { name: "New workspace" }));
@@ -168,10 +170,13 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Model provider");
-    const providers = screen.getByRole("group", { name: "Model provider" });
-    expect(await within(providers).findByRole("radio", { name: /OpenRouter/ })).toBeChecked();
-    expect(within(providers).getAllByRole("radio")).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+    // The only provider is no choice, so no card asks for one.
+    const connect = await screen.findByRole("button", { name: "Connect OpenRouter" });
+    expect(screen.queryByRole("group", { name: "Model provider" })).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("OpenRouter API key")).not.toBeInTheDocument();
+    expect(connect).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+    expect(connect).toBeEnabled();
   });
 
   it("keeps the dialog open on a key the provider refuses, and says so", async () => {
