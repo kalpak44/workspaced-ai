@@ -26,6 +26,21 @@
   }
 }
 
+/* Draw attention to the newly available tour action without moving the button. */
+.tour-ready-next::after {
+  content: "";
+  position: absolute;
+  inset: -5px;
+  border: 2px solid var(--color-amber-500);
+  border-radius: 0.875rem;
+  pointer-events: none;
+  animation: tour-ready-pulse 1.8s ease-in-out infinite;
+}
+@keyframes tour-ready-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(245 158 11 / 0); }
+  50% { box-shadow: 0 0 0 6px rgb(245 158 11 / 0.22); }
+}
+
 /* One raised surface for every card, list and panel, so pages read as one set. */
 @utility card {
   @apply rounded-xl border border-zinc-200 bg-white shadow-xs dark:border-zinc-800 dark:bg-zinc-900/60;

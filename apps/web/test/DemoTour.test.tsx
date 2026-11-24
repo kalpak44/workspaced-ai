@@ -60,6 +60,26 @@ beforeEach(() => {
 });
 
 describe("guided public-page workflow", () => {
+  it("announces workspace readiness and highlights Next only when startup finishes", async () => {
+    tour.setTourProgress({ step: S.STARTING, workspaceId: workspace.id });
+    const props = { loading: false, onDraft: vi.fn(), onLaunch: vi.fn() };
+    const { rerender } = render(<DemoTour {...props} workspaces={[{ ...workspace, status: "INITIALIZING" }]} />);
+    await title("Your workspace is starting");
+    const button = within(guide()).getByRole("button", { name: "Next" });
+    expect(button).toBeDisabled();
+    expect(button.parentElement).not.toHaveClass("tour-ready-next");
+    expect(within(guide()).getByRole("status")).toHaveTextContent("Preparing the workspace");
+
+    rerender(<DemoTour {...props} workspaces={[workspace]} />);
+    await title("Your workspace is ready");
+    expect(button).toBeEnabled();
+    expect(button.parentElement).toHaveClass("tour-ready-next");
+    expect(within(guide()).getByRole("status")).toHaveTextContent("Your workspace is ready. Click Next to continue.");
+    await next();
+    await title("Open the real recipe Store");
+    expect(button.parentElement).not.toHaveClass("tour-ready-next");
+  });
+
   it("opens the real naming form automatically and keeps a user-written name", async () => {
     api = installFakeApi([]);
     api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: true };
