@@ -114,6 +114,33 @@ describe("general settings", () => {
     expect(screen.getByRole("button", { name: "Send again" })).toBeInTheDocument();
   });
 
+  it("turns balance reminder emails off and on, keeping the choice on the account", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    const view = await renderSettings();
+    const section = screen.getByRole("region", { name: "Email" });
+    const reminders = within(section).getByRole("checkbox", { name: /Email me balance reminders/ });
+    expect(reminders).toBeChecked();
+
+    await user.click(reminders);
+    expect(await screen.findByText("Balance reminders will only show here.")).toBeInTheDocument();
+    expect(api.auth.account.mail).toEqual({ balanceReminders: false });
+    view.unmount();
+    resetAccount();
+    await renderSettings();
+    expect(screen.getByRole("checkbox", { name: /Email me balance reminders/ })).not.toBeChecked();
+  });
+
+  it("keeps balance reminder emails on when the choice cannot be saved", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    await renderSettings();
+    api.auth.failMail = true;
+    await user.click(screen.getByRole("checkbox", { name: /Email me balance reminders/ }));
+    expect(await screen.findByText(/Could not save your email settings/)).toBeInTheDocument();
+    expect(screen.getByRole("checkbox", { name: /Email me balance reminders/ })).toBeChecked();
+  });
+
   it("sets up two-factor authentication through a sign-in", async () => {
     installFakeApi();
     const opened = vi.spyOn(browser, "open").mockImplementation(() => {});

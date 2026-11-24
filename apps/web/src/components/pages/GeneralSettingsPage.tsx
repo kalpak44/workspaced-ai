@@ -11,7 +11,7 @@ import { AiConnectorsPanel } from "../organisms/AiConnectorsPanel";
 
 const NOTES = {
   "ai-connectors": "Named AI connections for all your workspaces.",
-  profile: "Your photo and name.",
+  profile: "Your photo, name, sign-in and email.",
   mail: "Mail sent from the platform's own addresses.",
 };
 
@@ -22,7 +22,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const section: Section = (requested === "mail" || requested === "ai-connectors") ? requested : "profile";
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: Section) => navigate({ name: "general-settings", section: id }, { replace: true });
-  const { account, saveProfile, requestPasswordReset, enrollMfa } = useAccount();
+  const { account, saveProfile, saveMailPreferences, requestPasswordReset, enrollMfa } = useAccount();
   const saved = { firstName: account?.firstName ?? "", lastName: account?.lastName ?? "" };
   const [names, setNames] = useState(saved);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -31,6 +31,9 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const [resetError, setResetError] = useState("");
   const [sendingReset, setSendingReset] = useState(false);
   const [notice, setNotice] = useState("");
+  const [savingMail, setSavingMail] = useState(false);
+  // Mailed unless turned off, as for an account the API has not yet answered with a choice.
+  const balanceReminders = account?.mail?.balanceReminders ?? true;
   // Only an admin may send mail; the API refuses anyone else, so the tab is not offered.
   const isAdmin = account?.role === "ADMIN";
   const namesChanged = names.firstName !== saved.firstName || names.lastName !== saved.lastName;
@@ -48,6 +51,18 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
       setNotice("Could not save your profile. Please try again.");
     } finally {
       setSavingProfile(false);
+    }
+  }
+
+  async function saveBalanceReminders(enabled: boolean) {
+    setSavingMail(true);
+    try {
+      await saveMailPreferences({ balanceReminders: enabled });
+      setNotice(enabled ? "Balance reminders will be emailed." : "Balance reminders will only show here.");
+    } catch {
+      setNotice("Could not save your email settings. Please try again.");
+    } finally {
+      setSavingMail(false);
     }
   }
 
@@ -115,6 +130,15 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
               <section aria-label="Two-factor authentication" className="card overflow-hidden">
                 <CardHeader title="Two-factor authentication" description="Takes you through sign-in to add a second factor. After that, every sign-in asks for a code."
                   action={<Button label="Set up" icon={ShieldCheck} variant="secondary" onClick={enrollMfa} />} />
+              </section>
+              <section aria-label="Email" className="card overflow-hidden">
+                <CardHeader title="Email" description={`What we email to ${account?.email ?? "you"} besides your notifications here.`} />
+                <SettingRow title="Balance reminders" hint="A week, three days and a day before your balance runs out. They stay in your notifications either way.">
+                  <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" checked={balanceReminders} disabled={savingMail} onChange={(event) => { setNotice(""); void saveBalanceReminders(event.target.checked); }} className="mt-0.5 size-4 accent-zinc-900 dark:accent-zinc-100" />
+                    <span>Email me balance reminders<span className="block text-xs text-zinc-500">A paused workspace, one about to be deleted and a failed automatic top-up are always emailed.</span></span>
+                  </label>
+                </SettingRow>
               </section>
             </div>
             {section === "ai-connectors" && <AiConnectorsPanel />}

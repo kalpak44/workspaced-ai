@@ -66,6 +66,20 @@ public interface AccountApi {
   ResponseEntity<Account> updateProfile(@Valid @RequestBody ProfileRequest request);
 
   @Operation(
+      operationId = "updateMailPreferences",
+      summary = "Choose which mail the account gets",
+      description =
+          "Turns the balance reminders mailed before a workspace is paused on or off. They are"
+              + " still shown in the app, and a pause, a deletion and a failed automatic top-up"
+              + " are mailed regardless.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "OK.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = Account.class)))
+  @PutMapping(path = "/mail-preferences", consumes = JSON, produces = JSON)
+  ResponseEntity<Account> updateMailPreferences(@RequestBody MailPreferences preferences);
+
+  @Operation(
       operationId = "saveTour",
       summary = "Save where the guided tour is",
       description =

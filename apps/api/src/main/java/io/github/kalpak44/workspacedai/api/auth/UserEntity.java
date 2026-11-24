@@ -60,6 +60,10 @@ public class UserEntity {
   @Column(name = "tour_paused", nullable = false)
   private boolean tourPaused;
 
+  // Set by the column default to true: reminders are mailed until the user turns them off.
+  @Column(name = "balance_reminder_mail", insertable = false, nullable = false)
+  private boolean balanceReminderMail = true;
+
   protected UserEntity() {
     // For JPA.
   }
@@ -95,6 +99,14 @@ public class UserEntity {
    */
   public void signOutEverywhere(Instant now) {
     this.sessionsValidAfter = now.truncatedTo(ChronoUnit.SECONDS);
+  }
+
+  public MailPreferences getMailPreferences() {
+    return new MailPreferences(balanceReminderMail);
+  }
+
+  public void setMailPreferences(MailPreferences preferences) {
+    balanceReminderMail = preferences.balanceReminders();
   }
 
   /** Null while no tour is under way. */

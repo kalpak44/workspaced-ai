@@ -17,6 +17,13 @@ export interface Account {
   readonly demoAvailable?: boolean;
   /** Where the guided tour is, so any browser resumes it; null while none is under way. */
   readonly tour?: TourProgress | null;
+  readonly mail?: MailPreferences;
+}
+
+/** The platform mail a user may turn off; pauses, deletions and failed top-ups are always mailed. */
+export interface MailPreferences {
+  /** The balance reminders mailed before a workspace is paused; they stay in the app either way. */
+  readonly balanceReminders: boolean;
 }
 
 export type Role = "USER" | "ADMIN";
@@ -96,6 +103,11 @@ export function endAuth0Session(): void {
 export async function updateProfile(profile: Profile): Promise<Account> {
   const body = JSON.stringify({ firstName: profile.firstName, lastName: profile.lastName });
   return (await send(`${ACCOUNT_URL}/profile`, { method: "PUT", body })).json();
+}
+
+export async function updateMailPreferences(preferences: MailPreferences): Promise<Account> {
+  const body = JSON.stringify(preferences);
+  return (await send(`${ACCOUNT_URL}/mail-preferences`, { method: "PUT", body })).json();
 }
 
 /** Saves where the guided tour is; null ends it. */

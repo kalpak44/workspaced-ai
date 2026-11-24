@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
@@ -27,7 +28,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  * cost together. An admin, whose workspaces are free, is never warned.
  *
  * <p>The warnings are mailed only at milestones, so the inbox is not filled daily: a week left,
- * three days, one day, and the last day before a paused workspace is deleted.
+ * three days, one day, and the last day before a paused workspace is deleted. A user who turned
+ * balance reminders off is mailed only the last of these.
  */
 @Component
 public class FundsReminder {
@@ -43,6 +45,7 @@ public class FundsReminder {
   private final TransactionTemplate transactions;
   private final BillingService billing;
   private final BillingProperties properties;
+  private final UserRepository users;
 
   FundsReminder(
       UsageRepository usage,
@@ -51,7 +54,8 @@ public class FundsReminder {
       NotificationService notifications,
       TransactionTemplate transactions,
       BillingService billing,
-      BillingProperties properties) {
+      BillingProperties properties,
+      UserRepository users) {
     this.usage = usage;
     this.accounts = accounts;
     this.workspaces = workspaces;
@@ -59,6 +63,7 @@ public class FundsReminder {
     this.transactions = transactions;
     this.billing = billing;
     this.properties = properties;
+    this.users = users;
   }
 
   // Hourly, so a balance that drops below a week is warned about the same day; the key sends
@@ -96,12 +101,15 @@ public class FundsReminder {
       var days = hoursLeft / 24;
       // In the daily key too, so a milestone crossed during the day is told of at once.
       var milestone = hoursLeft < 24 ? "1d" : hoursLeft < 72 ? "3d" : "7d";
+      var mailed =
+          users.findById(user).map(u -> u.getMailPreferences().balanceReminders()).orElse(true);
       send(
           user,
           running,
           (workspace, row) ->
               "funds-running-out:" + workspace.getId() + ":" + today + ":" + milestone,
-          (workspace, row) -> "funds-running-out:" + workspace.getId() + ":" + milestone,
+          (workspace, row) ->
+              mailed ? "funds-running-out:" + workspace.getId() + ":" + milestone : null,
           (workspace, row) ->
               Notifications.fundsRunningOut(
                   workspace.getName(), days, properties.pausedFor(), fee));

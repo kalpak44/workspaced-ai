@@ -128,6 +128,14 @@ public class AuthService {
     return Account.of(user(userId), profile);
   }
 
+  @Transactional
+  public Account updateMailPreferences(
+      UUID userId, Auth0Users.Profile profile, MailPreferences preferences) {
+    var user = user(userId);
+    user.setMailPreferences(preferences);
+    return Account.of(user, profile);
+  }
+
   /** Null ends the tour. */
   @Transactional
   public void saveTour(UUID userId, TourProgress progress) {

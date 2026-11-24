@@ -426,6 +426,21 @@ class AuthTest {
   }
 
   @Test
+  void mailsBalanceRemindersUntilTheUserTurnsThemOff() throws Exception {
+    var bearer = bearerFor("grace@example.com");
+    var account = JSON.readTree(send("GET", "/account", bearer, null).body());
+    assertThat(account.path("mail").path("balanceReminders").asBoolean()).isTrue();
+
+    var updated = send("PUT", "/account/mail-preferences", bearer, "{\"balanceReminders\":false}");
+
+    assertThat(updated.statusCode()).isEqualTo(200);
+    assertThat(JSON.readTree(updated.body()).path("mail").path("balanceReminders").asBoolean())
+        .isFalse();
+    account = JSON.readTree(send("GET", "/account", bearer, null).body());
+    assertThat(account.path("mail").path("balanceReminders").asBoolean()).isFalse();
+  }
+
+  @Test
   void savesTheNamesToAuth0() throws Exception {
     var bearer = bearerFor("ada@example.com");
     var updated =

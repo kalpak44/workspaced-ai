@@ -189,6 +189,7 @@ export function installFakeApi(
     resetRequests: 0,
     failProfile: false,
     failReset: false,
+    failMail: false,
     failLogout: false,
     // What the next verification email resend answers, and how many were asked for.
     resendStatus: 204,
@@ -433,6 +434,9 @@ export function installFakeApi(
       if (auth.failProfile) return json({}, 500);
       const { firstName, lastName } = JSON.parse(String(init?.body));
       auth.account = { ...auth.account, firstName, lastName };
+    } else if (url.endsWith("/account/mail-preferences")) {
+      if (auth.failMail) return json({}, 500);
+      auth.account = { ...auth.account, mail: JSON.parse(String(init?.body)) };
     } else if (url.endsWith("/account/tour")) {
       auth.account = { ...auth.account, tour: init?.method === "PUT" ? JSON.parse(String(init.body)) : null };
       return new Response(null, { status: 204 });

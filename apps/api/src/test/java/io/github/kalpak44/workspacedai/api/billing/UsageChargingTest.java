@@ -9,6 +9,7 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.MailPreferences;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
@@ -342,6 +343,25 @@ class UsageChargingTest {
         .last()
         .asString()
         .endsWith("will be paused within a day");
+  }
+
+  @Test
+  void keepsBalanceRemindersInTheAppForAUserWhoTurnedTheirMailOff() throws Exception {
+    transactions.executeWithoutResult(
+        _ -> users.findById(user).orElseThrow().setMailPreferences(new MailPreferences(false)));
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    fund(-(MONTH - HOURLY * 12));
+
+    reminder.remind(Instant.now());
+    assertThat(reminders()).singleElement();
+    assertThat(mails()).isEmpty();
+
+    // A pause is mailed regardless.
+    fund(-(balance() - HOURLY / 2));
+    charger.charge(
+        workspace, usage.findById(workspace).orElseThrow().getChargedUntil().plusSeconds(3600));
+    assertThat(mails()).extracting(Mail::subject).singleElement().asString().endsWith("is paused");
   }
 
   @Test

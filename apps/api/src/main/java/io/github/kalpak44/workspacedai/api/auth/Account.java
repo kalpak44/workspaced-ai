@@ -18,7 +18,8 @@ public record Account(
     @Schema(description = "Whether the account can still start its one free demo workspace")
         boolean demoAvailable,
     @Schema(description = "Where the guided tour is; null while no tour is under way")
-        TourProgress tour) {
+        TourProgress tour,
+    MailPreferences mail) {
 
   static Account of(UserEntity user, Auth0Users.Profile profile) {
     return new Account(
@@ -29,6 +30,7 @@ public record Account(
         profile.picture().isEmpty() ? null : profile.picture(),
         user.getRole(),
         user.isDemoAvailable(),
-        user.getTourProgress());
+        user.getTourProgress(),
+        user.getMailPreferences());
   }
 }
