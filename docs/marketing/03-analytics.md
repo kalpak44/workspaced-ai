@@ -11,6 +11,18 @@ guess until this exists.
 4. First paid top-up
 5. Still paying after 30 days
 
+## Done
+
+- **Source on sign-up** (migration `V66`): `utm_source` and `utm_campaign` are saved on the account when it is made.
+  The site's `attribution.js` adds them to every link into the app and to its own pages, falling back to the
+  referring host when a visit has no UTM tags; the app forwards them from its own URL too. The API keeps them in the
+  encrypted sign-in cookie through Auth0's round trip. `privacy.html` says so.
+- **Admin funnel:** `GET /admin/funnel?from=&to=` and General settings → Funnel. For the accounts made in a period
+  (admins left out), it counts sign-ups, demos started, paid top-ups and accounts still charged 30 days after signing
+  up, in total and per source and campaign, with the tour's step history beside them.
+
+Page views (step 1) are not counted. Steps 2 to 5 do not need them, so Umami waits until a question needs them.
+
 ## Recommendation
 
 **Self-host Umami or Plausible on the k3s cluster** for site and app page views. Both work without cookies, so the

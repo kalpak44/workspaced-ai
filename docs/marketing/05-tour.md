@@ -13,7 +13,12 @@ another device resumes at the same step, and skipping pauses it in place rather 
 What it cannot tell is **where people stop**: it keeps only the current step, and finishing or ending the tour sets it
 to null, so a user who finished looks the same as one who never started.
 
-## 1. Record each step, not only the current one
+## 1. Record each step, not only the current one — done
+
+`tour_event` (migration `V66`) keeps every move: `REACHED`, `PAUSED`, `RESUMED` and `ENDED`, with the step. The API
+works out the event from the stored bookmark before and after each `saveTour`, so the web app sends nothing extra.
+Finishing and quitting both end the tour, so ending on the last step is what counts as finishing. The admin funnel
+shows how many reached each step and how many skipped, quit or are still at it. Step durations are not shown yet.
 
 **Recommendation:** a `tour_event` table — user, step, event (`reached`, `paused`, `resumed`, `finished`, `ended`),
 time — written by the same `saveTour` call, plus `app_user.tour_finished_at`.
