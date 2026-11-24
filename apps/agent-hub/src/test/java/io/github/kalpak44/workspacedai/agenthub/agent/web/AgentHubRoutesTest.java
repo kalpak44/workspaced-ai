@@ -5,6 +5,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import io.github.kalpak44.workspacedai.agenthub.MutableClock;
 import io.github.kalpak44.workspacedai.agenthub.TestCallers;
 import io.github.kalpak44.workspacedai.agenthub.TestDatabase;
+import io.github.kalpak44.workspacedai.agenthub.agent.AgentEntity;
+import io.github.kalpak44.workspacedai.agenthub.agent.AgentRepository;
+import io.github.kalpak44.workspacedai.agenthub.agent.EnrollmentTokenEntity;
+import io.github.kalpak44.workspacedai.agenthub.agent.EnrollmentTokenRepository;
 import io.github.kalpak44.workspacedai.agenthub.agent.TestAgent;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.FakeVmManager;
 import java.net.URI;
@@ -15,7 +19,6 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
@@ -30,7 +33,6 @@ import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Primary;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import tools.jackson.databind.JsonNode;
@@ -69,7 +71,8 @@ class AgentHubRoutesTest {
   }
 
   @LocalServerPort int port;
-  @Autowired JdbcClient jdbc;
+  @Autowired EnrollmentTokenRepository tokens;
+  @Autowired AgentRepository agents;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -83,21 +86,13 @@ class AgentHubRoutesTest {
     assertThat(Instant.parse(body.path("expiresAt").asString()))
         .isEqualTo(CLOCK.instant().plus(Duration.ofMinutes(30)));
     var token = body.path("token").asString();
-    assertThat(
-            jdbc.sql("select token_hash from enrollment_token where vm_id = ?")
-                .param(vm)
-                .query(byte[].class)
-                .single())
+    assertThat(tokens.findById(vm).map(EnrollmentTokenEntity::getTokenHash).orElseThrow())
         .isEqualTo(
             MessageDigest.getInstance("SHA-256").digest(token.getBytes(StandardCharsets.UTF_8)));
 
     var agent = new TestAgent();
     assertThat(enroll(vm, token, agent.publicKey()).statusCode()).isEqualTo(204);
-    assertThat(
-            jdbc.sql("select public_key from agent where vm_id = ?")
-                .param(vm)
-                .query(byte[].class)
-                .single())
+    assertThat(agents.findById(vm).map(AgentEntity::getPublicKey).orElseThrow())
         .isEqualTo(agent.rawPublicKey());
     assertThat(enroll(vm, token, agent.publicKey()).statusCode()).isEqualTo(409);
     assertThat(issue(vm).statusCode()).isEqualTo(409);
@@ -149,12 +144,7 @@ class AgentHubRoutesTest {
     assertThat(heartbeat.statusCode()).isEqualTo(200);
     assertThat(heartbeat.body()).isEqualTo("{\"status\":\"READY\"}");
     assertThat(VM_MANAGER.reports).contains("ready " + vm, "heartbeat " + vm);
-    assertThat(
-            jdbc.sql("select last_seen_at from agent where vm_id = ?")
-                .param(vm)
-                .query(Timestamp.class)
-                .single()
-                .toInstant())
+    assertThat(agents.findById(vm).map(AgentEntity::getLastSeenAt).orElseThrow())
         .isEqualTo(CLOCK.instant());
   }
 
@@ -224,12 +214,7 @@ class AgentHubRoutesTest {
       assertThat(send("POST", "/internal/enrollments", body, token).statusCode()).isEqualTo(403);
       assertThat(send("DELETE", "/internal/agents/" + vm, null, token).statusCode()).isEqualTo(403);
     }
-    assertThat(
-            jdbc.sql("select count(*) from enrollment_token where vm_id = ?")
-                .param(vm)
-                .query(Long.class)
-                .single())
-        .isZero();
+    assertThat(tokens.existsById(vm)).isFalse();
   }
 
   @Test
@@ -243,12 +228,7 @@ class AgentHubRoutesTest {
       assertThat(send("DELETE", "/internal/agents/" + vm, null, forwarded).statusCode())
           .isEqualTo(404);
     }
-    assertThat(
-            jdbc.sql("select count(*) from enrollment_token where vm_id = ?")
-                .param(vm)
-                .query(Long.class)
-                .single())
-        .isZero();
+    assertThat(tokens.existsById(vm)).isFalse();
     // The agent routes are meant to come through it.
     var forwarded =
         send("POST", "/agent/heartbeat", null, Map.of("X-Forwarded-For", "203.0.113.7"));

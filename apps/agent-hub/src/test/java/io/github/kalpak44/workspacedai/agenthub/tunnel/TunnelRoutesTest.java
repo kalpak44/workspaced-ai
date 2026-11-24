@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import io.github.kalpak44.workspacedai.agenthub.TestCallers;
 import io.github.kalpak44.workspacedai.agenthub.TestDatabase;
+import io.github.kalpak44.workspacedai.agenthub.agent.AgentEntity;
+import io.github.kalpak44.workspacedai.agenthub.agent.AgentRepository;
 import io.github.kalpak44.workspacedai.agenthub.agent.EnrollmentService;
 import io.github.kalpak44.workspacedai.agenthub.agent.TestAgent;
 import io.github.kalpak44.workspacedai.agenthub.agent.web.InternalRoutesFilter;
@@ -16,7 +18,6 @@ import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
 import java.net.http.WebSocketHandshakeException;
 import java.nio.charset.StandardCharsets;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.HashMap;
@@ -32,7 +33,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.simple.JdbcClient;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
@@ -52,7 +52,7 @@ class TunnelRoutesTest {
   @LocalServerPort int port;
   @Autowired EnrollmentService enrollments;
   @Autowired WorkerRegistry registry;
-  @Autowired JdbcClient jdbc;
+  @Autowired AgentRepository agents;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -63,12 +63,7 @@ class TunnelRoutesTest {
 
     worker(vm, agent);
 
-    assertThat(
-            jdbc.sql("select last_seen_at from agent where vm_id = ?")
-                .param(vm)
-                .query(Timestamp.class)
-                .single())
-        .isNotNull();
+    assertThat(agents.findById(vm).map(AgentEntity::getLastSeenAt)).isPresent();
   }
 
   @Test

@@ -27,6 +27,13 @@ spring:
     hikari:
       pool-name: agent-hub-pool
 
+  # The API's migrations own the schema; a mapping that drifts from it fails at startup
+  # instead of being "fixed" by Hibernate.
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+
 management:
   endpoints:
     web:
