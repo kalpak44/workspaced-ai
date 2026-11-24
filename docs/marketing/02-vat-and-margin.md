@@ -20,8 +20,8 @@ so the guard's margins rise on their own.
 
 | | Today (VAT paid) | With the VAT ID |
 |---|---|---|
-| Worst-case margin per paid euro | €0.141 | €0.27 |
-| Referral program as written (20% credit) | loses money in the worst case | keeps about €0.14 |
+| Worst-case margin per paid euro | €0.116 | €0.248 |
+| Referral program as written (20% credit) | loses €0.04 in the worst case | keeps about €0.12 |
 | Partner commission of 15% | not allowed by the guard | allowed |
 
 ## Done

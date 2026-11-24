@@ -55,13 +55,13 @@ describe("VM sizes", () => {
   it("offers the stand-in plan while every other plan is sold out, and says why", async () => {
     const api = installFakeApi();
     for (const size of api.state.vmSizes) size.available = false;
-    api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: true, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 33.458333, monthlyGross: 33.458333, recommended: false, available: true });
+    api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: true, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 34.979167, monthlyGross: 34.979167, recommended: false, available: true });
     api.state.vmSizes[0].isDefault = false;
     const user = userEvent.setup();
     await openSizes(user);
 
     expect(warning()).toHaveTextContent("Every plan is sold out right now, so Starter Flex is offered in their place");
-    expect(screen.getByRole("radio", { name: /Starter Flex.*cpx22.*€1\.10 a day/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Starter Flex.*cpx22.*€1\.15 a day/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 

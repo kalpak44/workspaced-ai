@@ -13,13 +13,13 @@ Nothing is paid for a sign-up, the demo or the trial key, so a fake account that
 
 | Period | Paid out | Real cost | Worst case | Typical |
 |---|---|---|---|---|
-| Both rewards running | 20% | €0.113 to €0.158 | −€0.017 | +€0.29 |
-| Friend's bonus used up | 10% | €0.056 to €0.079 | +€0.062 | +€0.35 |
-| After 12 months | 0 | 0 | +€0.141 | +€0.41 |
+| Both rewards running | 20% | €0.113 to €0.158 | −€0.042 | +€0.29 |
+| Friend's bonus used up | 10% | €0.056 to €0.079 | +€0.037 | +€0.35 |
+| After 12 months | 0 | 0 | +€0.116 | +€0.40 |
 
 **The worst case loses money while Hetzner charges this account VAT.** Do
-[02-vat-and-margin.md](02-vat-and-margin.md) first (worst case +€0.14 with both rewards running), or lower both rewards
-to 7.5%.
+[02-vat-and-margin.md](02-vat-and-margin.md) first (worst case +€0.12 with both rewards running), or lower both rewards
+to 5%.
 
 See [economics.md](economics.md) for the assumptions and the startup guard.
 

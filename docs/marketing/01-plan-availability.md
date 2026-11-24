@@ -10,7 +10,7 @@ each pinned to one Hetzner server type (`workspaced.plans`), and Hetzner sells t
   in nbg1 is offered and created in the first fallback that has it, on the same server at the same cost.
 - **No stand-in at the plan's price.** A pricier server behind a plan would sell at a loss (cpx22 at Starter's price
   loses about €17 a month), so a plan sold out everywhere shows as unavailable instead.
-- **Starter Flex**, cpx22 at €1.10 a day, a `fallback` plan offered as the default only while every other plan is sold
+- **Starter Flex**, cpx22 at €1.15 a day, a `fallback` plan offered as the default only while every other plan is sold
   out. On 2026-11-24 cx23, cx33 and cx43 were sold out in nbg1, fsn1 and hel1 alike, so the location fallback alone
   left nothing to sell.
 

@@ -19,12 +19,12 @@ never earns cash.
 
 | | Worst case | Typical |
 |---|---|---|
-| Margin on €1 spent | €0.141 | €0.406 |
+| Margin on €1 spent | €0.116 | €0.403 |
 | Commission | −€0.100 | −€0.100 |
 | Payout fees at a €50 minimum payout | ~−€0.005 | ~−€0.005 |
-| **Platform keeps** | **+€0.036** | **+€0.30** |
+| **Platform keeps** | **+€0.011** | **+€0.30** |
 
-Optionally 15% for partners bringing €1,000 a month. That loses about 1.4% in today's worst case, so it waits for
+Optionally 15% for partners bringing €1,000 a month. That loses about 4% in today's worst case, so it waits for
 [02-vat-and-margin.md](02-vat-and-margin.md); the guard in [economics.md](economics.md) decides.
 
 ## Rules

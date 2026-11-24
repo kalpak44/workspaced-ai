@@ -17,7 +17,8 @@ import org.springframework.validation.annotation.Validated;
  * @param offered in the order they are shown; the first is the default
  * @param hourlyBillingFactor how much more Hetzner charges an hour than its monthly price spread
  *     over 730, before the monthly cap is reached
- * @param stripeFeePercent the worst share of a top-up Stripe keeps
+ * @param stripeFeePercent the worst share of a top-up's amount before VAT that Stripe keeps, card
+ *     fee and invoice fee together
  * @param minMarginPercent what a plan must keep of its price after the server's cost and Stripe's
  *     fee, or it is withheld
  */

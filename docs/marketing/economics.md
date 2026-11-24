@@ -6,8 +6,12 @@ How much each paid euro leaves after costs, and the rule that keeps every bonus,
 
 - A workspace is sold as a plan at a fixed daily price before VAT (`workspaced.plans` in
   `apps/api/src/main/resources/application.yml`): Starter €0.35 (cx23), Builder €0.55 (cx33), Pro €0.95 (cx43).
-- `compute/VmPricing` withholds a plan whose price, less a 7% Stripe fee, keeps under 10% over its server's cost with
+- `compute/VmPricing` withholds a plan whose price, less a 9.5% Stripe fee, keeps under 10% over its server's cost with
   VAT × 1.155, the premium Hetzner's hourly billing adds before its monthly cap.
+- Stripe in Bulgaria (stripe.com/en-bg/pricing): cards 1.5% + €0.25 for standard EEA cards, 2.8% for premium EEA, 3.15%
+  for international, always on the amount with VAT; 0.4% per paid invoice (capped at US$2 for Checkout's invoices).
+  Payouts to a euro account cost nothing; paying out in another currency costs 1%. The worst case, a €5 top-up on an
+  international card, keeps 9.3% of the amount before VAT.
 - A top-up is charged with 20% VAT on top (`workspaced.billing.vat-percent`); the balance receives the amount before VAT.
   The minimum top-up is €5 (`BillingService.MIN_TOP_UP_CENTS`).
 - Workspaces are charged by the hour from the balance; a month is 730 hours.
@@ -32,11 +36,10 @@ A plan's *cost share* is its server's cost over its price. It is highest on Pro 
 | Assumptions | €5 top-ups, VAT paid to Hetzner, VM gone within a month | €20 top-ups, VAT reclaimed, VM kept a month | €5 top-ups, VM gone within a month |
 | Revenue (ex-VAT) | €1.000 | €1.000 | €1.000 |
 | Hetzner cost (cost share) | −€0.791 (Pro: €22.86 / €28.90) | −€0.563 (Starter: €5.99 / €10.65) | −€0.659 (Pro: €19.05 / €28.90) |
-| Stripe fee (~1.5% + €0.25 on the amount with VAT) | −€0.068 | −€0.031 | −€0.068 |
-| **Margin** | **€0.141** | **€0.406** | **€0.273** |
+| Stripe fee (card fee and 0.4% invoice fee on the amount with VAT) | −€0.093 (international card) | −€0.034 (standard EEA card) | −€0.093 |
+| **Margin** | **€0.116** | **€0.403** | **€0.248** |
 
-Per plan in the worst case: Starter €0.152, Builder €0.187, Pro €0.141. The Stripe fee rate is an assumption; read the
-real one from the Stripe dashboard and update this table.
+Per plan in the worst case: Starter €0.127, Builder €0.162, Pro €0.116, Starter Flex €0.113.
 
 ## What a reward really costs
 
@@ -63,8 +66,8 @@ worstMargin − Σ programCost ≥ floor
 Implement it as a `@ConfigurationProperties` validator (`MarketingGuard` in a new `marketing` package) that reads
 `PlanProperties`, `BillingProperties` and each program's properties. `worstCostShare` is the highest of the plans'
 cost shares, read from the same Hetzner prices `VmPricing` checks, so it follows Hetzner's prices and the VAT ID. A config change that would sell at a loss then
-fails the deployment instead of losing money silently. `worstStripeFee` is a property too (default `0.068`), so it can
-follow Stripe's real pricing.
+fails the deployment instead of losing money silently. `worstStripeFee` is `workspaced.plans.stripe-fee-percent`
+(9.5), so the guard and the plans read one number.
 
 ## Rules the guard assumes
 

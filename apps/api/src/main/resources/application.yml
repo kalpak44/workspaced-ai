@@ -67,12 +67,14 @@ workspaced:
       # usually in stock, and priced to pass the margin check below.
       - name: Starter Flex
         server-type: cpx22
-        daily-price: 1.10
+        daily-price: 1.15
         fallback: true
     # A plan is withheld unless, after Stripe's fee, its price keeps this margin over its server's
     # cost with VAT, raised by Hetzner's hourly billing before the monthly cap.
     hourly-billing-factor: 1.155
-    stripe-fee-percent: 7
+    # Stripe's worst case in Bulgaria: a €5 top-up on a non-EEA card, 3.15% + €0.25 on the amount
+    # with VAT, plus 0.4% for its invoice.
+    stripe-fee-percent: 9.5
     min-margin-percent: 10
   # Every harness is reached through this service's tunnel to its VM. Left unset, as it is
   # locally, no workspace's harness answers.
