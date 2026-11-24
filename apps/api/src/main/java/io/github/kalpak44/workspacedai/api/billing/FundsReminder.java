@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.billing;
 
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
@@ -12,7 +13,6 @@ import java.time.ZoneOffset;
 import java.util.List;
 import java.util.UUID;
 import java.util.function.BiFunction;
-import java.util.function.Function;
 import java.util.stream.Collectors;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
@@ -26,6 +26,10 @@ import org.springframework.transaction.support.TransactionTemplate;
  * {@link UsageCharger} then pauses it, and about each paused one until it is deleted. All of a
  * user's running workspaces draw on one balance, so how long it lasts is reckoned from what they
  * cost together. An admin, whose workspaces are free, is never warned.
+ *
+ * <p>The warnings are mailed only at milestones, so the inbox is not filled daily: a week left,
+ * three days, one day, and the last day before a paused workspace is deleted. A user who turned
+ * balance reminders off is mailed only the last of these.
  */
 @Component
 public class FundsReminder {
@@ -41,6 +45,7 @@ public class FundsReminder {
   private final TransactionTemplate transactions;
   private final BillingService billing;
   private final BillingProperties properties;
+  private final UserRepository users;
 
   FundsReminder(
       UsageRepository usage,
@@ -49,7 +54,8 @@ public class FundsReminder {
       NotificationService notifications,
       TransactionTemplate transactions,
       BillingService billing,
-      BillingProperties properties) {
+      BillingProperties properties,
+      UserRepository users) {
     this.usage = usage;
     this.accounts = accounts;
     this.workspaces = workspaces;
@@ -57,6 +63,7 @@ public class FundsReminder {
     this.transactions = transactions;
     this.billing = billing;
     this.properties = properties;
+    this.users = users;
   }
 
   // Hourly, so a balance that drops below a week is warned about the same day; the key sends
@@ -92,10 +99,17 @@ public class FundsReminder {
     var fee = billing.amount(billing.reactivationFeeMicros());
     if (hoursLeft < WARN_BEFORE.toHours()) {
       var days = hoursLeft / 24;
+      // In the daily key too, so a milestone crossed during the day is told of at once.
+      var milestone = hoursLeft < 24 ? "1d" : hoursLeft < 72 ? "3d" : "7d";
+      var mailed =
+          users.findById(user).map(u -> u.getMailPreferences().balanceReminders()).orElse(true);
       send(
           user,
           running,
-          workspace -> "funds-running-out:" + workspace.getId() + ":" + today,
+          (workspace, row) ->
+              "funds-running-out:" + workspace.getId() + ":" + today + ":" + milestone,
+          (workspace, row) ->
+              mailed ? "funds-running-out:" + workspace.getId() + ":" + milestone : null,
           (workspace, row) ->
               Notifications.fundsRunningOut(
                   workspace.getName(), days, properties.pausedFor(), fee));
@@ -107,16 +121,31 @@ public class FundsReminder {
             .filter(row -> row.getPausedAt() != null)
             .filter(row -> LocalDate.ofInstant(row.getPausedAt(), ZoneOffset.UTC).isBefore(today))
             .toList(),
-        workspace -> "paused-workspace:" + workspace.getId() + ":" + today,
         (workspace, row) ->
-            Notifications.pausedWorkspaceDeletion(
-                workspace.getName(), row.getPausedAt().plus(properties.pausedFor()), now, fee));
+            "paused-workspace:"
+                + workspace.getId()
+                + ":"
+                + today
+                + (lastDay(row, now) ? ":last-day" : ""),
+        (workspace, row) ->
+            lastDay(row, now) ? "paused-workspace:" + workspace.getId() + ":last-day" : null,
+        (workspace, row) ->
+            Notifications.pausedWorkspaceDeletion(workspace.getName(), deletesAt(row), now, fee));
+  }
+
+  private boolean lastDay(UsageEntity row, Instant now) {
+    return deletesAt(row).isBefore(now.plus(Duration.ofDays(1)));
+  }
+
+  private Instant deletesAt(UsageEntity row) {
+    return row.getPausedAt().plus(properties.pausedFor());
   }
 
   private void send(
       UUID user,
       List<UsageEntity> rows,
-      Function<WorkspaceEntity, String> key,
+      BiFunction<WorkspaceEntity, UsageEntity, String> key,
+      BiFunction<WorkspaceEntity, UsageEntity, String> mailKey,
       BiFunction<WorkspaceEntity, UsageEntity, NotificationMessage> message) {
     if (rows.isEmpty()) {
       return;
@@ -128,10 +157,13 @@ public class FundsReminder {
             workspaces
                 .findAllById(byWorkspace.keySet())
                 .forEach(
-                    workspace ->
-                        notifications.sendOnce(
-                            user,
-                            key.apply(workspace),
-                            message.apply(workspace, byWorkspace.get(workspace.getId())))));
+                    workspace -> {
+                      var row = byWorkspace.get(workspace.getId());
+                      notifications.sendOnce(
+                          user,
+                          key.apply(workspace, row),
+                          message.apply(workspace, row),
+                          mailKey.apply(workspace, row));
+                    }));
   }
 }

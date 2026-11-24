@@ -11,3 +11,4 @@ export { Stars } from "./Stars";
 export { Tag } from "./Tag";
 export { Select } from "./Select";
 export { Skeleton } from "./Skeleton";
+export { Confetti } from "./Confetti";

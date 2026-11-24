@@ -17,6 +17,13 @@ export interface Account {
   readonly demoAvailable?: boolean;
   /** Where the guided tour is, so any browser resumes it; null while none is under way. */
   readonly tour?: TourProgress | null;
+  readonly mail?: MailPreferences;
+}
+
+/** The platform mail a user may turn off; pauses, deletions and failed top-ups are always mailed. */
+export interface MailPreferences {
+  /** The balance reminders mailed before a workspace is paused; they stay in the app either way. */
+  readonly balanceReminders: boolean;
 }
 
 export type Role = "USER" | "ADMIN";
@@ -47,14 +54,26 @@ export const browser = {
   },
 };
 
+/** The utm_ parameters this page was opened with, passed on so the API records where a sign-up came from. */
+function attribution(): string {
+  const params = new URLSearchParams(globalThis.location.search);
+  const kept = new URLSearchParams();
+  for (const name of ["utm_source", "utm_campaign"]) {
+    const value = params.get(name);
+    if (value) kept.set(name, value);
+  }
+  return kept.size ? `&${kept}` : "";
+}
+
 /** A full-page navigation, not a fetch: Auth0's login page has to be on screen. */
 export function signIn(): void {
-  browser.open(SIGN_IN_URL);
+  const forwarded = attribution();
+  browser.open(forwarded ? `${SIGN_IN_URL}?${forwarded.slice(1)}` : SIGN_IN_URL);
 }
 
 /** The same entry point, opened on Auth0's sign-up form instead of its login form. */
 export function signUp(): void {
-  browser.open(`${SIGN_IN_URL}?signup`);
+  browser.open(`${SIGN_IN_URL}?signup${attribution()}`);
 }
 
 /** A sign-in that sets up a second factor first; every later sign-in asks for it. */
@@ -96,6 +115,11 @@ export function endAuth0Session(): void {
 export async function updateProfile(profile: Profile): Promise<Account> {
   const body = JSON.stringify({ firstName: profile.firstName, lastName: profile.lastName });
   return (await send(`${ACCOUNT_URL}/profile`, { method: "PUT", body })).json();
+}
+
+export async function updateMailPreferences(preferences: MailPreferences): Promise<Account> {
+  const body = JSON.stringify(preferences);
+  return (await send(`${ACCOUNT_URL}/mail-preferences`, { method: "PUT", body })).json();
 }
 
 /** Saves where the guided tour is; null ends it. */

@@ -2,22 +2,24 @@ export class ApiError extends Error {
   readonly status: number;
   /** The problem detail the API gave, when it gave one; two refusals can share a status. */
   readonly detail: string | null;
+  /** The rest of the problem the API answered with, such as a 402's shortCents. */
+  readonly problem: Readonly<Record<string, unknown>>;
 
-  constructor(status: number, detail: string | null = null) {
+  constructor(status: number, detail: string | null = null, problem: Readonly<Record<string, unknown>> = {}) {
     super(`API answered ${status}`);
     this.name = "ApiError";
     this.status = status;
     this.detail = detail;
+    this.problem = problem;
   }
 }
 
-async function problemDetail(response: Response): Promise<string | null> {
+async function problemOf(response: Response): Promise<Readonly<Record<string, unknown>>> {
   try {
     const body: unknown = await response.json();
-    const detail = (body as { detail?: unknown } | null)?.detail;
-    return typeof detail === "string" ? detail : null;
+    return body !== null && typeof body === "object" ? body as Record<string, unknown> : {};
   } catch {
-    return null;
+    return {};
   }
 }
 
@@ -65,7 +67,8 @@ export async function send(url: string, init?: RequestInit): Promise<Response> {
     if (response.status === 401) {
       globalThis.dispatchEvent(new Event(UNAUTHORIZED));
     }
-    throw new ApiError(response.status, await problemDetail(response));
+    const problem = await problemOf(response);
+    throw new ApiError(response.status, typeof problem.detail === "string" ? problem.detail : null, problem);
   }
   return response;
 }

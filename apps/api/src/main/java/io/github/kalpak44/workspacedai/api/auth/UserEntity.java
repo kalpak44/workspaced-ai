@@ -60,13 +60,26 @@ public class UserEntity {
   @Column(name = "tour_paused", nullable = false)
   private boolean tourPaused;
 
+  // Set by the column default to true: reminders are mailed until the user turns them off.
+  @Column(name = "signup_source", length = 100, updatable = false)
+  private String signupSource;
+
+  @Column(name = "signup_campaign", length = 100, updatable = false)
+  private String signupCampaign;
+
+  @Column(name = "balance_reminder_mail", insertable = false, nullable = false)
+  private boolean balanceReminderMail = true;
+
   protected UserEntity() {
     // For JPA.
   }
 
-  public UserEntity(String idpSubject, Role role) {
+  /** An account made by a sign-up that a link with that attribution started, if one did. */
+  public UserEntity(String idpSubject, Role role, Attribution attribution) {
     this.idpSubject = idpSubject;
     this.role = role;
+    this.signupSource = attribution.source();
+    this.signupCampaign = attribution.campaign();
   }
 
   public UUID getId() {
@@ -89,12 +102,35 @@ public class UserEntity {
     return createdAt;
   }
 
+  /** Null until the account's one demo was taken. */
+  public Instant getDemoStartedAt() {
+    return demoStartedAt;
+  }
+
+  /** utm_source of the link that started the sign-up; null for none. */
+  public String getSignupSource() {
+    return signupSource;
+  }
+
+  /** utm_campaign of that link; null for none. */
+  public String getSignupCampaign() {
+    return signupCampaign;
+  }
+
   /**
    * Revokes every session token issued before now. Tokens carry whole seconds, so the time is cut
    * to the second: a sign-in later in this same second stays valid.
    */
   public void signOutEverywhere(Instant now) {
     this.sessionsValidAfter = now.truncatedTo(ChronoUnit.SECONDS);
+  }
+
+  public MailPreferences getMailPreferences() {
+    return new MailPreferences(balanceReminderMail);
+  }
+
+  public void setMailPreferences(MailPreferences preferences) {
+    balanceReminderMail = preferences.balanceReminders();
   }
 
   /** Null while no tour is under way. */

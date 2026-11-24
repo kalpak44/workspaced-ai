@@ -34,6 +34,12 @@ public class AccountController implements AccountApi {
   }
 
   @Override
+  public ResponseEntity<Account> updateMailPreferences(MailPreferences preferences) {
+    return ResponseEntity.ok(
+        service.updateMailPreferences(CurrentUser.id(), CurrentUser.profile(), preferences));
+  }
+
+  @Override
   public ResponseEntity<Void> saveTour(TourProgress progress) {
     service.saveTour(CurrentUser.id(), progress);
     return ResponseEntity.noContent().build();

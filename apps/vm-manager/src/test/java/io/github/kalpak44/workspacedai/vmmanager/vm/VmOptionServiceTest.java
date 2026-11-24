@@ -49,6 +49,10 @@ class VmOptionServiceTest {
   }
 
   VmOptionService service(List<String> recommended) {
+    return service(recommended, List.of());
+  }
+
+  VmOptionService service(List<String> recommended, List<String> fallbackLocations) {
     return new VmOptionService(
         new VmProperties(recommended, new BigDecimal("60")),
         new HetznerProperties(
@@ -58,9 +62,29 @@ class VmOptionServiceTest {
             "ubuntu-24.04",
             List.of(),
             Duration.ofSeconds(1),
-            null),
+            null,
+            fallbackLocations),
         hetzner,
         clock);
+  }
+
+  @Test
+  void takesATypeSoldOutInTheLocationFromTheFirstFallbackThatHasIt() {
+    var prices =
+        List.of(
+            new ServerType.Price("nbg1", new BigDecimal("5.49"), new BigDecimal("6.59")),
+            new ServerType.Price("fsn1", new BigDecimal("5.49"), new BigDecimal("6.59")),
+            new ServerType.Price("hel1", new BigDecimal("5.49"), new BigDecimal("6.59")));
+    hetzner.types =
+        List.of(
+            new ServerType("cx23", 2, 4, 40, "shared", "x86", false, prices, List.of("nbg1")),
+            new ServerType(
+                "cx33", 4, 8, 80, "shared", "x86", false, prices, List.of("nbg1", "fsn1", "hel1")));
+
+    var options = service(List.of("cx23", "cx33"), List.of("fsn1", "hel1")).list();
+
+    assertThat(options).extracting(VmOption::location).containsExactly("fsn1", "nbg1");
+    assertThat(options).extracting(VmOption::available).containsExactly(true, false);
   }
 
   @Test

@@ -25,9 +25,10 @@ public interface VmSizeApi {
       operationId = "listVmSizes",
       summary = "List VM sizes",
       description =
-          "Every size a new workspace's VM can be created as, cheapest first, with its specs and "
-              + "monthly price. An admin sees what the VM costs; any other user sees the price with "
-              + "the configured markup added.")
+          "Every plan a new workspace can be created as, in the order they are offered, with its"
+              + " server's specs and its monthly price. An admin sees what the VM costs; any other"
+              + " user sees the plan's fixed price. A plan whose price no longer covers its server's"
+              + " cost is listed as unavailable.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",

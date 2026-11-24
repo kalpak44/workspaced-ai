@@ -265,6 +265,7 @@ public interface SessionApi {
               + "replaces any earlier one of that id; `delta` ({messageId, partId, delta}) with "
               + "text appended to a part; `status` ({busy}); `title` ({title}); `error` "
               + "({message}); `forms` ({}) when pending questions change (reload /forms). "
+              + "The current `status` is sent on every connection, including reconnects. "
               + "A `keepalive` comment is sent about every 10 seconds.")
   @ApiResponse(
       responseCode = "200",

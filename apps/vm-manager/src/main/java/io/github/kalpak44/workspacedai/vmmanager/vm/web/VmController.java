@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
+import io.github.kalpak44.workspacedai.vmmanager.vm.ComputeProvider;
 import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.MetricsRange;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmMetricsService;
@@ -61,6 +62,8 @@ public class VmController implements VmApi {
 
   @Override
   public ResponseEntity<VmDto> create(CreateVmDto body) {
+    // Refuses a cloud it cannot create in; VmService creates every VM at Hetzner.
+    ComputeProvider.resolve(body.provider());
     var created =
         service.create(
             body.workspaceId(),

@@ -53,23 +53,28 @@ public class SessionStreams {
     subscribers.put(emitter, subscriber);
     var hub = hubs.computeIfAbsent(target.workspaceId(), ignored -> new Hub());
     hub.add(subscriber);
-    if (hub.upstream == null) {
-      try {
+    try {
+      if (hub.upstream == null) {
         hub.upstream =
             harness.stream(
                 target.endpoint(),
                 envelope -> relay(target.workspaceId(), envelope),
                 () -> ended(target.workspaceId(), hub));
-      } catch (RuntimeException e) {
-        hub.remove(subscriber);
-        subscribers.remove(emitter);
-        if (hub.empty()) {
-          hubs.remove(target.workspaceId());
-        }
-        subscriber.outbox.close();
-        emitter.completeWithError(e);
-        return emitter;
       }
+      // Start listening before taking the snapshot. The subscribe lock keeps newer relayed
+      // status events behind it, so reconnecting browsers recover replies already in progress.
+      subscriber.outbox.offer(
+          sse(new HarnessEvent.Status(harness.busy(target.endpoint(), target.harnessSessionId()))));
+    } catch (RuntimeException e) {
+      hub.remove(subscriber);
+      subscribers.remove(emitter);
+      if (hub.empty()) {
+        hubs.remove(target.workspaceId());
+        close(hub.upstream);
+      }
+      subscriber.outbox.close();
+      emitter.completeWithError(e);
+      return emitter;
     }
     emitter.onCompletion(() -> close(emitter));
     emitter.onTimeout(() -> close(emitter));

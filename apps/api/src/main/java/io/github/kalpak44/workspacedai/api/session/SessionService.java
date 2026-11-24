@@ -282,7 +282,7 @@ public class SessionService {
     return transactions.execute(
         _ ->
             sessions
-                .lockByIdAndWorkspaceId(sessionId, workspaceId)
+                .findLockedByIdAndWorkspaceId(sessionId, workspaceId)
                 .orElseThrow(
                     () ->
                         new ResponseStatusException(

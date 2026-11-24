@@ -69,7 +69,7 @@ async function openProviderStep() {
   await user.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByRole("radio", { name: /cx23/ });
   await user.click(screen.getByRole("button", { name: "Next" }));
-  await screen.findByLabelText("OpenRouter API key");
+  await screen.findByRole("button", { name: "Connect OpenRouter" });
   await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
   return user;
 }
@@ -154,6 +154,7 @@ describe("Connect OpenRouter", () => {
     await authorization();
     expect(api.drafts.size).toBe(0);
 
+    await user.click(screen.getByRole("button", { name: "Paste a key instead" }));
     await user.type(screen.getByLabelText("OpenRouter API key"), "sk-or-v1-pasted");
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
     await waitFor(() => expect(closed).toHaveBeenCalled());
@@ -217,8 +218,8 @@ describe("Connect OpenRouter", () => {
     await user.click(screen.getByRole("button", { name: "Connect OpenRouter" }));
     callBack("expired", (await authorization()).searchParams.get("state"));
     expect(await screen.findByRole("alert")).toHaveTextContent("OpenRouter did not issue a key");
-    expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("");
     expect(screen.getByRole("button", { name: "Connect OpenRouter" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Paste a key instead" })).toBeEnabled();
   });
 });
 

@@ -26,6 +26,7 @@
         </a>
         <nav class="flex items-center gap-1 text-sm sm:gap-2">
           <a href="/#features" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Features</a>
+          <a href="/pricing" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Pricing</a>
           <a href="/docs" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Docs</a>
           <a href="/support" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Support</a>
           <a href="https://ai.workspaced.online/" class="rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Sign in</a>
@@ -37,7 +38,7 @@
     <main class="flex-1">
       <article class="mx-auto max-w-3xl px-4 py-14 sm:py-20">
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">Privacy policy</h1>
-        <p class="mt-3 text-sm text-zinc-500">Draft · Last updated 19 November 2026</p>
+        <p class="mt-3 text-sm text-zinc-500">Draft · Last updated 24 November 2026</p>
         <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
           <strong class="font-semibold">Draft, for information.</strong>
           This policy is a working draft published while Workspaced AI is in public beta, so you can see how we intend to
@@ -81,6 +82,12 @@
               secrets and variables, firewall rules, connected domain names, and usage records needed to bill you.</li>
             <li><strong>Secrets</strong> - the values of your API keys and secrets, including your OpenRouter key, kept encrypted
               in a secrets store and delivered only to your own Workspace's machine.</li>
+            <li><strong>Sign-up source</strong> - when the link you followed to sign up names a source or campaign
+              (<code>utm_source</code>, <code>utm_campaign</code>), or another website linked you to ours, that name is stored
+              with your account, so we can tell which places bring people who keep using the Service. It is never used to
+              follow you elsewhere, and our website stores nothing in your browser to keep it.</li>
+            <li><strong>Guided tour progress</strong> - which steps of the guided tour you reached, skipped or ended, and when,
+              so we can see where the tour loses people.</li>
             <li><strong>Technical data</strong> - IP address, browser and device information, request logs, and security events
               generated when you use the Service.</li>
             <li><strong>Correspondence</strong> - what you send us by email, and our replies.</li>
@@ -200,6 +207,7 @@
         <nav class="grid grid-cols-2 gap-x-10 gap-y-2 text-zinc-600 dark:text-zinc-400" aria-label="Footer">
           <a href="https://ai.workspaced.online/" class="hover:text-zinc-900 dark:hover:text-zinc-100">Open app</a>
           <a href="/docs" class="hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
+          <a href="/pricing" class="hover:text-zinc-900 dark:hover:text-zinc-100">Pricing</a>
           <a href="/support" class="hover:text-zinc-900 dark:hover:text-zinc-100">Support</a>
           <a href="/privacy" class="hover:text-zinc-900 dark:hover:text-zinc-100">Privacy policy</a>
           <a href="/terms" class="hover:text-zinc-900 dark:hover:text-zinc-100">Terms of service</a>
@@ -219,5 +227,6 @@
       </div>
     </section>
     <script src="/privacy-notice.js"></script>
+    <script src="/attribution.js"></script>
   </body>
 </html>

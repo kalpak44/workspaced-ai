@@ -403,4 +403,45 @@ public interface WorkspaceApi {
   @ApiResponse(responseCode = "409", description = "The workspace is not an active free trial.")
   @PostMapping("/{id}/tutorial-completed")
   ResponseEntity<Void> completeTutorial(@PathVariable UUID id);
+
+  @Operation(
+      operationId = "keepWorkspace",
+      summary = "Keep the free demo as a paid workspace",
+      description =
+          "Turns the account's running demo into a workspace the balance pays for, on the same VM"
+              + " with nothing lost, charged by the hour at its plan's price from now on. The"
+              + " balance must cover the same period as creating a workspace requires.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Kept; no longer a demo.",
+      content = @Content(mediaType = JSON, schema = @Schema(implementation = Workspace.class)))
+  @ApiResponse(
+      responseCode = "402",
+      description =
+          "The balance does not cover it; the problem's shortCents property is what to add.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No workspace has that id.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class),
+              examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "409",
+      description =
+          "It is not a running demo, is about to be deleted, or runs on a machine no plan sells.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping(path = "/{id}/keep", produces = JSON)
+  ResponseEntity<Workspace> keep(
+      @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
+          @PathVariable
+          UUID id);
 }

@@ -6,7 +6,7 @@ import { useWorkspaces } from "../../hooks/useWorkspaces";
 import { reportTourAction, setTourProgress, TOUR_STEP, useStoredTour, useTourProgress } from "../../lib/tour";
 import { DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
-import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, DemoTour, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
+import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, DemoTour, KeepWorkspaceDialog, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -50,6 +50,8 @@ export function WorkspacesPage() {
   const [restartId, setRestartId] = useState<string | null>(null);
   const [pageTitle, setPageTitle] = useState<string | null>(null);
   const [paletteOpen, setPaletteOpen] = useState(false);
+  // The demo being kept as a workspace of the user's own; null while the dialog is closed.
+  const [keepingId, setKeepingId] = useState<string | null>(null);
   // The API sends a new account's first sign-in to `/?welcome`, and its welcome mail links to
   // `/?tour`; both are read before any redirect drops them.
   const [tourAsked, setTourAsked] = useState(() => ["welcome", "tour"].some((parameter) => new URLSearchParams(globalThis.location.search).has(parameter)));
@@ -62,6 +64,15 @@ export function WorkspacesPage() {
   const tour = useTourProgress();
   const stored = useStoredTour();
   const demo = workspaces.find((w) => w.demo) ?? null;
+  const keeping = workspaces.find((w) => w.id === keepingId && w.demo) ?? null;
+
+  // The warning before a demo ends links here with ?keep, to open the same dialog.
+  useEffect(() => {
+    const query = new URLSearchParams(globalThis.location.search);
+    if (route.name !== "workspace" || !query.has("keep")) return;
+    globalThis.history.replaceState(globalThis.history.state, "", globalThis.location.pathname);
+    setKeepingId(route.workspaceId);
+  }, [route]);
   // The account says whether its demo is used; a demo listed here is the same answer, sooner.
   const demoAvailable = account?.demoAvailable === true && !demo;
   // A skipped tour resumes where it was, while its demo is still to come or still here.
@@ -113,7 +124,7 @@ export function WorkspacesPage() {
     page = <Suspense fallback={<EmptyState busy title="Loading settings…" hint="Preparing your preferences" />}><GeneralSettingsPage section={route.section} /></Suspense>;
   } else if (route.name === "billing") {
     tabTitle = "Billing";
-    page = <Suspense fallback={<EmptyState busy title="Loading billing…" hint="Fetching your balance and invoices" />}><BillingPage /></Suspense>;
+    page = <Suspense fallback={<EmptyState busy title="Loading billing…" hint="Fetching your balance and invoices" />}><BillingPage onKept={(kept) => { patch(kept.id, kept); navigate({ name: "workspace", workspaceId: kept.id }); }} /></Suspense>;
   } else if (route.name === "notifications") {
     tabTitle = "Notifications";
     page = <Suspense fallback={<EmptyState busy title="Loading notifications…" hint="Fetching the latest" />}><NotificationsPage /></Suspense>;
@@ -206,7 +217,7 @@ export function WorkspacesPage() {
         workspacesOpen={route.name === "home"} onNewWorkspace={openNew} />}
       notice={(demo || error) && (
         <>
-          {demo && <DemoBanner name={demo.name} expiresAt={demo.expiresAt ?? null} />}
+          {demo && <DemoBanner name={demo.name} expiresAt={demo.expiresAt ?? null} onKeep={() => setKeepingId(demo.id)} />}
           {error && <ErrorBanner message={error} onDismiss={dismissError} />}
         </>
       )}
@@ -227,7 +238,11 @@ export function WorkspacesPage() {
         />
       )}
       <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key, connectorId) => launch(id, key, undefined, connectorId)}
-        onExit={() => setNewName(null)} />
+        onExit={() => setNewName(null)} onKeep={setKeepingId} />
+      {keeping && (
+        <KeepWorkspaceDialog workspace={keeping} onClose={() => setKeepingId(null)}
+          onKept={(kept) => { patch(kept.id, kept); setKeepingId(null); }} />
+      )}
       {restartTarget && (
         <RestartWorkspaceDialog
           name={restartTarget.name}

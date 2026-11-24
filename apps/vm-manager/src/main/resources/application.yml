@@ -45,6 +45,9 @@ workspaced:
     token: ${WORKSPACED_HETZNER_TOKEN:}
     # Nuremberg, Germany. fsn1 (Falkenstein) is the other German location.
     location: ${WORKSPACED_HETZNER_LOCATION:nbg1}
+    # Comma-separated, tried in order for a server type sold out above, so a plan keeps its
+    # server instead of going unavailable.
+    fallback-locations: ${WORKSPACED_HETZNER_FALLBACK_LOCATIONS:fsn1}
     image: ${WORKSPACED_HETZNER_IMAGE:ubuntu-24.04}
     # Comma-separated names of project SSH keys put on every VM. Empty, Hetzner emails a root
     # password for each one instead.
@@ -78,6 +81,6 @@ workspaced:
     domain: ${WORKSPACED_VM_DNS_DOMAIN:vm.workspaced.online}
   vm:
     # The recommended low-cost sizes, default first. Specs, prices and capacity come from Hetzner.
-    server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33}
+    server-types: ${WORKSPACED_VM_SERVER_TYPES:cx23,cx33,cx43}
     # Other x86 sizes up to this monthly price with VAT are offered too, for when those sell out.
     max-monthly-gross: ${WORKSPACED_VM_MAX_MONTHLY_GROSS:60}

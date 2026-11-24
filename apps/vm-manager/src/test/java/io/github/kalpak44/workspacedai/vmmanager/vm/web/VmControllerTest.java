@@ -340,6 +340,33 @@ class VmControllerTest {
   }
 
   @Test
+  void rejectsAProviderNotOffered() throws Exception {
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\""
+                + UUID.randomUUID()
+                + "\",\"userId\":\""
+                + USER
+                + KEY
+                + ",\"provider\":\"aws\"}");
+    assertThat(response.statusCode()).isEqualTo(400);
+    assertThat(response.body()).contains("choose one of hetzner");
+  }
+
+  @Test
+  void createsAtHetznerWhenNoProviderIsNamed() throws Exception {
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\"" + UUID.randomUUID() + "\",\"userId\":\"" + USER + KEY + "}");
+    assertThat(response.statusCode()).isEqualTo(201);
+    assertThat(response.body()).contains("\"provider\":\"hetzner\"");
+  }
+
+  @Test
   void createsTheSizeAsked() throws Exception {
     var response =
         send(

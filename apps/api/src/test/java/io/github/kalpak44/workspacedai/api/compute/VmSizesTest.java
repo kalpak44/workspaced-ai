@@ -31,6 +31,7 @@ class VmSizesTest {
   private static final JsonMapper JSON = JsonMapper.builder().build();
   private static final VmSize CX23 =
       new VmSize(
+          null,
           "cx23",
           true,
           2,
@@ -64,7 +65,7 @@ class VmSizesTest {
   }
 
   @Test
-  void showsAnAdminTheCostAndEveryoneElseTheMarkedUpPrice() throws Exception {
+  void showsAnAdminTheCostAndEveryoneElseThePlanPrice() throws Exception {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     var name = "vera-" + UUID.randomUUID();
     users.save(TestUsers.newUser(name));
@@ -79,8 +80,8 @@ class VmSizesTest {
                         users.findByIdpSubject(TestUsers.subject(name)).orElseThrow()))
                     .body())
             .get(0);
-    assertThat(user.get("monthlyNet").decimalValue()).isEqualByComparingTo("7.41");
-    assertThat(user.get("monthlyGross").decimalValue()).isEqualByComparingTo("8.90");
+    assertThat(user.get("monthlyGross").decimalValue()).isEqualByComparingTo("10.645833");
+    assertThat(user.get("plan").asString()).isEqualTo("Starter");
     assertThat(user.get("serverType").asString()).isEqualTo("cx23");
   }
 

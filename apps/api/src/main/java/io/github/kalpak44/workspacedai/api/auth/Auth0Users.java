@@ -11,6 +11,9 @@ public interface Auth0Users {
    */
   record Profile(String email, String givenName, String familyName, String picture) {}
 
+  /** The address Auth0 has for the user; blank when it has none. */
+  String email(String subject);
+
   void updateNames(String subject, String givenName, String familyName);
 
   /** Has Auth0 send the user its email-verification message again. */

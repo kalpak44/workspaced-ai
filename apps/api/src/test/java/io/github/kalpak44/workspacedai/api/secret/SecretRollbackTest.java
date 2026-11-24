@@ -8,6 +8,7 @@ import static org.mockito.Mockito.doThrow;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.firewall.FirewallRequests;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -27,6 +28,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class SecretRollbackTest {
 
   @MockitoBean WorkspaceRuntime runtime;
+  @MockitoBean FirewallRequests firewallRequests;
   @Autowired SecretService service;
   @Autowired WorkspaceRepository workspaces;
   @Autowired WorkspaceSecretRepository secrets;

@@ -103,6 +103,11 @@ public interface Harness {
 
   List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId);
 
+  /**
+   * Whether this session is executing a reply, including one started before a browser connected.
+   */
+  boolean busy(HarnessEndpoint endpoint, String sessionId);
+
   List<AgentForm> forms(HarnessEndpoint endpoint, String sessionId);
 
   void replyForm(

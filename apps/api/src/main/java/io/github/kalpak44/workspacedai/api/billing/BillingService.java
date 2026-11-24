@@ -116,6 +116,7 @@ public class BillingService {
         properties.vatPercent(),
         cents(reactivationFeeMicros()),
         properties.pausedFor().toHours(),
+        properties.requireCovered().toHours(),
         cents(monthOf(hourlyTotal)),
         hourlyTotal == 0
             ? null
@@ -134,37 +135,56 @@ public class BillingService {
   }
 
   /**
-   * Refuses unless the balance covers a month of the price together with the workspaces the user
-   * already has, which draw on the same balance, so no workspace is deleted for want of funds soon
-   * after a new one is made.
+   * Refuses unless the balance covers {@code require-covered} of the price together with the
+   * workspaces the user already has, which draw on the same balance, so no workspace is paused for
+   * want of funds soon after a new one is made.
    *
    * @param monthlyPrice what the user pays a month, in the billing currency
    * @throws InsufficientFundsException when it does not
    */
-  public void requireMonthOf(UUID user, BigDecimal monthlyPrice) {
+  public void requireCovered(UUID user, BigDecimal monthlyPrice) {
+    var hours = properties.requireCovered().toHours();
     var balance = balanceMicros(user);
-    var price = micros(monthlyPrice);
+    var price = hourlyOf(monthlyPrice) * hours;
     var running =
-        monthOf(usage.findAllByUserId(user).stream().mapToLong(UsageEntity::getHourlyMicros).sum());
+        usage.findAllByUserId(user).stream().mapToLong(UsageEntity::getHourlyMicros).sum() * hours;
     if (balance >= running + price) {
       return;
     }
+    var span = days(hours);
     if (running == 0) {
       throw new InsufficientFundsException(
           "This size costs "
               + amount(price)
-              + " a month and the balance is "
+              + " for "
+              + span
+              + " and the balance is "
               + amount(balance)
-              + "; add funds to create it.");
+              + "; add funds to create it.",
+          price - balance);
     }
     throw new InsufficientFundsException(
         "Your workspaces cost "
             + amount(running)
-            + " a month and this size adds "
+            + " for "
+            + span
+            + " and this size adds "
             + amount(price)
             + ", but the balance is "
             + amount(balance)
-            + "; add funds to cover a month of them all.");
+            + "; add funds to cover "
+            + span
+            + " of them all.",
+        running + price - balance);
+  }
+
+  /** "7 days", "36 hours": a coverage period as the user is told it. */
+  private static String days(long hours) {
+    if (hours % 24 != 0) {
+      return hours + (hours == 1 ? " hour" : " hours");
+    }
+    var days = hours / 24;
+    return days + (days == 1 ? " day" : " days");
   }
 
   /** Whole hours the balance pays for at the hourly charge; none when it is not positive. */
@@ -174,12 +194,17 @@ public class BillingService {
 
   /** Charges the workspace from now on, by the hour, at the monthly price spread over a month. */
   public void startCharging(UUID workspace, UUID user, BigDecimal monthlyPrice) {
+    usage.save(new UsageEntity(workspace, user, hourlyOf(monthlyPrice), Instant.now()));
+  }
+
+  /** The monthly price spread over a month's hours, never free. */
+  private static long hourlyOf(BigDecimal monthlyPrice) {
     var hourly =
         monthlyPrice
             .multiply(MICROS)
             .divide(HOURS_PER_MONTH, 0, RoundingMode.HALF_UP)
             .longValueExact();
-    usage.save(new UsageEntity(workspace, user, Math.max(hourly, 1), Instant.now()));
+    return Math.max(hourly, 1);
   }
 
   public Checkout startTopUp(UUID user, long amountCents) {

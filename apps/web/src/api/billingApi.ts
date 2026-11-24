@@ -11,6 +11,8 @@ export interface Billing {
   readonly reactivationFeeCents: number;
   /** How long a workspace stays paused for want of funds before it is deleted, in hours. */
   readonly pausedForHours: number;
+  /** How long the balance must pay for every workspace, a new one included, before it can be created, in hours. */
+  readonly requiredHours: number;
   /** What the running workspaces cost together over a month, in cents; paused ones cost nothing. */
   readonly monthlySpendCents: number;
   /** When the balance stops paying for the running workspaces and they are paused; null while none is charged. */

@@ -12,6 +12,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param reactivationFee taken from the balance to start a workspace paused for want of funds
  *     again, in the billing currency
  * @param pausedFor how long a workspace stays paused for want of funds before it is deleted
+ * @param requireCovered how long the balance must pay for every workspace, a new one included,
+ *     before that one can be created
  * @param returnUrl the billing page Stripe Checkout sends the user back to
  * @param stripe the account payments go to
  */
@@ -21,6 +23,7 @@ public record BillingProperties(
     @DefaultValue("20") int vatPercent,
     @DefaultValue("5.00") BigDecimal reactivationFee,
     @DefaultValue("3d") Duration pausedFor,
+    @DefaultValue("7d") Duration requireCovered,
     @DefaultValue("http://localhost:5173/billing") URI returnUrl,
     @DefaultValue Stripe stripe) {
 

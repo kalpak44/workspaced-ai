@@ -26,6 +26,11 @@ public record Vm(
     Instant createdAt,
     Instant lastSeenAt) {
 
+  /** The cloud it runs in; every VM is a Hetzner server until a second provider exists. */
+  public ComputeProvider provider() {
+    return ComputeProvider.HETZNER;
+  }
+
   Vm withStatus(VmStatus status) {
     return new Vm(
         id, workspaceId, userId, serverType, serverId, status, ipv4, ipv6, createdAt, lastSeenAt);

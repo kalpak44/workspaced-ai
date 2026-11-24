@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="theme-color" content="#fafafa" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#09090b" media="(prefers-color-scheme: dark)" />
+    <meta name="description" content="Simple daily prices for your AI workspace: Starter €0.35 a day, Builder €0.55, Pro €0.95. Charged by the hour from a prepaid balance, with no subscription. Free 4-hour demo." />
+    <link rel="canonical" href="https://workspaced.online/pricing" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="workspaced-ai" />
+    <meta property="og:url" content="https://workspaced.online/pricing" />
+    <meta property="og:title" content="Pricing - workspaced-ai" />
+    <meta property="og:description" content="Simple daily prices for your AI workspace: Starter €0.35 a day, Builder €0.55, Pro €0.95. Charged by the hour from a prepaid balance, with no subscription. Free 4-hour demo." />
+    <meta name="twitter:card" content="summary" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="stylesheet" href="/style.css" />
+    <title>Pricing - workspaced-ai</title>
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "FAQPage",
+        "mainEntity": [
+          {"@type": "Question", "name": "Is there a subscription?", "acceptedAnswer": {"@type": "Answer", "text": "No. You top up a prepaid balance, and each workspace is charged by the hour while it exists. Delete it and its charges stop."}},
+          {"@type": "Question", "name": "Does a workspace cost money while I am not using it?", "acceptedAnswer": {"@type": "Answer", "text": "Yes. A workspace keeps its machine and disk for you, so it is charged by the hour for as long as it exists, used or not."}},
+          {"@type": "Question", "name": "Who pays for the AI model?", "acceptedAnswer": {"@type": "Answer", "text": "You do, directly. Each workspace uses your own OpenRouter key, so AI usage is billed by OpenRouter and is not part of your workspaced-ai balance."}}
+        ]
+      }
+    </script>
+  </head>
+  <body class="flex min-h-dvh flex-col bg-zinc-50 font-sans text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
+    <header class="sticky top-0 z-10 border-b border-zinc-200/70 bg-zinc-50/80 backdrop-blur dark:border-zinc-800/70 dark:bg-zinc-950/80">
+      <div class="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4">
+        <a href="/" class="flex items-center gap-2" aria-label="workspaced-ai home">
+          <svg viewBox="0 0 24 24" class="size-6" fill="none" aria-hidden="true"><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Z" fill="currentColor" fill-opacity="0.04" /><path d="m12 12 9-5v10l-9 5V12Z" fill="currentColor" fill-opacity="0.12" /><path d="m12 2 9 5v10l-9 5-9-5V7l9-5Zm0 10 9-5M12 12 3 7m9 5v10" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          <span class="font-semibold tracking-tight">workspaced<span class="text-zinc-400">-ai</span></span>
+        </a>
+        <nav class="flex items-center gap-1 text-sm sm:gap-2">
+          <a href="/#features" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Features</a>
+          <a href="/pricing" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Pricing</a>
+          <a href="/docs" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Docs</a>
+          <a href="/support" class="hidden rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 sm:inline-flex dark:text-zinc-400 dark:hover:text-zinc-100">Support</a>
+          <a href="https://ai.workspaced.online/" class="rounded-lg px-3 py-2 text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100">Sign in</a>
+          <a href="https://ai.workspaced.online/api/v1/oauth2/authorization/auth0?signup" class="btn btn-primary">Start building</a>
+        </nav>
+      </div>
+    </header>
+
+    <main class="flex-1">
+      <section class="relative overflow-hidden">
+        <span aria-hidden="true" class="pointer-events-none absolute -top-48 left-1/2 size-[36rem] -translate-x-1/2 rounded-full bg-linear-to-br from-sky-300/30 via-fuchsia-300/20 to-orange-200/20 blur-3xl dark:from-sky-500/10 dark:via-fuchsia-500/10 dark:to-orange-400/5"></span>
+        <div class="relative mx-auto max-w-5xl px-4 pt-14 pb-10 sm:pt-20">
+          <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">Pay by the day, not by the month</h1>
+          <p class="mt-3 max-w-2xl text-zinc-600 dark:text-zinc-400">
+            Each workspace is a private cloud machine for your AI. Top up a prepaid balance, pick a plan, and it is
+            charged by the hour while it exists. No subscription, nothing to cancel: delete a workspace and its charges stop.
+          </p>
+
+          <div class="mt-10 grid gap-4 md:grid-cols-3">
+            <div class="card flex flex-col p-6">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-semibold">Starter</h3>
+                
+              </div>
+              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Websites, bots and small apps.</p>
+              <p class="mt-5"><span class="text-3xl font-semibold tracking-tight tabular-nums">€0.35</span> <span class="text-sm text-zinc-500">a day</span></p>
+              <p class="mt-1 text-sm tabular-nums text-zinc-500">€10.65 a month · €0.015 an hour</p>
+              <ul class="mt-5 flex-1 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>2 vCPU</li>
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>4 GB RAM</li>
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>40 GB disk</li>
+              </ul>
+              <a href="https://ai.workspaced.online/api/v1/oauth2/authorization/auth0?signup" class="btn btn-secondary mt-6 w-full">Start with Starter</a>
+            </div>
+            <div class="card flex flex-col p-6 ring-2 ring-zinc-900 dark:ring-zinc-100">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-semibold">Builder</h3>
+                <span class="rounded-full bg-zinc-900 px-2 py-0.5 text-xs font-medium text-white dark:bg-white dark:text-zinc-900">Recommended</span>
+              </div>
+              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Several apps at once, faster builds.</p>
+              <p class="mt-5"><span class="text-3xl font-semibold tracking-tight tabular-nums">€0.55</span> <span class="text-sm text-zinc-500">a day</span></p>
+              <p class="mt-1 text-sm tabular-nums text-zinc-500">€16.73 a month · €0.023 an hour</p>
+              <ul class="mt-5 flex-1 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>4 vCPU</li>
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>8 GB RAM</li>
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>80 GB disk</li>
+              </ul>
+              <a href="https://ai.workspaced.online/api/v1/oauth2/authorization/auth0?signup" class="btn btn-primary mt-6 w-full">Start with Builder</a>
+            </div>
+            <div class="card flex flex-col p-6">
+              <div class="flex items-center justify-between gap-2">
+                <h3 class="font-semibold">Pro</h3>
+                
+              </div>
+              <p class="mt-1.5 text-sm text-zinc-600 dark:text-zinc-400">Heavy builds, databases and bigger projects.</p>
+              <p class="mt-5"><span class="text-3xl font-semibold tracking-tight tabular-nums">€0.95</span> <span class="text-sm text-zinc-500">a day</span></p>
+              <p class="mt-1 text-sm tabular-nums text-zinc-500">€28.90 a month · €0.040 an hour</p>
+              <ul class="mt-5 flex-1 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>8 vCPU</li>
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>16 GB RAM</li>
+                <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>160 GB disk</li>
+              </ul>
+              <a href="https://ai.workspaced.online/api/v1/oauth2/authorization/auth0?signup" class="btn btn-secondary mt-6 w-full">Start with Pro</a>
+            </div>
+          </div>
+          <p class="mt-4 text-sm text-zinc-500">
+            Prices exclude VAT, which is added when you top up. Every plan runs on a Hetzner server in Germany with its own
+            public IPv4 address, and is billed from the hour it starts.
+          </p>
+          <p class="mt-2 text-sm text-zinc-500">
+            Our provider sometimes sells these servers out for a few hours. While every plan is sold out, the app offers
+            <strong class="font-medium text-zinc-700 dark:text-zinc-300">Starter Flex</strong> in their place: 2 vCPU,
+            4 GB RAM and 80 GB disk on a server line that is usually in stock, at €1.15 a day (€34.98 a month).
+          </p>
+        </div>
+      </section>
+
+      <section class="border-t border-zinc-200 py-14 dark:border-zinc-800">
+        <div class="mx-auto grid max-w-5xl gap-4 px-4 md:grid-cols-2">
+          <div class="card p-6">
+            <h2 class="font-semibold">Free to try</h2>
+            <ul class="mt-4 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>One demo workspace for four hours, on the house. No card needed. Like it? Keep it, with nothing lost, at its plan&rsquo;s daily price.</li>
+              <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>A trial AI key with $1 of model usage, so the demo works before you bring your own.</li>
+            </ul>
+          </div>
+          <div class="card p-6">
+            <h2 class="font-semibold">Billed by someone else</h2>
+            <ul class="mt-4 space-y-2 text-sm text-zinc-600 dark:text-zinc-400">
+              <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>AI usage is billed by OpenRouter on your own key, not by us, so there are no hidden AI charges here.</li>
+              <li class="flex gap-2"><svg class="mt-0.5 size-4 shrink-0 text-emerald-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>Domain names, if you connect your own, are paid to your registrar.</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="border-t border-zinc-200 py-14 dark:border-zinc-800">
+        <div class="mx-auto max-w-4xl px-4">
+          <h2 class="text-xl font-semibold tracking-tight">How the balance works</h2>
+          <div class="mt-6 space-y-3">
+            <details class="card group p-5">
+              <summary class="flex list-none items-center justify-between gap-4 font-medium">Is there a subscription?<span class="text-zinc-400 transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary>
+              <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">No. You top up a prepaid balance by card, from €5, and each workspace is charged by the hour at the price fixed when you created it. You get an invoice for every top-up. Automatic top-ups are there if you want them.</p>
+            </details>
+            <details class="card group p-5">
+              <summary class="flex list-none items-center justify-between gap-4 font-medium">How much do I need to start?<span class="text-zinc-400 transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary>
+              <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">Enough for seven days of your workspaces, the new one included. For a Starter workspace that is €2.45, so a €10 top-up lasts about four weeks.</p>
+            </details>
+            <details class="card group p-5">
+              <summary class="flex list-none items-center justify-between gap-4 font-medium">Does a workspace cost money while I am not using it?<span class="text-zinc-400 transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary>
+              <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">Yes. A workspace keeps its machine and disk for you, so it is charged for as long as it exists, used or not. Delete one you no longer need and its charges stop.</p>
+            </details>
+            <details class="card group p-5">
+              <summary class="flex list-none items-center justify-between gap-4 font-medium">What happens when my balance runs out?<span class="text-zinc-400 transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary>
+              <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">We warn you in the week before. When the balance cannot pay the next hour, the workspace is paused. Topping up starts it again for a €5 reactivation fee. A workspace still paused after three days is deleted with everything on it.</p>
+            </details>
+            <details class="card group p-5">
+              <summary class="flex list-none items-center justify-between gap-4 font-medium">What if a plan is sold out?<span class="text-zinc-400 transition-transform group-open:rotate-45" aria-hidden="true">+</span></summary>
+              <p class="mt-3 text-sm text-zinc-600 dark:text-zinc-400">Plans run on servers our provider sometimes sells out of for a few hours. While every plan is sold out, the app offers Starter Flex at €1.15 a day so you can still start; you can also wait for the cheaper plans to come back. Workspaces you already have keep running either way.</p>
+            </details>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="border-t border-zinc-200 py-10 text-sm dark:border-zinc-800">
+      <div class="mx-auto flex max-w-6xl flex-col gap-6 px-4 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <p class="font-semibold tracking-tight">workspaced<span class="text-zinc-400">-ai</span></p>
+          <p class="mt-1 text-zinc-500">© 2026 Workspaced AI. Public beta.</p>
+        </div>
+        <nav class="grid grid-cols-2 gap-x-10 gap-y-2 text-zinc-600 dark:text-zinc-400" aria-label="Footer">
+          <a href="https://ai.workspaced.online/" class="hover:text-zinc-900 dark:hover:text-zinc-100">Open app</a>
+          <a href="/docs" class="hover:text-zinc-900 dark:hover:text-zinc-100">Docs</a>
+          <a href="/pricing" class="hover:text-zinc-900 dark:hover:text-zinc-100">Pricing</a>
+          <a href="/support" class="hover:text-zinc-900 dark:hover:text-zinc-100">Support</a>
+          <a href="/privacy" class="hover:text-zinc-900 dark:hover:text-zinc-100">Privacy policy</a>
+          <a href="/terms" class="hover:text-zinc-900 dark:hover:text-zinc-100">Terms of service</a>
+        </nav>
+      </div>
+    </footer>
+
+    <!-- Hidden until the script below finds no earlier dismissal, so a returning visitor never sees it flash. -->
+    <section id="privacy-notice" hidden aria-label="Cookies and privacy" class="fixed inset-x-4 bottom-4 z-20 mx-auto max-w-xl">
+      <div class="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 shadow-xl sm:flex-row sm:items-center dark:border-zinc-800 dark:bg-zinc-900">
+        <p class="min-w-0 flex-1 text-sm leading-6 text-zinc-600 dark:text-zinc-400">
+          This site sets no cookies and runs no analytics or tracking. The app uses only the cookies needed to keep you
+          signed in. Your data is handled under the GDPR as described in our
+          <a href="/privacy" class="font-medium text-zinc-900 underline underline-offset-2 dark:text-zinc-100">Privacy policy</a>.
+        </p>
+        <button type="button" id="privacy-notice-dismiss" class="btn btn-secondary shrink-0">I agree</button>
+      </div>
+    </section>
+    <script src="/privacy-notice.js"></script>
+    <script src="/attribution.js"></script>
+  </body>
+</html>

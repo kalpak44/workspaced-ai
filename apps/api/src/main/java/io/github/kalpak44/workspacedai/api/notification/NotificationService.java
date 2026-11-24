@@ -1,7 +1,10 @@
 package io.github.kalpak44.workspacedai.api.notification;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -12,15 +15,27 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 public class NotificationService {
 
-  private final NotificationRepository repository;
+  /** How long a milestone, once mailed, is not mailed again. */
+  public static final Duration MAIL_ONCE_WITHIN = Duration.ofDays(7);
 
-  NotificationService(NotificationRepository repository) {
+  private final NotificationRepository repository;
+  private final ApplicationEventPublisher events;
+
+  NotificationService(NotificationRepository repository, ApplicationEventPublisher events) {
     this.repository = repository;
+    this.events = events;
   }
 
   @Transactional
   public void send(UUID user, NotificationMessage message) {
     repository.save(new NotificationEntity(user, message, null));
+  }
+
+  /** Sends it, and mails it to the user once the transaction commits. */
+  @Transactional
+  public void sendAndMail(UUID user, NotificationMessage message) {
+    send(user, message);
+    events.publishEvent(new NotificationMail(user, message));
   }
 
   /**
@@ -29,8 +44,28 @@ public class NotificationService {
    */
   @Transactional
   public void sendOnce(UUID user, String key, NotificationMessage message) {
-    if (!repository.existsByUserIdAndDedupeKey(user, key)) {
-      repository.save(new NotificationEntity(user, message, key));
+    sendOnce(user, key, message, null);
+  }
+
+  /**
+   * As {@link #sendOnce(UUID, String, NotificationMessage)}, and mails what it sends unless the
+   * user was mailed under the same mail key within {@link #MAIL_ONCE_WITHIN}: a reminder repeated
+   * daily reaches the inbox only at the milestones the key names.
+   *
+   * @param mailKey null mails nothing
+   */
+  @Transactional
+  public void sendOnce(UUID user, String key, NotificationMessage message, String mailKey) {
+    if (repository.existsByUserIdAndDedupeKey(user, key)) {
+      return;
+    }
+    var mail =
+        mailKey != null
+            && !repository.existsByUserIdAndMailKeyAndCreatedAtAfter(
+                user, mailKey, Instant.now().minus(MAIL_ONCE_WITHIN));
+    repository.save(new NotificationEntity(user, message, key, mail ? mailKey : null));
+    if (mail) {
+      events.publishEvent(new NotificationMail(user, message));
     }
   }
 

@@ -36,7 +36,8 @@ class VmServiceTest {
           "ubuntu-24.04",
           List.of("ops"),
           Duration.ofSeconds(1),
-          null);
+          null,
+          List.of());
 
   final FakeHetznerClient hetzner = new FakeHetznerClient();
 

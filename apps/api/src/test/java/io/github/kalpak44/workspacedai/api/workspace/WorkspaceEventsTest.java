@@ -23,9 +23,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
 @Import({TestDatabase.class, TestRuntime.class})
@@ -35,7 +34,8 @@ class WorkspaceEventsTest {
   @Autowired WorkspaceService service;
   @Autowired WorkspaceEvents events;
   @Autowired WorkspaceRepository repository;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired WorkspaceDeletions deletions;
+  @Autowired TransactionTemplate transaction;
   @MockitoBean ApiKeyCheck keyCheck;
 
   @BeforeEach
@@ -97,19 +97,16 @@ class WorkspaceEventsTest {
     assertThat(nextData(lines)).contains(mine.id().toString());
     var elsewhere = UUID.randomUUID();
     // Someone else's workspace first: it must not reach this user's stream.
-    jdbc.query(
-        "select pg_notify(?, ?)",
-        (RowCallbackHandler) _ -> {},
-        WorkspaceDeletions.CHANNEL,
-        UUID.randomUUID() + ":" + UUID.randomUUID());
-    jdbc.query(
-        "select pg_notify(?, ?)",
-        (RowCallbackHandler) _ -> {},
-        WorkspaceDeletions.CHANNEL,
-        elsewhere + ":" + TestUsers.ADMIN);
+    announce(new WorkspaceDeleted(UUID.randomUUID(), UUID.randomUUID()));
+    announce(new WorkspaceDeleted(elsewhere, TestUsers.ADMIN));
 
     assertThat(nextNonBlank(lines)).isEqualTo("event:" + WorkspaceEvents.DELETED);
     assertThat(lines.next()).contains(elsewhere.toString());
+  }
+
+  /** As another instance's delete would, once its transaction commits. */
+  private void announce(WorkspaceDeleted deleted) {
+    transaction.executeWithoutResult(_ -> deletions.announce(deleted));
   }
 
   private static String nextNonBlank(Iterator<String> lines) {

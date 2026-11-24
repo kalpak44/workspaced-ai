@@ -87,6 +87,10 @@ class DomainConnectTest {
   }
 
   static DomainProperties properties() {
+    return properties(List.of("godaddy.com", "ionos.com"), List.of());
+  }
+
+  static DomainProperties properties(List<String> liveProviders, List<String> testZones) {
     return new DomainProperties(
         null,
         "_dck1",
@@ -94,7 +98,9 @@ class DomainConnectTest {
         "https://app",
         "dns://unused",
         Duration.ofSeconds(2),
-        20);
+        20,
+        liveProviders,
+        testZones);
   }
 
   DomainConnect connect() {
@@ -154,11 +160,39 @@ class DomainConnectTest {
   void usesTheProviderNameWhenItGivesNoDisplayName() {
     answers.put(
         "/dc/v2/example.com/settings",
-        "{\"providerName\":\"IONOS\",\"urlSyncUX\":\"https://sync\",\"urlAPI\":\"http://"
+        "{\"providerId\":\"ionos.com\",\"providerName\":\"IONOS\",\"urlSyncUX\":\"https://sync\",\"urlAPI\":\"http://"
             + host
             + "/dc\"}");
 
     assertThat(connect().discover("example.com", "workspace"))
         .contains(new DnsProvider("IONOS", "https://sync"));
+  }
+
+  @Test
+  void findsNoneAtAProviderThatHasNotTakenTheTemplateLive() {
+    var connect =
+        new DomainConnect(
+            dns(),
+            properties(List.of(), List.of()),
+            JsonMapper.builder().build(),
+            guarded::add,
+            "http");
+
+    assertThat(connect.discover("example.com", "workspace")).isEmpty();
+    assertThat(asked).containsExactly("/dc/v2/example.com/settings");
+  }
+
+  @Test
+  void findsOneForATestZoneBeforeTheProviderGoesLive() {
+    var connect =
+        new DomainConnect(
+            dns(),
+            properties(List.of(), List.of("example.com")),
+            JsonMapper.builder().build(),
+            guarded::add,
+            "http");
+
+    assertThat(connect.discover("example.com", "workspace"))
+        .contains(new DnsProvider("GoDaddy Inc", "https://dcc.example.net"));
   }
 }

@@ -7,8 +7,10 @@ import java.security.SecureRandom;
 import java.time.Clock;
 import java.util.Base64;
 import java.util.UUID;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
 
 /** Issues single-use enrollment tokens and trades one for the public key a VM enrolls with. */
 @Service
@@ -19,11 +21,17 @@ public class EnrollmentService {
   private final AgentStore store;
   private final AgentHubProperties properties;
   private final Clock clock;
+  private final TransactionOperations transactions;
 
-  public EnrollmentService(AgentStore store, AgentHubProperties properties, Clock clock) {
+  public EnrollmentService(
+      AgentStore store,
+      AgentHubProperties properties,
+      Clock clock,
+      TransactionOperations transactions) {
     this.store = store;
     this.properties = properties;
     this.clock = clock;
+    this.transactions = transactions;
   }
 
   /**
@@ -31,8 +39,17 @@ public class EnrollmentService {
    *
    * @throws AlreadyEnrolledException the VM already has an agent
    */
-  @Transactional
   public IssuedToken issue(UUID vmId) {
+    // Two first issues for one VM race to insert its token row, and the loser fails on the key;
+    // run again, it finds the winner's row and replaces it.
+    try {
+      return transactions.execute(_ -> issueOnce(vmId));
+    } catch (DataIntegrityViolationException e) {
+      return transactions.execute(_ -> issueOnce(vmId));
+    }
+  }
+
+  private IssuedToken issueOnce(UUID vmId) {
     if (store.isEnrolled(vmId)) {
       throw new AlreadyEnrolledException(vmId);
     }

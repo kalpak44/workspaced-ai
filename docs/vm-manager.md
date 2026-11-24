@@ -144,7 +144,7 @@ and its metadata, so it can read neither its own Hetzner token nor any other sec
 
 `GET /api/v1/vm-options` lists the sizes a VM can be created as, cheapest first, with their cores, memory, disk,
 whole monthly cost and whether Hetzner has capacity for them in the configured location right now. The recommended low-cost
-sizes are configuration (`WORKSPACED_VM_SERVER_TYPES`, `cx23,cx33` by default, the first the default); any other x86 size
+sizes are configuration (`WORKSPACED_VM_SERVER_TYPES`, `cx23,cx33,cx43` by default, the first the default); any other x86 size
 with at least the default's memory, up to `WORKSPACED_VM_MAX_MONTHLY_GROSS` (60 by default, 0 for none) is offered beside them, so there is something to
 choose while they are sold out. Specs, prices and capacity are never restated: they come from Hetzner and are cached for
 a minute. A size Hetzner deprecates or does not sell in the location drops out; one it has sold out stays, with
@@ -161,9 +161,33 @@ Without a Hetzner token it answers `503`; when Hetzner fails or answers unexpect
 VMs live in their own Hetzner Cloud project, so its API token can reach nothing else. The token is a Read & Write one,
 kept in Vault at `secret/workspaced-vm-manager-secrets` under `hcloud-token`, and reaches the VM manager as
 `WORKSPACED_HETZNER_TOKEN` through its own ExternalSecret, so the API pod never holds it. VMs are created in `nbg1`
-(Nuremberg, Germany) unless `WORKSPACED_HETZNER_LOCATION` says otherwise, from `WORKSPACED_HETZNER_IMAGE`
+(Nuremberg, Germany) unless `WORKSPACED_HETZNER_LOCATION` says otherwise. A size sold out there is offered, and
+created, in the first of `WORKSPACED_HETZNER_FALLBACK_LOCATIONS` (`fsn1` by default) that has it, so the API's plans keep
+their server rather than going unavailable; each option names its location. VMs are created from `WORKSPACED_HETZNER_IMAGE`
 (`ubuntu-24.04`). `WORKSPACED_HETZNER_SSH_KEYS` names project SSH keys to put on every VM; left empty, Hetzner emails
 the account a root password for each one instead.
+
+## Compute providers
+
+Every VM is a Hetzner server, but the contract already names the cloud: a create takes an optional `provider`
+(`hetzner` when omitted, `400` for one not offered), and every VM and VM option answers its `provider`. The ids live in
+`ComputeProvider` here and in the API, and must match, since they are what the two services exchange.
+
+Adding a cloud (e.g. AWS EC2) means:
+
+- an entry in both `ComputeProvider` enums;
+- its own create, stop, start, delete, firewall, metrics and inventory code, chosen by provider in `VmController`
+  where today `VmService` calls `HetznerClient` directly;
+- its options in `/vm-options`, each carrying its `provider`.
+
+What must stay true:
+
+- **A workspace's provider is fixed at creation.** The API stores it in `workspace.compute_provider` and never updates
+  it; a VM does not move between clouds.
+- **Users never see providers.** The API builds `/vm-sizes` field by field, so `provider` is dropped there, and the
+  workspace the web app reads does not carry it.
+- **Admins decide what can be created and at what price, in the API.** Not built yet: an admin-managed list of allowed
+  provider and size pairs with their prices, which `/vm-sizes` filters and prices before anything reaches the web app.
 
 ## Code layout
 

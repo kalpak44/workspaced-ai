@@ -23,11 +23,11 @@ export const OPENROUTER = {
   apiKeyVariable: "OPENROUTER_API_KEY",
 };
 
-/** What the fake VM manager offers, cheapest first: two low-cost sizes and a pricier stand-in. */
+/** The plans the fake API offers, in the order shown: Starter, Builder and Pro. */
 export const VM_SIZES = [
-  { serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 5.49, monthlyGross: 6.59, recommended: true, available: true },
-  { serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 8.49, monthlyGross: 10.19, recommended: true, available: true },
-  { serverType: "cpx22", isDefault: false, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 19.49, monthlyGross: 23.39, recommended: false, available: true },
+  { plan: "Starter", serverType: "cx23", isDefault: true, cores: 2, memoryGb: 4, diskGb: 40, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 10.645833, monthlyGross: 10.645833, recommended: true, available: true },
+  { plan: "Builder", serverType: "cx33", isDefault: false, cores: 4, memoryGb: 8, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 16.729167, monthlyGross: 16.729167, recommended: true, available: true },
+  { plan: "Pro", serverType: "cx43", isDefault: false, cores: 8, memoryGb: 16, diskGb: 160, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 28.895833, monthlyGross: 28.895833, recommended: true, available: true },
 ];
 
 /** What the fake API has told the user, newest first, three of them unread. */
@@ -158,7 +158,7 @@ export function installFakeApi(
   const state = {
     // Each test's own copy, so one can sell a size out.
     vmSizes: VM_SIZES.map((size) => ({ ...size })),
-    // When set, a create is refused as the balance not covering a month of the size.
+    // When set, a create is refused as the balance not covering the required days of the size.
     noFunds: false,
     fail: 0,
     nextId: 1,
@@ -173,6 +173,8 @@ export function installFakeApi(
     nextSession: 1,
     nextTerminal: 1,
     failTerminalDelete: false,
+    // What a week of the demo's plan costs; keeping it needs that much balance.
+    keepCostCents: 246,
     failTerminalCreate: false,
     failAgentList: false,
     failAgentSwitch: false,
@@ -189,6 +191,7 @@ export function installFakeApi(
     resetRequests: 0,
     failProfile: false,
     failReset: false,
+    failMail: false,
     failLogout: false,
     // What the next verification email resend answers, and how many were asked for.
     resendStatus: 204,
@@ -209,6 +212,7 @@ export function installFakeApi(
     balanceCents: 1240,
     reactivationFeeCents: 500,
     pausedForHours: 72,
+    requiredHours: 168,
     card: null as string | null,
     autoTopUp: { enabled: false, belowCents: 1000, amountCents: 2000 },
     // The card a setup session returning with this id saved.
@@ -246,8 +250,8 @@ export function installFakeApi(
 
   function billingResponse(url: string, init?: RequestInit): Response | null {
     if (url.endsWith("/api/v1/billing")) {
-      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps } = billing;
-      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps });
+      const { balanceCents, vatPercent, reactivationFeeCents, pausedForHours, requiredHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps } = billing;
+      return json({ balanceCents, currency: "eur", vatPercent, reactivationFeeCents, pausedForHours, requiredHours, monthlySpendCents, fundedUntil, workspaces, usage, card, autoTopUp, topUps });
     }
     if (url.endsWith("/api/v1/billing/card") && init?.method === "POST") {
       if (billing.failStart) return json({}, billing.failStart);
@@ -433,6 +437,9 @@ export function installFakeApi(
       if (auth.failProfile) return json({}, 500);
       const { firstName, lastName } = JSON.parse(String(init?.body));
       auth.account = { ...auth.account, firstName, lastName };
+    } else if (url.endsWith("/account/mail-preferences")) {
+      if (auth.failMail) return json({}, 500);
+      auth.account = { ...auth.account, mail: JSON.parse(String(init?.body)) };
     } else if (url.endsWith("/account/tour")) {
       auth.account = { ...auth.account, tour: init?.method === "PUT" ? JSON.parse(String(init.body)) : null };
       return new Response(null, { status: 204 });
@@ -690,6 +697,17 @@ export function installFakeApi(
       if (state.fail) return json({}, state.fail);
       const { timeZone } = JSON.parse(String(init?.body)) as { timeZone: string };
       if (timeZone !== rows[index].timeZone) rows[index] = { ...rows[index], timeZone, restartRequired: true };
+      return json(rows[index]);
+    }
+    const keepRoute = /\/api\/v1\/workspaces\/([^/]+)\/keep$/.exec(url);
+    if (keepRoute && init?.method === "POST") {
+      const index = rows.findIndex((item) => item.id === keepRoute[1]);
+      if (index < 0) return json({}, 404);
+      if (!rows[index].demo) return json({ detail: "only a running demo can be kept" }, 409);
+      if (billing.balanceCents < state.keepCostCents) {
+        return json({ detail: "add funds to keep it", shortCents: state.keepCostCents - billing.balanceCents }, 402);
+      }
+      rows[index] = { ...rows[index], demo: false, expiresAt: null };
       return json(rows[index]);
     }
     const tutorialRoute = /\/api\/v1\/workspaces\/([^/]+)\/tutorial-completed$/.exec(url);

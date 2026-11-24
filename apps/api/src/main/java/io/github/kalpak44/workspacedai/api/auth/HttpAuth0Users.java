@@ -43,6 +43,14 @@ public class HttpAuth0Users implements Auth0Users {
   }
 
   @Override
+  public String email(String subject) {
+    var email =
+        read(call(authorized("users/" + encode(subject) + "?fields=email&include_fields=true")))
+            .path("email");
+    return email.isString() ? email.asString() : "";
+  }
+
+  @Override
   public void updateNames(String subject, String givenName, String familyName) {
     var body =
         json.writeValueAsString(

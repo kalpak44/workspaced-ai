@@ -111,7 +111,7 @@ class AutoTopUps {
     }
     var amount = topUp.getAmountCents();
     if (!invoice.paid()) {
-      end(topUp, TopUpStatus.FAILED, "the payment did not go through");
+      end(topUp, TopUpStatus.FAILED, "The payment did not go through.");
       return;
     }
     if (invoice.subtotal() != amount
@@ -124,7 +124,7 @@ class AutoTopUps {
           invoice.subtotal(),
           invoice.total(),
           invoice.currency());
-      end(topUp, TopUpStatus.FAILED, "the charge did not match the top-up");
+      end(topUp, TopUpStatus.FAILED, "The charge did not match the top-up.");
       return;
     }
     if (billing.credit(topUp.getId(), invoice.id(), invoice.number())) {
@@ -132,7 +132,8 @@ class AutoTopUps {
     }
   }
 
-  // A failure turns automatic top-ups off and says why; an expired one is dropped quietly.
+  // A failure turns automatic top-ups off and says why, by mail as well, since a balance no longer
+  // topped up is soon a paused workspace; an expired one is dropped quietly.
   private void end(TopUpEntity topUp, TopUpStatus status, String reason) {
     transactions.executeWithoutResult(
         _ ->
@@ -146,7 +147,7 @@ class AutoTopUps {
                         return;
                       }
                       ledger.account(locked.getUserId()).disableAutoTopUp();
-                      notifications.send(
+                      notifications.sendAndMail(
                           locked.getUserId(),
                           Notifications.autoTopUpFailed(
                               billing.amount(locked.getAmountCents() * Ledger.MICROS_PER_CENT),
