@@ -337,6 +337,9 @@ describe("guided public-page workflow", () => {
     await user.click(within(completion).getByRole("button", { name: "Keep exploring" }));
     expect(screen.queryByRole("dialog", { name: "You built a website!" })).not.toBeInTheDocument();
     expect(location.pathname).toBe(path);
+    await user.click(screen.getByRole("link", { name: /^Workspaces$/ }));
+    await screen.findByRole("heading", { name: /^Workspaces$/ });
+    expect(screen.queryByRole("button", { name: "Resume the tour" })).not.toBeInTheDocument();
   });
 
   it("ends on keeping the demo, which opens the keep dialog", async () => {

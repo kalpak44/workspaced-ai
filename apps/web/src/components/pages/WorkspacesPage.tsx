@@ -1,6 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { navigate, useRoute } from "../../hooks/useRoute";
+import { useNotifications } from "../../hooks/useNotifications";
 import { useTheme } from "../../hooks/useTheme";
 import { useWorkspaces } from "../../hooks/useWorkspaces";
 import { reportTourAction, setTourProgress, TOUR_STEP, useStoredTour, useTourProgress } from "../../lib/tour";
@@ -63,6 +64,7 @@ export function WorkspacesPage() {
   const { account } = useAccount();
   const tour = useTourProgress();
   const stored = useStoredTour();
+  const notices = useNotifications();
   const demo = workspaces.find((w) => w.demo) ?? null;
   const keeping = workspaces.find((w) => w.id === keepingId && w.demo) ?? null;
 
@@ -76,7 +78,9 @@ export function WorkspacesPage() {
   // The account says whether its demo is used; a demo listed here is the same answer, sooner.
   const demoAvailable = account?.demoAvailable === true && !demo;
   // A skipped tour resumes where it was, while its demo is still to come or still here.
-  const resumable = (!stored && !!demo) || (stored?.paused === true
+  const missingBookmark = !stored && !!demo && notices.status === "ready"
+    && !notices.notifications.some(notice => notice.title === "Tutorial completed" && notice.action?.route.name === "workspace" && notice.action.route.workspaceId === demo.id);
+  const resumable = missingBookmark || (stored?.paused === true
     && (demoAvailable || (!!stored.workspaceId && workspaces.some((w) => w.id === stored.workspaceId))));
   const canTour = resumable || (demoAvailable && !stored);
   const startTour = () => {
