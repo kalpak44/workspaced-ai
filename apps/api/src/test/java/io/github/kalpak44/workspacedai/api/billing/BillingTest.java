@@ -2,11 +2,15 @@ package io.github.kalpak44.workspacedai.api.billing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.verify;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.mail.Mailer;
+import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import java.net.URI;
@@ -21,6 +25,7 @@ import java.util.UUID;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
@@ -29,6 +34,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -52,6 +58,7 @@ class BillingTest {
   @Autowired NotificationService notifications;
   @Autowired JdbcTemplate jdbc;
   @Autowired AutoTopUps autoTopUps;
+  @MockitoBean Mailer mailer;
 
   private final HttpClient http = HttpClient.newHttpClient();
 
@@ -364,6 +371,15 @@ class BillingTest {
             fields -> {
               assertThat(fields.get(0)).isEqualTo("Automatic top-up failed");
               assertThat((String) fields.get(1)).contains("Your card was declined.");
+            });
+    var mail = ArgumentCaptor.forClass(Mail.class);
+    verify(mailer, atLeast(0)).send(mail.capture());
+    assertThat(mail.getAllValues())
+        .singleElement()
+        .satisfies(
+            sent -> {
+              assertThat(sent.subject()).isEqualTo("Automatic top-up failed");
+              assertThat(sent.text()).contains("Your card was declined.", "[Go to billing](");
             });
 
     STRIPE.declineCards = false;
