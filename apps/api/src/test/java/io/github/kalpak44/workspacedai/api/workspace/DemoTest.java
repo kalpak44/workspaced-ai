@@ -124,7 +124,9 @@ class DemoTest {
             .toList();
     assertThat(completed).hasSize(1);
     assertThat(completed.getFirst().body())
-        .contains("permanently deleted", "secrets", "scheduled tasks", "not for production", "UTC");
+        .contains("permanently deleted", "secrets", "scheduled tasks", "not for production", "UTC")
+        .contains("website tutorial", "unless you keep it", "shared AI budget")
+        .doesNotContain("WordPress", "bills AI usage separately");
     assertThat(completed.getFirst().action().path()).isEqualTo("/workspaces/" + workspace.id());
     verifyNoInteractions(mailer);
   }

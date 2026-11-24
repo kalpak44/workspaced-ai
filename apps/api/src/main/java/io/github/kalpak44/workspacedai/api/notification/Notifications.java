@@ -201,15 +201,15 @@ public final class Notifications {
         NotificationKind.WORKSPACE,
         NotificationTone.SUCCESS,
         "Tutorial completed",
-        "Your trial is ready. " + name + " will be deleted on " + deletion + ".",
-        "You finished the guided WordPress tutorial. You can keep exploring "
+        "Your trial is ready. " + name + " will be deleted on " + deletion + " unless you keep it.",
+        "You finished the guided website tutorial. You can keep exploring "
             + name
             + " until "
             + deletion
-            + ". Then this workspace, its website, files, sessions, secrets"
-            + " and scheduled tasks are permanently deleted. Save anything you want to keep before"
+            + ". Then, unless you keep it, this workspace, its website, files, sessions, secrets"
+            + " and scheduled tasks are permanently deleted. Keep the workspace or save your work before"
             + " then. This trial is not for production. We will notify you before deletion and"
-            + " once it has been deleted. OpenRouter bills AI usage separately.",
+            + " once it has been deleted. Your trial includes a shared AI budget.",
         new NotificationAction("Open workspace", "/workspaces/" + id));
   }
 
