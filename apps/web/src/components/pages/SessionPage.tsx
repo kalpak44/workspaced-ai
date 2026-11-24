@@ -5,7 +5,8 @@ import { useSessions } from "../../hooks/useSessions";
 import { useSessionAgents } from "../../hooks/useSessionAgents";
 import { FileLinkContext, useSessionFiles } from "../../hooks/useSessionFiles";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { reportChatBusy, reportChatCheckpoint, reportChatPageLink, reportTourAction } from "../../lib/tour";
+import { reportChatBusy, reportChatCheckpoint, reportChatPageLink, reportTourChatIssue, reportTourAction, TOUR_DESIGN_IDEAS, TOUR_DESIGN_PROMPT, TOUR_PUBLIC_PROMPT, TOUR_STEP, useTourProgress } from "../../lib/tour";
+import { recoverTourChat } from "../../hooks/useDemoTour";
 import { PageHeader } from "../molecules";
 import { ChatModelPicker, ChatPanel } from "../organisms";
 import { ChatAgentPicker } from "../organisms/ChatAgentPicker";
@@ -25,6 +26,9 @@ interface Props {
 
 /** One session's chat, full width. */
 export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelChanged }: Props) {
+  const tour = useTourProgress();
+  const tourCanSend = !tour || (tour.workspaceId === workspace.id && tour.sessionId === sessionId
+    && (tour.step === TOUR_STEP.CONFIRM_PUBLIC || tour.step === TOUR_STEP.DESIGN));
   const ready = workspace.status === "READY" && !deleting;
   const sessions = useSessions(ready ? workspace.id : null);
   const chat = useChat(ready ? workspace.id : null, ready ? sessionId : null, sessions.retitle);
@@ -47,8 +51,19 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
     const waiting = !ready || chat.loading || chat.busy || !!chat.error || !reply.trim();
     reportChatBusy(sessionId, waiting);
     reportChatCheckpoint(sessionId, waiting ? "" : reply);
-    if (!waiting) reportChatPageLink(sessionId, reply);
+    if (!chat.loading) reportChatPageLink(sessionId, chat.messages.filter(message => message.role === "assistant").toReversed()
+      .flatMap(message => message.parts.filter(part => part.type === "text").map(part => part.text ?? "")).join("\n"));
   }, [sessionId, ready, chat.loading, chat.busy, chat.error, chat.messages]);
+
+  useEffect(() => {
+    const issue = chat.error ?? (tour?.step === TOUR_STEP.BUILD && !chat.loading && !chat.busy && chat.messages.length === 0
+      ? "Your recipe has not started yet. Click Retry to send it to your assistant." : null);
+    if (!tour || !issue) { reportTourChatIssue(sessionId, null); return; }
+    reportTourChatIssue(sessionId, { message: issue, retry: async () => {
+      await recoverTourChat(workspace.id, sessionId, tour.step === TOUR_STEP.BUILD, chat.send, chat.reconnect);
+    } });
+    return () => reportTourChatIssue(sessionId, null);
+  }, [sessionId, workspace.id, tour?.step, chat.error, chat.loading, chat.busy, chat.messages.length]);
 
   // A session that is not in the list was deleted, or the link was wrong.
   const missing = ready && !sessions.loading && !sessions.error && !session;
@@ -71,7 +86,7 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           messages={chat.messages}
           loading={chat.loading && chat.messages.length === 0}
           busy={chat.busy}
-          disabled={switchingAgent}
+          disabled={switchingAgent || !tourCanSend}
           forms={chat.forms}
           onAnswer={chat.answerForm}
           error={sessions.error ?? chat.error ?? files.linkError}
@@ -83,6 +98,9 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           modelControl={<><ChatAgentPicker agents={agents} disabled={chat.busy || chat.forms.length > 0} /><ChatModelPicker workspace={workspace} disabled={chat.busy || switchingAgent} onChanged={onModelChanged} /></>}
           onEdit={chat.edit}
           onSend={async (text) => {
+            if (!tourCanSend) return false;
+            if (tour && (tour.step === TOUR_STEP.CONFIRM_PUBLIC ? text !== TOUR_PUBLIC_PROMPT
+              : text !== TOUR_DESIGN_PROMPT && !TOUR_DESIGN_IDEAS.includes(text))) return false;
             const sent = await chat.send(files.withAttachments(text));
             if (sent) { files.clear(); reportTourAction({ type: "message-sent", workspaceId: workspace.id, sessionId }); }
             return sent;

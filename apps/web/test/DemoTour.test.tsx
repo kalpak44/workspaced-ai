@@ -60,6 +60,52 @@ beforeEach(() => {
 });
 
 describe("guided public-page workflow", () => {
+  it("recovers an empty failed recipe session through Retry without creating another session", async () => {
+    api.sessions.set(workspace.id, [{ id: "retry-recipe", title: "My page", path: "/home/workspace/sessions/retry-recipe", createdAt: new Date().toISOString() }]);
+    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "Demo", category: "websites", tags: [], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: null, rating: { average: 0, count: 0 }, myRating: null, mine: false, content: "Build the predefined page" } satisfies Recipe);
+    tour.setTourProgress({ step: S.BUILD, workspaceId: workspace.id, sessionId: "retry-recipe" });
+    globalThis.history.replaceState(null, "", "/workspaces/trial/sessions/retry-recipe");
+    render(<App />);
+    await title("Your assistant is on it");
+    FakeEventSource.emitSession("error", { message: "Agent is starting. Try again." });
+    await waitFor(() => expect(within(guide()).getByRole("button", { name: "Retry" })).toBeEnabled());
+    await next("Retry");
+    await waitFor(() => expect(api.prompts).toHaveLength(1));
+    expect(api.prompts[0].sessionId).toBe("retry-recipe");
+    expect(api.prompts[0].text).toContain("Build the predefined page");
+    expect(api.sessions.get(workspace.id)).toHaveLength(1);
+  });
+
+  it("blocks unrelated navigation and keeping the demo, then restores them on skip", async () => {
+    open(S.STARTING);
+    await title("It's on, and your assistant is awake");
+    expect(screen.getByRole("button", { name: "Keep it", hidden: true })).toBeDisabled();
+    const path = location.pathname;
+    await user.click(screen.getByRole("link", { name: "Store", hidden: true }));
+    expect(location.pathname).toBe(path);
+    await user.keyboard("{Meta>}k{/Meta}");
+    expect(screen.queryByRole("dialog", { name: /command/i })).not.toBeInTheDocument();
+    await user.click(within(guide()).getByRole("button", { name: "Skip tour" }));
+    expect(screen.getByRole("button", { name: "Keep it" })).toBeEnabled();
+    await user.click(screen.getByRole("link", { name: "Store" }));
+    expect(location.pathname).toBe("/store");
+  });
+
+  it("restores the recipe screen when resuming on an unrelated URL", async () => {
+    open(S.REVIEW, "/settings/ai-connectors");
+    await title("Here's what it will make");
+    await waitFor(() => expect(location.pathname).toBe(`/store/${tour.TOUR_RECIPE_ID}`));
+  });
+
+  it("does not claim a page is live when the assistant returns no address", async () => {
+    tour.setTourProgress({ step: S.DEPLOY, workspaceId: workspace.id, sessionId: "no-link" });
+    tour.reportChatBusy("no-link", false);
+    render(<DemoTour workspaces={[workspace]} loading={false} onDraft={vi.fn()} onLaunch={vi.fn()} />);
+    await title("Putting your page online");
+    expect(within(guide()).getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(within(guide()).getByRole("status")).toHaveTextContent("No public page address yet");
+  });
+
   it("announces workspace readiness and highlights Next only when startup finishes", async () => {
     tour.setTourProgress({ step: S.STARTING, workspaceId: workspace.id });
     const props = { loading: false, onDraft: vi.fn(), onLaunch: vi.fn() };
@@ -80,7 +126,7 @@ describe("guided public-page workflow", () => {
     expect(button.parentElement).not.toHaveClass("tour-ready-next");
   });
 
-  it("opens the real naming form automatically and keeps a user-written name", async () => {
+  it("opens the real naming form and accepts only the predefined name through Next", async () => {
     api = installFakeApi([]);
     api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: true };
     globalThis.history.replaceState(null, "", "/?welcome");
@@ -91,10 +137,18 @@ describe("guided public-page workflow", () => {
     await next();
     await title("What shall we call it?");
     const name = await screen.findByRole("textbox", { name: "Name" });
+    expect(name).toHaveAttribute("readonly");
     await user.type(name, "My own project");
+    expect(name).toHaveValue("");
+    await user.click(screen.getByRole("button", { name: "Cancel", hidden: true }));
+    expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
+    await user.keyboard("{Escape}");
+    expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
+    await next();
+    expect(name).toHaveValue(tour.TOUR_WORKSPACE_NAME);
     await next();
     await title("Your assistant comes with free AI credit");
-    await waitFor(() => expect(api.auth.account.tour?.name).toBe("My own project"));
+    await waitFor(() => expect(api.auth.account.tour?.name).toBe(tour.TOUR_WORKSPACE_NAME));
     expect(api.launched).toHaveLength(0);
   });
 
@@ -192,7 +246,11 @@ describe("guided public-page workflow", () => {
     expect(location.pathname).toBe(`/workspaces/trial/sessions/${sessionId}`);
     expect(screen.queryByRole("form", { name: "Open a port" })).not.toBeInTheDocument();
     await next();
-    expect(screen.getByRole("textbox", { name: "Message" })).toHaveValue(tour.TOUR_PUBLIC_PROMPT);
+    const confirmation = screen.getByRole("textbox", { name: "Message" });
+    expect(confirmation).toHaveValue(tour.TOUR_PUBLIC_PROMPT);
+    expect(confirmation).toHaveAttribute("readonly");
+    await user.type(confirmation, "Do something else");
+    expect(confirmation).toHaveValue(tour.TOUR_PUBLIC_PROMPT);
     await next();
     expect(api.prompts.at(-1)?.text).toBe(tour.TOUR_PUBLIC_PROMPT);
     await title("Putting your page online");
@@ -223,12 +281,13 @@ describe("guided public-page workflow", () => {
     expect(location.pathname).toBe("/store/00000000-0000-4000-8000-00000000b00b");
   }, 30000);
 
-  it("accepts a direct chat reply without a tour Next click", async () => {
+  it("ignores out-of-step chat actions while the assistant builds", async () => {
     tour.setTourProgress({ step: S.BUILD, workspaceId: workspace.id, sessionId: "direct-confirm" });
     render(<DemoTour workspaces={[workspace]} loading={false} onDraft={vi.fn()} onLaunch={vi.fn()} />);
     await title("Your assistant is on it");
     tour.reportTourAction({ type: "message-sent", workspaceId: workspace.id, sessionId: "direct-confirm" });
-    await title("Putting your page online");
+    await title("Your assistant is on it");
+    expect(within(guide()).getByRole("button", { name: "Next" })).toBeDisabled();
     expect(location.pathname).not.toContain("settings");
   });
 

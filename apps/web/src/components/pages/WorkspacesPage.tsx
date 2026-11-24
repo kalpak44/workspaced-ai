@@ -217,7 +217,7 @@ export function WorkspacesPage() {
         workspacesOpen={route.name === "home"} onNewWorkspace={openNew} />}
       notice={(demo || error) && (
         <>
-          {demo && <DemoBanner name={demo.name} expiresAt={demo.expiresAt ?? null} onKeep={() => setKeepingId(demo.id)} />}
+          {demo && <DemoBanner name={demo.name} expiresAt={demo.expiresAt ?? null} keepDisabled={!!tour} onKeep={() => { if (!tour) setKeepingId(demo.id); }} />}
           {error && <ErrorBanner message={error} onDismiss={dismissError} />}
         </>
       )}
@@ -239,7 +239,7 @@ export function WorkspacesPage() {
       )}
       <DemoTour workspaces={workspaces} loading={loading} onDraft={draft} onLaunch={(id, key, connectorId) => launch(id, key, undefined, connectorId)}
         onExit={() => setNewName(null)} onKeep={setKeepingId} />
-      {keeping && (
+      {keeping && !tour && (
         <KeepWorkspaceDialog workspace={keeping} onClose={() => setKeepingId(null)}
           onKept={(kept) => { patch(kept.id, kept); setKeepingId(null); }} />
       )}

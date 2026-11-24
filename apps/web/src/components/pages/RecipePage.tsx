@@ -4,7 +4,7 @@ import { useAccount } from "../../hooks/useAccount";
 import { startRecipeSession, useRecipe } from "../../hooks/useRecipes";
 import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { reportTourAction, TOUR_RECIPE_ID } from "../../lib/tour";
+import { reportTourAction, TOUR_RECIPE_ID, useTourProgress } from "../../lib/tour";
 import { applyPrompt, authorName, draftName, revisePrompt, serializeDraft } from "../../lib/recipes";
 import { Button, CategoryTile, Stars, Tag, categoryLabel } from "../atoms";
 import { EmptyState, Markdown, Modal, ModalBody, ModalFooter, PageHeader, RatingInput } from "../molecules";
@@ -24,6 +24,7 @@ type Dialog = "apply" | "revise" | "delete" | null;
 export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
   const { recipe, missing, error, loading, rate, remove } = useRecipe(recipeId);
   const { account } = useAccount();
+  const tour = useTourProgress();
   const [dialog, setDialog] = useState<Dialog>(null);
   const [rating, setRating] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -146,7 +147,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
         <WorkspacePickerDialog
           title={`Apply ${recipe.title}`}
           description="A new session starts in the workspace you choose, and its agent follows the recipe, asking you for what it needs."
-          workspaces={workspaces}
+          workspaces={tour ? workspaces.filter(workspace => workspace.id === tour.workspaceId) : workspaces}
           actionLabel="Apply"
           actionIcon={Play}
           onClose={() => setDialog(null)}

@@ -268,5 +268,6 @@ export function useChat(
     ? [...messages, { id: "pending", role: "user", parts: [{ id: "pending", type: "text", text: pending.text, tool: null, status: null }] }]
     : messages;
 
-  return { messages: shown, forms, answerForm, busy, loading, error, dismissError: () => setError(null), send, edit, stop };
+  return { messages: shown, forms, answerForm, busy, loading, error,
+    reconnect: async () => { setError(null); await reload.current(); await reloadForms.current(); }, dismissError: () => setError(null), send, edit, stop };
 }

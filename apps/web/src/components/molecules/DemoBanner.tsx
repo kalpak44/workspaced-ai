@@ -9,6 +9,7 @@ interface Props {
   readonly name: string;
   /** Opens keeping it as a workspace of the user's own; absent where that is not offered. */
   readonly onKeep?: () => void;
+  readonly keepDisabled?: boolean;
 }
 
 /** "3 h 12 min", "8 min", or "less than a minute". */
@@ -23,7 +24,7 @@ export function timeLeft(until: number, now: number): string {
  * Says on every page, for as long as the demo exists, that it is free and when it ends, and offers
  * to keep it, so nobody loses what they built without having had the choice.
  */
-export function DemoBanner({ expiresAt, name, onKeep }: Props) {
+export function DemoBanner({ expiresAt, name, onKeep, keepDisabled = false }: Props) {
   const budget = useTrialBudget();
   const percentage = budget.remaining === null ? null : Math.round(budget.remaining * 100);
   const [now, setNow] = useState(() => Date.now());
@@ -45,8 +46,8 @@ export function DemoBanner({ expiresAt, name, onKeep }: Props) {
           ? <>It ends in <span className="font-medium tabular-nums">{timeLeft(until, now)}</span>, at {clock}, unless you keep it.</>
           : <>It ends a few hours after it starts, unless you keep it.</>}
       </p>
-      {onKeep && <button type="button" onClick={onKeep}
-        className="inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-amber-50 hover:bg-amber-800 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100">
+      {onKeep && <button type="button" disabled={keepDisabled} title={keepDisabled ? "Finish or skip the tour to keep this workspace" : undefined} onClick={onKeep}
+        className="disabled:cursor-not-allowed disabled:opacity-50 inline-flex shrink-0 items-center gap-1.5 rounded-lg bg-amber-900 px-3 py-1.5 text-xs font-semibold text-amber-50 hover:bg-amber-800 dark:bg-amber-200 dark:text-amber-950 dark:hover:bg-amber-100">
         <Heart aria-hidden className="size-3.5" />Keep it</button>}
       </div>
       <div className="w-full shrink-0 space-y-1 lg:w-64">

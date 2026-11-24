@@ -9,6 +9,7 @@ export const TOUR_STEP = {
 export const TOUR_STEP_COUNT = Object.keys(TOUR_STEP).length;
 export const TOUR_WORKSPACE_NAME = "My first workspace";
 export const TOUR_PUBLIC_PROMPT = "Yes, make this page public so anyone can open it from the internet. Open the website port, publish the page, and give me its clickable address.";
+export const TOUR_DESIGN_IDEAS: readonly string[] = ["Make it about my bakery, with opening hours", "Use calm, dark colours", "Add a short section about me", "Make it more playful"];
 export const TOUR_DESIGN_PROMPT = "Change the heading to Welcome to my first workspace and use a warm cream background. Keep the page public at the same address.";
 
 /** Kept on the account, so any browser resumes it. Only non-secret identifiers and names. */
@@ -128,6 +129,20 @@ export function reportChatBusy(sessionId: string, working: boolean): void {
 }
 export function useChatBusy(sessionId: string | undefined): boolean | undefined {
   return useSyncExternalStore(subscribe, () => sessionId ? busy.get(sessionId) : undefined);
+}
+
+interface TourChatIssue {
+  readonly message: string;
+  readonly retry: () => Promise<void>;
+}
+const chatIssues = new Map<string, TourChatIssue>();
+export function reportTourChatIssue(sessionId: string, issue: TourChatIssue | null): void {
+  const previous = chatIssues.get(sessionId);
+  if (issue) chatIssues.set(sessionId, issue); else chatIssues.delete(sessionId);
+  if (previous?.message !== issue?.message) emit();
+}
+export function useTourChatIssue(sessionId: string | undefined): TourChatIssue | undefined {
+  return useSyncExternalStore(subscribe, () => sessionId ? chatIssues.get(sessionId) : undefined);
 }
 
 type ChatCheckpoint = "public";
