@@ -1,0 +1,61 @@
+# Guided tour
+
+The tour is the first thing a new user does: it creates the free demo, applies the "Simple web page" recipe and changes
+the page through chat (`apps/web/src/components/organisms/DemoTour.tsx`, steps in `apps/web/src/lib/tour.ts`). It is
+where a sign-up either sees the value or leaves.
+
+## Already in place
+
+The current step is saved on the account, not in the browser: `app_user.tour_step` and the ids it needs
+(`V61__tour_progress.sql`, `TourProgress`, saved by `AuthService.saveTour` on every step). A refresh, another browser or
+another device resumes at the same step, and skipping pauses it in place rather than losing it.
+
+What it cannot tell is **where people stop**: it keeps only the current step, and finishing or ending the tour sets it
+to null, so a user who finished looks the same as one who never started.
+
+## 1. Record each step, not only the current one
+
+**Recommendation:** a `tour_event` table — user, step, event (`reached`, `paused`, `resumed`, `finished`, `ended`),
+time — written by the same `saveTour` call, plus `app_user.tour_finished_at`.
+
+- `TourProgress` stays the resume bookmark; the events are history, appended and never updated.
+- Write the event in the API from the change between the stored step and the new one, so the web app needs no extra
+  call and an old tab cannot invent history.
+- Keep `step` numbers stable, or store the step's name: `lib/tour.ts` already versions its step list, and a renumbered
+  step would otherwise mix two steps in one chart.
+
+**Admin view:** a step-by-step drop-off chart next to the funnel in [analytics.md](analytics.md) — of 100 users who
+started, how many reached each step, how long each step took, and where paused tours were left. Steps where many people
+stop are the ones to shorten, explain better or drop.
+
+## 2. Bring people back to a paused tour
+
+- **In the app:** while a tour is paused, show a small "Continue the tour — step 10 of 19, The recipe Store" card on the
+  workspaces page, instead of relying on the user to find it.
+- **By email:** the demo lasts four hours, so a reminder the next day is too late. Send one email about 30 minutes after
+  a tour stops mid-way while its demo still has time left, linking to `/?tour`. It is part of
+  [lifecycle-email.md](lifecycle-email.md) and respects the same mail preference.
+- **After the demo is gone:** a tour whose workspace was deleted cannot resume. Say so instead of pointing at a
+  missing workspace, and offer to finish it on a paid workspace with a first top-up.
+
+## 3. End the tour on the next step, not a goodbye
+
+The last card currently suggests the GoDaddy domain recipe and the docs. At that moment the user has just built a
+public page and has a few hours of demo left — the best moment to convert.
+
+**Recommendation:** the finishing card offers, in this order:
+
+1. **Keep this workspace** ([demo-conversion.md](demo-conversion.md)) — the page they just built stays online.
+2. **Put it on your own domain** (the existing domain recipe).
+3. **Invite a friend** ([referrals.md](referrals.md)).
+
+## 4. Cut the steps that cost the most users
+
+The tour has 19 steps in four chapters and already shows the chapter and "10/19" with a progress bar. Once the step
+history from (1) exists, merge or drop the steps where most users stop. The Store chapter (Private, Own, Public, Find)
+is the likeliest candidate: four steps explain recipes before the user has seen one do anything.
+
+## Measure
+
+Share of sign-ups that start the tour, finish it, and pay within 7 days, split by whether they finished — that tells
+whether the tour is worth improving further.
