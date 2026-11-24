@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -15,7 +16,9 @@ import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.mail.Mailer;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
+import io.github.kalpak44.workspacedai.api.recipe.StarterRecipes;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -36,12 +39,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 @SpringBootTest(webEnvironment = WebEnvironment.RANDOM_PORT)
@@ -59,7 +63,10 @@ class AuthTest {
   @Autowired Auth0Tokens tokens;
   @Autowired TokenService tokenService;
   @Autowired JwtDecoder decoder;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired EntityManager entityManager;
+  @Autowired TransactionTemplate transaction;
+  @Autowired TourEventRepository tourEvents;
+  @MockitoSpyBean StarterRecipes starterRecipes;
   @MockitoBean ApiKeyCheck keyCheck;
   @MockitoBean PasswordResets passwordResets;
   @MockitoBean Mailer mailer;
@@ -73,49 +80,25 @@ class AuthTest {
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     // The store keeps whichever token expires last, so one test's token would outlive into the
     // next.
-    jdbc.update("DELETE FROM auth0_token");
+    transaction.executeWithoutResult(
+        _ -> {
+          var delete =
+              entityManager.getCriteriaBuilder().createCriteriaDelete(Auth0TokenEntity.class);
+          delete.from(Auth0TokenEntity.class);
+          entityManager.createQuery(delete).executeUpdate();
+        });
   }
 
   @Test
-  void assignsOnlyCielaToItsVerifiedPublisher() {
-    var seed = UUID.fromString("00000000-0000-4000-8000-000000000a01");
-    var recipe = UUID.fromString("00000000-0000-4000-8000-00000000b008");
-    jdbc.update(
-        "INSERT INTO app_user (id, idp_subject, role) VALUES (?, 'system|workspaced', 'USER')",
-        seed);
-    for (var suffix : List.of("b001", "b002", "b006", "b007", "b008", "b009", "b00a", "b00b")) {
-      jdbc.update(
-          """
-          INSERT INTO recipe (id, author_id, title, category, content, visibility,
-                              author_first_name, author_last_name, published_at)
-          VALUES (?, ?, 'Seeded recipe', 'websites', 'Steps', 'PUBLIC', 'Pavel', 'Usanli', now())
-          """,
-          UUID.fromString("00000000-0000-4000-8000-00000000" + suffix),
-          seed);
-    }
+  void handsTheCielaRecipeOverOnlyOnceThePublishersEmailIsVerified() {
     var profile = new Auth0Users.Profile("pavel.usanli@gmail.com", "Pavel", "Usanli", "");
-    assertThatThrownBy(() -> auth.signIn("publisher", profile, false, Role.USER))
+    assertThatThrownBy(() -> auth.signIn("publisher", profile, false, Role.USER, Attribution.NONE))
         .isInstanceOf(AuthService.UnverifiedEmailException.class);
-    auth.signIn(
-        "another-user",
-        new Auth0Users.Profile("other@example.com", "Other", "User", ""),
-        true,
-        Role.USER);
-    assertThat(jdbc.queryForObject("SELECT author_id FROM recipe WHERE id = ?", UUID.class, recipe))
-        .isEqualTo(seed);
-    auth.signIn("publisher", profile, true, Role.USER);
+    verify(starterRecipes, never()).claimPublisher(any(), any());
+
+    auth.signIn("publisher", profile, true, Role.USER, Attribution.NONE);
     var owner = users.findByIdpSubject("publisher").orElseThrow().getId();
-    assertThat(jdbc.queryForObject("SELECT author_id FROM recipe WHERE id = ?", UUID.class, recipe))
-        .isEqualTo(owner);
-    assertThat(
-            jdbc.queryForObject(
-                "SELECT count(*) FROM recipe WHERE author_id = ?", Integer.class, owner))
-        .isEqualTo(1);
-    assertThat(
-            jdbc.queryForObject(
-                "SELECT author_id FROM recipe WHERE id = '00000000-0000-4000-8000-00000000b002'",
-                UUID.class))
-        .isEqualTo(seed);
+    verify(starterRecipes).claimPublisher(owner, "pavel.usanli@gmail.com");
   }
 
   @Test
@@ -152,6 +135,61 @@ class AuthTest {
   }
 
   @Test
+  void keepsTheSignUpSourceFromAuth0() throws Exception {
+    var response =
+        send(
+            "GET",
+            "/oauth2/authorization/auth0?signup&utm_source=newsletter&utm_campaign=nov",
+            null,
+            null);
+    assertThat(response.headers().firstValue("Location"))
+        .hasValueSatisfying(l -> assertThat(l).doesNotContain("utm_", "newsletter"));
+  }
+
+  @Test
+  void recordsWhereTheAccountCameFromOnlyWhenItIsMade() {
+    auth.signIn(
+        "test|grace@example.com",
+        profile("grace@example.com"),
+        true,
+        Role.USER,
+        new Attribution("newsletter", "nov"));
+    auth.signIn(
+        "test|grace@example.com",
+        profile("grace@example.com"),
+        true,
+        Role.USER,
+        new Attribution("elsewhere", null));
+    var user = users.findByIdpSubject("test|grace@example.com").orElseThrow();
+    assertThat(user.getSignupSource()).isEqualTo("newsletter");
+    assertThat(user.getSignupCampaign()).isEqualTo("nov");
+  }
+
+  @Test
+  void recordsEachMoveOfTheTour() {
+    var user =
+        auth.signIn(
+            "test|tour@example.com",
+            profile("tour@example.com"),
+            true,
+            Role.USER,
+            Attribution.NONE);
+    var id = users.findByIdpSubject("test|tour@example.com").orElseThrow().getId();
+    auth.saveTour(id, new TourProgress(0, null, null, null, null, false));
+    auth.saveTour(id, new TourProgress(0, null, null, null, null, false));
+    auth.saveTour(id, new TourProgress(1, null, null, null, null, false));
+    auth.saveTour(id, new TourProgress(1, null, null, null, null, true));
+    auth.saveTour(id, new TourProgress(1, null, null, null, null, false));
+    auth.saveTour(id, new TourProgress(2, null, null, null, null, false));
+    auth.saveTour(id, null);
+    assertThat(user.created()).isTrue();
+    assertThat(
+            tourEvents.findByUserIdInOrderByIdAsc(List.of(id)).stream()
+                .map(event -> event.getStep() + ":" + event.getKind()))
+        .containsExactly("0:REACHED", "1:REACHED", "1:PAUSED", "1:RESUMED", "2:REACHED", "2:ENDED");
+  }
+
+  @Test
   void sendsAFailedSignInBackToTheLoginPage() throws Exception {
     var response =
         send("GET", "/login/oauth2/code/auth0?error=access_denied&state=unknown", null, null);
@@ -162,9 +200,13 @@ class AuthTest {
 
   @Test
   void matchesTheAccountByItsAuth0SubjectAndKeepsNoProfile() throws Exception {
-    var first = auth.signIn("test|ada@example.com", profile("ada@example.com"), true, Role.USER);
+    var first =
+        auth.signIn(
+            "test|ada@example.com", profile("ada@example.com"), true, Role.USER, Attribution.NONE);
     assertThat(first.created()).isTrue();
-    var again = auth.signIn("test|ada@example.com", profile("ada@example.com"), true, Role.USER);
+    var again =
+        auth.signIn(
+            "test|ada@example.com", profile("ada@example.com"), true, Role.USER, Attribution.NONE);
     assertThat(again.created()).isFalse();
 
     // The profile shown is the one Auth0 vouched for at sign-in, carried in the token.
@@ -176,10 +218,10 @@ class AuthTest {
 
   @Test
   void takesTheRoleAuth0AssignsAtEachSignIn() {
-    auth.signIn("auth0|ada", profile("ada@example.com"), true, Role.ADMIN);
+    auth.signIn("auth0|ada", profile("ada@example.com"), true, Role.ADMIN, Attribution.NONE);
     assertThat(users.findByIdpSubject("auth0|ada"))
         .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.ADMIN));
-    auth.signIn("auth0|ada", profile("ada@example.com"), true, Role.USER);
+    auth.signIn("auth0|ada", profile("ada@example.com"), true, Role.USER, Attribution.NONE);
     assertThat(users.findByIdpSubject("auth0|ada"))
         .hasValueSatisfying(u -> assertThat(u.getRole()).isEqualTo(Role.USER));
   }
@@ -231,7 +273,10 @@ class AuthTest {
 
   @Test
   void refusesAnEmailAuth0HasNotVerified() {
-    assertThatThrownBy(() -> auth.signIn("auth0|ada", profile("ada@example.com"), false, Role.USER))
+    assertThatThrownBy(
+            () ->
+                auth.signIn(
+                    "auth0|ada", profile("ada@example.com"), false, Role.USER, Attribution.NONE))
         .isInstanceOf(AuthService.UnverifiedEmailException.class);
     assertThat(users.findByIdpSubject(TestUsers.subject("ada@example.com"))).isEmpty();
   }
@@ -350,7 +395,7 @@ class AuthTest {
   void keepsTheManagementTokenEncryptedAtRest() {
     tokens.save(new Auth0Tokens.Token("management-token", Instant.now().plusSeconds(3600)));
     var stored =
-        jdbc.queryForObject("SELECT access_token FROM auth0_token WHERE id = 1", String.class);
+        entityManager.find(Auth0TokenEntity.class, Auth0TokenEntity.SINGLETON_ID).getAccessToken();
     assertThat(stored).doesNotContain("management-token");
     assertThat(tokens.current())
         .hasValueSatisfying(t -> assertThat(t.value()).isEqualTo("management-token"));

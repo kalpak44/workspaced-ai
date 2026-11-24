@@ -36,6 +36,7 @@ public class AuthService {
   private final VerificationEmails verificationEmails;
   private final AuthProperties properties;
   private final StarterRecipes starterRecipes;
+  private final TourEvents tourEvents;
   private final org.springframework.context.ApplicationEventPublisher events;
 
   public AuthService(
@@ -49,6 +50,7 @@ public class AuthService {
       VerificationEmails verificationEmails,
       AuthProperties properties,
       StarterRecipes starterRecipes,
+      TourEvents tourEvents,
       org.springframework.context.ApplicationEventPublisher events) {
     this.users = users;
     this.tokens = tokens;
@@ -60,6 +62,7 @@ public class AuthService {
     this.verificationEmails = verificationEmails;
     this.properties = properties;
     this.starterRecipes = starterRecipes;
+    this.tourEvents = tourEvents;
     this.events = events;
   }
 
@@ -80,14 +83,21 @@ public class AuthService {
    * notifications, and takes the role Auth0 has for them now. The profile goes into the token,
    * never into the database.
    */
+  /**
+   * @param attribution kept on the account only when this sign-in makes it
+   */
   @Transactional
   public SignIn signIn(
-      String subject, Auth0Users.Profile profile, boolean emailVerified, Role role) {
+      String subject,
+      Auth0Users.Profile profile,
+      boolean emailVerified,
+      Role role,
+      Attribution attribution) {
     if (!emailVerified || profile.email().isBlank()) {
       throw new UnverifiedEmailException();
     }
     var existing = users.findByIdpSubject(subject);
-    var user = existing.orElseGet(() -> create(subject, role));
+    var user = existing.orElseGet(() -> create(subject, role, attribution));
     user.signedIn(role);
     starterRecipes.claimPublisher(user.getId(), profile.email());
     return new SignIn(tokens.issue(user, profile), profile.email(), existing.isEmpty());
@@ -139,7 +149,9 @@ public class AuthService {
   /** Null ends the tour. */
   @Transactional
   public void saveTour(UUID userId, TourProgress progress) {
-    user(userId).setTourProgress(progress);
+    var user = user(userId);
+    tourEvents.record(userId, user.getTourProgress(), progress);
+    user.setTourProgress(progress);
   }
 
   public record ProfileUpdate(Account account, TokenService.Token token) {}
@@ -215,8 +227,8 @@ public class AuthService {
     throw new ResponseStatusException(HttpStatus.UNAUTHORIZED, "sign in again");
   }
 
-  private UserEntity create(String subject, Role role) {
-    var user = users.saveAndFlush(new UserEntity(subject, role));
+  private UserEntity create(String subject, Role role, Attribution attribution) {
+    var user = users.saveAndFlush(new UserEntity(subject, role, attribution));
     notifications.send(user.getId(), Notifications.welcome(""));
     events.publishEvent(new UserCreated(user.getId()));
     return user;

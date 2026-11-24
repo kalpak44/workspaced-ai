@@ -13,6 +13,7 @@ import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.billing.BillingFixtures;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
 import io.github.kalpak44.workspacedai.api.mail.Mailer;
@@ -20,6 +21,7 @@ import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -39,7 +41,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.json.JsonMapper;
@@ -65,7 +66,7 @@ class DemoTest {
   @Autowired WorkspaceRepository workspaces;
   @Autowired DemoReaper reaper;
   @Autowired NotificationService notifications;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired EntityManager entityManager;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
@@ -100,12 +101,7 @@ class DemoTest {
         .isCloseTo(Instant.now().plus(Duration.ofHours(4)), within(1, ChronoUnit.MINUTES));
     // A size asked for is ignored: pick the cheapest available, even if it is not the default.
     verify(runtime).start(eq(workspace.id()), eq(user), any(), eq("cx23"), any());
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from billing_usage where workspace_id = ?",
-                Long.class,
-                workspace.id()))
-        .isZero();
+    assertThat(BillingFixtures.usageRows(entityManager, workspace.id())).isZero();
     assertThat(account().get("demoAvailable").asBoolean()).isFalse();
     assertThat(newest().title()).isEqualTo("Your demo workspace is starting");
   }

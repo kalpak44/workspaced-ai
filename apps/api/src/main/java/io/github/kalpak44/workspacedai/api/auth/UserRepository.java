@@ -1,42 +1,27 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import jakarta.persistence.LockModeType;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
-import org.springframework.data.jpa.repository.Modifying;
-import org.springframework.data.jpa.repository.Query;
-import org.springframework.data.repository.query.Param;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.data.jpa.repository.Lock;
 
-public interface UserRepository extends JpaRepository<UserEntity, UUID> {
+public interface UserRepository extends JpaRepository<UserEntity, UUID>, DemoClaims {
 
-  @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-  @Query("select u from UserEntity u where u.id = :id")
-  Optional<UserEntity> lockById(@Param("id") UUID id);
+  /** Held to the end of the transaction. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  Optional<UserEntity> findLockedById(UUID id);
 
   Optional<UserEntity> findByIdpSubject(String idpSubject);
 
   /** Everyone with the role as of their last sign-in, which is when Auth0's roles are copied. */
-  @Query("select u.id from UserEntity u where u.role = :role")
-  List<UUID> findIdsByRole(@Param("role") Role role);
+  List<UserEntity> findByRole(Role role);
 
-  /**
-   * Takes the account's one demo; 0 when it already had it, or another start took it first. Its own
-   * transaction, committed before the VM is asked for.
-   */
-  @Transactional
-  @Modifying
-  @Query(
-      "update UserEntity u set u.demoStartedAt = :now where u.id = :id and u.demoStartedAt is null")
-  int claimDemo(@Param("id") UUID id, @Param("now") Instant now);
-
-  /** Hands the demo back after its VM failed to start, so it can be tried again. */
-  @Transactional
-  @Modifying
-  @Query("update UserEntity u set u.demoStartedAt = null where u.id = :id")
-  int releaseDemo(@Param("id") UUID id);
+  /** Accounts made in [from, to) whose role is not the one given. */
+  List<UserEntity> findByRoleNotAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
+      Role role, Instant from, Instant to);
 
   /** What each request is checked against. */
   Optional<Access> findAccessById(UUID id);

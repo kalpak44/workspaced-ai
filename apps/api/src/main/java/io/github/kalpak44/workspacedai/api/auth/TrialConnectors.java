@@ -44,7 +44,7 @@ public class TrialConnectors {
     try {
       return transaction.execute(
           status -> {
-            if (users.lockById(ownerId).isEmpty()) return Optional.empty();
+            if (users.findLockedById(ownerId).isEmpty()) return Optional.empty();
             var current = connectors.findByOwnerIdAndTrialTrue(ownerId);
             if (current.isPresent()) return current;
             var key = management.createTrial(ownerId);

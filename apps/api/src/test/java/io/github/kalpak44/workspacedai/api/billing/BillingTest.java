@@ -12,7 +12,9 @@ import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.mail.Mailer;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
+import io.github.kalpak44.workspacedai.api.notification.NotificationFixtures;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -31,10 +33,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
@@ -56,7 +58,8 @@ class BillingTest {
   @Autowired BillingService billing;
   @Autowired UserRepository users;
   @Autowired NotificationService notifications;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired EntityManager entityManager;
+  @Autowired TransactionTemplate transaction;
   @Autowired AutoTopUps autoTopUps;
   @MockitoBean Mailer mailer;
 
@@ -81,7 +84,7 @@ class BillingTest {
     topUps.deleteAll();
     usage.deleteAll();
     accounts.deleteAll();
-    jdbc.update("DELETE FROM notification");
+    transaction.executeWithoutResult(_ -> NotificationFixtures.deleteAll(entityManager));
     STRIPE.reset();
   }
 

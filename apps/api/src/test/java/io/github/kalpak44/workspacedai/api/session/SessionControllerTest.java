@@ -15,12 +15,14 @@ import io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings;
 import io.github.kalpak44.workspacedai.api.settings.SettingsService;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceService;
+import jakarta.persistence.EntityManager;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.UUID;
@@ -34,10 +36,10 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 /** The API against a harness that answers as opencode does, through the real client. */
@@ -55,7 +57,8 @@ class SessionControllerTest {
   @Autowired SessionExpiryScheduler cleanup;
   @Autowired SessionExpiryService expiry;
   @Autowired SettingsService settings;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired EntityManager entityManager;
+  @Autowired TransactionTemplate transaction;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -107,9 +110,7 @@ class SessionControllerTest {
     var session = create();
     var policy = new SessionTtlSettings(true, 1);
     settings.setSessionTtl(workspace, policy);
-    jdbc.update(
-        "update workspace_session set created_at = now() - interval '2 hours' where id = ?",
-        session.id());
+    ageTwoHours(session.id());
     // An old creation time is irrelevant when a model has just responded.
     cleanup.cleanup();
     assertThat(sessions.existsById(session.id())).isTrue();
@@ -147,9 +148,7 @@ class SessionControllerTest {
     assertThat(sessions.existsById(session.id())).isTrue();
     // Even though deleting the conversation succeeded, its folder must still be retried.
     // A missing conversation uses the stored creation time; age the row for the retry.
-    jdbc.update(
-        "update workspace_session set created_at = now() - interval '2 hours' where id = ?",
-        session.id());
+    ageTwoHours(session.id());
     OPENCODE.shellExit = 0;
     cleanup.cleanup();
     assertThat(sessions.existsById(session.id())).isFalse();
@@ -477,5 +476,21 @@ class SessionControllerTest {
             .method(method, body)
             .build();
     return http.send(request, BodyHandlers.ofString());
+  }
+
+  /** The database stamps created_at, so aging a session takes an update. */
+  private void ageTwoHours(UUID session) {
+    transaction.executeWithoutResult(
+        _ -> {
+          var cb = entityManager.getCriteriaBuilder();
+          var update = cb.createCriteriaUpdate(WorkspaceSessionEntity.class);
+          var row = update.from(WorkspaceSessionEntity.class);
+          update
+              .set(
+                  row.get(WorkspaceSessionEntity_.createdAt),
+                  Instant.now().minus(Duration.ofHours(2)))
+              .where(cb.equal(row.get(WorkspaceSessionEntity_.id), session));
+          entityManager.createQuery(update).executeUpdate();
+        });
   }
 }

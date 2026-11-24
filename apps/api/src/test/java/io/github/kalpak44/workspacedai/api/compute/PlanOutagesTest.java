@@ -6,6 +6,7 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.Attribution;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
@@ -22,7 +23,6 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** Admins hear once that no plan can be created, and once that one can again. */
@@ -37,17 +37,19 @@ class PlanOutagesTest {
   @Autowired PlanOutages outages;
   @Autowired UserRepository users;
   @Autowired NotificationService notifications;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired PlanOutageRepository outageRows;
 
   private UUID admin;
   private UUID user;
 
   @BeforeEach
   void setUp() {
-    jdbc.update("delete from plan_outage");
+    outageRows.deleteAll();
     admin =
         users
-            .save(new UserEntity(TestUsers.subject("ops-" + UUID.randomUUID()), Role.ADMIN))
+            .save(
+                new UserEntity(
+                    TestUsers.subject("ops-" + UUID.randomUUID()), Role.ADMIN, Attribution.NONE))
             .getId();
     user = users.save(TestUsers.newUser("user-" + UUID.randomUUID())).getId();
   }
@@ -70,10 +72,7 @@ class PlanOutagesTest {
         .containsExactly("Plans can be created again", "No plan can be created");
     assertThat(newest(admin).summary())
         .isEqualTo("A plan is available again after 45 minutes with none.");
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from plan_outage where ended_at is not null", Long.class))
-        .isOne();
+    assertThat(outageRows.count()).isOne();
   }
 
   @Test
@@ -89,7 +88,7 @@ class PlanOutagesTest {
   void treatsAnUnreachableVmManagerAsNoNews() {
     when(pricing.sizes(false)).thenThrow(new VmManagerUnavailableException("down", null));
     outages.check(START);
-    assertThat(jdbc.queryForObject("select count(*) from plan_outage", Long.class)).isZero();
+    assertThat(outageRows.count()).isZero();
   }
 
   private void soldOut(boolean soldOut) {

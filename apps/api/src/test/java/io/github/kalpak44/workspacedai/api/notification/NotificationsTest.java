@@ -6,6 +6,7 @@ import io.github.kalpak44.workspacedai.api.FakeAuth0Users;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.Attribution;
 import io.github.kalpak44.workspacedai.api.auth.AuthService;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
@@ -50,7 +51,8 @@ class NotificationsTest {
     var subject = "auth0|" + UUID.randomUUID();
     bearer =
         "Bearer "
-            + auth.signIn(subject, FakeAuth0Users.profile(subject), true, Role.USER)
+            + auth.signIn(
+                    subject, FakeAuth0Users.profile(subject), true, Role.USER, Attribution.NONE)
                 .token()
                 .value();
     user = users.findByIdpSubject(subject).orElseThrow().getId();

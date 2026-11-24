@@ -103,11 +103,11 @@ class TrialConnectorsTest {
   void provisionsAfterVerifiedSignupAndReusesTheKeyOnLaterSignIns() {
     var subject = "trial-test|" + UUID.randomUUID();
     var profile = new Auth0Users.Profile("new@example.com", "New", "User", "");
-    var first = auth.signIn(subject, profile, true, Role.USER);
+    var first = auth.signIn(subject, profile, true, Role.USER, Attribution.NONE);
     var account = users.findByIdpSubject(subject).orElseThrow();
     assertThat(first.created()).isTrue();
     assertThat(connectors.findByOwnerIdAndTrialTrue(account.getId())).isPresent();
-    auth.signIn(subject, profile, true, Role.USER);
+    auth.signIn(subject, profile, true, Role.USER, Attribution.NONE);
     verify(management).createTrial(account.getId());
   }
 
@@ -118,7 +118,11 @@ class TrialConnectorsTest {
     var subject = "trial-failure|" + UUID.randomUUID();
     assertThat(
             auth.signIn(
-                    subject, new Auth0Users.Profile("new@example.com", "", "", ""), true, Role.USER)
+                    subject,
+                    new Auth0Users.Profile("new@example.com", "", "", ""),
+                    true,
+                    Role.USER,
+                    Attribution.NONE)
                 .created())
         .isTrue();
     assertThat(

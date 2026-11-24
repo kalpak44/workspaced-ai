@@ -56,7 +56,7 @@ public class ConnectorAlerts {
     transaction.executeWithoutResult(
         status ->
             connectors
-                .lockById(id)
+                .findLockedById(id)
                 .ifPresent(
                     connector -> {
                       connector.checkedAt(now);
@@ -107,7 +107,7 @@ public class ConnectorAlerts {
     transaction.executeWithoutResult(
         status ->
             connectors
-                .lockById(id)
+                .findLockedById(id)
                 .ifPresent(
                     connector -> {
                       connector.checkedAt(now);
@@ -150,7 +150,7 @@ public class ConnectorAlerts {
 
   private void checked(UUID id) {
     transaction.executeWithoutResult(
-        status -> connectors.lockById(id).ifPresent(row -> row.checkedAt(Instant.now())));
+        status -> connectors.findLockedById(id).ifPresent(row -> row.checkedAt(Instant.now())));
   }
 
   private static Instant expiry(String value) {

@@ -203,7 +203,7 @@ public class WorkspaceService {
         transactions.execute(
             _ -> {
               if (demo) {
-                users.lockById(ownerId).orElseThrow();
+                users.findLockedById(ownerId).orElseThrow();
                 var existing =
                     repository.findFirstByOwnerIdAndModelProviderAndDemoTrueAndDraftTrue(
                         ownerId, provider.id());
@@ -454,7 +454,7 @@ public class WorkspaceService {
   /** Records completion once, using a row lock so concurrent retries cannot duplicate it. */
   @Transactional
   public boolean completeTutorial(UUID id) {
-    var found = repository.lockById(id);
+    var found = repository.findLockedById(id);
     if (found.isEmpty()) return false;
     var workspace = found.get();
     if (!workspace.isDemo()

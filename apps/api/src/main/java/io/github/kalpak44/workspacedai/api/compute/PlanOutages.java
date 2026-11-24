@@ -5,14 +5,12 @@ import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.notification.NotificationMessage;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
-import java.sql.Timestamp;
 import java.time.Duration;
 import java.time.Instant;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -28,12 +26,10 @@ public class PlanOutages {
 
   private static final Logger LOG = LoggerFactory.getLogger(PlanOutages.class);
 
-  private record Open(long id, Instant startedAt, Instant alertedAt) {}
-
   private final VmPricing pricing;
   private final UserRepository users;
   private final NotificationService notifications;
-  private final JdbcTemplate jdbc;
+  private final PlanOutageRepository outages;
   private final TransactionTemplate transaction;
   private final Duration alertAfter;
 
@@ -41,13 +37,13 @@ public class PlanOutages {
       VmPricing pricing,
       UserRepository users,
       NotificationService notifications,
-      JdbcTemplate jdbc,
+      PlanOutageRepository outages,
       PlatformTransactionManager manager,
       @Value("${workspaced.plans.outage-alert-after:PT15M}") Duration alertAfter) {
     this.pricing = pricing;
     this.users = users;
     this.notifications = notifications;
-    this.jdbc = jdbc;
+    this.outages = outages;
     this.transaction = new TransactionTemplate(manager);
     this.alertAfter = alertAfter;
   }
@@ -74,47 +70,32 @@ public class PlanOutages {
   }
 
   private void record(boolean available, Instant now) {
-    var open =
-        jdbc
-            .query(
-                "select id, started_at, alerted_at from plan_outage where ended_at is null"
-                    + " for update",
-                (row, _) ->
-                    new Open(
-                        row.getLong("id"),
-                        row.getTimestamp("started_at").toInstant(),
-                        row.getTimestamp("alerted_at") == null
-                            ? null
-                            : row.getTimestamp("alerted_at").toInstant()))
-            .stream()
-            .findFirst();
+    var open = outages.findFirstByEndedAtIsNull();
     if (available) {
       open.ifPresent(
           outage -> {
-            jdbc.update(
-                "update plan_outage set ended_at = ? where id = ?",
-                Timestamp.from(now),
-                outage.id());
+            outage.ended(now);
             // Admins who were never told it started need not hear that it ended.
-            if (outage.alertedAt() != null) {
-              tellAdmins(Notifications.plansBack(Duration.between(outage.startedAt(), now)));
+            if (outage.isAlerted()) {
+              tellAdmins(Notifications.plansBack(Duration.between(outage.getStartedAt(), now)));
             }
           });
       return;
     }
     if (open.isEmpty()) {
-      jdbc.update("insert into plan_outage (started_at) values (?)", Timestamp.from(now));
+      outages.save(new PlanOutageEntity(now));
       return;
     }
     var outage = open.get();
-    if (outage.alertedAt() == null && !outage.startedAt().plus(alertAfter).isAfter(now)) {
-      jdbc.update(
-          "update plan_outage set alerted_at = ? where id = ?", Timestamp.from(now), outage.id());
-      tellAdmins(Notifications.plansSoldOut(outage.startedAt()));
+    if (!outage.isAlerted() && !outage.getStartedAt().plus(alertAfter).isAfter(now)) {
+      outage.alerted(now);
+      tellAdmins(Notifications.plansSoldOut(outage.getStartedAt()));
     }
   }
 
   private void tellAdmins(NotificationMessage message) {
-    users.findIdsByRole(Role.ADMIN).forEach(admin -> notifications.sendAndMail(admin, message));
+    users
+        .findByRole(Role.ADMIN)
+        .forEach(admin -> notifications.sendAndMail(admin.getId(), message));
   }
 }

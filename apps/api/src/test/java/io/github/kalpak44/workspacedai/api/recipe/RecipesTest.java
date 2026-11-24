@@ -28,7 +28,6 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -41,7 +40,7 @@ class RecipesTest {
   @LocalServerPort int port;
 
   @Autowired UserRepository users;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired RecipeRepository recipes;
   @Autowired NotificationService notifications;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -50,7 +49,7 @@ class RecipesTest {
 
   @BeforeEach
   void reset() {
-    jdbc.update("DELETE FROM recipe");
+    recipes.deleteAll();
     users.findAll().stream().filter(u -> !u.getId().equals(TestUsers.ADMIN)).forEach(users::delete);
     users.save(TestUsers.newUser("ada@example.com", "Ada", "Lovelace"));
     admin = TestUsers.bearer(port);
@@ -118,7 +117,7 @@ class RecipesTest {
     for (var request : invalid) {
       assertThat(send("POST", "/recipes", request, ada).statusCode()).as(request).isEqualTo(400);
     }
-    assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM recipe", Long.class)).isZero();
+    assertThat(recipes.count()).isZero();
   }
 
   @Test
