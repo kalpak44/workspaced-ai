@@ -61,6 +61,10 @@ workspaced:
   domains:
     private-key: ${WORKSPACED_DOMAIN_CONNECT_PRIVATE_KEY:}
     app-url: ${WORKSPACED_APP_URL:https://ai.workspaced.online}
+    # Provider ids, comma-separated, that have taken our templates live, and zones that get
+    # Domain Connect anywhere for testing. A provider answers for a template before it is live.
+    live-providers: ${WORKSPACED_DOMAIN_CONNECT_PROVIDERS:}
+    test-zones: ${WORKSPACED_DOMAIN_CONNECT_TEST_ZONES:}
   # Mail sent as any address on the domain, through Mailjet. Left unset, as it is locally,
   # sending answers 503.
   mail:
