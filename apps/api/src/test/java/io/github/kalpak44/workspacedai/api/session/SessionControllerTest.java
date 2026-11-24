@@ -382,6 +382,36 @@ class SessionControllerTest {
 
   @Test
   @Timeout(10)
+  void restoresRunningStateOnEverySubscriptionWithoutANewStartEvent() throws Exception {
+    var session = create();
+    OPENCODE.sessionBusyAt = 10L;
+    OPENCODE.holdStream = new java.util.concurrent.CountDownLatch(1);
+    try {
+      for (var attempt = 0; attempt < 2; attempt++) {
+        var request =
+            HttpRequest.newBuilder(url("/" + session.id() + "/events"))
+                .header("Authorization", TestUsers.bearer(port))
+                .header("Accept", "text/event-stream")
+                .build();
+        var response = http.send(request, BodyHandlers.ofLines());
+        try (var lines = response.body()) {
+          assertThat(
+                  lines
+                      .filter(line -> line.startsWith("data:"))
+                      .map(line -> line.substring(5).trim())
+                      .findFirst())
+              .contains("{\"busy\":true}");
+        }
+      }
+    } finally {
+      OPENCODE.sessionBusyAt = null;
+      OPENCODE.holdStream.countDown();
+      OPENCODE.holdStream = null;
+    }
+  }
+
+  @Test
+  @Timeout(10)
   void streamsTheReplyAndKeepsTheTitleTheAgentGaveIt() throws Exception {
     var session = create();
     var request =

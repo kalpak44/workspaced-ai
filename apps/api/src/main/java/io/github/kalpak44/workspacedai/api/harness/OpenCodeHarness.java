@@ -325,6 +325,14 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public boolean busy(HarnessEndpoint endpoint, String sessionId) {
+    var time =
+        call(endpoint, "GET", "/api/session/" + encode(sessionId), null).path("data").path("time");
+    return time.hasNonNull("busy")
+        && (!time.hasNonNull("idle") || time.path("busy").asLong() > time.path("idle").asLong());
+  }
+
+  @Override
   public Optional<String> title(HarnessEndpoint endpoint, String directory, String sessionId) {
     var response = call(endpoint, "GET", "/api/session/" + encode(sessionId), null);
     return Optional.ofNullable(text(response.path("data"), "title"));
