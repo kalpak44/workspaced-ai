@@ -4,6 +4,7 @@ import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.billing.BillingService;
+import io.github.kalpak44.workspacedai.api.billing.InsufficientFundsException;
 import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
@@ -67,6 +68,9 @@ public class WorkspaceService {
   private final VmPricing pricing;
   private final BillingService billing;
   private final NotificationService notifications;
+  // A demo is no longer kept this close to its end, so a keep never races the reaper.
+  private static final Duration KEEP_CUTOFF = Duration.ofMinutes(1);
+
   private final Duration demoLength;
   private final int demosAtOnce;
 
@@ -472,9 +476,77 @@ public class WorkspaceService {
     return true;
   }
 
-  /** Deletes a demo whose time is up; the owner is told that was why. */
-  public boolean deleteExpiredDemo(UUID id) {
-    return delete(id, false, Notifications::demoEnded);
+  /**
+   * Turns the owner's running demo into a workspace their balance pays for, on the same VM, so
+   * nothing built in it is lost. The balance must cover the usual period at its plan's price.
+   *
+   * @return empty when no workspace has that id
+   * @throws InsufficientFundsException when the balance does not cover it
+   */
+  public Optional<Workspace> keep(UUID id) {
+    var found = repository.findById(id);
+    if (found.isEmpty()) {
+      return Optional.empty();
+    }
+    var workspace = found.get();
+    requireKeepable(workspace, Instant.now());
+    var ownerId = workspace.getOwnerId();
+    var price = keepPrice(ownerId, workspace.getServerType());
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
+    var kept =
+        transactions.execute(
+            _ -> {
+              var locked = repository.findLockedById(id).orElseThrow();
+              // Checked again under the lock the reaper takes before it deletes an expired demo.
+              requireKeepable(locked, Instant.now());
+              locked.keep();
+              price.ifPresent(monthly -> billing.startCharging(id, ownerId, monthly));
+              notifications.send(ownerId, Notifications.workspaceKept(id, locked.getName()));
+              return locked;
+            });
+    return Optional.of(Workspace.of(kept, statusOf(id)));
+  }
+
+  // Too close to its end, the reaper may already be deleting it, so it can no longer be kept.
+  private static void requireKeepable(WorkspaceEntity workspace, Instant now) {
+    if (!workspace.isDemo() || workspace.isDraft() || workspace.getExpiresAt() == null) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "only a running demo can be kept");
+    }
+    if (!workspace.getExpiresAt().minus(KEEP_CUTOFF).isAfter(now)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "this demo is about to be deleted");
+    }
+  }
+
+  /** The plan price of the demo's VM, which keeping it charges; none for an admin. */
+  private Optional<BigDecimal> keepPrice(UUID ownerId, String serverType) {
+    // A blank type would be priced as the default plan rather than as the VM it runs on.
+    if (serverType == null || serverType.isBlank()) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "this demo's machine is not known yet; try again shortly");
+    }
+    try {
+      return priceFor(ownerId, serverType);
+    } catch (ServerTypeRejectedException e) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "this demo's machine is not sold as a plan right now");
+    }
+  }
+
+  /**
+   * Deletes a demo whose time is up at {@code now}; the owner is told that was why. False when it
+   * is gone, or is no longer an expired demo because its owner kept it.
+   */
+  public boolean deleteExpiredDemo(UUID id, Instant now) {
+    var expired =
+        transactions.execute(
+            _ ->
+                repository
+                    .findLockedById(id)
+                    .filter(WorkspaceEntity::isDemo)
+                    .filter(w -> w.getExpiresAt() != null)
+                    .filter(w -> !w.getExpiresAt().isAfter(now))
+                    .isPresent());
+    return Boolean.TRUE.equals(expired) && delete(id, false, Notifications::demoEnded);
   }
 
   /**

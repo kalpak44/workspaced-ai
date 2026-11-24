@@ -251,9 +251,22 @@ public final class Notifications {
             + minutes
             + " minutes, on "
             + WHEN.format(expiresAt)
-            + ", with its website, files, sessions, secrets and scheduled tasks. Download anything"
-            + " you want to keep before then. Liked it? Add funds and create a workspace of your"
-            + " own to keep building.",
+            + ", with its website, files, sessions, secrets and scheduled tasks. To keep building"
+            + " in it, keep it as a workspace of your own: it stays on the same machine with"
+            + " nothing lost, and is paid from your balance from then on.",
+        new NotificationAction("Keep this workspace", "/workspaces/" + id + "?keep"));
+  }
+
+  /** For an owner who has just kept their demo as a workspace of their own. */
+  public static NotificationMessage workspaceKept(UUID id, String name) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.SUCCESS,
+        name + " is yours to keep",
+        "It is no longer deleted, and is paid from your balance from now on.",
+        name
+            + " is no longer a demo: it stays on the same machine with everything in it, and is"
+            + " paid from your balance by the hour from now on, like any workspace of your own.",
         new NotificationAction("Open workspace", "/workspaces/" + id));
   }
 

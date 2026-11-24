@@ -160,7 +160,8 @@ public class BillingService {
               + span
               + " and the balance is "
               + amount(balance)
-              + "; add funds to create it.");
+              + "; add funds to create it.",
+          price - balance);
     }
     throw new InsufficientFundsException(
         "Your workspaces cost "
@@ -173,7 +174,8 @@ public class BillingService {
             + amount(balance)
             + "; add funds to cover "
             + span
-            + " of them all.");
+            + " of them all.",
+        running + price - balance);
   }
 
   /** "7 days", "36 hours": a coverage period as the user is told it. */

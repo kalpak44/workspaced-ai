@@ -78,8 +78,8 @@ public class WorkspaceEntity {
   @Column(nullable = false)
   private boolean draft;
 
-  // An account's free demo: never charged, and deleted at expiresAt.
-  @Column(nullable = false, updatable = false)
+  // An account's free demo until its owner keeps it: never charged, and deleted at expiresAt.
+  @Column(nullable = false)
   private boolean demo;
 
   // Set when a demo's VM starts; null for every other workspace.
@@ -96,6 +96,12 @@ public class WorkspaceEntity {
 
   public void setExpiresAt(Instant expiresAt) {
     this.expiresAt = expiresAt;
+  }
+
+  /** Turns the demo into a workspace its owner pays for, on the same VM. */
+  void keep() {
+    demo = false;
+    expiresAt = null;
   }
 
   public boolean isDraft() {

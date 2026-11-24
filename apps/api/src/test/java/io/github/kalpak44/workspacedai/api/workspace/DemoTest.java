@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -33,6 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -40,6 +42,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
@@ -67,6 +70,8 @@ class DemoTest {
   @Autowired DemoReaper reaper;
   @Autowired NotificationService notifications;
   @Autowired EntityManager entityManager;
+  @Autowired ApplicationContext context;
+  @Autowired WorkspaceService service;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
@@ -266,6 +271,70 @@ class DemoTest {
     assertThat(workspaces.existsById(id)).isFalse();
     assertThat(newest().title()).isEqualTo("Your demo has ended");
     verifyNoInteractions(mailer);
+  }
+
+  @Test
+  void keepsTheDemoOnItsVmAndChargesItsPlanFromThen() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    BillingFixtures.credit(context, user, 1000);
+
+    var kept = send("POST", "/workspaces/" + id + "/keep", null);
+
+    assertThat(kept.statusCode()).isEqualTo(200);
+    var workspace = JSON.readValue(kept.body(), Workspace.class);
+    assertThat(workspace.demo()).isFalse();
+    assertThat(workspace.expiresAt()).isNull();
+    assertThat(BillingFixtures.usageRows(entityManager, id)).isOne();
+    assertThat(newest().title()).isEqualTo("Demo is yours to keep");
+    // Still the same VM: it was neither stopped nor started again.
+    verify(runtime, never()).stop(id);
+    assertThat(send("POST", "/workspaces/" + id + "/keep", null).statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void asksForWhatTheBalanceLacksToKeepIt() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+
+    var refused = send("POST", "/workspaces/" + id + "/keep", null);
+
+    assertThat(refused.statusCode()).isEqualTo(402);
+    // A week of €10.65 a month, rounded up to the cent, and the balance is empty.
+    assertThat(JSON.readTree(refused.body()).get("shortCents").asLong()).isEqualTo(246);
+    assertThat(workspaces.findById(id).orElseThrow().isDemo()).isTrue();
+  }
+
+  @Test
+  void neitherKeepsNorSparesADemoAtItsEnd() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    BillingFixtures.credit(context, user, 1000);
+    var late =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    var row = workspaces.findById(late).orElseThrow();
+    row.setExpiresAt(Instant.now().plusSeconds(30));
+    workspaces.save(row);
+
+    assertThat(send("POST", "/workspaces/" + late + "/keep", null).statusCode()).isEqualTo(409);
+    reaper.reap(Instant.now().plus(Duration.ofMinutes(1)));
+    assertThat(workspaces.existsById(late)).isFalse();
+  }
+
+  @Test
+  void leavesAKeptDemoToItsOwnerEvenOnceItsTimeHasPassed() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    BillingFixtures.credit(context, user, 1000);
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    var expiresAt = workspaces.findById(id).orElseThrow().getExpiresAt();
+    assertThat(send("POST", "/workspaces/" + id + "/keep", null).statusCode()).isEqualTo(200);
+
+    // As a reaper that listed it just before the keep would then try to delete it.
+    assertThat(service.deleteExpiredDemo(id, expiresAt.plusSeconds(1))).isFalse();
+    reaper.reap(expiresAt.plusSeconds(1));
+    assertThat(workspaces.existsById(id)).isTrue();
   }
 
   @Test

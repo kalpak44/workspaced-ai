@@ -133,6 +133,11 @@ public class WorkspaceController implements WorkspaceApi {
     return ResponseEntity.noContent().build();
   }
 
+  @Override
+  public ResponseEntity<Workspace> keep(UUID id) {
+    return ResponseEntity.ok(service.keep(id).orElseThrow(() -> notFound(id)));
+  }
+
   private static ResponseStatusException notFound(UUID id) {
     return new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + id);
   }

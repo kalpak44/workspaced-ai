@@ -3,11 +3,28 @@ package io.github.kalpak44.workspacedai.api.billing;
 import jakarta.persistence.EntityManager;
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.context.ApplicationContext;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /** Billing rows for tests outside this package, which cannot reach its entities. */
 public final class BillingFixtures {
 
   private BillingFixtures() {}
+
+  /** Adds to the user's balance as a paid top-up would, through the real ledger. */
+  public static void credit(ApplicationContext context, UUID user, long cents) {
+    context
+        .getBean(TransactionTemplate.class)
+        .executeWithoutResult(
+            _ ->
+                context
+                    .getBean(Ledger.class)
+                    .post(
+                        user,
+                        cents * Ledger.MICROS_PER_CENT,
+                        Ledger.TOP_UP,
+                        "test-credit-" + UUID.randomUUID()));
+  }
 
   /** A €10 top-up Stripe has paid. Call inside a transaction. */
   public static void paidTopUp(EntityManager entityManager, UUID user) {

@@ -39,8 +39,8 @@ public class FakeWorkspaceRuntime implements WorkspaceRuntime {
       ComputeProvider provider,
       String serverType,
       WorkspaceEnvironment environment) {
-    // Nothing runs locally; the workspace is usable as soon as it is stored.
-    return null;
+    // Nothing runs locally; the workspace is usable as soon as it is stored, on the type asked for.
+    return serverType;
   }
 
   @Override
