@@ -1,5 +1,7 @@
 package io.github.kalpak44.workspacedai.api.notification;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.context.ApplicationEventPublisher;
@@ -12,6 +14,9 @@ import org.springframework.transaction.annotation.Transactional;
  */
 @Service
 public class NotificationService {
+
+  /** How long a milestone, once mailed, is not mailed again. */
+  public static final Duration MAIL_ONCE_WITHIN = Duration.ofDays(7);
 
   private final NotificationRepository repository;
   private final ApplicationEventPublisher events;
@@ -39,23 +44,29 @@ public class NotificationService {
    */
   @Transactional
   public void sendOnce(UUID user, String key, NotificationMessage message) {
-    saveOnce(user, key, message);
+    sendOnce(user, key, message, null);
   }
 
-  /** As {@link #sendOnce}, and mails what it sends to the user once the transaction commits. */
+  /**
+   * As {@link #sendOnce(UUID, String, NotificationMessage)}, and mails what it sends unless the
+   * user was mailed under the same mail key within {@link #MAIL_ONCE_WITHIN}: a reminder repeated
+   * daily reaches the inbox only at the milestones the key names.
+   *
+   * @param mailKey null mails nothing
+   */
   @Transactional
-  public void sendOnceAndMail(UUID user, String key, NotificationMessage message) {
-    if (saveOnce(user, key, message)) {
+  public void sendOnce(UUID user, String key, NotificationMessage message, String mailKey) {
+    if (repository.existsByUserIdAndDedupeKey(user, key)) {
+      return;
+    }
+    var mail =
+        mailKey != null
+            && !repository.existsByUserIdAndMailKeyAndCreatedAtAfter(
+                user, mailKey, Instant.now().minus(MAIL_ONCE_WITHIN));
+    repository.save(new NotificationEntity(user, message, key, mail ? mailKey : null));
+    if (mail) {
       events.publishEvent(new NotificationMail(user, message));
     }
-  }
-
-  private boolean saveOnce(UUID user, String key, NotificationMessage message) {
-    if (repository.existsByUserIdAndDedupeKey(user, key)) {
-      return false;
-    }
-    repository.save(new NotificationEntity(user, message, key));
-    return true;
   }
 
   /** The user's newest notifications, newest first. */

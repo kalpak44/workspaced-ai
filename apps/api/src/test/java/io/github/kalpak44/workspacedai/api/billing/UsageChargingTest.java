@@ -313,8 +313,35 @@ class UsageChargingTest {
 
     reminder.remind(now.plus(Duration.ofDays(1)));
     assertThat(reminders()).hasSize(2);
-    assertThat(mails()).hasSize(2);
     assertThat(workspaces.findById(workspace)).isPresent();
+  }
+
+  @Test
+  void mailsTheBalanceReminderAtAWeekThreeDaysAndOneDayLeftOnly() throws Exception {
+    fund(MONTH);
+    created(create(bearer));
+    var now = Instant.now();
+
+    fund(-(MONTH - HOURLY * 84));
+    reminder.remind(now);
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    assertThat(reminders()).hasSize(2);
+    assertThat(mails()).singleElement().extracting(Mail::subject).asString().endsWith("3 days");
+
+    // Crossing a milestone during the day is told of at once, in the app and by mail.
+    fund(-HOURLY * 24);
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    fund(-HOURLY * 48);
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    reminder.remind(now.plus(Duration.ofDays(2)));
+
+    assertThat(reminders()).hasSize(5);
+    assertThat(mails())
+        .extracting(Mail::subject)
+        .hasSize(3)
+        .last()
+        .asString()
+        .endsWith("will be paused within a day");
   }
 
   @Test
@@ -334,12 +361,24 @@ class UsageChargingTest {
         .extracting(Notification::title)
         .asString()
         .endsWith("will be deleted in about 2 days");
-    assertThat(mails())
-        .extracting(Mail::subject)
-        .filteredOn(s -> s.contains("will be deleted"))
-        .singleElement()
-        .asString()
-        .endsWith("will be deleted in about 2 days");
+    assertThat(deletionMails()).isEmpty();
+
+    // Mailed on its last day only, once.
+    transactions.executeWithoutResult(
+        _ ->
+            usage
+                .findById(workspace)
+                .orElseThrow()
+                .pause(now.minus(Duration.ofDays(2)).minus(Duration.ofHours(12))));
+    reminder.remind(now);
+    reminder.remind(now.plus(Duration.ofHours(6)));
+
+    assertThat(deletionReminders()).hasSize(2);
+    assertThat(deletionMails()).singleElement().asString().endsWith("will be deleted within a day");
+  }
+
+  private List<String> deletionMails() {
+    return mails().stream().map(Mail::subject).filter(s -> s.contains("will be deleted")).toList();
   }
 
   @Test
