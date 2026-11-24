@@ -166,6 +166,22 @@ class AuthTest {
   }
 
   @Test
+  void savesTheActiveTourPayloadBetweenBrowserRequests() throws Exception {
+    var bearer = bearerFor("tour-browser@example.com");
+    var response =
+        send(
+            "PUT",
+            "/account/tour",
+            bearer,
+            "{\"step\":13,\"workspaceId\":\"demo\",\"sessionId\":\"page\",\"paused\":false}");
+    assertThat(response.statusCode()).isEqualTo(204);
+    var account = JSON.readTree(send("GET", "/account", bearer, null).body());
+    assertThat(account.get("tour").get("step").asInt()).isEqualTo(13);
+    assertThat(account.get("tour").get("workspaceId").asString()).isEqualTo("demo");
+    assertThat(account.get("tour").get("paused").asBoolean()).isFalse();
+  }
+
+  @Test
   void recordsEachMoveOfTheTour() {
     var user =
         auth.signIn(

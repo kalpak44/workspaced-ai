@@ -60,6 +60,15 @@ beforeEach(() => {
 });
 
 describe("guided public-page workflow", () => {
+  it("offers to resume an existing demo when an older browser failed to save its bookmark", async () => {
+    api.auth.account = { ...api.auth.account, role: "USER", demoAvailable: false, tour: null };
+    render(<App />);
+    await user.click(await screen.findByRole("button", { name: "Resume the tour" }));
+    await title("Pick a recipe");
+    await waitFor(() => expect(api.auth.account.tour?.workspaceId).toBe(workspace.id));
+    expect(api.launched).toHaveLength(0);
+  });
+
   it("recovers an empty failed recipe session through Retry without creating another session", async () => {
     api.sessions.set(workspace.id, [{ id: "retry-recipe", title: "My page", path: "/home/workspace/sessions/retry-recipe", createdAt: new Date().toISOString() }]);
     api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "Demo", category: "websites", tags: [], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: null, rating: { average: 0, count: 0 }, myRating: null, mine: false, content: "Build the predefined page" } satisfies Recipe);

@@ -125,7 +125,7 @@ export async function updateMailPreferences(preferences: MailPreferences): Promi
 /** Saves where the guided tour is; null ends it. */
 export async function saveTour(progress: TourProgress | null): Promise<void> {
   await send(`${ACCOUNT_URL}/tour`, progress
-    ? { method: "PUT", body: JSON.stringify(progress) }
+    ? { method: "PUT", body: JSON.stringify({ ...progress, paused: progress.paused ?? false }) }
     : { method: "DELETE" });
 }
 

@@ -76,11 +76,13 @@ export function WorkspacesPage() {
   // The account says whether its demo is used; a demo listed here is the same answer, sooner.
   const demoAvailable = account?.demoAvailable === true && !demo;
   // A skipped tour resumes where it was, while its demo is still to come or still here.
-  const resumable = stored?.paused === true
-    && (demoAvailable || (!!stored.workspaceId && workspaces.some((w) => w.id === stored.workspaceId)));
+  const resumable = (!stored && !!demo) || (stored?.paused === true
+    && (demoAvailable || (!!stored.workspaceId && workspaces.some((w) => w.id === stored.workspaceId))));
   const canTour = resumable || (demoAvailable && !stored);
   const startTour = () => {
-    setTourProgress(resumable && stored ? { ...stored, paused: false } : { step: 0 });
+    setTourProgress(resumable && stored ? { ...stored, paused: false }
+      : demo ? { step: demo.status === "READY" ? TOUR_STEP.STORE : TOUR_STEP.STARTING, workspaceId: demo.id }
+      : { step: TOUR_STEP.WELCOME });
   };
 
   useEffect(() => {

@@ -31,6 +31,7 @@ const KEY = "workspaced.tour.v6";
 let progress: TourProgress | null = load();
 let adopted = false;
 let save: (progress: TourProgress | null) => Promise<void> = async () => undefined;
+let pendingSave: Promise<void> = Promise.resolve();
 /** How the tour reaches the account; the account hook provides it. */
 export function saveTourWith(saver: typeof save): void { save = saver; }
 const listeners = new Set<() => void>();
@@ -86,7 +87,9 @@ export function useStoredTour(): TourProgress | null { return useSyncExternalSto
 export function setTourProgress(next: TourProgress | null): void {
   progress = next;
   emit();
-  void save(next).catch(() => undefined);
+  // Preserve step order even when requests complete at different speeds.
+  const saver = save;
+  pendingSave = pendingSave.then(() => saver(next)).catch(() => undefined);
 }
 /**
  * Takes the account's tour once it loads. With none there, a tour this browser already has, from
