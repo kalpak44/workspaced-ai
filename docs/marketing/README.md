@@ -15,6 +15,8 @@ costs and the guard that keeps every program inside that.
 | Model provider step defaults to Connect OpenRouter, with a two-line AI notice | [04-demo-conversion.md](04-demo-conversion.md) | `f43af16` |
 | OpenRouter attribution headers on every agent request | [10-listings-and-launches.md](10-listings-and-launches.md) | `f4eed5a` |
 | Sign-up funnel per source for admins (General settings → Funnel), with the tour's step history | [03-analytics.md](03-analytics.md), [05-tour.md](05-tour.md) | `ded8fb1` |
+| Keep the demo as a paid workspace on the same VM, from the banner, the warning and the tour's end | [04-demo-conversion.md](04-demo-conversion.md) | `27462c2`, `232557c` |
+| Tour rewritten for non-technical users: shorter, chapters, ideas to tap, a celebration, ends on keeping | [05-tour.md](05-tour.md) | `232557c` |
 | Admins are told when no plan has been available for 15 minutes, and when one is back | [01-plan-availability.md](01-plan-availability.md) | `bbcf259` |
 
 ## Next, in order
@@ -24,8 +26,7 @@ costs and the guard that keeps every program inside that.
 | 1 | [01-plan-availability.md](01-plan-availability.md) | "Tell me when it's back" on a sold-out plan | Nothing below matters if no workspace can be created | Small |
 | 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Add the VAT ID to Hetzner, settle OSS with an accountant | No code, and it decides whether every reward program can pay out | None |
 | 3 | [03-analytics.md](03-analytics.md) | Site page views, only if the funnel leaves a question it cannot answer | The funnel already counts every step after the visit | Small |
-| 4 | [04-demo-conversion.md](04-demo-conversion.md) | Keep the demo's work by paying | The demo is the most expensive acquisition, and its work is deleted today | Medium |
-| 5 | [05-tour.md](05-tour.md) | Bring people back to a paused tour, end on "keep this workspace" | Same moment as 4 | Small |
+| 5 | [05-tour.md](05-tour.md) | Bring people back to a paused tour; cut more steps once the history shows where people stop | The tour is every user's first five minutes | Small |
 | 6 | [06-billing.md](06-billing.md) | Paused days instead of the €5 fee, spending this month, then hibernate | Cheap trust fixes; hibernate is the large one and comes last | Small, then large |
 | 7 | [07-lifecycle-email.md](07-lifecycle-email.md) | Onboarding and win-back email | Brings back the users 4 to 6 lose, at Mailjet volume only | Small |
 | 8 | [08-top-up-bonuses.md](08-top-up-bonuses.md) | Bonus credit on large and automatic top-ups | Pays for itself in Stripe fees once users are paying | Small |

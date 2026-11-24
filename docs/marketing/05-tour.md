@@ -43,7 +43,10 @@ stop are the ones to shorten, explain better or drop.
 - **After the demo is gone:** a tour whose workspace was deleted cannot resume. Say so instead of pointing at a
   missing workspace, and offer to finish it on a paid workspace with a first top-up.
 
-## 3. End the tour on the next step, not a goodbye
+## 3. End the tour on the next step, not a goodbye — done
+
+The last screen is "You built a website!", with confetti, a list of what the user just did and **Keep this workspace**
+as its main action; "put it on your own domain" follows as a link. The plan as first written is kept below.
 
 The last card currently suggests the GoDaddy domain recipe and the docs. At that moment the user has just built a
 public page and has a few hours of demo left — the best moment to convert.
@@ -54,7 +57,13 @@ public page and has a few hours of demo left — the best moment to convert.
 2. **Put it on your own domain** (the existing domain recipe).
 3. **Invite a friend** ([13-referrals.md](13-referrals.md)).
 
-## 4. Cut the steps that cost the most users
+## 4. Cut the steps that cost the most users — started
+
+The Store's Private, Own and Public steps are skipped: opening the Store goes straight to the recipe, so a tour is 16
+steps. They keep their numbers, so a tour paused on one resumes and recorded steps stay comparable. The copy is
+rewritten for someone non-technical: no VM, CPU or connector vocabulary, and the four-hour limit said once, as "free
+for four hours, keep it anytime". Progress shows as four named chapters, the page's own link opens from the tour once
+the assistant gives it, and "Now make it yours" offers one-tap ideas. Further cuts wait for the step history.
 
 The tour has 19 steps in four chapters and already shows the chapter and "10/19" with a progress bar. Once the step
 history from (1) exists, merge or drop the steps where most users stop. The Store chapter (Private, Own, Public, Find)
