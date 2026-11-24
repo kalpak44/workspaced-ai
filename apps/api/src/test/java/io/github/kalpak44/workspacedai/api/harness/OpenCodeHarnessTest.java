@@ -58,6 +58,19 @@ class OpenCodeHarnessTest {
   }
 
   @Test
+  void readsExecutionStateEvenWhenItsStartEventWasMissed() {
+    assertThat(harness.busy(opencode.endpoint(), FakeOpenCode.SESSION)).isFalse();
+    opencode.sessionBusyAt = 10L;
+    assertThat(harness.busy(opencode.endpoint(), FakeOpenCode.SESSION)).isTrue();
+    opencode.sessionIdleAt = 20L;
+    assertThat(harness.busy(opencode.endpoint(), FakeOpenCode.SESSION)).isFalse();
+    opencode.sessionBusyAt = 30L;
+    assertThat(harness.busy(opencode.endpoint(), FakeOpenCode.SESSION)).isTrue();
+    opencode.sessionIdleAt = 30L;
+    assertThat(harness.busy(opencode.endpoint(), FakeOpenCode.SESSION)).isFalse();
+  }
+
+  @Test
   void readsAnswersAndCancelsPendingQuestions() {
     var form = harness.forms(opencode.endpoint(), FakeOpenCode.SESSION).getFirst();
     assertThat(form.id()).isEqualTo("frm_age");

@@ -12,13 +12,16 @@ import io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings;
 import io.github.kalpak44.workspacedai.api.settings.SettingsService;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import net.javacrumbs.shedlock.core.LockConfiguration;
+import net.javacrumbs.shedlock.core.LockProvider;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** Every API instance schedules the expiry pass; only the one holding the lock runs it. */
@@ -30,13 +33,11 @@ class SessionExpiryLockTest {
   @Autowired SessionExpiryScheduler cleanup;
   @Autowired WorkspaceRepository workspaces;
   @Autowired SettingsService settings;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired LockProvider locks;
 
   @BeforeEach
   void oneWorkspaceWithExpiryOn() {
     workspaces.deleteAll();
-    // Expired rather than deleted: ShedLock remembers a lock's row exists and only updates it.
-    jdbc.update("update shedlock set lock_until = timezone('utc', now()) - interval '1 second'");
     var workspace =
         workspaces
             .save(new WorkspaceEntity(TestUsers.ADMIN, "Research", "openrouter", "UTC"))
@@ -47,13 +48,18 @@ class SessionExpiryLockTest {
 
   @Test
   void skipsThePassWhileAnotherInstanceHoldsTheLock() {
-    jdbc.update(
-        "insert into shedlock (name, lock_until, locked_at, locked_by)"
-            + " values ('session-expiry', timezone('utc', now()) + interval '1 hour',"
-            + " timezone('utc', now()), 'another-instance')"
-            + " on conflict (name) do update set lock_until = excluded.lock_until,"
-            + " locked_by = excluded.locked_by");
-    cleanup.cleanup();
+    // Taken as another instance would take it, for an hour.
+    var held =
+        locks
+            .lock(
+                new LockConfiguration(
+                    Instant.now(), "session-expiry", Duration.ofHours(1), Duration.ZERO))
+            .orElseThrow();
+    try {
+      cleanup.cleanup();
+    } finally {
+      held.unlock();
+    }
     verify(expiry, never()).candidates(any());
   }
 

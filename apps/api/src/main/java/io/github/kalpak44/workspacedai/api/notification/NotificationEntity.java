@@ -45,6 +45,10 @@ class NotificationEntity {
   @Column(name = "dedupe_key", length = 200)
   private String dedupeKey;
 
+  // Set when it was mailed as well, naming the milestone it was mailed for.
+  @Column(name = "mail_key", length = 200)
+  private String mailKey;
+
   @Column(name = "created_at", nullable = false)
   private Instant createdAt;
 
@@ -54,6 +58,10 @@ class NotificationEntity {
   protected NotificationEntity() {}
 
   NotificationEntity(UUID userId, NotificationMessage message, String dedupeKey) {
+    this(userId, message, dedupeKey, null);
+  }
+
+  NotificationEntity(UUID userId, NotificationMessage message, String dedupeKey, String mailKey) {
     this.id = UUID.randomUUID();
     this.userId = userId;
     this.kind = message.kind();
@@ -66,6 +74,7 @@ class NotificationEntity {
       this.actionPath = message.action().path();
     }
     this.dedupeKey = dedupeKey;
+    this.mailKey = mailKey;
     this.createdAt = Instant.now();
   }
 

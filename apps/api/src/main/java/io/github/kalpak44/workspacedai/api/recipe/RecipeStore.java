@@ -128,7 +128,7 @@ public class RecipeStore {
    * ratings sent at once by the same user cannot both insert and collide on the key.
    */
   public void rate(UUID recipeId, UUID user, int stars) {
-    var recipe = recipes.lockById(recipeId).orElseThrow();
+    var recipe = recipes.findLockedById(recipeId).orElseThrow();
     ratings
         .findById(new RecipeRatingEntity.Key(recipeId, user))
         .ifPresentOrElse(

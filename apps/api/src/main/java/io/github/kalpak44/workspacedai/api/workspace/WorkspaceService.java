@@ -4,6 +4,8 @@ import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.billing.BillingService;
+import io.github.kalpak44.workspacedai.api.billing.InsufficientFundsException;
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
@@ -66,6 +68,9 @@ public class WorkspaceService {
   private final VmPricing pricing;
   private final BillingService billing;
   private final NotificationService notifications;
+  // A demo is no longer kept this close to its end, so a keep never races the reaper.
+  private static final Duration KEEP_CUTOFF = Duration.ofMinutes(1);
+
   private final Duration demoLength;
   private final int demosAtOnce;
 
@@ -136,7 +141,7 @@ public class WorkspaceService {
     validTimeZone(timeZone);
     var size = demo ? cheapestDemoSize() : serverType;
     var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
-    price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     if (demo) {
       requireDemoAvailable(ownerId);
     }
@@ -146,15 +151,24 @@ public class WorkspaceService {
     if (demo) {
       claimDemo(ownerId);
     }
-    var id =
-        transactions
-            .execute(
-                _ ->
-                    repository.saveAndFlush(
-                        new WorkspaceEntity(ownerId, name, provider.id(), timeZone, demo)))
-            .getId();
+    var created =
+        transactions.execute(
+            _ ->
+                repository.saveAndFlush(
+                    new WorkspaceEntity(ownerId, name, provider.id(), timeZone, demo)));
+    var id = created.getId();
     try {
-      return start(id, ownerId, name, provider, apiKey, size, timeZone, price, demo);
+      return start(
+          id,
+          ownerId,
+          name,
+          provider,
+          created.getComputeProvider(),
+          apiKey,
+          size,
+          timeZone,
+          price,
+          demo);
     } catch (RuntimeException e) {
       // The user sees only that it failed; this is where the reason is kept.
       log.warn("workspace {} failed to create", id, e);
@@ -187,13 +201,13 @@ public class WorkspaceService {
     if (demo) {
       requireDemoAvailable(ownerId);
     } else {
-      priceFor(ownerId, size).ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+      priceFor(ownerId, size).ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     }
     var entity =
         transactions.execute(
             _ -> {
               if (demo) {
-                users.lockById(ownerId).orElseThrow();
+                users.findLockedById(ownerId).orElseThrow();
                 var existing =
                     repository.findFirstByOwnerIdAndModelProviderAndDemoTrueAndDraftTrue(
                         ownerId, provider.id());
@@ -228,7 +242,7 @@ public class WorkspaceService {
     var provider = ModelProvider.byId(draft.getModelProvider()).orElseThrow();
     var size = demo ? cheapestDemoSize() : draft.getServerType();
     var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
-    price.ifPresent(monthly -> billing.requireMonthOf(ownerId, monthly));
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     if (demo) {
       requireDemoAvailable(ownerId);
     }
@@ -252,6 +266,7 @@ public class WorkspaceService {
               ownerId,
               draft.getName(),
               provider,
+              draft.getComputeProvider(),
               apiKey,
               size,
               draft.getTimeZone(),
@@ -273,6 +288,7 @@ public class WorkspaceService {
       UUID ownerId,
       String name,
       ModelProvider provider,
+      ComputeProvider compute,
       String apiKey,
       String serverType,
       String timeZone,
@@ -282,6 +298,7 @@ public class WorkspaceService {
         runtime.start(
             id,
             ownerId,
+            compute,
             serverType,
             new WorkspaceEnvironment(
                 Map.of(
@@ -427,7 +444,7 @@ public class WorkspaceService {
    * not stop the row is kept, so the delete can be retried. False when no workspace has that id.
    */
   public boolean delete(UUID id) {
-    return delete(id, Notifications::workspaceDeleted);
+    return delete(id, false, Notifications::workspaceDeleted);
   }
 
   /**
@@ -435,13 +452,13 @@ public class WorkspaceService {
    * could no longer keep it; the owner is told that was why.
    */
   public boolean deleteUnpaid(UUID id) {
-    return delete(id, Notifications::workspaceDeletedUnpaid);
+    return delete(id, true, Notifications::workspaceDeletedUnpaid);
   }
 
   /** Records completion once, using a row lock so concurrent retries cannot duplicate it. */
   @Transactional
   public boolean completeTutorial(UUID id) {
-    var found = repository.lockById(id);
+    var found = repository.findLockedById(id);
     if (found.isEmpty()) return false;
     var workspace = found.get();
     if (!workspace.isDemo()
@@ -459,12 +476,83 @@ public class WorkspaceService {
     return true;
   }
 
-  /** Deletes a demo whose time is up; the owner is told that was why. */
-  public boolean deleteExpiredDemo(UUID id) {
-    return delete(id, Notifications::demoEnded);
+  /**
+   * Turns the owner's running demo into a workspace their balance pays for, on the same VM, so
+   * nothing built in it is lost. The balance must cover the usual period at its plan's price.
+   *
+   * @return empty when no workspace has that id
+   * @throws InsufficientFundsException when the balance does not cover it
+   */
+  public Optional<Workspace> keep(UUID id) {
+    var found = repository.findById(id);
+    if (found.isEmpty()) {
+      return Optional.empty();
+    }
+    var workspace = found.get();
+    requireKeepable(workspace, Instant.now());
+    var ownerId = workspace.getOwnerId();
+    var price = keepPrice(ownerId, workspace.getServerType());
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
+    var kept =
+        transactions.execute(
+            _ -> {
+              var locked = repository.findLockedById(id).orElseThrow();
+              // Checked again under the lock the reaper takes before it deletes an expired demo.
+              requireKeepable(locked, Instant.now());
+              locked.keep();
+              price.ifPresent(monthly -> billing.startCharging(id, ownerId, monthly));
+              notifications.send(ownerId, Notifications.workspaceKept(id, locked.getName()));
+              return locked;
+            });
+    return Optional.of(Workspace.of(kept, statusOf(id)));
   }
 
-  private boolean delete(UUID id, Function<String, NotificationMessage> reason) {
+  // Too close to its end, the reaper may already be deleting it, so it can no longer be kept.
+  private static void requireKeepable(WorkspaceEntity workspace, Instant now) {
+    if (!workspace.isDemo() || workspace.isDraft() || workspace.getExpiresAt() == null) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "only a running demo can be kept");
+    }
+    if (!workspace.getExpiresAt().minus(KEEP_CUTOFF).isAfter(now)) {
+      throw new ResponseStatusException(HttpStatus.CONFLICT, "this demo is about to be deleted");
+    }
+  }
+
+  /** The plan price of the demo's VM, which keeping it charges; none for an admin. */
+  private Optional<BigDecimal> keepPrice(UUID ownerId, String serverType) {
+    // A blank type would be priced as the default plan rather than as the VM it runs on.
+    if (serverType == null || serverType.isBlank()) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "this demo's machine is not known yet; try again shortly");
+    }
+    try {
+      return priceFor(ownerId, serverType);
+    } catch (ServerTypeRejectedException e) {
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "this demo's machine is not sold as a plan right now");
+    }
+  }
+
+  /**
+   * Deletes a demo whose time is up at {@code now}; the owner is told that was why. False when it
+   * is gone, or is no longer an expired demo because its owner kept it.
+   */
+  public boolean deleteExpiredDemo(UUID id, Instant now) {
+    var expired =
+        transactions.execute(
+            _ ->
+                repository
+                    .findLockedById(id)
+                    .filter(WorkspaceEntity::isDemo)
+                    .filter(w -> w.getExpiresAt() != null)
+                    .filter(w -> !w.getExpiresAt().isAfter(now))
+                    .isPresent());
+    return Boolean.TRUE.equals(expired) && delete(id, false, Notifications::demoEnded);
+  }
+
+  /**
+   * @param mail whether the owner is mailed the reason as well as notified
+   */
+  private boolean delete(UUID id, boolean mail, Function<String, NotificationMessage> reason) {
     var owner = repository.findOwnerIdById(id);
     if (owner.isEmpty()) {
       return false;
@@ -480,7 +568,14 @@ public class WorkspaceService {
           repository
               .findById(id)
               .ifPresent(
-                  workspace -> notifications.send(owner.get(), reason.apply(workspace.getName())));
+                  workspace -> {
+                    var note = reason.apply(workspace.getName());
+                    if (mail) {
+                      notifications.sendAndMail(owner.get(), note);
+                    } else {
+                      notifications.send(owner.get(), note);
+                    }
+                  });
           repository.deleteById(id);
           events.publishEvent(new WorkspaceDeleted(id, owner.get()));
         });

@@ -2,7 +2,6 @@ package io.github.kalpak44.workspacedai.api.auth;
 
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
@@ -31,7 +30,7 @@ public class ConnectorAlertScheduler {
       initialDelayString = "${workspaced.openrouter.alert-interval:PT1M}")
   @SchedulerLock(name = "ai-connector-alerts", lockAtMostFor = "PT30M")
   public void run() {
-    for (var row : connectors.findForStatusCheck(PageRequest.of(0, batchSize))) {
+    for (var row : connectors.findForStatusCheck(batchSize)) {
       try {
         alerts.check(row.getId());
       } catch (RuntimeException failure) {

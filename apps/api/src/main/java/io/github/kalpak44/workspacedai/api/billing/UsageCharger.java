@@ -167,6 +167,7 @@ public class UsageCharger {
                       row.pause(now);
                       notifyOwner(
                           row,
+                          true,
                           name ->
                               Notifications.workspacePaused(
                                   name,
@@ -204,6 +205,7 @@ public class UsageCharger {
                   row.resume(now);
                   notifyOwner(
                       row,
+                      false,
                       name -> Notifications.workspaceResumed(workspace, name, billing.amount(fee)));
                   return true;
                 }));
@@ -214,9 +216,19 @@ public class UsageCharger {
     }
   }
 
-  private void notifyOwner(UsageEntity row, Function<String, NotificationMessage> message) {
+  // A pause is mailed as well, since its owner may not open the app before it is deleted.
+  private void notifyOwner(
+      UsageEntity row, boolean mail, Function<String, NotificationMessage> message) {
     workspaceRows
         .findById(row.getWorkspaceId())
-        .ifPresent(w -> notifications.send(row.getUserId(), message.apply(w.getName())));
+        .ifPresent(
+            w -> {
+              var note = message.apply(w.getName());
+              if (mail) {
+                notifications.sendAndMail(row.getUserId(), note);
+              } else {
+                notifications.send(row.getUserId(), note);
+              }
+            });
   }
 }

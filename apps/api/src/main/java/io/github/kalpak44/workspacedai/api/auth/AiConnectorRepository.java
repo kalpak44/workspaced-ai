@@ -1,20 +1,31 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 
 public interface AiConnectorRepository extends JpaRepository<AiConnectorEntity, UUID> {
-  @org.springframework.data.jpa.repository.Lock(jakarta.persistence.LockModeType.PESSIMISTIC_WRITE)
-  @org.springframework.data.jpa.repository.Query(
-      "select c from AiConnectorEntity c where c.id = :id")
-  Optional<AiConnectorEntity> lockById(
-      @org.springframework.data.repository.query.Param("id") UUID id);
 
-  @org.springframework.data.jpa.repository.Query(
-      "select c from AiConnectorEntity c where c.provider = 'openrouter' order by c.statusCheckedAt asc nulls first, c.id")
-  List<AiConnectorEntity> findForStatusCheck(org.springframework.data.domain.Pageable page);
+  /** Held to the end of the transaction. */
+  @Lock(LockModeType.PESSIMISTIC_WRITE)
+  Optional<AiConnectorEntity> findLockedById(UUID id);
+
+  List<AiConnectorEntity> findByProvider(String provider, Pageable page);
+
+  /** OpenRouter connectors checked least recently first, and those never checked before all. */
+  default List<AiConnectorEntity> findForStatusCheck(int limit) {
+    var order =
+        Sort.by(
+            Sort.Order.asc(AiConnectorEntity_.STATUS_CHECKED_AT).nullsFirst(),
+            Sort.Order.asc(AiConnectorEntity_.ID));
+    return findByProvider("openrouter", PageRequest.of(0, limit, order));
+  }
 
   Optional<AiConnectorEntity> findByOwnerIdAndTrialTrue(UUID ownerId);
 

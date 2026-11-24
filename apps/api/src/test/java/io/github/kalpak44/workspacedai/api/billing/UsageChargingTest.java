@@ -2,15 +2,20 @@ package io.github.kalpak44.workspacedai.api.billing;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.atLeast;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.MailPreferences;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
+import io.github.kalpak44.workspacedai.api.mail.Mailer;
+import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.NotificationTone;
@@ -33,6 +38,7 @@ import java.util.Set;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
@@ -43,7 +49,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 import tools.jackson.databind.json.JsonMapper;
 
 /**
- * A user who is not an admin pays for a workspace from the balance: a month of it and of every
+ * A user who is not an admin pays for a workspace from the balance: a week of it and of every
  * workspace they already have up front to create one, then by the hour, until the balance runs out
  * and the workspace goes.
  */
@@ -52,9 +58,10 @@ import tools.jackson.databind.json.JsonMapper;
 class UsageChargingTest {
 
   private static final JsonMapper JSON = JsonMapper.builder().build();
-  // 6.59 a month costs a user 8.90 with the 35% markup, which is 8.90 / 730 an hour.
+  // Starter, the plan behind cx23, costs a user 0.35 a day, which is 0.35 / 24 an hour.
   private static final VmSize CX23 =
       new VmSize(
+          null,
           "cx23",
           true,
           2,
@@ -67,13 +74,15 @@ class UsageChargingTest {
           new BigDecimal("6.59"),
           true,
           true);
-  private static final long HOURLY = 12_192;
-  private static final long MONTH = 8_900_000;
+  private static final long HOURLY = 14_583;
+  private static final long MONTH = 730 * HOURLY;
+  private static final long WEEK = 168 * HOURLY;
   private static final long FEE = 5_000_000;
 
   @LocalServerPort int port;
   @MockitoBean VmManager vmManager;
   @MockitoBean ApiKeyCheck keyCheck;
+  @MockitoBean Mailer mailer;
   @Autowired UserRepository users;
   @Autowired WorkspaceRepository workspaces;
   @Autowired UsageRepository usage;
@@ -87,6 +96,7 @@ class UsageChargingTest {
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
+  private String email;
   private String bearer;
 
   @BeforeEach
@@ -94,31 +104,32 @@ class UsageChargingTest {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     when(keyCheck.accepts(any(), any())).thenReturn(true);
     var name = "payer-" + UUID.randomUUID();
-    user = users.save(TestUsers.newUser(name)).getId();
-    bearer = TestUsers.bearer(users.findByIdpSubject(TestUsers.subject(name)).orElseThrow());
+    email = name + "@example.com";
+    user = users.save(TestUsers.newUser(email)).getId();
+    bearer = TestUsers.bearer(users.findByIdpSubject(TestUsers.subject(email)).orElseThrow());
   }
 
   @Test
-  void refusesWithoutAMonthOfBalanceAndSaysHowMuch() throws Exception {
-    fund(MONTH - 1);
+  void refusesWithoutAWeekOfBalanceAndSaysHowMuch() throws Exception {
+    fund(WEEK - 1);
 
     var refused = create(bearer);
 
     assertThat(refused.statusCode()).isEqualTo(402);
-    assertThat(refused.body()).contains("costs 8.90 EUR a month").contains("add funds");
+    assertThat(refused.body()).contains("costs 2.44 EUR for 7 days").contains("add funds");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).isEmpty();
   }
 
   @Test
-  void refusesUnlessTheBalanceCoversAMonthOfEveryWorkspaceWithTheNewOne() throws Exception {
-    fund(2 * MONTH - 1);
+  void refusesUnlessTheBalanceCoversAWeekOfEveryWorkspaceWithTheNewOne() throws Exception {
+    fund(2 * WEEK - 1);
     created(create(bearer));
 
     var refused = create(bearer);
 
     assertThat(refused.statusCode()).isEqualTo(402);
     assertThat(refused.body())
-        .contains("Your workspaces cost 8.90 EUR a month and this size adds 8.90 EUR");
+        .contains("Your workspaces cost 2.44 EUR for 7 days and this size adds 2.44 EUR");
     assertThat(workspaces.findAllByOwnerIdOrderByCreatedAtAscIdAsc(user)).hasSize(1);
   }
 
@@ -132,21 +143,21 @@ class UsageChargingTest {
 
     var billing = JSON.readTree(billing().body());
 
-    assertThat(billing.get("monthlySpendCents").asLong()).isEqualTo(890);
+    assertThat(billing.get("monthlySpendCents").asLong()).isEqualTo(1065);
     assertThat(billing.get("workspaces"))
         .singleElement()
         .satisfies(
             spend -> {
               assertThat(spend.get("id").asString()).isEqualTo(workspace.toString());
-              assertThat(spend.get("monthlyCents").asLong()).isEqualTo(890);
+              assertThat(spend.get("monthlyCents").asLong()).isEqualTo(1065);
             });
-    // Two hours are paid, which leaves 727 whole hours of the balance.
+    // Two hours are paid, which leaves 728 whole hours of the balance.
     var fundedUntil = Instant.parse(billing.get("fundedUntil").asString());
     assertThat(fundedUntil)
-        .isBetween(now.plus(Duration.ofHours(726)), now.plus(Duration.ofHours(727)));
+        .isBetween(now.plus(Duration.ofHours(727)), now.plus(Duration.ofHours(728)));
     assertThat(billing.get("usage"))
         .singleElement()
-        .satisfies(day -> assertThat(day.get("amountCents").asLong()).isEqualTo(2));
+        .satisfies(day -> assertThat(day.get("amountCents").asLong()).isEqualTo(3));
   }
 
   @Test
@@ -191,6 +202,15 @@ class UsageChargingTest {
     assertThat(notice.title()).endsWith("is paused");
     assertThat(notice.tone()).isEqualTo(NotificationTone.ERROR);
     assertThat(notice.body()).contains("5.00 EUR reactivation fee");
+    assertThat(mails())
+        .singleElement()
+        .satisfies(
+            mail -> {
+              assertThat(mail.to()).extracting(Mailer.Address::email).containsExactly(email);
+              assertThat(mail.subject()).isEqualTo(notice.title());
+              assertThat(mail.text()).contains("5.00 EUR reactivation fee", "[Add funds](");
+              assertThat(mail.html()).contains("cid:logo");
+            });
 
     charger.charge(workspace, Instant.now().plus(Duration.ofHours(5)));
     assertThat(balance()).isEqualTo(HOURLY / 2);
@@ -211,12 +231,14 @@ class UsageChargingTest {
     assertThat(notifications.list(user).getFirst())
         .extracting(Notification::title, Notification::summary)
         .containsExactly("Workspace deleted", name + " was deleted: the balance ran out.");
+    assertThat(mails()).extracting(Mail::subject).endsWith("Workspace deleted");
   }
 
   @Test
   void startsAPausedWorkspaceAgainOnceTheBalancePaysTheFeeAndAnHour() throws Exception {
     var workspace = paused();
-    fund(FEE + HOURLY / 2 - 1);
+    // Paused with half an hour left, so the next hour drove it the other half below zero.
+    fund(FEE + (HOURLY - HOURLY / 2) - 1);
 
     charger.settlePaused(workspace, Instant.now());
     assertThat(usage.findById(workspace).orElseThrow().getPausedAt()).isNotNull();
@@ -231,6 +253,7 @@ class UsageChargingTest {
     assertThat(balance()).isEqualTo(HOURLY);
     assertThat(runtime.statuses(Set.of(workspace))).containsEntry(workspace, WorkspaceStatus.READY);
     assertThat(notifications.list(user).getFirst().title()).endsWith("is running again");
+    assertThat(mails()).extracting(Mail::subject).noneMatch(s -> s.endsWith("running again"));
   }
 
   @Test
@@ -241,6 +264,7 @@ class UsageChargingTest {
 
     assertThat(billing.get("reactivationFeeCents").asLong()).isEqualTo(500);
     assertThat(billing.get("pausedForHours").asLong()).isEqualTo(72);
+    assertThat(billing.get("requiredHours").asLong()).isEqualTo(168);
     assertThat(billing.get("monthlySpendCents").asLong()).isZero();
     assertThat(billing.get("fundedUntil").isNull()).isTrue();
     var deletesAt = Instant.parse(billing.get("workspaces").get(0).get("deletesAt").asString());
@@ -286,9 +310,62 @@ class UsageChargingTest {
         .contains("costs a 5.00 EUR fee")
         .endsWith("deleted about 3 days later.");
 
+    assertThat(mails())
+        .singleElement()
+        .extracting(Mail::subject)
+        .asString()
+        .endsWith("will be paused in about 3 days");
+
     reminder.remind(now.plus(Duration.ofDays(1)));
     assertThat(reminders()).hasSize(2);
     assertThat(workspaces.findById(workspace)).isPresent();
+  }
+
+  @Test
+  void mailsTheBalanceReminderAtAWeekThreeDaysAndOneDayLeftOnly() throws Exception {
+    fund(MONTH);
+    created(create(bearer));
+    var now = Instant.now();
+
+    fund(-(MONTH - HOURLY * 84));
+    reminder.remind(now);
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    assertThat(reminders()).hasSize(2);
+    assertThat(mails()).singleElement().extracting(Mail::subject).asString().endsWith("3 days");
+
+    // Crossing a milestone during the day is told of at once, in the app and by mail.
+    fund(-HOURLY * 24);
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    fund(-HOURLY * 48);
+    reminder.remind(now.plus(Duration.ofDays(1)));
+    reminder.remind(now.plus(Duration.ofDays(2)));
+
+    assertThat(reminders()).hasSize(5);
+    assertThat(mails())
+        .extracting(Mail::subject)
+        .hasSize(3)
+        .last()
+        .asString()
+        .endsWith("will be paused within a day");
+  }
+
+  @Test
+  void keepsBalanceRemindersInTheAppForAUserWhoTurnedTheirMailOff() throws Exception {
+    transactions.executeWithoutResult(
+        _ -> users.findById(user).orElseThrow().setMailPreferences(new MailPreferences(false)));
+    fund(MONTH);
+    var workspace = created(create(bearer));
+    fund(-(MONTH - HOURLY * 12));
+
+    reminder.remind(Instant.now());
+    assertThat(reminders()).singleElement();
+    assertThat(mails()).isEmpty();
+
+    // A pause is mailed regardless.
+    fund(-(balance() - HOURLY / 2));
+    charger.charge(
+        workspace, usage.findById(workspace).orElseThrow().getChargedUntil().plusSeconds(3600));
+    assertThat(mails()).extracting(Mail::subject).singleElement().asString().endsWith("is paused");
   }
 
   @Test
@@ -308,6 +385,24 @@ class UsageChargingTest {
         .extracting(Notification::title)
         .asString()
         .endsWith("will be deleted in about 2 days");
+    assertThat(deletionMails()).isEmpty();
+
+    // Mailed on its last day only, once.
+    transactions.executeWithoutResult(
+        _ ->
+            usage
+                .findById(workspace)
+                .orElseThrow()
+                .pause(now.minus(Duration.ofDays(2)).minus(Duration.ofHours(12))));
+    reminder.remind(now);
+    reminder.remind(now.plus(Duration.ofHours(6)));
+
+    assertThat(deletionReminders()).hasSize(2);
+    assertThat(deletionMails()).singleElement().asString().endsWith("will be deleted within a day");
+  }
+
+  private List<String> deletionMails() {
+    return mails().stream().map(Mail::subject).filter(s -> s.contains("will be deleted")).toList();
   }
 
   @Test
@@ -337,6 +432,15 @@ class UsageChargingTest {
   private List<Notification> reminders() {
     return notifications.list(user).stream()
         .filter(n -> n.title().contains("will be paused"))
+        .toList();
+  }
+
+  // The mail this test's user was sent; a reminder also reaches users earlier tests left behind.
+  private List<Mail> mails() {
+    var mail = ArgumentCaptor.forClass(Mail.class);
+    verify(mailer, atLeast(0)).send(mail.capture());
+    return mail.getAllValues().stream()
+        .filter(m -> m.to().stream().anyMatch(to -> to.email().equals(email)))
         .toList();
   }
 

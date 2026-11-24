@@ -18,9 +18,9 @@ describe("welcome", () => {
   it("opens the tutorial automatically on the first-login callback and drops the parameter", async () => {
     await signedInAt("/?welcome");
     const dialog = await screen.findByRole("region", { name: "Guided tour" });
-    expect(dialog).toHaveTextContent("Guided tour");
-    expect(dialog).toHaveTextContent("Just click Next");
-    expect(dialog).toHaveTextContent("your personal Trial connector covers the AI usage to get started");
+    expect(dialog).toHaveTextContent("Let's build your first website together");
+    expect(dialog).toHaveTextContent("click Next and we do each step with you");
+    expect(dialog).toHaveTextContent("It is free, AI included");
     expect(globalThis.location.pathname + globalThis.location.search).toBe("/");
     await userEvent.setup().click(screen.getByRole("button", { name: "Skip tour" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
@@ -33,7 +33,7 @@ describe("welcome", () => {
 
   it("starts the tour straight from the welcome mail's link", async () => {
     await signedInAt("/?tour");
-    expect(await screen.findByText(/Just click/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Let's build your first website together" })).toBeInTheDocument();
     expect(globalThis.location.search).toBe("");
   });
 
@@ -47,7 +47,7 @@ describe("welcome", () => {
     await signedInAt("/", { workspaces: false });
     const invitation = await screen.findByRole("region", { name: "Guided tour" });
     await userEvent.setup().click(within(invitation).getByRole("button", { name: "Start the tour" }));
-    expect(await screen.findByText(/Just click/)).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Let's build your first website together" })).toBeInTheDocument();
   });
 
   it("welcomes no one who lands on / without the parameter", async () => {

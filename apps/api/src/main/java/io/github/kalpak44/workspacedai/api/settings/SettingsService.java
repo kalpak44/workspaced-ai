@@ -63,7 +63,7 @@ public class SettingsService {
     }
     var workspace =
         workspaces
-            .lockById(workspaceId)
+            .findLockedById(workspaceId)
             .orElseThrow(
                 () ->
                     new ResponseStatusException(

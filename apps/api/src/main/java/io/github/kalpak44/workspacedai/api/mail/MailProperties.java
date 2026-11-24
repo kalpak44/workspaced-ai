@@ -14,6 +14,8 @@ import org.springframework.boot.context.properties.bind.DefaultValue;
  * @param secretKey Mailjet's private API key
  * @param url the API root, replaced only by tests
  * @param timeout how long one call may take
+ * @param background whether a notification is mailed off the thread that sent it, so a job that
+ *     sends many waits on none; tests turn it off to see the mail at once
  */
 @ConfigurationProperties("workspaced.mail")
 public record MailProperties(
@@ -22,7 +24,8 @@ public record MailProperties(
     String apiKey,
     String secretKey,
     @DefaultValue("https://api.mailjet.com") URI url,
-    @DefaultValue("20s") Duration timeout) {
+    @DefaultValue("20s") Duration timeout,
+    @DefaultValue("true") boolean background) {
 
   boolean isConfigured() {
     return apiKey != null && !apiKey.isBlank() && secretKey != null && !secretKey.isBlank();

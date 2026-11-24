@@ -28,6 +28,12 @@ public record Billing(
         long pausedForHours,
     @Schema(
             description =
+                "How long the balance must pay for every workspace, a new one included, before"
+                    + " that one can be created, in hours",
+            example = "168")
+        long requiredHours,
+    @Schema(
+            description =
                 "What the running workspaces cost together over a month, in cents; paused ones"
                     + " cost nothing",
             example = "1780")

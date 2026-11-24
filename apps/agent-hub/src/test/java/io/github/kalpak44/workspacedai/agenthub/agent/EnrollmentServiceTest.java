@@ -11,6 +11,8 @@ import java.time.Instant;
 import java.util.Base64;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DuplicateKeyException;
+import org.springframework.transaction.support.TransactionOperations;
 
 class EnrollmentServiceTest {
 
@@ -24,7 +26,8 @@ class EnrollmentServiceTest {
           Duration.ofSeconds(10),
           Duration.ofSeconds(10),
           64);
-  final EnrollmentService service = new EnrollmentService(store, properties, clock);
+  final EnrollmentService service =
+      new EnrollmentService(store, properties, clock, TransactionOperations.withoutTransaction());
   final TestAgent agent = new TestAgent();
   final UUID vm = UUID.randomUUID();
 
@@ -37,6 +40,27 @@ class EnrollmentServiceTest {
     assertThat(issued.token()).doesNotContain("=");
     assertThat(store.tokens.get(vm).hash()).hasSize(32).isNotEqualTo(issued.token().getBytes());
     assertThat(service.issue(vm).token()).isNotEqualTo(issued.token());
+  }
+
+  @Test
+  void issuesAgainWhenARacingIssueInsertedTheTokenFirst() {
+    var racing =
+        new InMemoryAgentStore() {
+          boolean lost;
+
+          @Override
+          public void saveToken(EnrollmentToken token) {
+            if (!lost) {
+              lost = true;
+              throw new DuplicateKeyException("enrollment_token_pkey");
+            }
+            super.saveToken(token);
+          }
+        };
+    var issued =
+        new EnrollmentService(racing, properties, clock, TransactionOperations.withoutTransaction())
+            .issue(vm);
+    assertThat(racing.tokens.get(vm).expiresAt()).isEqualTo(issued.expiresAt());
   }
 
   @Test

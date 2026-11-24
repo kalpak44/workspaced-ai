@@ -11,6 +11,7 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.firewall.FirewallRequests;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
@@ -30,6 +31,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class WorkspaceRollbackTest {
 
   @MockitoBean WorkspaceRuntime runtime;
+  @MockitoBean FirewallRequests firewallRequests;
   @MockitoBean ApiKeyCheck keyCheck;
   @Autowired WorkspaceService service;
   @Autowired WorkspaceRepository repository;
@@ -50,7 +52,7 @@ class WorkspaceRollbackTest {
   void keepsNoWorkspaceWhoseVmCouldNotStartAndReleasesIt() {
     doThrow(new IllegalStateException("VM manager down"))
         .when(runtime)
-        .start(any(), any(), any(), any());
+        .start(any(), any(), any(), any(), any());
     assertThatThrownBy(
             () ->
                 service.create(
@@ -69,7 +71,7 @@ class WorkspaceRollbackTest {
                     TestUsers.ADMIN, "Nope", ModelProvider.OPENROUTER, "sk-bad", null, "UTC"))
         .isInstanceOf(ApiKeyRejectedException.class);
     assertThat(repository.findAll()).isEmpty();
-    verify(runtime, never()).start(any(), any(), any(), any());
+    verify(runtime, never()).start(any(), any(), any(), any(), any());
   }
 
   @Test

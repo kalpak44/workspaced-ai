@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import io.github.kalpak44.workspacedai.api.auth.Attribution;
 import io.github.kalpak44.workspacedai.api.auth.Role;
 import io.github.kalpak44.workspacedai.api.auth.TokenService;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
@@ -49,7 +50,7 @@ public final class TestUsers {
    * An account as an Auth0 sign-in would make it, not yet saved; its subject is "test|" + email.
    */
   public static UserEntity newUser(String email) {
-    return new UserEntity(subject(email), Role.USER);
+    return new UserEntity(subject(email), Role.USER, Attribution.NONE);
   }
 
   /** The same, with the names its Auth0 profile has. */

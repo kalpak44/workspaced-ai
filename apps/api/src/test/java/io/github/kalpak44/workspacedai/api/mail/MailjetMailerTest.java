@@ -64,7 +64,7 @@ class MailjetMailerTest {
     var url = URI.create("http://localhost:" + server.getAddress().getPort());
     return new MailjetMailer(
         new MailProperties(
-            "workspaced.online", "noreply", apiKey, "private", url, Duration.ofSeconds(5)),
+            "workspaced.online", "noreply", apiKey, "private", url, Duration.ofSeconds(5), false),
         JSON);
   }
 

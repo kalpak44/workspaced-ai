@@ -295,7 +295,8 @@ class HttpHetznerClientTest {
             "ubuntu-24.04",
             List.of(),
             Duration.ofSeconds(5),
-            imageSelector);
+            imageSelector,
+            List.of());
     return new HttpHetznerClient(
         properties, HttpClient.newHttpClient(), JsonMapper.builder().build());
   }

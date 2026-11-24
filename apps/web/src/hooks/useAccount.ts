@@ -3,7 +3,7 @@ import * as api from "../api/accountApi";
 import { UNAUTHORIZED } from "../api/http";
 import { adoptTourProgress, saveTourWith } from "../lib/tour";
 
-export type { Account, Profile, ResendResult } from "../api/accountApi";
+export type { Account, MailPreferences, Profile, ResendResult } from "../api/accountApi";
 
 /**
  * Why no one is signed in, when it is not simply a visitor arriving: the account check could
@@ -83,6 +83,9 @@ export function useAccount() {
     resendVerificationEmail: api.resendVerificationEmail,
     async saveProfile(profile: api.Profile) {
       set({ status: "signed-in", account: await api.updateProfile(profile) });
+    },
+    async saveMailPreferences(preferences: api.MailPreferences) {
+      set({ status: "signed-in", account: await api.updateMailPreferences(preferences) });
     },
     requestPasswordReset: api.requestPasswordReset,
     enrollMfa: api.enrollMfa,

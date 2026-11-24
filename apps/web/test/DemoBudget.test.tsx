@@ -17,7 +17,7 @@ it.each([
   const bar = await screen.findByRole("progressbar", { name: "Trial AI budget remaining" });
   expect(bar).toHaveAttribute("aria-valuenow", String(percentage));
   expect(bar.firstChild).toHaveClass(color as string);
-  expect(screen.getByRole("status", { name: "Demo workspace" })).toHaveTextContent("It is deleted in");
+  expect(screen.getByRole("status", { name: "Demo workspace" })).toHaveTextContent("It ends in");
   expect(bar).toHaveAttribute("aria-valuetext", `${Math.round(Number(remaining) * 100)}% remaining`);
 });
 

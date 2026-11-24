@@ -8,6 +8,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.compute.ProvisionedVm;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmManagerUnavailableException;
@@ -38,6 +39,7 @@ class VmWorkspaceRuntimeTest {
     when(vmManager.create(
             workspace,
             owner,
+            ComputeProvider.HETZNER,
             null,
             "sk-or-v1-test",
             Map.of("OPENROUTER_BASE_URL", "https://or", "OPENCODE_PASSWORD", "p")))
@@ -47,6 +49,7 @@ class VmWorkspaceRuntimeTest {
         runtime.start(
             workspace,
             owner,
+            ComputeProvider.HETZNER,
             null,
             new WorkspaceEnvironment(
                 Map.of("OPENROUTER_BASE_URL", "https://or"),

@@ -75,6 +75,28 @@ class CookieAuthorizationRequestsTest {
         .contains("Max-Age=0");
   }
 
+  @Test
+  void handsTheSignUpSourceToTheCallbacksSuccessHandler() {
+    var repository = new CookieAuthorizationRequests(SECRET, JSON);
+    var attributed =
+        OAuth2AuthorizationRequest.from(authorization)
+            .attributes(a -> a.putAll(Map.of("utm_source", "newsletter", "utm_campaign", "nov")))
+            .build();
+    var response = new MockHttpServletResponse();
+    repository.saveAuthorizationRequest(attributed, new MockHttpServletRequest(), response);
+    var header = response.getHeader("Set-Cookie");
+    var cookie =
+        new Cookie(
+            CookieAuthorizationRequests.COOKIE,
+            header.substring(header.indexOf('=') + 1, header.indexOf(';')));
+    var callback = with(cookie);
+
+    repository.removeAuthorizationRequest(callback, new MockHttpServletResponse());
+
+    assertThat(callback.getAttribute(Attribution.REQUEST_ATTRIBUTE))
+        .isEqualTo(new Attribution("newsletter", "nov"));
+  }
+
   private Cookie saved(CookieAuthorizationRequests repository) {
     var response = new MockHttpServletResponse();
     repository.saveAuthorizationRequest(authorization, new MockHttpServletRequest(), response);

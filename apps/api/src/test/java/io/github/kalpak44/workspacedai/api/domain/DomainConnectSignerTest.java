@@ -11,6 +11,7 @@ import java.security.Signature;
 import java.time.Duration;
 import java.util.Base64;
 import java.util.LinkedHashMap;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 
 class DomainConnectSignerTest {
@@ -37,7 +38,9 @@ class DomainConnectSignerTest {
             "https://app",
             "dns://x",
             Duration.ofSeconds(1),
-            20));
+            20,
+            List.of(),
+            List.of()));
   }
 
   static String pem() {

@@ -3,9 +3,12 @@ import { type SubmitEvent, useEffect, useState } from "react";
 import { usePagination } from "../../hooks/usePagination";
 import { type AutoTopUp, type Billing, type TopUp, useBilling } from "../../hooks/useBilling";
 import { formatMoney } from "../../lib/format";
+import { centsFor, perDay } from "../../lib/pricing";
 import { Button, IconButton, TextField } from "../atoms";
 import { EmptyState, PageHeader, Pagination, SettingsSection, Toast } from "../molecules";
 import { AddFundsDialog } from "../organisms";
+import { keep, takeKeepAfterTopUp } from "../../hooks/useKeepWorkspace";
+import type { Workspace } from "../../hooks/useWorkspaces";
 
 const DATE = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 const DAY = new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeZone: "UTC" });
@@ -36,7 +39,7 @@ function Runway({ billing }: { readonly billing: Billing }) {
   const span = days < 1 ? "less than a day" : `about ${days} ${days === 1 ? "day" : "days"}`;
   return (
     <p className={`text-sm ${days < WARN_DAYS ? "font-medium text-amber-300" : "text-white/70"}`}>
-      Lasts until {FUNDED_UNTIL.format(until)} · {span} at {formatMoney(billing.monthlySpendCents)} a month
+      Lasts until {FUNDED_UNTIL.format(until)} · {span} at {perDay(billing.monthlySpendCents)}
     </p>
   );
 }
@@ -155,8 +158,12 @@ function returnedTopUp(): { readonly id: string; readonly cancelled: boolean } |
   return id ? { id, cancelled: query.get("outcome") === "cancelled" } : null;
 }
 
-/** The account's balance, a way to top it up, and every top-up with its invoice. */
-export function BillingPage() {
+/**
+ * The account's balance, a way to top it up, and every top-up with its invoice.
+ *
+ * @param onKept called once a top-up made to keep the demo has kept it
+ */
+export function BillingPage({ onKept }: { readonly onKept?: (workspace: Workspace) => void }) {
   const { billing, status, pay: startPayment, confirm, openInvoice, saveCard, confirmCard, removeCard, setAutoTopUp } = useBilling();
   const [adding, setAdding] = useState(false);
   const [paying, setPaying] = useState(false);
@@ -199,13 +206,23 @@ export function BillingPage() {
       return;
     }
     // The webhook may not have arrived yet, so the API is asked to read the payment back itself.
+    // Taken whatever the outcome, so a payment that did not clear never keeps the demo later.
+    const keeping = takeKeepAfterTopUp();
     confirm(returned.id).then(
-      (topUp) => setNotice(topUp.status === "PAID"
-        ? `${formatMoney(topUp.amountCents)} was added to your balance.`
-        : "Your payment is being confirmed. The balance updates once it clears."),
+      async (topUp) => {
+        if (topUp.status !== "PAID") {
+          setNotice("Your payment is being confirmed. The balance updates once it clears.");
+          return;
+        }
+        setNotice(`${formatMoney(topUp.amountCents)} was added to your balance.`);
+        if (!keeping) return;
+        const kept = await keep(keeping);
+        if (kept.kind === "kept") onKept?.(kept.workspace);
+        else setNotice(`${formatMoney(topUp.amountCents)} was added to your balance, but your demo could not be kept: ${kept.kind === "short" ? "the balance still does not cover its first week." : kept.reason}`);
+      },
       () => setNotice("Your payment could not be confirmed yet. Check back in a minute."),
     );
-  }, [confirm]);
+  }, [confirm, onKept]);
 
   const pay = (cents: number) => {
     setPaying(true);
@@ -252,7 +269,7 @@ export function BillingPage() {
 
         <FundsWarning billing={billing} onAddFunds={() => { setAdding(true); setNotice(""); }} />
 
-        <SettingsSection title="Spending" description={`Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges. When the balance runs out, workspaces are paused rather than deleted: add funds within ${keptFor(billing.pausedForHours)} and they start again, for a ${formatMoney(billing.reactivationFeeCents)} reactivation fee each.`}>
+        <SettingsSection title="Spending" description={`Each workspace is charged by the hour from your balance while it exists. Deleting one stops its charges. When the balance runs out, workspaces are paused rather than deleted: add funds within ${keptFor(billing.pausedForHours)} and they start again, for a ${formatMoney(billing.reactivationFeeCents)} reactivation fee each. Prices exclude VAT, which is charged on each top-up.`}>
           {billing.workspaces.length === 0 && billing.usage.length === 0 ? (
             <div className="flex flex-col items-center gap-2 rounded-lg border border-dashed border-zinc-300 py-10 text-center text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
               <Receipt aria-hidden className="size-6" />
@@ -266,6 +283,7 @@ export function BillingPage() {
                     <thead className="border-y border-zinc-200 bg-zinc-50 text-xs text-zinc-500 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
                       <tr>
                         <th scope="col" className="px-4 py-2 font-medium sm:pl-6">Workspace</th>
+                        <th scope="col" className="px-4 py-2 text-right font-medium">Per day</th>
                         <th scope="col" className="px-4 py-2 text-right font-medium sm:pr-6">Per month</th>
                       </tr>
                     </thead>
@@ -280,7 +298,8 @@ export function BillingPage() {
                               </span>
                             )}
                           </td>
-                          <td className={`whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6 ${workspace.deletesAt ? "text-zinc-400 line-through dark:text-zinc-500" : ""}`}>{formatMoney(workspace.monthlyCents)}</td>
+                          <td className={`whitespace-nowrap px-4 py-3 text-right font-medium tabular-nums ${workspace.deletesAt ? "text-zinc-400 line-through dark:text-zinc-500" : ""}`}>{formatMoney(centsFor(workspace.monthlyCents, 24))}</td>
+                          <td className={`whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6 ${workspace.deletesAt ? "text-zinc-400 line-through dark:text-zinc-500" : "text-zinc-500 dark:text-zinc-400"}`}>{formatMoney(workspace.monthlyCents)}</td>
                         </tr>
                       ))}
                     </tbody>
@@ -288,6 +307,7 @@ export function BillingPage() {
                       <tfoot className="border-t border-zinc-200 font-medium dark:border-zinc-800">
                         <tr>
                           <th scope="row" className="px-4 py-3 text-left font-medium sm:pl-6">Total</th>
+                          <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">{formatMoney(centsFor(billing.monthlySpendCents, 24))}</td>
                           <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums sm:pr-6">{formatMoney(billing.monthlySpendCents)}</td>
                         </tr>
                       </tfoot>
@@ -379,6 +399,7 @@ export function BillingPage() {
         <AddFundsDialog
           balanceCents={billing.balanceCents}
           vatPercent={billing.vatPercent}
+          first={!billing.topUps.some((topUp) => topUp.status === "PAID")}
           busy={paying}
           onClose={() => setAdding(false)}
           onConfirm={pay}

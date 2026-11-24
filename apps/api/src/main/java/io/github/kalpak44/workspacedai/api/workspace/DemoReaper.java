@@ -55,7 +55,7 @@ public class DemoReaper {
               "demo-ending:" + demo.getId(),
               Notifications.demoEnding(demo.getId(), demo.getName(), minutes, demo.getExpiresAt()));
         } else {
-          service.deleteExpiredDemo(demo.getId());
+          service.deleteExpiredDemo(demo.getId(), now);
         }
       } catch (RuntimeException e) {
         // The others are still reaped; this one is tried again on the next run.

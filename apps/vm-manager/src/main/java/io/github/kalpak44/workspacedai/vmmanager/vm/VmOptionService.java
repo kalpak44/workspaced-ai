@@ -78,7 +78,7 @@ public class VmOptionService {
   }
 
   private List<VmOption> fetch() {
-    var location = hetznerProperties.location();
+    var locations = hetznerProperties.locations();
     var types = hetzner.serverTypes();
     // A stand-in is never smaller than the default, which is the least a workspace runs on.
     var floor =
@@ -87,25 +87,31 @@ public class VmOptionService {
             .mapToDouble(ServerType::memoryGb)
             .findFirst()
             .orElse(0);
-    var ipv4 =
-        hetzner.primaryIpv4Prices().stream()
-            .filter(price -> price.location().equals(location))
-            .findFirst()
-            .orElse(null);
-    if (ipv4 == null) {
-      log.warn("no IPv4 price for {}; prices leave the address out", location);
-    }
+    var ipv4Prices = hetzner.primaryIpv4Prices();
     var options = new ArrayList<VmOption>();
     for (var type : types) {
-      var server = type.deprecated() ? null : type.priceIn(location).orElse(null);
-      if (server == null) {
+      // The first location that has it in stock, or else the first that sells it at all, so a
+      // sold-out type still shows what to wait for.
+      var location =
+          type.deprecated()
+              ? null
+              : locations.stream()
+                  .filter(type::availableIn)
+                  .findFirst()
+                  .or(() -> locations.stream().filter(l -> type.priceIn(l).isPresent()).findFirst())
+                  .orElse(null);
+      if (location == null) {
         continue;
+      }
+      var server = type.priceIn(location).orElseThrow();
+      var ipv4 = ipv4Prices.stream().filter(price -> price.location().equals(location)).findFirst();
+      if (ipv4.isEmpty()) {
+        log.warn("no IPv4 price for {}; prices leave the address out", location);
       }
       var costs = new ArrayList<VmCost>();
       costs.add(new VmCost(SERVER, server.monthlyNet(), server.monthlyGross()));
-      if (ipv4 != null) {
-        costs.add(new VmCost(IPV4, ipv4.monthlyNet(), ipv4.monthlyGross()));
-      }
+      ipv4.ifPresent(
+          price -> costs.add(new VmCost(IPV4, price.monthlyNet(), price.monthlyGross())));
       var net = costs.stream().map(VmCost::monthlyNet).reduce(BigDecimal.ZERO, BigDecimal::add);
       var gross = costs.stream().map(VmCost::monthlyGross).reduce(BigDecimal.ZERO, BigDecimal::add);
       var recommended = properties.recommends(type.name());
@@ -130,7 +136,7 @@ public class VmOptionService {
     }
     for (var name : properties.serverTypes()) {
       if (options.stream().noneMatch(option -> option.serverType().equals(name))) {
-        log.warn("server type {} is not on sale in {}; not offering it", name, location);
+        log.warn("server type {} is not on sale in {}; not offering it", name, locations);
       }
     }
     options.sort(Comparator.comparing(VmOption::monthlyGross).thenComparing(VmOption::serverType));

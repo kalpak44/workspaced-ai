@@ -19,8 +19,15 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpRequest.BodyPublishers;
 import java.net.http.HttpResponse;
 import java.net.http.HttpResponse.BodyHandlers;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
+import java.util.concurrent.locks.LockSupport;
+import net.javacrumbs.shedlock.core.LockConfiguration;
+import net.javacrumbs.shedlock.core.LockProvider;
+import net.javacrumbs.shedlock.core.SimpleLock;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -47,11 +54,13 @@ class SettingsControllerTest {
   @Autowired WorkspaceRepository repository;
   @Autowired SessionService sessions;
   @Autowired ApplicationEventPublisher events;
-  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
+  @Autowired LockProvider locks;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID workspace;
+  // The MCP lock as another instance holds it, until a test releases it.
+  private SimpleLock heldMcpLock;
 
   private static FakeOpenCode start() {
     try {
@@ -302,10 +311,8 @@ class SettingsControllerTest {
         Thread.ofVirtual()
             .start(
                 () -> {
-                  java.util.concurrent.locks.LockSupport.parkNanos(300_000_000L);
-                  jdbc.update(
-                      "update shedlock set lock_until = timezone('utc', now()) where name = ?",
-                      SettingsService.mcpLock(workspace));
+                  LockSupport.parkNanos(300_000_000L);
+                  releaseMcpLock();
                 });
     var started = System.nanoTime();
     var added = send("POST", "/mcp-servers", "{\"name\":\"docs\",\"url\":\"https://mcp.test\"}");
@@ -326,12 +333,23 @@ class SettingsControllerTest {
 
   /** As another API instance would, mid-change: its lease runs an hour from now. */
   private void holdMcpLock() {
-    jdbc.update(
-        "insert into shedlock (name, lock_until, locked_at, locked_by)"
-            + " values (?, timezone('utc', now()) + interval '1 hour', timezone('utc', now()),"
-            + " 'another-instance') on conflict (name) do update set"
-            + " lock_until = excluded.lock_until, locked_by = excluded.locked_by",
-        SettingsService.mcpLock(workspace));
+    heldMcpLock =
+        locks
+            .lock(
+                new LockConfiguration(
+                    Instant.now(),
+                    SettingsService.mcpLock(workspace),
+                    Duration.ofHours(1),
+                    Duration.ZERO))
+            .orElseThrow();
+  }
+
+  @AfterEach
+  void releaseMcpLock() {
+    if (heldMcpLock != null) {
+      heldMcpLock.unlock();
+      heldMcpLock = null;
+    }
   }
 
   private HttpResponse<String> send(String method, String path, String json) throws Exception {

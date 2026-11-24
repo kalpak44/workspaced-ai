@@ -126,7 +126,7 @@ public class VmService {
               new ServerSpec(
                   "vm-" + id,
                   type,
-                  hetznerProperties.location(),
+                  option.location(),
                   hetznerProperties.image(),
                   hetznerProperties.sshKeys(),
                   Map.of(

@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.runtime;
 
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.compute.ProvisionedVm;
 import io.github.kalpak44.workspacedai.api.compute.VmManager;
 import io.github.kalpak44.workspacedai.api.compute.VmManagerFailedException;
@@ -45,12 +46,16 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
    */
   @Override
   public String start(
-      UUID workspaceId, UUID ownerId, String serverType, WorkspaceEnvironment environment) {
+      UUID workspaceId,
+      UUID ownerId,
+      ComputeProvider provider,
+      String serverType,
+      WorkspaceEnvironment environment) {
     var keyVariable = ModelProvider.OPENROUTER.apiKeyVariable();
     var rest = new HashMap<>(environment.config());
     rest.putAll(environment.secrets());
     var key = rest.remove(keyVariable);
-    return vmManager.create(workspaceId, ownerId, serverType, key, rest).serverType();
+    return vmManager.create(workspaceId, ownerId, provider, serverType, key, rest).serverType();
   }
 
   @Override

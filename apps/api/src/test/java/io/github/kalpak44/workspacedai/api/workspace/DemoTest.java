@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.within;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -13,6 +14,7 @@ import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
+import io.github.kalpak44.workspacedai.api.billing.BillingFixtures;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
 import io.github.kalpak44.workspacedai.api.mail.Mailer;
@@ -20,6 +22,7 @@ import io.github.kalpak44.workspacedai.api.notification.Notification;
 import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -31,6 +34,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -38,8 +42,8 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import tools.jackson.databind.json.JsonMapper;
@@ -65,7 +69,9 @@ class DemoTest {
   @Autowired WorkspaceRepository workspaces;
   @Autowired DemoReaper reaper;
   @Autowired NotificationService notifications;
-  @Autowired JdbcTemplate jdbc;
+  @Autowired EntityManager entityManager;
+  @Autowired ApplicationContext context;
+  @Autowired WorkspaceService service;
 
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID user;
@@ -99,13 +105,8 @@ class DemoTest {
     assertThat(workspace.expiresAt())
         .isCloseTo(Instant.now().plus(Duration.ofHours(4)), within(1, ChronoUnit.MINUTES));
     // A size asked for is ignored: pick the cheapest available, even if it is not the default.
-    verify(runtime).start(eq(workspace.id()), eq(user), eq("cx23"), any());
-    assertThat(
-            jdbc.queryForObject(
-                "select count(*) from billing_usage where workspace_id = ?",
-                Long.class,
-                workspace.id()))
-        .isZero();
+    verify(runtime).start(eq(workspace.id()), eq(user), any(), eq("cx23"), any());
+    assertThat(BillingFixtures.usageRows(entityManager, workspace.id())).isZero();
     assertThat(account().get("demoAvailable").asBoolean()).isFalse();
     assertThat(newest().title()).isEqualTo("Your demo workspace is starting");
   }
@@ -165,7 +166,7 @@ class DemoTest {
   void handsTheDemoBackWhenItsVmFailsToStart() throws Exception {
     doThrow(new IllegalStateException("Hetzner is down"))
         .when(runtime)
-        .start(any(), eq(user), any(), any());
+        .start(any(), eq(user), any(), any(), any());
 
     assertThat(send("POST", "/workspaces", demo("sk-or-1")).statusCode()).isEqualTo(500);
 
@@ -188,7 +189,7 @@ class DemoTest {
     var workspace = JSON.readValue(launched.body(), Workspace.class);
     assertThat(workspace.demo()).isTrue();
     assertThat(workspace.expiresAt()).isNotNull();
-    verify(runtime).start(eq(workspace.id()), eq(user), eq("cx33"), any());
+    verify(runtime).start(eq(workspace.id()), eq(user), any(), eq("cx33"), any());
     assertThat(account().get("demoAvailable").asBoolean()).isFalse();
   }
 
@@ -273,6 +274,70 @@ class DemoTest {
   }
 
   @Test
+  void keepsTheDemoOnItsVmAndChargesItsPlanFromThen() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    BillingFixtures.credit(context, user, 1000);
+
+    var kept = send("POST", "/workspaces/" + id + "/keep", null);
+
+    assertThat(kept.statusCode()).isEqualTo(200);
+    var workspace = JSON.readValue(kept.body(), Workspace.class);
+    assertThat(workspace.demo()).isFalse();
+    assertThat(workspace.expiresAt()).isNull();
+    assertThat(BillingFixtures.usageRows(entityManager, id)).isOne();
+    assertThat(newest().title()).isEqualTo("Demo is yours to keep");
+    // Still the same VM: it was neither stopped nor started again.
+    verify(runtime, never()).stop(id);
+    assertThat(send("POST", "/workspaces/" + id + "/keep", null).statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void asksForWhatTheBalanceLacksToKeepIt() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+
+    var refused = send("POST", "/workspaces/" + id + "/keep", null);
+
+    assertThat(refused.statusCode()).isEqualTo(402);
+    // A week of €10.65 a month, rounded up to the cent, and the balance is empty.
+    assertThat(JSON.readTree(refused.body()).get("shortCents").asLong()).isEqualTo(246);
+    assertThat(workspaces.findById(id).orElseThrow().isDemo()).isTrue();
+  }
+
+  @Test
+  void neitherKeepsNorSparesADemoAtItsEnd() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    BillingFixtures.credit(context, user, 1000);
+    var late =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    var row = workspaces.findById(late).orElseThrow();
+    row.setExpiresAt(Instant.now().plusSeconds(30));
+    workspaces.save(row);
+
+    assertThat(send("POST", "/workspaces/" + late + "/keep", null).statusCode()).isEqualTo(409);
+    reaper.reap(Instant.now().plus(Duration.ofMinutes(1)));
+    assertThat(workspaces.existsById(late)).isFalse();
+  }
+
+  @Test
+  void leavesAKeptDemoToItsOwnerEvenOnceItsTimeHasPassed() throws Exception {
+    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    BillingFixtures.credit(context, user, 1000);
+    var id =
+        JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
+    var expiresAt = workspaces.findById(id).orElseThrow().getExpiresAt();
+    assertThat(send("POST", "/workspaces/" + id + "/keep", null).statusCode()).isEqualTo(200);
+
+    // As a reaper that listed it just before the keep would then try to delete it.
+    assertThat(service.deleteExpiredDemo(id, expiresAt.plusSeconds(1))).isFalse();
+    reaper.reap(expiresAt.plusSeconds(1));
+    assertThat(workspaces.existsById(id)).isTrue();
+  }
+
+  @Test
   void leavesWorkspacesThatAreNotDemosAlone() throws Exception {
     var admin = TestUsers.bearer(port);
     var created =
@@ -298,6 +363,7 @@ class DemoTest {
 
   private static VmSize size(String type, boolean isDefault, boolean available, String price) {
     return new VmSize(
+        null,
         type,
         isDefault,
         2,

@@ -135,7 +135,7 @@ public class AiConnectorService {
                         new ResponseStatusException(
                             HttpStatus.SERVICE_UNAVAILABLE,
                             "Trial fallback is unavailable; the connector was not deleted"));
-    users.lockById(CurrentUser.id()).orElseThrow();
+    users.findLockedById(CurrentUser.id()).orElseThrow();
     row = owned(id);
     affected = workspaces.findAllByOwnerIdAndAiConnectorId(CurrentUser.id(), id);
     var changed = new java.util.ArrayList<UUID>();
@@ -183,7 +183,7 @@ public class AiConnectorService {
 
   @Transactional
   public Connector select(UUID workspaceId, UUID connectorId) {
-    users.lockById(CurrentUser.id()).orElseThrow();
+    users.findLockedById(CurrentUser.id()).orElseThrow();
     var workspace = workspace(workspaceId);
     var key = key(connectorId, workspace.getModelProvider());
     validate(provider(workspace.getModelProvider()), key);
@@ -199,7 +199,7 @@ public class AiConnectorService {
 
   @Transactional
   public void remember(UUID workspaceId, UUID connectorId) {
-    users.lockById(CurrentUser.id()).orElseThrow();
+    users.findLockedById(CurrentUser.id()).orElseThrow();
     var workspace = workspace(workspaceId);
     key(connectorId, workspace.getModelProvider());
     workspace.setAiConnectorId(connectorId);

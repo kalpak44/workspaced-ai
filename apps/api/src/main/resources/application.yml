@@ -49,9 +49,33 @@ workspaced:
   # locally, workspace routes answer 503.
   vm-manager:
     url: ${WORKSPACED_VM_MANAGER_URL:}
-  vm-pricing:
-    # Added, in percent, to a VM's cost in the prices users who are not admins see.
-    markup-percent: ${WORKSPACED_VM_MARKUP_PERCENT:35}
+  # What a workspace can be created as: a fixed daily price, before VAT, for one Hetzner server
+  # type each. The first is the default; a fallback plan is offered only while every other plan
+  # is sold out. The site's pricing.html states these prices too.
+  plans:
+    offered:
+      - name: Starter
+        server-type: cx23
+        daily-price: 0.35
+      - name: Builder
+        server-type: cx33
+        daily-price: 0.55
+      - name: Pro
+        server-type: cx43
+        daily-price: 0.95
+      # Hetzner sells the cx line out everywhere for hours at a time; cpx22 is the same size,
+      # usually in stock, and priced to pass the margin check below.
+      - name: Starter Flex
+        server-type: cpx22
+        daily-price: 1.15
+        fallback: true
+    # A plan is withheld unless, after Stripe's fee, its price keeps this margin over its server's
+    # cost with VAT, raised by Hetzner's hourly billing before the monthly cap.
+    hourly-billing-factor: 1.155
+    # Stripe's worst case in Bulgaria: a €5 top-up on a non-EEA card, 3.15% + €0.25 on the amount
+    # with VAT, plus 0.4% for its invoice.
+    stripe-fee-percent: 9.5
+    min-margin-percent: 10
   # Every harness is reached through this service's tunnel to its VM. Left unset, as it is
   # locally, no workspace's harness answers.
   agent-hub:
@@ -61,6 +85,10 @@ workspaced:
   domains:
     private-key: ${WORKSPACED_DOMAIN_CONNECT_PRIVATE_KEY:}
     app-url: ${WORKSPACED_APP_URL:https://ai.workspaced.online}
+    # Provider ids, comma-separated, that have taken our templates live, and zones that get
+    # Domain Connect anywhere for testing. A provider answers for a template before it is live.
+    live-providers: ${WORKSPACED_DOMAIN_CONNECT_PROVIDERS:}
+    test-zones: ${WORKSPACED_DOMAIN_CONNECT_TEST_ZONES:}
   # Mail sent as any address on the domain, through Mailjet. Left unset, as it is locally,
   # sending answers 503.
   mail:
@@ -105,6 +133,9 @@ workspaced:
     # How long a workspace the balance cannot pay for stays paused, its VM shut down, before it
     # is deleted for good.
     paused-for: ${WORKSPACED_BILLING_PAUSED_FOR:3d}
+    # How long the balance must pay for every workspace, a new one included, before that one can
+    # be created. Short, since the balance is prepaid and a shortfall only pauses workspaces.
+    require-covered: ${WORKSPACED_BILLING_REQUIRE_COVERED:7d}
     # How often started hours of workspaces are charged; each is charged once, however late.
     charge-interval: ${WORKSPACED_BILLING_CHARGE_INTERVAL:PT5M}
     stripe:

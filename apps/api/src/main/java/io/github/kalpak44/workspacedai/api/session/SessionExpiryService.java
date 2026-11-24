@@ -63,9 +63,9 @@ public class SessionExpiryService {
     var workspaceId = sessions.findWorkspaceId(id).orElse(null);
     if (workspaceId == null) return false;
     // Serialize policy updates and expiry; an acknowledged disable cannot race a later deletion.
-    var workspace = workspaces.lockById(workspaceId).orElse(null);
+    var workspace = workspaces.findLockedById(workspaceId).orElse(null);
     if (workspace == null || !workspace.isSessionTtlEnabled()) return false;
-    var session = sessions.lockByIdAndWorkspaceId(id, workspaceId).orElse(null);
+    var session = sessions.findLockedByIdAndWorkspaceId(id, workspaceId).orElse(null);
     if (session == null) return false;
     var endpoint = runtime.harness(workspaceId).orElse(null);
     if (endpoint == null) return false;

@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.notification;
 
+import java.time.Instant;
 import java.util.Collection;
 import java.util.List;
 import java.util.UUID;
@@ -13,4 +14,6 @@ interface NotificationRepository extends JpaRepository<NotificationEntity, UUID>
   List<NotificationEntity> findAllByUserIdAndIdIn(UUID userId, Collection<UUID> ids);
 
   boolean existsByUserIdAndDedupeKey(UUID userId, String dedupeKey);
+
+  boolean existsByUserIdAndMailKeyAndCreatedAtAfter(UUID userId, String mailKey, Instant after);
 }

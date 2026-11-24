@@ -11,9 +11,11 @@ import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.OpenRouterKeyMetrics;
+import io.github.kalpak44.workspacedai.api.provider.OpenRouterManagement;
 import io.github.kalpak44.workspacedai.api.provider.OpenRouterMetrics;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceRuntime;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.*;
@@ -23,7 +25,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
-import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -34,8 +35,8 @@ class AiConnectorsTest {
   @Autowired AiConnectorRepository connectors;
   @Autowired WorkspaceRepository workspaces;
   @Autowired UserRepository users;
-  @Autowired JdbcTemplate jdbc;
-  @MockitoBean io.github.kalpak44.workspacedai.api.provider.OpenRouterManagement management;
+  @Autowired EntityManager entityManager;
+  @MockitoBean OpenRouterManagement management;
   @MockitoBean ApiKeyCheck check;
   @MockitoBean OpenRouterMetrics metrics;
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean WorkspaceRuntime runtime;
@@ -62,7 +63,7 @@ class AiConnectorsTest {
     assertThat(created.statusCode()).isEqualTo(201);
     assertThat(created.body()).doesNotContain("private-key", "encryptedKey", "apiKey");
     assertThat(json.readTree(created.body()).get("name").asString()).isEqualTo("Work");
-    var sealed = jdbc.queryForObject("select encrypted_key from ai_connector", String.class);
+    var sealed = connectors.findAll().getFirst().encryptedKey();
     assertThat(sealed).doesNotContain("private-key");
     assertThat(send("GET", "/ai-connectors", null, TestUsers.bearer(port)).body())
         .contains("Work")
@@ -182,13 +183,15 @@ class AiConnectorsTest {
         .isEqualTo(400);
     assertThat(connectors.count()).isZero();
     create();
-    assertThat(
-            jdbc.queryForObject(
-                "select provider_notice_accepted_at is not null from ai_connector", Boolean.class))
-        .isTrue();
-    assertThat(
-            jdbc.queryForObject("select provider_notice_version from ai_connector", String.class))
-        .isEqualTo("ai-provider-notice-v1");
+    var cb = entityManager.getCriteriaBuilder();
+    var query = cb.createTupleQuery();
+    var row = query.from(AiConnectorEntity.class);
+    var acceptedAt = row.get(AiConnectorEntity_.providerNoticeAcceptedAt);
+    var version = row.get(AiConnectorEntity_.providerNoticeVersion);
+    var notice =
+        entityManager.createQuery(query.multiselect(acceptedAt, version)).getSingleResult();
+    assertThat(notice.get(acceptedAt)).isNotNull();
+    assertThat(notice.get(version)).isEqualTo("ai-provider-notice-v1");
   }
 
   @Test

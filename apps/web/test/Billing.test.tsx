@@ -64,10 +64,10 @@ describe("billing", () => {
     render(<App />);
     await screen.findByText("Current balance");
 
-    expect(balance().getByText(/about 25 days at €17\.80 a month/)).toBeInTheDocument();
+    expect(balance().getByText(/about 25 days at €0\.59 a day/)).toBeInTheDocument();
     const workspaces = within(screen.getByRole("table", { name: "Workspaces" }));
-    expect(workspaces.getByRole("row", { name: "research-box €8.90" })).toBeInTheDocument();
-    expect(workspaces.getByRole("row", { name: "Total €17.80" })).toBeInTheDocument();
+    expect(workspaces.getByRole("row", { name: "research-box €0.29 €8.90" })).toBeInTheDocument();
+    expect(workspaces.getByRole("row", { name: "Total €0.59 €17.80" })).toBeInTheDocument();
     const days = within(screen.getByRole("table", { name: "Daily charges" }));
     expect(days.getByRole("row", { name: "Nov 16, 2026 €0.59" })).toBeInTheDocument();
     expect(days.getAllByRole("row")).toHaveLength(3);
@@ -215,6 +215,21 @@ describe("billing", () => {
     await user.click(screen.getByRole("button", { name: "Pay €24.00" }));
     await vi.waitFor(() => expect(open).toHaveBeenCalledWith("https://checkout.stripe.test/t3"));
     expect(api.billing.started).toEqual([2000]);
+  });
+
+  it("offers a first top-up sized to one workspace, and says how long it lasts", async () => {
+    const api = installFakeApi();
+    api.billing.topUps = [];
+    await openBilling();
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Add funds" }));
+
+    const amounts = within(screen.getByRole("radiogroup", { name: "Amount" })).getAllByRole("radio");
+    expect(amounts.map((amount) => amount.textContent)).toEqual(["€10.00", "€25.00", "€50.00"]);
+    expect(screen.getByRole("radio", { name: "€10.00" })).toHaveAttribute("aria-checked", "true");
+    expect(await screen.findByRole("status", { name: "What it buys" })).toHaveTextContent(
+      "€10.00 lasts about 4 weeks of a Starter workspace at €0.35 a day.",
+    );
   });
 
   it("takes no payment when the API does not say what VAT to charge", async () => {

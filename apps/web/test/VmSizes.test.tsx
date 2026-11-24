@@ -28,49 +28,58 @@ async function openSizes(user: User) {
 const warning = () => screen.queryByRole("status", { name: "Sizes unavailable" });
 
 describe("VM sizes", () => {
-  it("shows each size with its price, cheapest first, and starts on the default", async () => {
+  it("shows each plan with its price, in order, and starts on the default", async () => {
     installFakeApi();
     const user = userEvent.setup();
     await openSizes(user);
 
     const radios = screen.getAllByRole("radio");
-    expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cpx22"]);
-    expect(screen.getByRole("radio", { name: /cx23/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /cx23.*2 vCPU · 4 GB RAM · 40 GB disk.*€6\.59.*per month.*€0\.009\/hour/ })).toBeInTheDocument();
-    expect(screen.getByText("Billed by the hour from your balance. Delete the workspace any time and its charges stop.")).toBeInTheDocument();
-    expect(screen.getByRole("radio", { name: /cpx22/ })).toBeEnabled();
+    expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cx43"]);
+    expect(screen.getByRole("radio", { name: /Starter/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Starter.*2 vCPU · 4 GB RAM · 40 GB disk · cx23.*€0\.35 a day.*€10\.65 a month.*€0\.015\/hour/ })).toBeInTheDocument();
+    expect(screen.getByText("Prices exclude VAT, which is added when you top up. Billed by the hour from your balance; delete the workspace any time and its charges stop.")).toBeInTheDocument();
     expect(warning()).not.toBeInTheDocument();
   });
 
-  it("warns while the low-cost sizes are sold out, picks nothing pricier for you, and checks again", async () => {
+  it("shows a sold-out plan but does not let it be chosen", async () => {
     const api = installFakeApi();
-    for (const size of api.state.vmSizes.filter((s) => s.recommended)) size.available = false;
+    api.state.vmSizes[0].available = false;
     const user = userEvent.setup();
     await openSizes(user);
 
-    expect(warning()).toHaveTextContent("The low-cost sizes are unavailable right now.");
-    expect(warning()).not.toHaveTextContent(/hetzner/i);
-    expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled();
-    expect(screen.getByRole("radio", { name: /cx23 · unavailable/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /Starter · unavailable/ })).toBeDisabled();
     expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
-    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    expect(warning()).not.toBeInTheDocument();
+  });
 
-    await user.click(screen.getByRole("radio", { name: /cpx22/ }));
+  it("offers the stand-in plan while every other plan is sold out, and says why", async () => {
+    const api = installFakeApi();
+    for (const size of api.state.vmSizes) size.available = false;
+    api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: true, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 34.979167, monthlyGross: 34.979167, recommended: false, available: true });
+    api.state.vmSizes[0].isDefault = false;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    expect(warning()).toHaveTextContent("Every plan is sold out right now, so Starter Flex is offered in their place");
+    expect(screen.getByRole("radio", { name: /Starter Flex.*cpx22.*€1\.15 a day/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+  });
+
+  it("warns while every plan is sold out, and checks again", async () => {
+    const api = installFakeApi();
+    for (const size of api.state.vmSizes) size.available = false;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    expect(warning()).toHaveTextContent("Every plan is sold out right now.");
+    expect(warning()).not.toHaveTextContent(/hetzner/i);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
     for (const size of api.state.vmSizes) size.available = true;
     await user.click(within(warning()!).getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(warning()).not.toBeInTheDocument());
-    expect(screen.getByRole("radio", { name: /cpx22/ })).toBeChecked();
-  });
-
-  it("leaves out a pricier size while it is unavailable", async () => {
-    const api = installFakeApi();
-    api.state.vmSizes[2].available = false;
-    const user = userEvent.setup();
-    await openSizes(user);
-
-    expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33"]);
+    await user.click(screen.getByRole("radio", { name: /Builder/ }));
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
   it("tells a paying user how long the balance lasts with the size among their workspaces", async () => {
@@ -82,20 +91,21 @@ describe("VM sizes", () => {
     await openSizes(user);
 
     expect(await screen.findByRole("status", { name: "Balance" })).toHaveTextContent(
-      "With it, your workspaces cost €15.49 a month. Your balance of €50.00 lasts about 3.2 months.",
+      "With it, your workspaces cost €0.64 a day (€19.55 a month). Your balance of €50.00 lasts about 2.6 months.",
     );
   });
 
-  it("warns a paying user before the create when the balance is short of a month of everything", async () => {
+  it("warns a paying user before the create when the balance is short of a week of everything", async () => {
     const api = installFakeApi();
     api.auth.account = { ...api.auth.account, role: "USER" };
+    api.billing.balanceCents = 300;
     api.billing.monthlySpendCents = 890;
     const user = userEvent.setup();
     await openSizes(user);
 
     const hint = await screen.findByRole("status", { name: "Balance" });
     expect(hint).toHaveTextContent(
-      "Your balance of €12.40 does not cover a month of your workspaces with this one (€15.49). Add €3.09, then create the workspace.",
+      "Your balance of €3.00 does not cover 7 days of your workspaces with this one (€4.50). Add €1.50, then create the workspace.",
     );
     expect(within(hint).getByRole("link", { name: "Add funds" })).toBeInTheDocument();
   });
@@ -111,17 +121,18 @@ describe("VM sizes", () => {
   it("says when the balance is short and links to adding funds", async () => {
     const api = installFakeApi();
     api.state.noFunds = true;
-    api.billing.balanceCents = 500;
+    api.billing.balanceCents = 100;
     const user = userEvent.setup();
     await openSizes(user);
     await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.type(await screen.findByLabelText("OpenRouter API key"), "sk-or-v1-test");
+    await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
+    await user.type(screen.getByLabelText("OpenRouter API key"), "sk-or-v1-test");
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
 
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
     const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("Your balance of €5.00 does not cover a month of cx23 (€6.59). Add €1.59, then create the workspace.");
+    expect(alert).toHaveTextContent("Your balance of €1.00 does not cover 7 days of Starter (€2.45). Add €1.45, then create the workspace.");
     await user.click(within(alert).getByRole("link", { name: "Add funds" }));
     expect(globalThis.location.pathname).toBe("/billing");
     expect(api.rows.map((w) => w.name)).not.toContain("Research");
@@ -132,13 +143,14 @@ describe("VM sizes", () => {
     const user = userEvent.setup();
     await openSizes(user);
     await user.click(screen.getByRole("button", { name: "Next" }));
-    await user.type(await screen.findByLabelText("OpenRouter API key"), "sk-or-v1-test");
+    await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
+    await user.type(screen.getByLabelText("OpenRouter API key"), "sk-or-v1-test");
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
     api.state.vmSizes[0].available = false;
 
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
-    expect(await screen.findByRole("status", { name: "Sizes unavailable" })).toHaveTextContent("cx23 is no longer available.");
+    expect(await screen.findByRole("status", { name: "Sizes unavailable" })).toHaveTextContent("Starter is no longer available.");
     await waitFor(() => expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled());
     expect(api.rows.map((w) => w.name)).not.toContain("Research");
   });

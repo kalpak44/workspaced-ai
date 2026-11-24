@@ -71,6 +71,9 @@ before relying on newer upstream operations.
 `apiKeyVariable`, the secret the workspace receives the key in. The list is hardcoded — OpenRouter only for now —
 because each provider needs its own key check.
 
+Compute providers are the same kind of list for where a workspace's VM runs, but backend-only: no route lists them,
+and nothing the web app reads names one. See [vm-manager.md](vm-manager.md#compute-providers).
+
 ## Workspaces
 
 A workspace has an `id` (UUID, assigned by the server), a `name` (1–100 characters, surrounding whitespace trimmed),
@@ -88,11 +91,17 @@ the order they were created.
 | `DELETE` | `/api/v1/workspaces/{id}` |                    | `204` once its VM is deleted, or `404`          |
 | `POST`   | `/api/v1/workspaces/{id}/restart` |            | `202` while its harness restarts, `404`, or `409` with no VM or while `PAUSED` |
 
-A size's price is what the VM costs, server and IPv4 address, for an admin, and that plus
-`workspaced.vm-pricing.markup-percent` (`WORKSPACED_VM_MARKUP_PERCENT`, 35 by default) for everyone else.
+`/vm-sizes` lists the plans in `workspaced.plans.offered`: Starter (cx23), Builder (cx33) and Pro (cx43), each a fixed
+daily price before VAT. An admin sees what the plan's VM costs, server and IPv4 address; everyone else sees the plan's
+price. A plan marked `fallback` (Starter Flex, cpx22) is listed, as the default and with `recommended` false, only
+while every other plan is sold out. A plan is listed as unavailable while its server is sold out, and also while its price, less Stripe's fee, no
+longer keeps `min-margin-percent` over the server's cost with VAT times `hourly-billing-factor`; the API logs an error
+then, so a Hetzner price rise withholds the plan instead of selling it at a loss. The site's `pricing.html` states the
+same prices, so a change to one is a change to both.
 
-A user who is not an admin pays for workspaces from their balance. Creating one needs a balance that covers a month of
-the size at their price, or answers `402` saying how much, and nothing is created. From then on each workspace is
+A user who is not an admin pays for workspaces from their balance. Creating one needs a balance that covers
+`WORKSPACED_BILLING_REQUIRE_COVERED` (7 days by default, returned as `requiredHours`) of every workspace they have plus
+the new one at their price, or answers `402` saying how much, and nothing is created. From then on each workspace is
 charged by the hour, its monthly price over 730 hours, for every hour as it starts; the price is fixed when the
 workspace is created. When the balance cannot pay a workspace's next hour, the workspace is deleted. An admin's
 workspaces are never charged.
@@ -480,8 +489,8 @@ with `automatic` set. Every step is keyed by the top-up's id, so one Stripe coul
 is finished on the next run without charging twice. A declined card voids the invoice, marks the top-up `FAILED`,
 turns automatic top-ups off and notifies the user. An admin's card is never charged.
 
-A user who is not an admin needs a balance covering a month of every workspace they have plus the new one to create
-one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even
+A user who is not an admin needs a balance covering `WORKSPACED_BILLING_REQUIRE_COVERED` (7 days) of every workspace
+they have plus the new one to create one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even
 those made before the user became one. When the balance cannot pay a workspace's next hour, its VM is shut down and it
 is `PAUSED`: it is not charged, nor can it be restarted. Once the balance pays `WORKSPACED_BILLING_REACTIVATION_FEE`
 (5.00 by default, returned as `reactivationFeeCents`) and an hour, it starts again within the charge interval, the fee is

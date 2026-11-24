@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.workspace;
 
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -30,6 +31,10 @@ public class WorkspaceEntity {
   // An id from ModelProvider; stored as text so a provider can be added without a migration.
   @Column(name = "model_provider", nullable = false, length = 50)
   private String modelProvider;
+
+  // An id from ComputeProvider, fixed at creation: a VM cannot move between clouds.
+  @Column(name = "compute_provider", nullable = false, updatable = false, length = 50)
+  private String computeProvider = ComputeProvider.DEFAULT.id();
 
   @Column(name = "ai_connector_id")
   private UUID aiConnectorId;
@@ -73,8 +78,8 @@ public class WorkspaceEntity {
   @Column(nullable = false)
   private boolean draft;
 
-  // An account's free demo: never charged, and deleted at expiresAt.
-  @Column(nullable = false, updatable = false)
+  // An account's free demo until its owner keeps it: never charged, and deleted at expiresAt.
+  @Column(nullable = false)
   private boolean demo;
 
   // Set when a demo's VM starts; null for every other workspace.
@@ -91,6 +96,12 @@ public class WorkspaceEntity {
 
   public void setExpiresAt(Instant expiresAt) {
     this.expiresAt = expiresAt;
+  }
+
+  /** Turns the demo into a workspace its owner pays for, on the same VM. */
+  void keep() {
+    demo = false;
+    expiresAt = null;
   }
 
   public boolean isDraft() {
@@ -191,6 +202,10 @@ public class WorkspaceEntity {
 
   public String getModelProvider() {
     return modelProvider;
+  }
+
+  public ComputeProvider getComputeProvider() {
+    return ComputeProvider.byId(computeProvider).orElseThrow();
   }
 
   public String getModel() {

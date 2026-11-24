@@ -3,6 +3,8 @@ package io.github.kalpak44.workspacedai.api.auth;
 import jakarta.servlet.http.HttpServletRequest;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
+import java.util.Map;
+import java.util.stream.Collectors;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -93,10 +95,25 @@ class Auth0SignIn {
     }
     var mfa = "enroll".equals(request.getParameter("mfa"));
     var signUp = request.getParameter("signup") != null;
-    if (!mfa && !signUp) {
+    var attribution =
+        Attribution.of(
+            request.getParameterMap().entrySet().stream()
+                .filter(e -> e.getValue().length > 0)
+                .collect(Collectors.toMap(Map.Entry::getKey, e -> e.getValue()[0])));
+    if (!mfa && !signUp && attribution.isEmpty()) {
       return authorization;
     }
     return OAuth2AuthorizationRequest.from(authorization)
+        // Kept in the encrypted sign-in cookie, never sent to Auth0.
+        .attributes(
+            attributes -> {
+              if (attribution.source() != null) {
+                attributes.put(Attribution.SOURCE_PARAM, attribution.source());
+              }
+              if (attribution.campaign() != null) {
+                attributes.put(Attribution.CAMPAIGN_PARAM, attribution.campaign());
+              }
+            })
         .additionalParameters(
             parameters -> {
               if (mfa) {
@@ -121,7 +138,7 @@ class Auth0SignIn {
       var user = (OidcUser) authentication.getPrincipal();
       AuthService.SignIn signIn;
       try {
-        signIn = signIn(auth, user);
+        signIn = signIn(auth, user, request);
       } catch (AuthService.UnverifiedEmailException _) {
         var proof = auth.verificationToken(user.getSubject());
         response.addHeader(
@@ -143,7 +160,8 @@ class Auth0SignIn {
    * A first sign-in finished twice at once, in two tabs, makes the account twice; the loser finds
    * the winner's account on a second try.
    */
-  private static AuthService.SignIn signIn(AuthService auth, OidcUser user) {
+  private static AuthService.SignIn signIn(
+      AuthService auth, OidcUser user, HttpServletRequest request) {
     var profile =
         new Auth0Users.Profile(
             text(user.getEmail()),
@@ -152,10 +170,17 @@ class Auth0SignIn {
             text(user.getPicture()));
     var verified = Boolean.TRUE.equals(user.getEmailVerified());
     try {
-      return auth.signIn(user.getSubject(), profile, verified, role(user));
+      return auth.signIn(user.getSubject(), profile, verified, role(user), attribution(request));
     } catch (DataIntegrityViolationException _) {
-      return auth.signIn(user.getSubject(), profile, verified, role(user));
+      return auth.signIn(user.getSubject(), profile, verified, role(user), attribution(request));
     }
+  }
+
+  /** What the sign-in cookie carried from the link that started this sign-in. */
+  private static Attribution attribution(HttpServletRequest request) {
+    return request.getAttribute(Attribution.REQUEST_ATTRIBUTE) instanceof Attribution kept
+        ? kept
+        : Attribution.NONE;
   }
 
   private static String text(String value) {

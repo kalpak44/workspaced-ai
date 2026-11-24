@@ -64,6 +64,11 @@ final class CookieAuthorizationRequests
       HttpServletRequest request, HttpServletResponse response) {
     var authorization = loadAuthorizationRequest(request);
     response.addHeader(HttpHeaders.SET_COOKIE, cookie("", Duration.ZERO));
+    // The success handler that makes the account sees the request, not the authorization.
+    if (authorization != null) {
+      request.setAttribute(
+          Attribution.REQUEST_ATTRIBUTE, Attribution.of(authorization.getAttributes()));
+    }
     return authorization;
   }
 

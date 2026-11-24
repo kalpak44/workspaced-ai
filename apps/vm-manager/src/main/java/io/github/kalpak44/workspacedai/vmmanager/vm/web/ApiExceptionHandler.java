@@ -3,6 +3,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHubException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.vault.VaultException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.ComputeProviderNotOfferedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.FirewallMissingException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.FirewallRuleRefusedException;
 import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessNotConfiguredException;
@@ -56,6 +57,11 @@ public class ApiExceptionHandler {
 
   @ExceptionHandler(ServerTypeNotOfferedException.class)
   ProblemDetail notOffered(ServerTypeNotOfferedException e) {
+    return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
+  }
+
+  @ExceptionHandler(ComputeProviderNotOfferedException.class)
+  ProblemDetail providerNotOffered(ComputeProviderNotOfferedException e) {
     return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST, e.getMessage());
   }
 

@@ -18,8 +18,9 @@ import tools.jackson.databind.json.JsonMapper;
 /**
  * Finds out whether a zone's DNS provider applies one of our templates itself: its _domainconnect
  * record names the provider's API, whose settings name where the user approves a template, and the
- * provider answers 2xx for a template it has. Anything else, a failure included, means the user
- * adds the records by hand, so this never fails an attach.
+ * provider answers 2xx for a template it has. That answer comes while a template is still limited
+ * to our test account too, so only a provider we list as live counts. Anything else, a failure
+ * included, means the user adds the records by hand, so this never fails an attach.
  */
 @Component
 public class DomainConnect {
@@ -74,6 +75,12 @@ public class DomainConnect {
               get(URI.create(
                       scheme + "://" + records.getFirst().strip() + "/v2/" + zone + "/settings"))
                   .orElse("{}"));
+      var providerId = settings.path("providerId").asString("");
+      if (!properties.liveProviders().contains(providerId)
+          && !properties.testZones().contains(zone)) {
+        log.info("{} is at {}, which has not taken our templates live", zone, providerId);
+        return Optional.empty();
+      }
       var syncUrl = settings.path("urlSyncUX").asString("");
       var apiUrl = settings.path("urlAPI").asString("");
       if (!syncUrl.startsWith("https://") || apiUrl.isBlank()) {

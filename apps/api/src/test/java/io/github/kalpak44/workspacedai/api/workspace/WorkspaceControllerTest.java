@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
 import io.github.kalpak44.workspacedai.api.provider.ProviderUnreachableException;
@@ -118,7 +119,7 @@ class WorkspaceControllerTest {
     assertThat(draft.status()).isEqualTo(WorkspaceStatus.DRAFT);
     assertThat(draft.serverType()).isEqualTo("cx23");
     verify(keyCheck, never()).accepts(any(), any());
-    verify(runtime, never()).start(any(), any(), any(), any());
+    verify(runtime, never()).start(any(), any(), any(), any(), any());
     assertThat(list()).isEmpty();
   }
 
@@ -132,7 +133,8 @@ class WorkspaceControllerTest {
     assertThat(JSON.readValue(launched.body(), Workspace.class).id()).isEqualTo(id);
     verify(keyCheck).accepts(ModelProvider.OPENROUTER, "sk-or-2");
     var environment = ArgumentCaptor.forClass(WorkspaceEnvironment.class);
-    verify(runtime).start(eq(id), any(), eq("cx23"), environment.capture());
+    verify(runtime)
+        .start(eq(id), any(), eq(ComputeProvider.HETZNER), eq("cx23"), environment.capture());
     assertThat(environment.getValue().secrets()).containsEntry("OPENROUTER_API_KEY", "sk-or-2");
     assertThat(list()).extracting(Workspace::id).containsExactly(id);
     // A second launch would start a second VM for the same workspace.
@@ -233,7 +235,7 @@ class WorkspaceControllerTest {
 
     assertThat(workspace.timeZone()).isEqualTo("Europe/Sofia");
     var environment = ArgumentCaptor.forClass(WorkspaceEnvironment.class);
-    verify(runtime).start(eq(workspace.id()), any(), any(), environment.capture());
+    verify(runtime).start(eq(workspace.id()), any(), any(), any(), environment.capture());
     assertThat(environment.getValue().config()).containsEntry("USER_TIMEZONE", "Europe/Sofia");
     // One with none is in UTC rather than in no zone at all.
     var elsewhere = create("Elsewhere");
