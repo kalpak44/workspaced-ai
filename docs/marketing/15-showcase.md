@@ -9,14 +9,14 @@ An opt-in gallery on `workspaced.online/showcase` of sites and apps users built 
 - **Opt-in per workspace:** a "Show in the showcase" toggle with a title, one sentence and a screenshot, in the
   workspace's domains panel (`DomainsPanel`). Nothing is listed without it.
 - **Admin approval** before anything appears, since the content is the user's.
-- **Built at deploy time** into static HTML like [recipe-pages.md](recipe-pages.md), from `GET /showcase` (approved
+- **Built at deploy time** into static HTML like [11-recipe-pages.md](11-recipe-pages.md), from `GET /showcase` (approved
   entries only), so the site stays static and indexable.
 - **Credit:** each entry can name the recipe it started from, linking to that recipe's page.
 
 ## "Built with workspaced"
 
 An optional small footer link users can add to what they publish, suggested by the agent when it sets up a site, never
-added without asking. With a partner code it earns the user commission under [partners.md](partners.md).
+added without asking. With a partner code it earns the user commission under [14-partners.md](14-partners.md).
 
 ## Social proof on the site
 

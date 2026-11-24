@@ -13,9 +13,13 @@ Nothing is paid for a sign-up, the demo or the trial key, so a fake account that
 
 | Period | Paid out | Real cost | Worst case | Typical |
 |---|---|---|---|---|
-| Both rewards running | 20% | €0.148 | +€0.043 | +€0.22 |
-| Friend's bonus used up | 10% | €0.074 | +€0.117 | +€0.27 |
-| After 12 months | 0 | 0 | +€0.191 | +€0.35 |
+| Both rewards running | 20% | €0.113 to €0.158 | −€0.017 | +€0.29 |
+| Friend's bonus used up | 10% | €0.056 to €0.079 | +€0.062 | +€0.35 |
+| After 12 months | 0 | 0 | +€0.141 | +€0.41 |
+
+**The worst case loses money while Hetzner charges this account VAT.** Do
+[02-vat-and-margin.md](02-vat-and-margin.md) first (worst case +€0.14 with both rewards running), or lower both rewards
+to 7.5%.
 
 See [economics.md](economics.md) for the assumptions and the startup guard.
 
@@ -36,7 +40,7 @@ See [economics.md](economics.md) for the assumptions and the startup guard.
   - `referral` (referee_user_id PK, referrer_user_id, referrer_type `USER` or `PARTNER`, campaign, signed_up_at,
     first_paid_at, referrer_until, referee_until, earned_micros, bonus_micros)
 
-  `referrer_type` and `campaign` are there from the start so [partners.md](partners.md) reuses the table.
+  `referrer_type` and `campaign` are there from the start so [14-partners.md](14-partners.md) reuses the table.
 - **Ledger kinds:** `REFERRAL_REWARD`, `REFERRAL_BONUS`, `REFERRAL_REVERSAL`. `Ledger.post` with the top-up id as the
   reference already makes a retried webhook pay once.
 - **`ReferralService.onPaidTopUp(user, topUp)`**, called where `BillingService` credits a paid top-up, in the same
@@ -77,5 +81,4 @@ like `mail`, built from the existing `card`, `CardHeader`, `SettingRow` and `Met
 
 ## Open questions
 
-- Is Hetzner's VAT reclaimed? If not, the worst case above is thin; dropping the friend's bonus to 5% widens it.
 - How bonus credit is treated for VAT; confirm with an accountant.

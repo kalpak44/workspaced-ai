@@ -1,42 +1,46 @@
 # Marketing
 
-Ideas for growing workspaced, each with how it would be built here. Nothing in this folder is implemented yet; each
-file is a plan. Every idea that gives away money or credit is bounded by [economics.md](economics.md), which shows how
-much each paid euro leaves after costs and the startup check that keeps every program inside that.
+Ideas for growing workspaced, each with how it would be built here, numbered in the order to do them. Every idea that
+gives away money or credit is bounded by [economics.md](economics.md), which shows how much each paid euro leaves after
+costs and the guard that keeps every program inside that.
 
-## Ideas
+## Done
 
-| File | What | Effort | Cost to run |
-|---|---|---|---|
-| [billing.md](billing.md) | Billing that feels fair: VAT shown once, daily prices, smaller first top-up, hibernate | Small to large | Neutral or positive |
-| [analytics.md](analytics.md) | Measure the funnel from visit to paying user | Small | None (self-hosted) |
-| [tour.md](tour.md) | Record where users stop in the guided tour, bring them back, end it on a next step | Small | None |
-| [demo-conversion.md](demo-conversion.md) | Turn the free demo into a paid workspace without losing work | Medium | Lowers cost per user |
-| [top-up-bonuses.md](top-up-bonuses.md) | Bonus credit for large top-ups and automatic top-ups | Small | Pays for itself |
-| [referrals.md](referrals.md) | Users invite friends and earn balance credit | Medium | 20% credit, ~15% real cost |
-| [partners.md](partners.md) | Creators earn cash commission on customers they bring | Large | 10% cash of paid spend |
-| [recipe-pages.md](recipe-pages.md) | A search landing page per public recipe | Medium | None |
-| [open-in-button.md](open-in-button.md) | "Open in workspaced" button for GitHub READMEs | Medium | Demo cost per click-through |
-| [listings-and-launches.md](listings-and-launches.md) | OpenRouter rankings, directories, Show HN, Product Hunt | Small | Time only |
-| [comparison-pages.md](comparison-pages.md) | Transparent pricing and comparisons with alternatives | Small | None |
-| [lifecycle-email.md](lifecycle-email.md) | Onboarding and win-back email | Small | Mailjet volume |
-| [showcase.md](showcase.md) | Opt-in gallery of what users built, social proof | Medium | None |
+| What | Where | Commit |
+|---|---|---|
+| Prices say they exclude VAT, daily price first, €10 first top-up, a week of balance to create | [06-billing.md](06-billing.md) | `220271f` |
+| Fixed-price plans (Starter, Builder, Pro) with a margin guard, replacing the markup | [06-billing.md](06-billing.md) | `0d46950` |
+| Pricing page at `/pricing` | [09-comparison-pages.md](09-comparison-pages.md) | `0d46950` |
+| Plans fall back to another Hetzner location when sold out | [01-plan-availability.md](01-plan-availability.md) | not yet deployed |
 
-## Order
+## Next, in order
 
-1. **Analytics** and the **tour** step history first: without them nothing below can be measured or tuned.
-2. **Billing** label and top-up fixes, **demo conversion** and **top-up bonuses**: quick, and all raise revenue from
-   users already signing up.
-3. **Referrals**, then **partners**, which reuses the same attribution.
-4. **Recipe pages** and the **README button** for long-term, compounding traffic.
-5. The rest whenever there is time; listings and launches are best done once demo conversion works, so the spike of
-   visitors is not wasted.
+| # | File | What | Why here | Effort |
+|---|---|---|---|---|
+| 1 | [01-plan-availability.md](01-plan-availability.md) | Keep the plans in stock, alert when they are not | Nothing below matters if no workspace can be created | Small |
+| 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Add the VAT ID to Hetzner | No code, and it decides whether every reward program can pay out | None |
+| 3 | [03-analytics.md](03-analytics.md) | Measure the funnel from visit to paying user | Everything after this is a guess until it exists | Small |
+| 4 | [04-demo-conversion.md](04-demo-conversion.md) | Keep the demo's work by paying | The demo is the most expensive acquisition, and its work is deleted today | Medium |
+| 5 | [05-tour.md](05-tour.md) | Record where users stop, end on "keep this workspace" | Same moment as 4; the step history is half of the measuring | Small |
+| 6 | [06-billing.md](06-billing.md) | Paused days instead of the €5 fee, spending this month, then hibernate | Cheap trust fixes; hibernate is the large one and comes last | Small, then large |
+| 7 | [07-lifecycle-email.md](07-lifecycle-email.md) | Onboarding and win-back email | Brings back the users 4 to 6 lose, at Mailjet volume only | Small |
+| 8 | [08-top-up-bonuses.md](08-top-up-bonuses.md) | Bonus credit on large and automatic top-ups | Pays for itself in Stripe fees once users are paying | Small |
+| 9 | [09-comparison-pages.md](09-comparison-pages.md) | Honest comparisons with Codespaces, Replit and a VPS | Search traffic from people already choosing a tool | Small |
+| 10 | [10-listings-and-launches.md](10-listings-and-launches.md) | Directories, Show HN, Product Hunt | A one-off spike, so only after 4 works and 3 can attribute it | Time only |
+| 11 | [11-recipe-pages.md](11-recipe-pages.md) | A search landing page per public recipe | Compounding traffic, slow to pay off | Medium |
+| 12 | [12-open-in-button.md](12-open-in-button.md) | "Open in workspaced" for GitHub READMEs | Compounding traffic; costs a demo per click-through | Medium |
+| 13 | [13-referrals.md](13-referrals.md) | Users invite friends for credit | Loses money in the worst case until 2 is done, and needs 3's attribution | Medium |
+| 14 | [14-partners.md](14-partners.md) | Creators earn cash commission | Reuses 13's attribution; worth it only with traffic to share | Large |
+| 15 | [15-showcase.md](15-showcase.md) | Opt-in gallery of what users built | Needs users with published work first | Medium |
+
+A file's number is its place in this list. When the order changes, rename the files so it stays true; when an item
+ships, move it to **Done** above and leave the remaining work in its file.
 
 ## Rules that apply to every idea
 
-- **Credit, not cash, unless the receiver is a vetted partner.** Credit is spent at marked-up prices, so a euro of it
-  costs about €0.74; a euro of cash costs a euro plus fees.
+- **Credit, not cash, unless the receiver is a vetted partner.** Credit is spent on plans, so a euro of it costs the
+  plan's cost share, €0.56 to €0.79; a euro of cash costs a euro plus fees.
 - **Only Stripe-paid money earns rewards.** Bonus credit, referral credit and demo time never generate further rewards.
 - **Admins are excluded from every program.** They pay cost price, so they bring no margin to share.
 - **Product behaviour changes go into `apps/site/src/terms.html` and `privacy.html`**, since those pages must describe
-  how the product actually behaves.
+  how the product actually behaves, and price changes into `pricing.html`.

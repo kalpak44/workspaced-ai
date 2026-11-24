@@ -9,15 +9,16 @@ users already have mail preferences (`MailPreferences`), so this is mostly conte
 |---|---|
 | Sign-up | Welcome (exists) |
 | Day 1, no demo started | "Start your free demo" with three recipes to try |
-| Demo ended, not kept | "Your demo built X — pick up where you left off" (see [demo-conversion.md](demo-conversion.md)) |
+| Demo ended, not kept | "Your demo built X — pick up where you left off" (see [04-demo-conversion.md](04-demo-conversion.md)) |
 | Day 3, workspace running | "Put it on your own domain" (Domain Connect) |
-| Day 7, paying | "Invite a friend, both get credit" (see [referrals.md](referrals.md)) |
+| Day 7, paying | "Invite a friend, both get credit" (see [13-referrals.md](13-referrals.md)) |
 
 ## Win-back
 
 - **Paused for lack of funds:** a workspace is paused for 3 days before deletion
-  (`workspaced.billing.paused-for`). Balance reminders already go out before that. Add one email on pause offering to
-  **waive the €5 reactivation fee once** if they top up within the 3 days. Losing the user costs more than the fee.
+  (`workspaced.billing.paused-for`). Balance reminders already go out before that. Add one email on pause saying what
+  starting it again costs; once [06-billing.md](06-billing.md) replaces the €5 fee with the paused days, that is a few
+  cents rather than a penalty.
 - **Inactive 30 days with a positive balance:** "You still have €X — here's what's new."
 
 ## Implementation
@@ -28,7 +29,6 @@ users already have mail preferences (`MailPreferences`), so this is mostly conte
   measured.
 - **Preference:** a "Tips and offers" toggle in General settings → Email, next to "Balance reminders". The onboarding
   and win-back emails send only when it is on, because offers need consent; account emails do not.
-- **Waiver:** a `REACTIVATION_WAIVER` ledger entry, once per account.
 - Templates use the existing mail layout.
 
 ## Measure

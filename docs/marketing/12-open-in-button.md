@@ -23,7 +23,7 @@ cloned and the agent ready to run it. It spreads through other people's projects
   later GitLab), validated strictly, since it ends up in a command on the VM. The clone runs as the workspace user after
   the harness starts.
 - **Badge:** `apps/site/src/badge.svg`, plus a page `/open-in-workspaced` with copy-paste snippets for Markdown and HTML.
-- **Partners:** a maintainer who adds `&ref=<code>` earns commission under [partners.md](partners.md). That gives them a
+- **Partners:** a maintainer who adds `&ref=<code>` earns commission under [14-partners.md](14-partners.md). That gives them a
   reason to add the badge.
 
 ## Cost and abuse

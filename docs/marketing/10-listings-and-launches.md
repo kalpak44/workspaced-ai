@@ -1,6 +1,6 @@
 # Listings and launches
 
-Free places to be listed, and one-off launches. Do the launches after [demo-conversion.md](demo-conversion.md) works, so
+Free places to be listed, and one-off launches. Do the launches after [04-demo-conversion.md](04-demo-conversion.md) works, so
 a spike of visitors is not wasted on a demo that ends and deletes their work.
 
 ## OpenRouter app rankings
@@ -20,8 +20,8 @@ Keep one short description, one logo and one screenshot in `docs/marketing/asset
 
 ## Launches
 
-- **Show HN:** lead with how it works — per-user Hetzner VMs, rootless Docker for the agent, priced at Hetzner plus a
-  stated markup. Hacker News rewards technical substance and penalises marketing language.
+- **Show HN:** lead with how it works — per-user Hetzner VMs, rootless Docker for the agent, fixed daily plan
+  prices with the margin guard. Hacker News rewards technical substance and penalises marketing language.
 - **Product Hunt:** prepare a short video, a launch-day promo code (reuse the referral code machinery, bounded by the
   guard in [economics.md](economics.md)), and be present all day to answer comments.
 - **Indie Hackers:** a build-in-public post with real numbers.
@@ -33,5 +33,5 @@ per-user VMs"), not ads; mention the product once, at the end.
 
 ## Measure
 
-Tag every link with `utm_source` and `utm_campaign` so [analytics.md](analytics.md) shows which launch brought payers,
+Tag every link with `utm_source` and `utm_campaign` so [03-analytics.md](03-analytics.md) shows which launch brought payers,
 not only visitors.

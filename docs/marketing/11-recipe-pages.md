@@ -26,10 +26,10 @@ A static page per public recipe on `workspaced.online`, for example `/recipes/wo
 
 ## Recipe authors
 
-Recipe authors can join [partners.md](partners.md): a recipe started from its own page, or shared by its author, carries
+Recipe authors can join [14-partners.md](14-partners.md): a recipe started from its own page, or shared by its author, carries
 the author's partner code. Authors then promote their own recipes.
 
 ## Measure
 
 Search impressions and clicks per page (Google Search Console), and demos started per recipe page on the funnel from
-[analytics.md](analytics.md).
+[03-analytics.md](03-analytics.md).

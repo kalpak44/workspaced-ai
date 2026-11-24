@@ -1,13 +1,13 @@
 # Partners
 
 Creators — YouTubers, bloggers, course authors, recipe authors — earn real money when people they bring pay for
-workspaces. It is a second tier on the attribution built for [referrals.md](referrals.md).
+workspaces. It is a second tier on the attribution built for [13-referrals.md](13-referrals.md).
 
 ## How it differs from referrals
 
 | | Referral (credit) | Partner (cash) |
 |---|---|---|
-| Real cost of €1 paid out | €0.74 | €1.00 plus payout fees |
+| Real cost of €1 paid out | €0.56 to €0.79 | €1.00 plus payout fees |
 | Who can join | Every user | Approved applicants |
 | Legal side | Terms update | Identity checks, tax, invoices, ad disclosure |
 
@@ -19,13 +19,13 @@ never earns cash.
 
 | | Worst case | Typical |
 |---|---|---|
-| Margin on €1 spent | €0.191 | €0.346 |
+| Margin on €1 spent | €0.141 | €0.406 |
 | Commission | −€0.100 | −€0.100 |
 | Payout fees at a €50 minimum payout | ~−€0.005 | ~−€0.005 |
-| **Platform keeps** | **+€0.086** | **+€0.24** |
+| **Platform keeps** | **+€0.036** | **+€0.30** |
 
-Optionally 15% for partners bringing €1,000 a month, which still leaves about 4% in the worst case; the guard in
-[economics.md](economics.md) decides.
+Optionally 15% for partners bringing €1,000 a month. That loses about 1.4% in today's worst case, so it waits for
+[02-vat-and-margin.md](02-vat-and-margin.md); the guard in [economics.md](economics.md) decides.
 
 ## Rules
 

@@ -1,21 +1,13 @@
-# Pricing and comparison pages
+# Comparison pages
 
 Transparent pricing is a selling point here, and comparison pages draw search traffic from people already choosing a
 tool.
 
-## Pricing page
+## Done
 
-A `pricing.html` on the site that says it plainly:
-
-- **"Hetzner's price plus 35%, charged by the hour. No subscription."**
-- A table of sizes with hourly and monthly prices, generated at build time from the API's `/vm-sizes` (the same prices
-  users see), so it cannot drift from the app.
-- What is free: one 4-hour demo, the trial AI key.
-- What costs extra: the reactivation fee, AI usage on the user's own OpenRouter key.
-- Top-up bonuses from [top-up-bonuses.md](top-up-bonuses.md), once they exist.
-
-The markup is configurable (`WORKSPACED_VM_MARKUP_PERCENT`); generate the number into the page rather than writing
-"35%" by hand.
+**Pricing page** (`0d46950`): `/pricing` on the site with the three plans, what is free, what others bill and how the
+balance works. Its prices are written into the page, so a change to `workspaced.plans` is a change to `pricing.html`
+too. Top-up bonuses from [08-top-up-bonuses.md](08-top-up-bonuses.md) go on it once they exist.
 
 ## Comparison pages
 

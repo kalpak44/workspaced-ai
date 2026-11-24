@@ -11,7 +11,7 @@ small top-ups expensive.
 | €20 | €0.61 | 3.0% |
 | €100 | €2.05 | 2.0% |
 
-A **5% bonus on €100+** costs about 3.7% (5% × 0.74, see [economics.md](economics.md)). A user who moves from €5 top-ups
+A **5% bonus on €100+** costs about 4% (5% × the €0.79 worst-case cost share, see [economics.md](economics.md)). A user who moves from €5 top-ups
 to €100 saves us 4.8% in fees. We also get the money upfront, and unspent balance is pure margin.
 
 ## Recommendation

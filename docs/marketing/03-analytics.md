@@ -20,7 +20,7 @@ every page in `apps/site/src` (each page carries its own header, so it is a chan
 
 **Count steps 2 to 5 in the API, not in the browser.** They are already database facts: `app_user` creation, demo
 workspaces, `TOP_UP` ledger entries, and usage after 30 days. An ad blocker cannot hide them, and they can be joined to
-the attribution stored by [referrals.md](referrals.md) and [partners.md](partners.md).
+the attribution stored by [13-referrals.md](13-referrals.md) and [14-partners.md](14-partners.md).
 
 ## Implementation
 

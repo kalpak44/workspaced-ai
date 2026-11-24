@@ -24,7 +24,7 @@ time — written by the same `saveTour` call, plus `app_user.tour_finished_at`.
 - Keep `step` numbers stable, or store the step's name: `lib/tour.ts` already versions its step list, and a renumbered
   step would otherwise mix two steps in one chart.
 
-**Admin view:** a step-by-step drop-off chart next to the funnel in [analytics.md](analytics.md) — of 100 users who
+**Admin view:** a step-by-step drop-off chart next to the funnel in [03-analytics.md](03-analytics.md) — of 100 users who
 started, how many reached each step, how long each step took, and where paused tours were left. Steps where many people
 stop are the ones to shorten, explain better or drop.
 
@@ -34,7 +34,7 @@ stop are the ones to shorten, explain better or drop.
   workspaces page, instead of relying on the user to find it.
 - **By email:** the demo lasts four hours, so a reminder the next day is too late. Send one email about 30 minutes after
   a tour stops mid-way while its demo still has time left, linking to `/?tour`. It is part of
-  [lifecycle-email.md](lifecycle-email.md) and respects the same mail preference.
+  [07-lifecycle-email.md](07-lifecycle-email.md) and respects the same mail preference.
 - **After the demo is gone:** a tour whose workspace was deleted cannot resume. Say so instead of pointing at a
   missing workspace, and offer to finish it on a paid workspace with a first top-up.
 
@@ -45,9 +45,9 @@ public page and has a few hours of demo left — the best moment to convert.
 
 **Recommendation:** the finishing card offers, in this order:
 
-1. **Keep this workspace** ([demo-conversion.md](demo-conversion.md)) — the page they just built stays online.
+1. **Keep this workspace** ([04-demo-conversion.md](04-demo-conversion.md)) — the page they just built stays online.
 2. **Put it on your own domain** (the existing domain recipe).
-3. **Invite a friend** ([referrals.md](referrals.md)).
+3. **Invite a friend** ([13-referrals.md](13-referrals.md)).
 
 ## 4. Cut the steps that cost the most users
 

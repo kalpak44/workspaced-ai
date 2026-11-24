@@ -13,17 +13,17 @@ People pay far more readily for work already done than for an empty machine.
 
 ## Implementation
 
-- **API:** `POST /workspaces/{id}/keep` in `WorkspaceService`. It requires a month of the demo's size
-  (`BillingService.requireMonthOf`), clears the demo flag, and starts charging (`BillingService.startCharging`) at the
-  normal marked-up price. Without enough balance it answers `402` with the amount needed, which the web app turns into a
+- **API:** `POST /workspaces/{id}/keep` in `WorkspaceService`. It requires a week of the demo's plan
+  (`BillingService.requireCovered`), clears the demo flag, and starts charging (`BillingService.startCharging`) at the
+  plan's price. Without enough balance it answers `402` with the amount needed, which the web app turns into a
   top-up for exactly that amount.
 - **Web:** a button on `DemoBanner` and in the warning notification. After Stripe Checkout returns, the app calls `keep`
   again automatically.
-- **Same size:** the demo runs on the cheapest size; keep it on that size so no VM is recreated. Resizing stays a
-  separate action.
+- **Same plan:** the demo runs on the cheapest plan in stock, normally Starter; keep it on that plan so no VM is
+  recreated. Changing plan stays a separate action.
 - **Mail:** if the demo ended without being kept, send one email the next day: "Your demo built X — start again with
   your work's recipe." Use `MailService.notify` and respect the user's mail preferences.
 
 ## Measure
 
-Demos started versus demos kept, and versus first top-up within 7 days, on the funnel from [analytics.md](analytics.md).
+Demos started versus demos kept, and versus first top-up within 7 days, on the funnel from [03-analytics.md](03-analytics.md).
