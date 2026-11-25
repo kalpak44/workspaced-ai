@@ -102,7 +102,10 @@ public class FundsReminder {
       // In the daily key too, so a milestone crossed during the day is told of at once.
       var milestone = hoursLeft < 24 ? "1d" : hoursLeft < 72 ? "3d" : "7d";
       var mailed =
-          users.findById(user).map(u -> u.getMailPreferences().balanceReminders()).orElse(true);
+          users
+              .findById(user)
+              .map(u -> Boolean.TRUE.equals(u.getMailPreferences().balanceReminders()))
+              .orElse(true);
       send(
           user,
           running,

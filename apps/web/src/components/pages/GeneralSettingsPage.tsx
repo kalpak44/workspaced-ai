@@ -1,6 +1,6 @@
 import { Funnel, Gift, KeyRound, Plug, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
-import { useAccount } from "../../hooks/useAccount";
+import { type MailPreferences, useAccount } from "../../hooks/useAccount";
 import { navigate } from "../../hooks/useRoute";
 import { Avatar, Button, TextField } from "../atoms";
 import { PageHeader, SectionNav, Toast } from "../molecules";
@@ -38,6 +38,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
   const [savingMail, setSavingMail] = useState(false);
   // Mailed unless turned off, as for an account the API has not yet answered with a choice.
   const balanceReminders = account?.mail?.balanceReminders ?? true;
+  const tips = account?.mail?.tips ?? true;
   // Only an admin may send mail; the API refuses anyone else, so the tab is not offered.
   const isAdmin = account?.role === "ADMIN";
   const namesChanged = names.firstName !== saved.firstName || names.lastName !== saved.lastName;
@@ -58,11 +59,11 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
     }
   }
 
-  async function saveBalanceReminders(enabled: boolean) {
+  async function saveMail(preferences: Partial<MailPreferences>, saved: string) {
     setSavingMail(true);
     try {
-      await saveMailPreferences({ balanceReminders: enabled });
-      setNotice(enabled ? "Balance reminders will be emailed." : "Balance reminders will only show here.");
+      await saveMailPreferences(preferences);
+      setNotice(saved);
     } catch {
       setNotice("Could not save your email settings. Please try again.");
     } finally {
@@ -139,8 +140,14 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
                 <CardHeader title="Email" description={`What we email to ${account?.email ?? "you"} besides your notifications here.`} />
                 <SettingRow title="Balance reminders" hint="A week, three days and a day before your balance runs out. They stay in your notifications either way.">
                   <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
-                    <input type="checkbox" checked={balanceReminders} disabled={savingMail} onChange={(event) => { setNotice(""); void saveBalanceReminders(event.target.checked); }} className="mt-0.5 size-4 accent-zinc-900 dark:accent-zinc-100" />
+                    <input type="checkbox" checked={balanceReminders} disabled={savingMail} onChange={(event) => { setNotice(""); const on = event.target.checked; void saveMail({ balanceReminders: on }, on ? "Balance reminders will be emailed." : "Balance reminders will only show here."); }} className="mt-0.5 size-4 accent-zinc-900 dark:accent-zinc-100" />
                     <span>Email me balance reminders<span className="block text-xs text-zinc-500">A paused workspace, one about to be deleted and a failed automatic top-up are always emailed.</span></span>
+                  </label>
+                </SettingRow>
+                <SettingRow title="Tips" hint="Now and then: a nudge to try the free trial, ideas after it, how to invite friends, or a balance you haven't used. They stay in your notifications either way.">
+                  <label className="flex items-start gap-2 text-sm text-zinc-700 dark:text-zinc-300">
+                    <input type="checkbox" checked={tips} disabled={savingMail} onChange={(event) => { setNotice(""); const on = event.target.checked; void saveMail({ tips: on }, on ? "Tips will be emailed." : "Tips will only show here."); }} className="mt-0.5 size-4 accent-zinc-900 dark:accent-zinc-100" />
+                    <span>Email me tips</span>
                   </label>
                 </SettingRow>
               </section>

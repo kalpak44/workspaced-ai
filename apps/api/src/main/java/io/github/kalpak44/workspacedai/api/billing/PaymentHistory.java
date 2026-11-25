@@ -65,6 +65,45 @@ public class PaymentHistory {
     return last;
   }
 
+  /** The accounts whose first paid top-up was paid within the period. */
+  @Transactional(readOnly = true)
+  public Set<UUID> firstPaidBetween(Instant from, Instant to) {
+    var cb = entities.getCriteriaBuilder();
+    var query = cb.createQuery(UUID.class);
+    var topUp = query.from(TopUpEntity.class);
+    var user = topUp.get(TopUpEntity_.userId);
+    var first = cb.least(topUp.get(TopUpEntity_.paidAt));
+    query
+        .select(user)
+        .where(cb.equal(topUp.get(TopUpEntity_.status), TopUpStatus.PAID))
+        .groupBy(user)
+        .having(cb.greaterThanOrEqualTo(first, from), cb.lessThan(first, to));
+    return new HashSet<>(entities.createQuery(query).getResultList());
+  }
+
+  /** The accounts last charged for a workspace within the period, and none since. */
+  @Transactional(readOnly = true)
+  public Set<UUID> lastChargedBetween(Instant from, Instant to) {
+    var cb = entities.getCriteriaBuilder();
+    var query = cb.createQuery(UUID.class);
+    var entry = query.from(LedgerEntryEntity.class);
+    var user = entry.get(LedgerEntryEntity_.userId);
+    var latest = cb.greatest(entry.get(LedgerEntryEntity_.createdAt));
+    query
+        .select(user)
+        .where(cb.equal(entry.get(LedgerEntryEntity_.kind), Ledger.USAGE))
+        .groupBy(user)
+        .having(cb.greaterThanOrEqualTo(latest, from), cb.lessThan(latest, to));
+    return new HashSet<>(entities.createQuery(query).getResultList());
+  }
+
+  /** The account's balance in cents, rounded down; zero for one that never had any. */
+  @Transactional(readOnly = true)
+  public long balanceCents(UUID user) {
+    var account = entities.find(BillingAccountEntity.class, user);
+    return account == null ? 0 : Math.floorDiv(account.getBalanceMicros(), Ledger.MICROS_PER_CENT);
+  }
+
   private static List<List<UUID>> batches(Collection<UUID> users) {
     var all = List.copyOf(users);
     var batches = new ArrayList<List<UUID>>();

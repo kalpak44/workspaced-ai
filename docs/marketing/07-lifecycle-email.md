@@ -3,6 +3,30 @@
 Short emails at the moments users usually drop off. Mail already goes through Mailjet via `MailService.notify`, and
 users already have mail preferences (`MailPreferences`), so this is mostly content and scheduling.
 
+## Shipped
+
+`lifecycle/LifecycleMail` runs hourly and sends four tips, each once, through `NotificationService.sendOnce`: in the
+app always, and by email unless the user turned off **Tips** in Settings → Email (`app_user.tips_mail`, on by
+default). They go out like every other platform email, from `noreply@` in the shared mail layout. Admins get none.
+
+| Tip | When |
+|---|---|
+| Your free trial is waiting | 1 day after sign-up, no trial started, never paid |
+| What will you build next? | 1 day after the trial started, never paid |
+| Invite a friend, and you both get extra | 7 days after the first paid top-up, while referrals are on |
+| You still have X to use | 30 days after the last workspace charge, with €1 or more left |
+
+Each is sent only within two days of its moment, so accounts that passed it before the job existed are not all
+mailed at launch, and a short outage loses none. Every tip ends with how to turn tips off, and the privacy policy
+lists them under legitimate interests.
+
+## Still open
+
+- "Put it on your own domain" for a workspace that has run a few days.
+- Measuring what each tip leads to: a demo started, a workspace kept, a top-up or an invitation within 7 days.
+
+## The original plan
+
 ## Onboarding
 
 | When | Email |

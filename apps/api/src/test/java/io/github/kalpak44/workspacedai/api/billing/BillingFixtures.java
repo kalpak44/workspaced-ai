@@ -33,6 +33,13 @@ public final class BillingFixtures {
     entityManager.persist(topUp);
   }
 
+  /** A €10 top-up Stripe paid at the given time. Call inside a transaction. */
+  public static void paidTopUp(EntityManager entityManager, UUID user, Instant paidAt) {
+    var topUp = new TopUpEntity(UUID.randomUUID(), user, 1000);
+    topUp.markPaid(paidAt, null, null);
+    entityManager.persist(topUp);
+  }
+
   /** An hourly charge for a workspace, as if made at the given time. Call inside a transaction. */
   public static void usageCharge(EntityManager entityManager, UUID user, Instant at) {
     var reference = "usage-" + UUID.randomUUID();

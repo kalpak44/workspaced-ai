@@ -124,11 +124,24 @@ describe("general settings", () => {
 
     await user.click(reminders);
     expect(await screen.findByText("Balance reminders will only show here.")).toBeInTheDocument();
-    expect(api.auth.account.mail).toEqual({ balanceReminders: false });
+    expect(api.auth.account.mail).toEqual({ balanceReminders: false, tips: true });
     view.unmount();
     resetAccount();
     await renderSettings();
     expect(screen.getByRole("checkbox", { name: /Email me balance reminders/ })).not.toBeChecked();
+  });
+
+  it("turns tip emails off without touching balance reminders", async () => {
+    const api = installFakeApi();
+    const user = userEvent.setup();
+    await renderSettings();
+    const tips = within(screen.getByRole("region", { name: "Email" })).getByRole("checkbox", { name: "Email me tips" });
+    expect(tips).toBeChecked();
+
+    await user.click(tips);
+    expect(await screen.findByText("Tips will only show here.")).toBeInTheDocument();
+    expect(api.fetchFn).toHaveBeenCalledWith("/api/v1/account/mail-preferences", expect.objectContaining({ body: JSON.stringify({ tips: false }) }));
+    expect(api.auth.account.mail).toEqual({ balanceReminders: true, tips: false });
   });
 
   it("keeps balance reminder emails on when the choice cannot be saved", async () => {

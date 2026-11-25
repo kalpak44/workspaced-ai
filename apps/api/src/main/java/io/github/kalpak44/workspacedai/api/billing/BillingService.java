@@ -685,7 +685,8 @@ public class BillingService {
   }
 
   /** "12.40 EUR": rounded down to the cent. */
-  String amount(long micros) {
+  /** The amount as users are shown it, e.g. 12.50 EUR. */
+  public String amount(long micros) {
     return BigDecimal.valueOf(micros, 6).setScale(2, RoundingMode.FLOOR).toPlainString()
         + " "
         + properties.currency().toUpperCase(Locale.ROOT);

@@ -84,7 +84,7 @@ export function useAccount() {
     async saveProfile(profile: api.Profile) {
       set({ status: "signed-in", account: await api.updateProfile(profile) });
     },
-    async saveMailPreferences(preferences: api.MailPreferences) {
+    async saveMailPreferences(preferences: Partial<api.MailPreferences>) {
       set({ status: "signed-in", account: await api.updateMailPreferences(preferences) });
     },
     requestPasswordReset: api.requestPasswordReset,

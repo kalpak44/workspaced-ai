@@ -70,6 +70,9 @@ public class UserEntity {
   @Column(name = "balance_reminder_mail", insertable = false, nullable = false)
   private boolean balanceReminderMail = true;
 
+  @Column(name = "tips_mail", insertable = false, nullable = false)
+  private boolean tipsMail = true;
+
   protected UserEntity() {
     // For JPA.
   }
@@ -126,11 +129,16 @@ public class UserEntity {
   }
 
   public MailPreferences getMailPreferences() {
-    return new MailPreferences(balanceReminderMail);
+    return new MailPreferences(balanceReminderMail, tipsMail);
   }
 
   public void setMailPreferences(MailPreferences preferences) {
-    balanceReminderMail = preferences.balanceReminders();
+    if (preferences.balanceReminders() != null) {
+      balanceReminderMail = preferences.balanceReminders();
+    }
+    if (preferences.tips() != null) {
+      tipsMail = preferences.tips();
+    }
   }
 
   /** Null while no tour is under way. */

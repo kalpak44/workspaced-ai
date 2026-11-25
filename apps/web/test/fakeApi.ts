@@ -442,7 +442,8 @@ export function installFakeApi(
       auth.account = { ...auth.account, firstName, lastName };
     } else if (url.endsWith("/account/mail-preferences")) {
       if (auth.failMail) return json({}, 500);
-      auth.account = { ...auth.account, mail: JSON.parse(String(init?.body)) };
+      // As the API does: a preference left out keeps its value.
+      auth.account = { ...auth.account, mail: { balanceReminders: true, tips: true, ...auth.account.mail, ...JSON.parse(String(init?.body)) } };
     } else if (url.endsWith("/account/tour")) {
       auth.account = { ...auth.account, tour: init?.method === "PUT" ? JSON.parse(String(init.body)) : null };
       return new Response(null, { status: 204 });

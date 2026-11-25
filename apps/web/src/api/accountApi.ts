@@ -24,6 +24,8 @@ export interface Account {
 export interface MailPreferences {
   /** The balance reminders mailed before a workspace is paused; they stay in the app either way. */
   readonly balanceReminders: boolean;
+  /** The occasional tips: trying the free trial, what to do after it, inviting friends, a balance left unused. */
+  readonly tips: boolean;
 }
 
 export type Role = "USER" | "ADMIN";
@@ -120,7 +122,8 @@ export async function updateProfile(profile: Profile): Promise<Account> {
   return (await send(`${ACCOUNT_URL}/profile`, { method: "PUT", body })).json();
 }
 
-export async function updateMailPreferences(preferences: MailPreferences): Promise<Account> {
+/** Changes only the preferences given; the API keeps the others. */
+export async function updateMailPreferences(preferences: Partial<MailPreferences>): Promise<Account> {
   const body = JSON.stringify(preferences);
   return (await send(`${ACCOUNT_URL}/mail-preferences`, { method: "PUT", body })).json();
 }

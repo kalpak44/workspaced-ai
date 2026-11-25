@@ -499,6 +499,13 @@ class AuthTest {
         .isFalse();
     account = JSON.readTree(send("GET", "/account", bearer, null).body());
     assertThat(account.path("mail").path("balanceReminders").asBoolean()).isFalse();
+    // Left out of the update, so kept.
+    assertThat(account.path("mail").path("tips").asBoolean()).isTrue();
+
+    send("PUT", "/account/mail-preferences", bearer, "{\"tips\":false}");
+    account = JSON.readTree(send("GET", "/account", bearer, null).body());
+    assertThat(account.path("mail").path("tips").asBoolean()).isFalse();
+    assertThat(account.path("mail").path("balanceReminders").asBoolean()).isFalse();
   }
 
   @Test

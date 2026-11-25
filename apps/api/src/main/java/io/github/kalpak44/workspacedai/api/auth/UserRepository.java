@@ -23,6 +23,9 @@ public interface UserRepository extends JpaRepository<UserEntity, UUID>, DemoCla
   List<UserEntity> findByRoleNotAndCreatedAtGreaterThanEqualAndCreatedAtLessThan(
       Role role, Instant from, Instant to);
 
+  List<UserEntity> findByRoleNotAndDemoStartedAtGreaterThanEqualAndDemoStartedAtLessThan(
+      Role role, Instant from, Instant to);
+
   /** What each request is checked against. */
   Optional<Access> findAccessById(UUID id);
 

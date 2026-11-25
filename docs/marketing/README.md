@@ -18,7 +18,8 @@ costs and the guard that keeps every program inside that.
 | Keep the demo as a paid workspace on the same VM, from the banner, the warning and the tour's end | [04-demo-conversion.md](04-demo-conversion.md) | `27462c2`, `232557c` |
 | Tour rewritten for non-technical users: shorter, chapters, ideas to tap, a celebration, ends on keeping | [05-tour.md](05-tour.md) | `232557c` |
 | Admins are told when no plan has been available for 15 minutes, and when one is back | [01-plan-availability.md](01-plan-availability.md) | `bbcf259` |
-| Referrals: 10% extra for the friend, 10% for the referrer, guarded by the plan margin check | [13-referrals.md](13-referrals.md) | this change |
+| Referrals: 10% extra for the friend, 10% for the referrer, guarded by the plan margin check | [13-referrals.md](13-referrals.md) | `d695341`, `aade3fe` |
+| Tips by email: try the trial, after the trial, invite friends, unused balance | [07-lifecycle-email.md](07-lifecycle-email.md) | this change |
 | VAT ID BG206070477 (Ispolink EOOD) on the Hetzner account: servers billed under reverse charge, 0% VAT | [02-vat-and-margin.md](02-vat-and-margin.md) | none, console only |
 
 ## Next, in order
@@ -30,7 +31,7 @@ costs and the guard that keeps every program inside that.
 | 3 | [03-analytics.md](03-analytics.md) | Site page views, only if the funnel leaves a question it cannot answer | The funnel already counts every step after the visit | Small |
 | 5 | [05-tour.md](05-tour.md) | Bring people back to a paused tour; cut more steps once the history shows where people stop | The tour is every user's first five minutes | Small |
 | 6 | [06-billing.md](06-billing.md) | Paused days instead of the €5 fee, spending this month, then hibernate | Cheap trust fixes; hibernate is the large one and comes last | Small, then large |
-| 7 | [07-lifecycle-email.md](07-lifecycle-email.md) | Onboarding and win-back email | Brings back the users 4 to 6 lose, at Mailjet volume only | Small |
+| 7 | [07-lifecycle-email.md](07-lifecycle-email.md) | A domain tip, and measuring what each tip leads to | The four tips are live | Small |
 | 8 | [08-top-up-bonuses.md](08-top-up-bonuses.md) | Bonus credit on large and automatic top-ups | Pays for itself in Stripe fees once users are paying | Small |
 | 9 | [09-comparison-pages.md](09-comparison-pages.md) | Honest comparisons with Codespaces, Replit and a VPS | Search traffic from people already choosing a tool | Small |
 | 10 | [10-listings-and-launches.md](10-listings-and-launches.md) | Directories, Show HN, Product Hunt | A one-off spike, so only after 4 works and 3 can attribute it | Time only |

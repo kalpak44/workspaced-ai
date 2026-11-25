@@ -15,6 +15,12 @@ public final class Notifications {
       new NotificationAction("Go to billing", "/billing");
   private static final NotificationAction ADD_FUNDS =
       new NotificationAction("Add funds", "/billing");
+  private static final NotificationAction NEW_WORKSPACE =
+      new NotificationAction("Create a workspace", "/");
+
+  // Every tip says how to stop them, since they are mailed unless turned off.
+  private static final String TIPS_OFF =
+      "\n\nDon't want tips like this by email? Turn them off in Settings, under Email.";
 
   private static final DateTimeFormatter WHEN =
       DateTimeFormatter.ofPattern("MMM d 'at' HH:mm 'UTC'", Locale.ENGLISH)
@@ -173,6 +179,78 @@ public final class Notifications {
             + " came from was refunded or disputed, so we took that credit back from your"
             + " balance.",
         BILLING);
+  }
+
+  /** For a user who signed up a day ago and has not tried a workspace yet. */
+  public static NotificationMessage startTrial() {
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.INFO,
+        "Your free trial is waiting",
+        "Try your own computer in the cloud for free.",
+        "You signed up but haven't tried a workspace yet. The free trial gives you your own"
+            + " computer in the cloud for a few hours, at no cost. Ask the assistant to build"
+            + " something, like a web page, and watch it work."
+            + TIPS_OFF,
+        new NotificationAction("Start the free trial", "/"));
+  }
+
+  /** For a user whose free trial ended a day ago without them keeping it. */
+  public static NotificationMessage afterTrial() {
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.INFO,
+        "What will you build next?",
+        "Your trial is over. A workspace of your own keeps running.",
+        "Your free trial has ended. With a workspace of your own, what the assistant builds"
+            + " keeps running after you close the browser, and you pay only for the days you"
+            + " use it."
+            + TIPS_OFF,
+        NEW_WORKSPACE);
+  }
+
+  /**
+   * For a user who first paid a week ago.
+   *
+   * @param friendPercent what an invited friend gets extra, e.g. 10%
+   * @param yourPercent what the user gets of the friend's top-ups, e.g. 10%
+   */
+  public static NotificationMessage inviteFriends(String friendPercent, String yourPercent) {
+    return new NotificationMessage(
+        NotificationKind.SYSTEM,
+        NotificationTone.INFO,
+        "Invite a friend, and you both get extra",
+        "Your friends get "
+            + friendPercent
+            + " extra. You get "
+            + yourPercent
+            + " of what they pay.",
+        "Thanks for using workspaced! If you know someone who would like it too, share your"
+            + " personal link. Your friends get "
+            + friendPercent
+            + " extra on their top-ups, and you get "
+            + yourPercent
+            + " of what they pay, added to your balance."
+            + TIPS_OFF,
+        new NotificationAction("Get your link", "/settings/referrals"));
+  }
+
+  /**
+   * For a user whose last workspace was charged a month ago and who still has money left.
+   *
+   * @param amount what is left, e.g. 12.50 EUR
+   */
+  public static NotificationMessage balanceWaiting(String amount) {
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.INFO,
+        "You still have " + amount + " to use",
+        "Your balance is waiting for your next workspace.",
+        "It's been a month since your last workspace, and "
+            + amount
+            + " is still on your balance. It's there whenever you want to build something new."
+            + TIPS_OFF,
+        NEW_WORKSPACE);
   }
 
   public static NotificationMessage topUpFailed(String amount) {

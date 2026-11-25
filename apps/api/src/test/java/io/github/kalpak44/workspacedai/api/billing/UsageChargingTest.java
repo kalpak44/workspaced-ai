@@ -352,7 +352,11 @@ class UsageChargingTest {
   @Test
   void keepsBalanceRemindersInTheAppForAUserWhoTurnedTheirMailOff() throws Exception {
     transactions.executeWithoutResult(
-        _ -> users.findById(user).orElseThrow().setMailPreferences(new MailPreferences(false)));
+        _ ->
+            users
+                .findById(user)
+                .orElseThrow()
+                .setMailPreferences(new MailPreferences(false, true)));
     fund(MONTH);
     var workspace = created(create(bearer));
     fund(-(MONTH - HOURLY * 12));
