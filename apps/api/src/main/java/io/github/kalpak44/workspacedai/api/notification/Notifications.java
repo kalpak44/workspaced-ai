@@ -181,6 +181,19 @@ public final class Notifications {
         BILLING);
   }
 
+  /** For a user who asked to be told when a plan is back. */
+  public static NotificationMessage planBack() {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.SUCCESS,
+        "A plan is available again",
+        "You can create your workspace now.",
+        "You asked us to let you know: a plan is available again, so you can create your"
+            + " workspace now. Plans can sell out again within hours, so it's best not to wait"
+            + " too long.",
+        new NotificationAction("Create a workspace", "/"));
+  }
+
   /** For a user who signed up a day ago and has not tried a workspace yet. */
   public static NotificationMessage startTrial() {
     return new NotificationMessage(

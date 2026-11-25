@@ -1,4 +1,5 @@
-import { RotateCw, Server, TriangleAlert } from "lucide-react";
+import { BellRing, RotateCw, Server, TriangleAlert } from "lucide-react";
+import { useState } from "react";
 import type { VmSize } from "../../hooks/useVmSizes";
 import { formatMoney } from "../../lib/format";
 import { HOURS_PER_MONTH, perDay } from "../../lib/pricing";
@@ -41,13 +42,19 @@ interface Props {
   readonly soldOut?: string | null;
   readonly onChange: (serverType: string) => void;
   readonly onReload: () => void;
+  /** Whether the user already asked to be emailed once a plan is back. */
+  readonly waiting?: boolean;
+  /** Asks to be emailed once a plan is back; left out, the picker does not offer it. */
+  readonly onWait?: () => Promise<void>;
 }
 
 /**
  * The plans on offer, each with its price. A sold-out plan shows but cannot be chosen; while every
  * plan is sold out, a warning says so and offers to check again.
  */
-export function VmSizePicker({ sizes, status, value, disabled = false, soldOut = null, onChange, onReload }: Props) {
+export function VmSizePicker({ sizes, status, value, disabled = false, soldOut = null, onChange, onReload, waiting = false, onWait }: Props) {
+  const [asking, setAsking] = useState(false);
+  const [failed, setFailed] = useState(false);
   if (status === "loading") {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
@@ -66,6 +73,19 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
   }
   const allSoldOut = !sizes.some((size) => size.available);
   const standIn = sizes.find((size) => !size.recommended && size.available);
+  // What the email waits for: one of the regular plans, not the pricier stand-in.
+  const regularSoldOut = !sizes.some((size) => size.recommended && size.available);
+  const ask = async () => {
+    setAsking(true);
+    setFailed(false);
+    try {
+      await onWait?.();
+    } catch {
+      setFailed(true);
+    } finally {
+      setAsking(false);
+    }
+  };
   return (
     <>
       {(allSoldOut || standIn || soldOut) && (
@@ -85,9 +105,13 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
                   : "Pick another plan, or check again in a while."}
             </p>
           </div>
-          <div>
+          <div className="flex flex-wrap items-center gap-2">
             <Button label="Check again" variant="secondary" icon={RotateCw} disabled={disabled} onClick={onReload} />
+            {onWait && regularSoldOut && (waiting
+              ? <p className="text-sm text-zinc-700 dark:text-zinc-300">We'll email you when a plan is back.</p>
+              : <Button label="Email me when a plan is back" variant="secondary" icon={BellRing} busy={asking} disabled={disabled} onClick={() => void ask()} />)}
           </div>
+          {failed && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">Could not save that. Please try again.</p>}
         </div>
       )}
       {sizes.map((size) => (

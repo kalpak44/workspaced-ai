@@ -19,14 +19,14 @@ costs and the guard that keeps every program inside that.
 | Tour rewritten for non-technical users: shorter, chapters, ideas to tap, a celebration, ends on keeping | [05-tour.md](05-tour.md) | `232557c` |
 | Admins are told when no plan has been available for 15 minutes, and when one is back | [01-plan-availability.md](01-plan-availability.md) | `bbcf259` |
 | Referrals: 10% extra for the friend, 10% for the referrer, guarded by the plan margin check | [13-referrals.md](13-referrals.md) | `d695341`, `aade3fe` |
-| Tips by email: try the trial, after the trial, invite friends, unused balance | [07-lifecycle-email.md](07-lifecycle-email.md) | this change |
+| Tips by email: try the trial, after the trial, invite friends, unused balance | [07-lifecycle-email.md](07-lifecycle-email.md) | `a4132c0` |
+| "Email me when a plan is back" while every regular plan is sold out | [01-plan-availability.md](01-plan-availability.md) | this change |
 | VAT ID BG206070477 (Ispolink EOOD) on the Hetzner account: servers billed under reverse charge, 0% VAT | [02-vat-and-margin.md](02-vat-and-margin.md) | none, console only |
 
 ## Next, in order
 
 | # | File | What | Why here | Effort |
 |---|---|---|---|---|
-| 1 | [01-plan-availability.md](01-plan-availability.md) | "Tell me when it's back" on a sold-out plan | Nothing below matters if no workspace can be created | Small |
 | 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Settle OSS and reverse charge for business customers with an accountant | Decides how `BillingService` computes VAT as sales grow | None |
 | 3 | [03-analytics.md](03-analytics.md) | Site page views, only if the funnel leaves a question it cannot answer | The funnel already counts every step after the visit | Small |
 | 5 | [05-tour.md](05-tour.md) | Bring people back to a paused tour; cut more steps once the history shows where people stop | The tour is every user's first five minutes | Small |

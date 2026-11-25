@@ -32,6 +32,7 @@ public class PlanOutages {
   private final PlanOutageRepository outages;
   private final TransactionTemplate transaction;
   private final Duration alertAfter;
+  private final PlanWaiters waiters;
 
   public PlanOutages(
       VmPricing pricing,
@@ -39,13 +40,15 @@ public class PlanOutages {
       NotificationService notifications,
       PlanOutageRepository outages,
       PlatformTransactionManager manager,
-      @Value("${workspaced.plans.outage-alert-after:PT15M}") Duration alertAfter) {
+      @Value("${workspaced.plans.outage-alert-after:PT15M}") Duration alertAfter,
+      PlanWaiters waiters) {
     this.pricing = pricing;
     this.users = users;
     this.notifications = notifications;
     this.outages = outages;
     this.transaction = new TransactionTemplate(manager);
     this.alertAfter = alertAfter;
+    this.waiters = waiters;
   }
 
   @Scheduled(
@@ -58,15 +61,25 @@ public class PlanOutages {
 
   void check(Instant now) {
     boolean available;
+    boolean regular;
     try {
-      available = pricing.sizes(false).stream().anyMatch(VmSize::available);
+      var sizes = pricing.sizes(false);
+      available = sizes.stream().anyMatch(VmSize::available);
+      // The pricier stand-in is not what those waiting asked for.
+      regular = sizes.stream().anyMatch(size -> size.recommended() && size.available());
     } catch (RuntimeException failure) {
       // An unreachable VM manager says nothing about Hetzner's stock, so it neither opens nor
       // closes an outage.
       LOG.warn("could not read the plans to check for an outage", failure);
       return;
     }
-    transaction.executeWithoutResult(status -> record(available, now));
+    transaction.executeWithoutResult(
+        status -> {
+          record(available, now);
+          if (regular) {
+            waiters.planIsBack();
+          }
+        });
   }
 
   private void record(boolean available, Instant now) {

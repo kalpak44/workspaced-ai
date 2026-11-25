@@ -26,3 +26,13 @@ export const VM_SIZES_URL = "/api/v1/vm-sizes";
 export async function listVmSizes(): Promise<VmSize[]> {
   return (await send(VM_SIZES_URL)).json();
 }
+
+/** Whether the user asked to be emailed once a plan is back. */
+export async function getPlanWaiting(): Promise<boolean> {
+  return (await (await send(`${VM_SIZES_URL}/waiting`)).json()).waiting;
+}
+
+/** One email once a regular plan can be created again; asking twice changes nothing. */
+export async function waitForPlan(): Promise<void> {
+  await send(`${VM_SIZES_URL}/waiting`, { method: "PUT" });
+}

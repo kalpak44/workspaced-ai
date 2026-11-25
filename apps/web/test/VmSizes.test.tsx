@@ -65,6 +65,28 @@ describe("VM sizes", () => {
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
+  it("emails the user once a plan is back, when they ask while every plan is sold out", async () => {
+    const api = installFakeApi();
+    for (const size of api.state.vmSizes) size.available = false;
+    const user = userEvent.setup();
+    await openSizes(user);
+
+    await user.click(within(warning()!).getByRole("button", { name: "Email me when a plan is back" }));
+
+    expect(await within(warning()!).findByText("We'll email you when a plan is back.")).toBeInTheDocument();
+    expect(api.state.planWaiting).toBe(true);
+  });
+
+  it("remembers that the user is already waiting for a plan", async () => {
+    const api = installFakeApi();
+    for (const size of api.state.vmSizes) size.available = false;
+    api.state.planWaiting = true;
+    await openSizes(userEvent.setup());
+
+    expect(await within(warning()!).findByText("We'll email you when a plan is back.")).toBeInTheDocument();
+    expect(within(warning()!).queryByRole("button", { name: "Email me when a plan is back" })).not.toBeInTheDocument();
+  });
+
   it("warns while every plan is sold out, and checks again", async () => {
     const api = installFakeApi();
     for (const size of api.state.vmSizes) size.available = false;

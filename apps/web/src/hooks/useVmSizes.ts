@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { listVmSizes, type VmSize } from "../api/vmSizesApi";
+import { getPlanWaiting, listVmSizes, type VmSize, waitForPlan } from "../api/vmSizesApi";
 
 export type { VmSize } from "../api/vmSizesApi";
 
@@ -11,9 +11,12 @@ export function useVmSizes() {
   const [sizes, setSizes] = useState<VmSize[]>([]);
   const [status, setStatus] = useState<"loading" | "ready" | "failed">("loading");
   const [attempt, setAttempt] = useState(0);
+  // Whether the user asked to be emailed once a plan is back; unknown counts as not.
+  const [waiting, setWaiting] = useState(false);
 
   useEffect(() => {
     let active = true;
+    getPlanWaiting().then((value) => active && setWaiting(value), () => undefined);
     listVmSizes().then(
       (list) => {
         if (active) {
@@ -33,5 +36,10 @@ export function useVmSizes() {
     setAttempt((value) => value + 1);
   }, []);
 
-  return { sizes, status, reload };
+  const wait = useCallback(async () => {
+    await waitForPlan();
+    setWaiting(true);
+  }, []);
+
+  return { sizes, status, reload, waiting, wait };
 }

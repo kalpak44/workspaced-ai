@@ -18,9 +18,10 @@ each pinned to one Hetzner server type (`workspaced.plans`), and Hetzner sells t
   included, has been available for 15 minutes (`workspaced.plans.outage-alert-after`), and another when one is back. An
   unreachable VM manager is not counted as an outage.
 
-## Next
-
-- **"Tell me when it's back"** on a sold-out plan: one email when it becomes available, reusing the funds-reminder mail.
+- **"Email me when a plan is back"** in the create dialog's warning while every regular plan is sold out
+  (`PlanWaiters`, `plan_waiter`). `PlanOutages`' five-minute check emails each user waiting once a regular plan is
+  available, never for the pricier stand-in, then forgets them. It is mailed whatever their tips setting, since they
+  asked for it.
 
 ## Measure
 

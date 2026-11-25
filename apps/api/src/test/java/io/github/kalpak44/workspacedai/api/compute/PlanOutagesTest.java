@@ -1,6 +1,8 @@
 package io.github.kalpak44.workspacedai.api.compute;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.TestDatabase;
@@ -38,6 +40,7 @@ class PlanOutagesTest {
   @Autowired UserRepository users;
   @Autowired NotificationService notifications;
   @Autowired PlanOutageRepository outageRows;
+  @Autowired PlanWaiters waiters;
 
   private UUID admin;
   private UUID user;
@@ -85,10 +88,67 @@ class PlanOutagesTest {
   }
 
   @Test
+  void emailsThoseWaitingOnceARegularPlanIsBackAndOnlyOnce() {
+    soldOut(true);
+    outages.check(START);
+    waiters.add(user);
+    waiters.add(user);
+    assertThat(waiters.waiting(user)).isTrue();
+
+    // The pricier stand-in is not what they waited for.
+    standInOnly();
+    outages.check(START.plus(Duration.ofMinutes(5)));
+    assertThat(titles(user)).isEmpty();
+
+    soldOut(false);
+    outages.check(START.plus(Duration.ofMinutes(10)));
+    outages.check(START.plus(Duration.ofMinutes(15)));
+    assertThat(titles(user)).containsExactly("A plan is available again");
+    assertThat(waiters.waiting(user)).isFalse();
+    verify(mailer).send(argThat(mail -> mail.subject().equals("A plan is available again")));
+  }
+
+  @Test
+  void forgetsARequestTheUserCancels() {
+    waiters.add(user);
+    waiters.stop(user);
+    waiters.stop(user);
+
+    soldOut(false);
+    outages.check(START);
+    assertThat(waiters.waiting(user)).isFalse();
+    assertThat(titles(user)).isEmpty();
+  }
+
+  @Test
   void treatsAnUnreachableVmManagerAsNoNews() {
     when(pricing.sizes(false)).thenThrow(new VmManagerUnavailableException("down", null));
     outages.check(START);
     assertThat(outageRows.count()).isZero();
+  }
+
+  private void standInOnly() {
+    when(pricing.sizes(false))
+        .thenReturn(
+            List.of(
+                size("Starter", "cx23", true, false), size("Starter Flex", "cpx22", false, true)));
+  }
+
+  private static VmSize size(String plan, String type, boolean recommended, boolean available) {
+    return new VmSize(
+        plan,
+        type,
+        false,
+        2,
+        4,
+        40,
+        "shared",
+        "x86",
+        "nbg1",
+        BigDecimal.TEN,
+        BigDecimal.TEN,
+        recommended,
+        available);
   }
 
   private void soldOut(boolean soldOut) {

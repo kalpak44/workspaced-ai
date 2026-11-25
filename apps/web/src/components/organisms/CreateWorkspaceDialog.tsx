@@ -136,7 +136,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const [pending, setPending] = useState(false);
   const [soldOut, setSoldOut] = useState<string | null>(null);
   const [noFunds, setNoFunds] = useState(false);
-  const { sizes, status, reload } = useVmSizes();
+  const { sizes, status, reload, waiting, wait } = useVmSizes();
   const chosen = sizes.find((size) => size.serverType === serverType);
   const providers = useModelProviders();
   const { account } = useAccount();
@@ -332,6 +332,8 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
           value={serverType}
           disabled={pending}
           soldOut={soldOut}
+          waiting={waiting}
+          onWait={wait}
           onChange={(type) => {
             setServerType(type);
             setSoldOut(null);

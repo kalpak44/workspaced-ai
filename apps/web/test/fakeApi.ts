@@ -158,6 +158,8 @@ export function installFakeApi(
   const state = {
     // Each test's own copy, so one can sell a size out.
     vmSizes: VM_SIZES.map((size) => ({ ...size })),
+    // Whether the user asked to be emailed once a plan is back.
+    planWaiting: false,
     // When set, a create is refused as the balance not covering the required days of the size.
     noFunds: false,
     fail: 0,
@@ -530,6 +532,11 @@ export function installFakeApi(
     }
     if (url.endsWith("/api/v1/vm-sizes")) {
       return json(state.vmSizes);
+    }
+    if (url.endsWith("/api/v1/vm-sizes/waiting")) {
+      if (init?.method === "PUT") state.planWaiting = true;
+      if (init?.method === "DELETE") state.planWaiting = false;
+      return init?.method ? new Response(null, { status: 204 }) : json({ waiting: state.planWaiting });
     }
     const instructionsRoute = /\/api\/v1\/workspaces\/([^/]+)\/instructions(?:\/([^/]+))?$/.exec(url);
     if (instructionsRoute) {
