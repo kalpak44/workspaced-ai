@@ -202,6 +202,23 @@ public class BillingService {
     usage.save(new UsageEntity(workspace, user, hourlyOf(monthlyPrice), Instant.now()));
   }
 
+  /**
+   * As {@link #startCharging}, for a workspace found running with nothing charging it. One whose
+   * create started charging it meanwhile is left as it is.
+   *
+   * @return whether this started the charge
+   */
+  public boolean startChargingIfUncharged(UUID workspace, UUID user, BigDecimal monthlyPrice) {
+    var hourly = hourlyOf(monthlyPrice);
+    var inserted =
+        transactions.execute(_ -> usage.insertIfAbsent(workspace, user, hourly, Instant.now()));
+    return inserted != null && inserted == 1;
+  }
+
+  public boolean isCharged(UUID workspace) {
+    return usage.existsById(workspace);
+  }
+
   /** The monthly price spread over a month's hours, never free. */
   private static long hourlyOf(BigDecimal monthlyPrice) {
     var hourly =

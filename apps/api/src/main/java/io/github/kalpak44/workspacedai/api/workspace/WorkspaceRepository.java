@@ -35,6 +35,9 @@ public interface WorkspaceRepository
 
   List<IdOnly> findAllProjectedBy();
 
+  /** Every workspace that has, or is getting, a VM. */
+  List<WorkspaceEntity> findAllByDraftFalse();
+
   List<IdOnly> findByFirewallAgentAllowedTrue();
 
   List<IdOnly> findBySessionTtlEnabledTrue();

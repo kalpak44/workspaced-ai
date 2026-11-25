@@ -17,7 +17,9 @@ import org.springframework.stereotype.Component;
  * Hetzner is the record of which VMs exist: every server this app creates is labelled with its VM
  * id, workspace id and user id, and those labels are read back into the repository at startup. So a
  * restart forgets only status and heartbeats, which the VMs report again, and never a server that
- * is still billing. A load that fails is retried every minute until one succeeds.
+ * is still billing. A load that fails is retried every minute until one succeeds, and a loaded one
+ * is repeated every ten minutes to adopt a server this instance never saved: one whose create timed
+ * out after Hetzner made it, or that another instance made during a rollout.
  */
 @Component
 public class HetznerVmInventory implements VmInventory {
@@ -56,6 +58,13 @@ public class HetznerVmInventory implements VmInventory {
     }
   }
 
+  @Scheduled(fixedDelay = 10, initialDelay = 10, timeUnit = TimeUnit.MINUTES)
+  void refresh() {
+    if (loaded.get()) {
+      load();
+    }
+  }
+
   /** Adds each labelled server not already known; one without readable labels is skipped. */
   synchronized void load() {
     try {
@@ -90,7 +99,8 @@ public class HetznerVmInventory implements VmInventory {
           server.id());
       return false;
     }
-    if (vms.findById(id).isPresent()) {
+    // A server still listed while its delete runs would come back as a VM nobody deletes again.
+    if (vms.findById(id).isPresent() || Server.DELETING.equals(server.status())) {
       return false;
     }
     vms.save(

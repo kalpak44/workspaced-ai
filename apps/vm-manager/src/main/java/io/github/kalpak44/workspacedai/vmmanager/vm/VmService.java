@@ -30,6 +30,10 @@ public class VmService {
   // What Hetzner answers a create with when it has no capacity for the type.
   private static final int RESOURCE_UNAVAILABLE = 412;
 
+  // Creates for one workspace queue on its lock; creates for others run alongside, so one slow
+  // create does not hold every other past the API's timeout.
+  private final Object[] creating = new Object[64];
+
   private final VmRepository vms;
   private final VmOptionService options;
   private final HetznerClient hetzner;
@@ -62,6 +66,9 @@ public class VmService {
     this.agentHub = agentHub;
     this.events = events;
     this.clock = clock;
+    for (var i = 0; i < creating.length; i++) {
+      creating[i] = new Object();
+    }
   }
 
   /** Oldest first; only that workspace's when one is given. */
@@ -75,10 +82,10 @@ public class VmService {
 
   /**
    * The workspace's VM: a second request for the same workspace returns the first one's, so a retry
-   * never creates a second server. Synchronized so two concurrent first requests cannot both create
-   * one. The OpenRouter key and the harness environment go to Vault before the server is asked for,
-   * so a VM never boots without them; nothing is kept when either refuses. A second request's key
-   * and environment are ignored.
+   * never creates a second server. Locked by workspace so two concurrent first requests cannot both
+   * create one. The OpenRouter key and the harness environment go to Vault before the server is
+   * asked for, so a VM never boots without them; nothing is kept when either refuses. A second
+   * request's key and environment are ignored.
    *
    * @param userId who owns the workspace
    * @param serverType blank for the default
@@ -87,7 +94,18 @@ public class VmService {
    * @throws ServerTypeNotOfferedException when the server type is not one offered
    * @throws VmInventoryNotLoadedException before the VMs already at Hetzner are known
    */
-  public synchronized Created create(
+  public Created create(
+      UUID workspaceId,
+      UUID userId,
+      String serverType,
+      String openRouterApiKey,
+      Map<String, String> environment) {
+    synchronized (creating[Math.floorMod(workspaceId.hashCode(), creating.length)]) {
+      return createLocked(workspaceId, userId, serverType, openRouterApiKey, environment);
+    }
+  }
+
+  private Created createLocked(
       UUID workspaceId,
       UUID userId,
       String serverType,

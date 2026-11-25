@@ -22,4 +22,7 @@ public record Server(
 
   /** Hetzner's status for a server that is powered off. */
   public static final String OFF = "off";
+
+  /** Hetzner's status for a server whose delete is under way. */
+  public static final String DELETING = "deleting";
 }

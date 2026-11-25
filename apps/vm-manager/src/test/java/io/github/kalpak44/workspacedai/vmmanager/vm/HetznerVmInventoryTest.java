@@ -129,4 +129,26 @@ class HetznerVmInventoryTest {
     assertThat(vms.findByWorkspaceId(workspaceId)).hasSize(1);
     assertThat(vms.findById(vmId)).isNotEqualTo(Optional.empty());
   }
+
+  @Test
+  void adoptsAServerMadeAfterItLoadedButNotOneBeingDeleted() {
+    inventory.load();
+    var deleting = server(8, labels(UUID.randomUUID().toString(), workspaceId.toString()));
+    hetzner.servers.put(7L, server(7, labels(vmId.toString(), workspaceId.toString())));
+    hetzner.servers.put(
+        8L,
+        new Server(
+            deleting.id(),
+            deleting.name(),
+            deleting.serverType(),
+            deleting.ipv4(),
+            deleting.ipv6(),
+            deleting.created(),
+            deleting.labels(),
+            Server.DELETING));
+
+    inventory.refresh();
+
+    assertThat(vms.findAll()).extracting(Vm::id).containsExactly(vmId);
+  }
 }
