@@ -56,10 +56,24 @@ public class TokenService {
    * email again. Its subject is the Auth0 user, never an account, and it signs no one in.
    */
   public Token issueVerification(String idpSubject) {
+    return issueVerification(idpSubject, Attribution.NONE);
+  }
+
+  /** Keeps sign-up attribution through verification without allowing it to sign anyone in. */
+  public Token issueVerification(String idpSubject, Attribution attribution) {
     var now = clock.instant();
     var expiresAt = now.plus(VERIFICATION_TTL);
     return sign(
         JwtClaimsSet.builder()
+            .claims(
+                claims -> {
+                  if (attribution.source() != null)
+                    claims.put(Attribution.SOURCE_PARAM, attribution.source());
+                  if (attribution.campaign() != null)
+                    claims.put(Attribution.CAMPAIGN_PARAM, attribution.campaign());
+                  if (attribution.referral() != null)
+                    claims.put(Attribution.REFERRAL_PARAM, attribution.referral());
+                })
             .issuer(ISSUER)
             .subject(idpSubject)
             .claim(CurrentUser.USE, CurrentUser.VERIFY_EMAIL)

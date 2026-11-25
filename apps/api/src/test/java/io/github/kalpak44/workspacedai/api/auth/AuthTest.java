@@ -17,8 +17,10 @@ import io.github.kalpak44.workspacedai.api.mail.Mailer;
 import io.github.kalpak44.workspacedai.api.mail.Mailer.Mail;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.recipe.StarterRecipes;
+import io.github.kalpak44.workspacedai.api.referral.ReferralService;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import jakarta.persistence.EntityManager;
+import jakarta.servlet.http.Cookie;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -39,6 +41,9 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.context.SpringBootTest.WebEnvironment;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.context.annotation.Import;
+import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.mock.web.MockHttpServletResponse;
+import org.springframework.security.oauth2.client.authentication.OAuth2AuthenticationToken;
 import org.springframework.security.oauth2.core.oidc.OidcIdToken;
 import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -60,6 +65,8 @@ class AuthTest {
   @Autowired UserRepository users;
   @Autowired WorkspaceRepository workspaces;
   @Autowired AuthService auth;
+  @Autowired AuthProperties authProperties;
+  @Autowired ReferralService referrals;
   @Autowired Auth0Tokens tokens;
   @Autowired TokenService tokenService;
   @Autowired JwtDecoder decoder;
@@ -452,6 +459,96 @@ class AuthTest {
             .build();
     assertThat(http.send(request, BodyHandlers.ofString()).statusCode()).isEqualTo(403);
     verifyNoInteractions(passwordResets);
+  }
+
+  @Test
+  void keepsTheReferralThroughEmailVerificationAndBindsItOnce() throws Exception {
+    var referrer = users.save(TestUsers.newUser("inviter@example.com"));
+    var code = referrals.overview(referrer.getId(), false).code();
+    var subject = "auth0|invited-" + UUID.randomUUID();
+    var attribution = new Attribution("referral", "invite", code);
+    var handler = Auth0SignIn.signedIn(auth, authProperties);
+    var callback = new MockHttpServletRequest();
+    callback.setAttribute(Attribution.REQUEST_ATTRIBUTE, attribution);
+    var response = new MockHttpServletResponse();
+
+    handler.onAuthenticationSuccess(callback, response, invitationLogin(subject, false));
+
+    assertThat(users.findByIdpSubject(subject)).isEmpty();
+    assertThat(response.getRedirectedUrl()).contains("verify-email");
+    var proof = verificationCookie(response);
+    assertThat(auth.verificationAttribution(subject, proof.getValue())).isEqualTo(attribution);
+
+    // Another unverified sign-in has no query parameters, just the signed verification proof.
+    var retry = new MockHttpServletRequest();
+    retry.setCookies(proof);
+    var retried = new MockHttpServletResponse();
+    handler.onAuthenticationSuccess(retry, retried, invitationLogin(subject, false));
+    proof = verificationCookie(retried);
+    assertThat(auth.verificationAttribution(subject, proof.getValue())).isEqualTo(attribution);
+
+    var verified = new MockHttpServletRequest();
+    verified.setCookies(proof);
+    var signedIn = new MockHttpServletResponse();
+    handler.onAuthenticationSuccess(verified, signedIn, invitationLogin(subject, true));
+
+    assertThat(users.findByIdpSubject(subject))
+        .hasValueSatisfying(
+            user -> {
+              assertThat(user.getSignupSource()).isEqualTo("referral");
+              assertThat(user.getSignupCampaign()).isEqualTo("invite");
+            });
+    assertThat(referrals.overview(referrer.getId(), false).invited()).isEqualTo(1);
+    assertThat(signedIn.getHeaders("Set-Cookie"))
+        .anySatisfy(
+            header ->
+                assertThat(header)
+                    .startsWith(AuthController.VERIFICATION_COOKIE + "=;")
+                    .contains("Max-Age=0"));
+
+    handler.onAuthenticationSuccess(
+        verified, new MockHttpServletResponse(), invitationLogin(subject, true));
+    assertThat(referrals.overview(referrer.getId(), false).invited()).isEqualTo(1);
+  }
+
+  @Test
+  void neverRestoresAnInvitationFromAnotherIdentityOrAnInvalidProof() {
+    var attribution = new Attribution("referral", null, "h8f98tmf");
+    var proof = auth.verificationToken("auth0|invited", attribution).value();
+    assertThat(auth.verificationAttribution("auth0|someone-else", proof))
+        .isEqualTo(Attribution.NONE);
+    assertThat(auth.verificationAttribution("auth0|invited", proof + "tampered"))
+        .isEqualTo(Attribution.NONE);
+    assertThat(auth.verificationAttribution("auth0|invited", null)).isEqualTo(Attribution.NONE);
+    assertThat(
+            auth.verificationAttribution(
+                "auth0|invited", tokenService.issueVerification("auth0|invited").value()))
+        .isEqualTo(Attribution.NONE);
+    var session = TestUsers.token(TestUsers.ADMIN, TestUsers.subject(TestUsers.ADMIN_EMAIL));
+    assertThat(auth.verificationAttribution(TestUsers.ADMIN.toString(), session))
+        .isEqualTo(Attribution.NONE);
+  }
+
+  private static Cookie verificationCookie(MockHttpServletResponse response) {
+    var header =
+        response.getHeaders("Set-Cookie").stream()
+            .filter(value -> value.startsWith(AuthController.VERIFICATION_COOKIE + "="))
+            .findFirst()
+            .orElseThrow();
+    assertThat(header).contains("HttpOnly", "Secure", "SameSite=Lax");
+    return new Cookie(
+        AuthController.VERIFICATION_COOKIE,
+        header.substring(header.indexOf('=') + 1, header.indexOf(';')));
+  }
+
+  private static OAuth2AuthenticationToken invitationLogin(String subject, boolean verified) {
+    var token =
+        new OidcIdToken(
+            "id-token",
+            Instant.now(),
+            Instant.now().plusSeconds(60),
+            Map.of("sub", subject, "email", "invited@example.com", "email_verified", verified));
+    return new OAuth2AuthenticationToken(new DefaultOidcUser(List.of(), token), List.of(), "auth0");
   }
 
   @Test

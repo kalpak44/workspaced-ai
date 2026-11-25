@@ -10,7 +10,10 @@ Every user can invite friends. Both earn balance credit, paid only from money th
   plan that could lose money with referral credit spent on it is withheld, from Hetzner's live prices. This holds
   even for someone who invites themselves, which is why there is no card fingerprint check yet.
 - **Attribution:** `workspaced.online/?ref=CODE`; the site's `attribution.js` and the app's sign-in carry `ref`
-  through the encrypted sign-in cookie, and `ReferralBinding` binds it once when the account is made. A referral
+  through the encrypted sign-in cookie. If email verification interrupts sign-up, the signed verification
+  cookie keeps attribution for 30 minutes in the same browser, bound to the Auth0 identity. It returns on
+  the OAuth callback with `SameSite=Lax` and is cleared after successful sign-in. `ReferralBinding` binds
+  the invitation once when the account is made. A referral
   link with no `utm_source` records `referral` as the sign-up source, so the admin funnel shows it.
 - **Crediting:** `BillingService.credit` asks every `TopUpRewards` in the transaction that credits a paid top-up,
   ledger kinds `REFERRAL_BONUS` and `REFERRAL_REWARD` with the top-up id as reference. Admins take part on neither

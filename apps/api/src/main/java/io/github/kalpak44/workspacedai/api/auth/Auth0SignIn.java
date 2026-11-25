@@ -139,17 +139,24 @@ class Auth0SignIn {
   static AuthenticationSuccessHandler signedIn(AuthService auth, AuthProperties properties) {
     return (request, response, authentication) -> {
       var user = (OidcUser) authentication.getPrincipal();
+      var pending =
+          auth.verificationAttribution(
+              user.getSubject(), AuthController.verificationCookie(request));
+      // Keep the original invitation for this identity through repeated verification attempts.
+      if (!pending.isEmpty()) request.setAttribute(Attribution.REQUEST_ATTRIBUTE, pending);
       AuthService.SignIn signIn;
       try {
         signIn = signIn(auth, user, request);
       } catch (AuthService.UnverifiedEmailException _) {
-        var proof = auth.verificationToken(user.getSubject());
+        var proof = auth.verificationToken(user.getSubject(), attribution(request));
         response.addHeader(
             HttpHeaders.SET_COOKIE, AuthController.verificationCookie(proof).toString());
         response.sendRedirect(logoutUrl(properties, properties.appUrl() + "/verify-email"));
         return;
       }
       response.addHeader(HttpHeaders.SET_COOKIE, AuthController.cookie(signIn.token()).toString());
+      response.addHeader(
+          HttpHeaders.SET_COOKIE, AuthController.clearVerificationCookie().toString());
       if (!signIn.created()) {
         response.sendRedirect("/");
         return;

@@ -75,13 +75,24 @@ public class AuthController implements AuthApi {
     return ResponseCookie.from(VERIFICATION_COOKIE, token.value())
         .httpOnly(true)
         .secure(true)
-        .sameSite("Strict")
+        // Must return on Auth0's cross-site callback after email verification.
+        .sameSite("Lax")
         .path("/")
         .maxAge(Duration.between(Instant.now(), token.expiresAt()))
         .build();
   }
 
-  private static String verificationCookie(HttpServletRequest request) {
+  static ResponseCookie clearVerificationCookie() {
+    return ResponseCookie.from(VERIFICATION_COOKIE, "")
+        .httpOnly(true)
+        .secure(true)
+        .sameSite("Lax")
+        .path("/")
+        .maxAge(Duration.ZERO)
+        .build();
+  }
+
+  static String verificationCookie(HttpServletRequest request) {
     return cookie(request, VERIFICATION_COOKIE);
   }
 

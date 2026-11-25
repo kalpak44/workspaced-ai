@@ -203,6 +203,26 @@ public class AuthService {
     return tokens.issueVerification(idpSubject);
   }
 
+  public TokenService.Token verificationToken(String idpSubject, Attribution attribution) {
+    return tokens.issueVerification(idpSubject, attribution);
+  }
+
+  /** Restores an invitation only for the same Auth0 identity that began verification. */
+  Attribution verificationAttribution(String subject, String proof) {
+    if (proof != null) {
+      try {
+        var jwt = decoder.decode(proof);
+        if (CurrentUser.VERIFY_EMAIL.equals(jwt.getClaimAsString(CurrentUser.USE))
+            && subject.equals(jwt.getSubject())) {
+          return Attribution.of(jwt.getClaims());
+        }
+      } catch (JwtException | IllegalArgumentException _) {
+        // Expired or altered proofs cannot attribute a sign-up.
+      }
+    }
+    return Attribution.NONE;
+  }
+
   /**
    * Has Auth0 send the verification email again for the sign-up the token names, at most once a
    * minute. The claim commits before Auth0 is asked, so no connection waits on it.
