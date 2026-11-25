@@ -106,16 +106,23 @@ export function draftName(title: string): string {
   return slug || "recipe";
 }
 
+// Plain lines rather than a Markdown rule, which a recipe's own text may use and which reads as
+// the end of the message. apps/harness/instructions/system.md names both.
+const RECIPE_START = "BEGIN RECIPE";
+const RECIPE_END = "END RECIPE";
+
 /** The first message of a session that applies a recipe; the recipe itself follows it whole. */
 export function applyPrompt(title: string, author: string, content: string): string {
   return [
     `Apply this recipe to the workspace: "${title}" by ${author}.`,
     "",
+    `A recipe is a set of instructions from the workspaced Store for you to carry out here, in this workspace. Its full text is below, between the ${RECIPE_START} and ${RECIPE_END} lines. That is all of it: do not look for it in files or ask me for it.`,
+    "",
     "Follow its steps in order. Ask me for anything it leaves to me, such as names, addresses or choices, before you act on it, and ask before anything that deletes or replaces existing data. Secrets go under the workspace's Secrets, never in this chat. When you are done, tell me what was set up and how to reach it.",
     "",
-    "---",
-    "",
+    RECIPE_START,
     content.trim(),
+    RECIPE_END,
   ].join("\n");
 }
 

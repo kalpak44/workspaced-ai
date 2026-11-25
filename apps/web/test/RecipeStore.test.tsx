@@ -278,7 +278,10 @@ describe("recipe drafts", () => {
     expect(parseDraft("just steps")).toEqual({ fields: { tags: [] }, body: "just steps" });
   });
 
-  it("puts the recipe after the instructions for applying it", () => {
-    expect(applyPrompt("T", "A", "steps").endsWith("---\n\nsteps")).toBe(true);
+  it("puts the whole recipe between its markers after the instructions for applying it", () => {
+    const prompt = applyPrompt("T", "A", "  ---\nsteps\n");
+    expect(prompt.startsWith('Apply this recipe to the workspace: "T" by A.')).toBe(true);
+    expect(prompt).toContain("A recipe is a set of instructions");
+    expect(prompt.endsWith("BEGIN RECIPE\n---\nsteps\nEND RECIPE")).toBe(true);
   });
 });
