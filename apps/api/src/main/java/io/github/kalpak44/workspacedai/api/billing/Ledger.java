@@ -16,6 +16,7 @@ class Ledger {
   static final String TOP_UP = "TOP_UP";
   static final String USAGE = "USAGE";
   static final String REACTIVATION = "REACTIVATION";
+  static final String REVERSAL = "REVERSAL";
 
   private final BillingAccountRepository accounts;
   private final LedgerEntryRepository entries;

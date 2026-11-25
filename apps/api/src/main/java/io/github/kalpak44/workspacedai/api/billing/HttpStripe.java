@@ -211,6 +211,33 @@ public class HttpStripe implements Stripe {
   }
 
   @Override
+  public Optional<Charge> charge(String chargeId) {
+    var response = send(get("/v1/charges/" + encode(chargeId)));
+    if (response.statusCode() == 404) {
+      return Optional.empty();
+    }
+    var charge = read(response);
+    var invoice = text(charge.path("invoice"));
+    var intent = text(charge.path("payment_intent"));
+    String session = null;
+    // A Checkout payment's invoice is issued after it, and its charge may not name it.
+    if (invoice == null && intent != null) {
+      var sessions =
+          read(send(get("/v1/checkout/sessions?limit=1&payment_intent=" + encode(intent))))
+              .path("data");
+      session = sessions.isEmpty() ? null : text(sessions.get(0).path("id"));
+    }
+    return Optional.of(
+        new Charge(
+            charge.path("id").asString(),
+            charge.path("amount").asLong(),
+            charge.path("amount_refunded").asLong(),
+            charge.path("disputed").asBoolean(),
+            invoice,
+            session));
+  }
+
+  @Override
   public CheckoutSession checkout(String sessionId) {
     return session(
         read(send(get("/v1/checkout/sessions/" + encode(sessionId) + "?expand[]=invoice"))));

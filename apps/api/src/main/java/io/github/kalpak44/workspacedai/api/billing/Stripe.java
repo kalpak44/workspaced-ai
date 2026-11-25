@@ -46,6 +46,12 @@ public interface Stripe {
   ChargedInvoice chargeCard(
       String customerId, String paymentMethodId, UUID topUpId, long amountCents);
 
+  /**
+   * The charge as Stripe has it now, with how much of it was refunded or disputed and the invoice
+   * or Checkout Session it paid for; empty when this account has no such charge.
+   */
+  Optional<Charge> charge(String chargeId);
+
   /** Removes the card from the customer; one already gone is not an error. */
   void detachCard(String paymentMethodId);
 
@@ -54,6 +60,28 @@ public interface Stripe {
    * @param label how to show it, e.g. Visa •••• 4242
    */
   record SavedCard(String customerId, String paymentMethodId, String label) {}
+
+  /**
+   * @param amount what was charged, tax included, in cents
+   * @param amountRefunded what has been refunded of it so far
+   * @param disputed whether the cardholder disputed it, which takes the whole amount back until the
+   *     dispute is decided
+   * @param invoiceId the invoice it paid; null for a Checkout payment Stripe did not link to one
+   * @param checkoutSessionId the Checkout Session it paid; null when it paid an invoice directly
+   */
+  record Charge(
+      String id,
+      long amount,
+      long amountRefunded,
+      boolean disputed,
+      String invoiceId,
+      String checkoutSessionId) {
+
+    /** What the platform no longer has of the amount. */
+    long lost() {
+      return disputed ? amount : Math.min(amountRefunded, amount);
+    }
+  }
 
   /**
    * @param status paid once the charge went through

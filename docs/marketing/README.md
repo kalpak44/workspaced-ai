@@ -36,7 +36,7 @@ costs and the guard that keeps every program inside that.
 | 10 | [10-listings-and-launches.md](10-listings-and-launches.md) | Directories, Show HN, Product Hunt | A one-off spike, so only after 4 works and 3 can attribute it | Time only |
 | 11 | [11-recipe-pages.md](11-recipe-pages.md) | A search landing page per public recipe | Compounding traffic, slow to pay off | Medium |
 | 12 | [12-open-in-button.md](12-open-in-button.md) | "Open in workspaced" for GitHub READMEs | Compounding traffic; costs a demo per click-through | Medium |
-| 13 | [13-referrals.md](13-referrals.md) | Reverse referral rewards on refunds and disputes, then the smaller extras | The program is live; this closes the refund gap | Small |
+| 13 | [13-referrals.md](13-referrals.md) | The smaller referral extras: fingerprint check, monthly cap, reward emails, admin card | The program and its refunds are done | Small |
 | 14 | [14-partners.md](14-partners.md) | Creators earn cash commission | Reuses 13's attribution; worth it only with traffic to share | Large |
 | 15 | [15-showcase.md](15-showcase.md) | Opt-in gallery of what users built | Needs users with published work first | Medium |
 | 16 | [16-recipe-authors.md](16-recipe-authors.md) | Recipe authors earn credit on paid usage of their recipes | Uses are already recorded; the reward needs 13's ledger work | Medium |

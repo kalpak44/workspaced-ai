@@ -139,6 +139,42 @@ public final class Notifications {
         BILLING);
   }
 
+  /**
+   * For a user whose top-up was refunded or disputed.
+   *
+   * @param amount what was taken from the balance, e.g. 25.00 EUR
+   */
+  public static NotificationMessage topUpReversed(String amount) {
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.WARNING,
+        "A payment was refunded",
+        amount + " was taken from your balance.",
+        "A top-up of yours was refunded or disputed with your bank, so we took the "
+            + amount
+            + " it added back from your balance. If your balance is now below zero, add funds to"
+            + " keep your workspaces running.",
+        ADD_FUNDS);
+  }
+
+  /**
+   * For a user whose referral reward or bonus came from a top-up that was refunded or disputed.
+   *
+   * @param amount what was taken from the balance, e.g. 2.50 EUR
+   */
+  public static NotificationMessage rewardReversed(String amount) {
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.WARNING,
+        "A referral credit was taken back",
+        amount + " was taken from your balance.",
+        "The payment a referral credit of "
+            + amount
+            + " came from was refunded or disputed, so we took that credit back from your"
+            + " balance.",
+        BILLING);
+  }
+
   public static NotificationMessage topUpFailed(String amount) {
     return new NotificationMessage(
         NotificationKind.BILLING,

@@ -19,10 +19,14 @@ Every user can invite friends. Both earn balance credit, paid only from money th
   earning), friends numbered rather than named, and the fine print. Terms section 10 and the privacy policy describe
   it.
 
+- **Refunds and disputes:** `charge.refunded` and `charge.dispute.created` take back what the top-up credited, its
+  own balance and every reward posted with it, in proportion to the amount refunded; each later refund of the same
+  charge takes only the difference, as `REVERSAL` ledger entries. A balance may go negative. Both events are in
+  `terraform/stripe/workspaced/webhooks/`.
+
 ## Still open
 
-- Refunds and disputes do not yet reverse rewards: handle `charge.refunded` and `charge.dispute.created`, and add
-  both events to `terraform/stripe/workspaced/webhooks/`. The terms already reserve the right to remove that credit.
+- A dispute decided in our favour does not give the balance back; do it by hand until it happens often.
 - Card fingerprint check, a monthly cap on rewarded friends, an email toggle for reward notifications, an admin card
   with the program's cost, and an "Invited by a friend?" banner on the site.
 

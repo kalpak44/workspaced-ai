@@ -81,6 +81,21 @@ public class ReferralRewards implements TopUpRewards {
     return rewards;
   }
 
+  @Override
+  @Transactional(propagation = Propagation.MANDATORY)
+  public void reversed(UUID payer, String kind, long micros) {
+    referrals
+        .findLockedByRefereeId(payer)
+        .ifPresent(
+            referral -> {
+              if (BONUS.equals(kind)) {
+                referral.addBonus(-micros);
+              } else if (REWARD.equals(kind)) {
+                referral.addReward(-micros);
+              }
+            });
+  }
+
   /** The side's share of a top-up, in whole cents, or what is left of its cap if that is less. */
   static long share(
       long micros, ReferralProperties.Side side, long already, Instant signedUp, Instant now) {

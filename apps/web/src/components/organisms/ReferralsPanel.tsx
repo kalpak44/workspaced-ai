@@ -31,7 +31,7 @@ function Funnel({ referrals }: { readonly referrals: Referrals }) {
   const steps = [
     { label: "Signed up", count: referrals.invited },
     { label: "Paid", count: referrals.paying },
-    { label: "Still earning you credit", count: earning },
+    { label: "Still earning you rewards", count: earning },
   ];
   const widest = Math.max(1, referrals.invited);
   return <ol aria-label="Your invitation funnel" className="space-y-2">
@@ -69,10 +69,10 @@ export function ReferralsPanel() {
   }
   if (!referrals) return <div className="flex justify-center p-8"><Spinner label="Loading your referrals" /></div>;
   if (!referrals.enabled) {
-    return <SettingsSection title="Invite friends" description="The referral program is paused. Rewards already credited stay in your balance.">{null}</SettingsSection>;
+    return <SettingsSection title="Invite friends" description="Referrals are paused for now. Rewards you already got stay in your balance.">{null}</SettingsSection>;
   }
   if (!referrals.eligible || !referrals.link) {
-    return <SettingsSection title="Invite friends" description="Admins pay cost price, so they take part in the referral program on neither side.">{null}</SettingsSection>;
+    return <SettingsSection title="Invite friends" description="Admins pay cost price, so they can't invite friends or be invited.">{null}</SettingsSection>;
   }
 
   const { referee, referrer, link } = referrals;
@@ -82,7 +82,7 @@ export function ReferralsPanel() {
 
   return <div className="space-y-6">
     <SettingsSection title={`Give friends ${percent(referee.percent)} extra, earn ${percent(referrer.percent)} of what they pay`}
-      description={`Friends who sign up with your link get ${percent(referee.percent)} extra on their top-ups for ${referee.days} days. You get ${percent(referrer.percent)} of every top-up they pay for ${referrer.days} days, up to ${formatMoney(referrer.capCents)} per friend, added to your balance.`}>
+      description={`Your friends get ${percent(referee.percent)} extra on their top-ups for ${referee.days} days. You get ${percent(referrer.percent)} of what they pay for ${referrer.days} days, up to ${formatMoney(referrer.capCents)} per friend.`}>
       <div className="flex flex-wrap items-center gap-2">
         <input aria-label="Your invitation link" readOnly value={link} onFocus={(event) => event.currentTarget.select()}
           className="min-w-0 flex-1 rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-2 font-mono text-sm dark:border-zinc-800 dark:bg-zinc-900" />
@@ -97,11 +97,11 @@ export function ReferralsPanel() {
       <MetricTile label="Earned so far" icon={Coins} value={formatMoney(referrals.earnedCents)} detail="Added to your balance" />
     </ul>
 
-    <SettingsSection title="How far your friends got" description="Of the friends who signed up with your link, how many paid, and whose top-ups still earn you credit.">
+    <SettingsSection title="How far your friends got" description="Who signed up, who paid, and who still earns you rewards.">
       <Funnel referrals={referrals} />
     </SettingsSection>
 
-    <SettingsSection title="Friends" description="Newest first. Friends are numbered, not named, to keep their accounts private.">
+    <SettingsSection title="Friends" description="Newest first. Friends are shown as numbers, not names, so their accounts stay private.">
       {referrals.friends.length === 0
         ? <p className="text-sm text-zinc-500 dark:text-zinc-400">Nobody has signed up with your link yet.</p>
         : <div className="overflow-x-auto">
@@ -118,12 +118,12 @@ export function ReferralsPanel() {
         </div>}
     </SettingsSection>
 
-    <SettingsSection title="The fine print" description="Rewards are balance credit for workspaces.">
+    <SettingsSection title="Good to know" description="Rewards go to your balance and pay for your workspaces.">
       <ul className="list-disc space-y-1 pl-5 text-sm text-zinc-600 dark:text-zinc-400">
-        <li>Only top-ups paid by card count. Credit, bonuses and the free demo never earn rewards.</li>
-        <li>A friend counts only if they sign up with your link and have no account yet.</li>
-        <li>Your friend's extra stops at {formatMoney(referee.capCents)}; yours at {formatMoney(referrer.capCents)} per friend.</li>
-        <li>Credit cannot be withdrawn or moved to another account.</li>
+        <li>The link works only for people who don't have an account yet.</li>
+        <li>Only top-ups paid by card count. Rewards, bonuses and the free trial don't.</li>
+        <li>Your friend's extra stops at {formatMoney(referee.capCents)}. Yours stops at {formatMoney(referrer.capCents)} per friend.</li>
+        <li>Rewards can't be cashed out or moved to another account. If a payment is refunded, its rewards are taken back.</li>
       </ul>
     </SettingsSection>
     <Toast message={notice} />

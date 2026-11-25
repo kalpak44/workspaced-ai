@@ -7,6 +7,7 @@ import io.github.kalpak44.workspacedai.api.notification.NotificationService;
 import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import java.math.BigDecimal;
+import java.math.BigInteger;
 import java.math.RoundingMode;
 import java.net.URI;
 import java.time.Instant;
@@ -18,6 +19,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.TreeMap;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -397,11 +399,13 @@ public class BillingService {
     String type;
     String sessionId;
     String mode;
+    String disputedCharge;
     try {
       var event = json.readTree(payload);
       type = event.path("type").asString();
       sessionId = event.path("data").path("object").path("id").asString();
       mode = event.path("data").path("object").path("mode").asString("payment");
+      disputedCharge = event.path("data").path("object").path("charge").asString("");
     } catch (JacksonException e) {
       return false;
     }
@@ -418,6 +422,9 @@ public class BillingService {
           "checkout.session.expired" ->
           settle(sessionId, false);
       case "checkout.session.async_payment_failed" -> settle(sessionId, true);
+      // The object is the charge for a refund and the dispute for a dispute.
+      case "charge.refunded" -> reverse(sessionId);
+      case "charge.dispute.created" -> reverse(disputedCharge);
       default -> log.debug("ignoring Stripe event {}", type);
     }
     return true;
@@ -499,6 +506,76 @@ public class BillingService {
         }
       }
     }
+  }
+
+  /**
+   * Takes back what a paid top-up credited, in proportion to how much of its charge was refunded or
+   * disputed: its balance, and every reward posted with it, each from whoever received it. Each
+   * refund of the same charge takes back only what the earlier ones did not, and a balance may go
+   * negative. The charge is read back from Stripe rather than taken from the event.
+   */
+  private void reverse(String chargeId) {
+    if (chargeId.isBlank()) {
+      return;
+    }
+    var charge = stripe.charge(chargeId).orElse(null);
+    if (charge == null) {
+      log.warn("Stripe has no charge {}", chargeId);
+      return;
+    }
+    var found =
+        Optional.ofNullable(charge.invoiceId())
+            .flatMap(topUps::findByStripeInvoiceId)
+            .or(
+                () ->
+                    Optional.ofNullable(charge.checkoutSessionId())
+                        .flatMap(topUps::findByCheckoutSessionId));
+    if (found.isEmpty()) {
+      log.warn("Stripe charge {} belongs to no top-up", chargeId);
+      return;
+    }
+    if (charge.amount() <= 0 || charge.lost() <= 0) {
+      return;
+    }
+    transactions.executeWithoutResult(
+        _ -> {
+          var topUp = topUps.findLockedById(found.get().getId()).orElseThrow();
+          if (topUp.getStatus() != TopUpStatus.PAID) {
+            return;
+          }
+          var reference = topUp.getId().toString();
+          // The top-up first, so accounts are locked in the order crediting it locked them.
+          var credited =
+              entries.findAllByReference(reference).stream()
+                  .sorted(Comparator.comparing(entry -> !Ledger.TOP_UP.equals(entry.getKind())))
+                  .toList();
+          for (var entry : credited) {
+            var prefix = reference + ":" + entry.getKind() + ":";
+            var due =
+                BigInteger.valueOf(entry.getAmountMicros())
+                    .multiply(BigInteger.valueOf(charge.lost()))
+                    .divide(BigInteger.valueOf(charge.amount()))
+                    .longValueExact();
+            var taken = -entries.sumByKindAndReferencePrefix(Ledger.REVERSAL, prefix);
+            var micros = due - taken;
+            if (micros <= 0) {
+              continue;
+            }
+            if (!Ledger.TOP_UP.equals(entry.getKind())) {
+              rewards.forEach(
+                  program -> program.reversed(topUp.getUserId(), entry.getKind(), micros));
+            }
+            if (ledger.post(entry.getUserId(), -micros, Ledger.REVERSAL, prefix + charge.lost())) {
+              notifications.send(
+                  entry.getUserId(),
+                  Ledger.TOP_UP.equals(entry.getKind())
+                      ? Notifications.topUpReversed(amount(micros))
+                      : Notifications.rewardReversed(amount(micros)));
+            }
+          }
+          log.info(
+              "took back {} of {} cents of top-up {}", charge.lost(), charge.amount(), reference);
+        });
   }
 
   // Only a pending top-up can end unpaid; a paid one stays paid whatever arrives late. The user is

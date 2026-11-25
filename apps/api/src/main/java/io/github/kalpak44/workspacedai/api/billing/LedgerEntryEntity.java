@@ -41,8 +41,16 @@ class LedgerEntryEntity {
     this.reference = reference;
   }
 
+  UUID getUserId() {
+    return userId;
+  }
+
   long getAmountMicros() {
     return amountMicros;
+  }
+
+  String getKind() {
+    return kind;
   }
 
   Instant getCreatedAt() {

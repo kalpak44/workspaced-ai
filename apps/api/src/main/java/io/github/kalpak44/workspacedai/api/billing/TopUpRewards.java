@@ -23,4 +23,14 @@ public interface TopUpRewards {
    * @param micros what the top-up added to their balance, before VAT
    */
   List<Reward> paid(UUID user, UUID topUp, long micros);
+
+  /**
+   * A reward of this program was taken back because its top-up was refunded or disputed, in the
+   * same transaction, so whatever the program counts towards its caps can be lowered with it.
+   *
+   * @param payer who paid the top-up
+   * @param kind the kind the reward was posted as
+   * @param micros what was taken back, a positive amount
+   */
+  default void reversed(UUID payer, String kind, long micros) {}
 }

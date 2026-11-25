@@ -37,6 +37,7 @@ class FakeStripe implements AutoCloseable {
   final List<String> idempotencyKeys = new CopyOnWriteArrayList<>();
   final Map<String, ObjectNode> taxRates = new ConcurrentHashMap<>();
   final Map<String, ObjectNode> invoices = new ConcurrentHashMap<>();
+  final Map<String, ObjectNode> charges = new ConcurrentHashMap<>();
   final List<String> detached = new CopyOnWriteArrayList<>();
   // What each keyed POST first answered, which Stripe answers again to a retry with the key.
   private final Map<String, String> answered = new ConcurrentHashMap<>();
@@ -56,6 +57,7 @@ class FakeStripe implements AutoCloseable {
     server.createContext("/v1/invoiceitems", this::invoiceItems);
     server.createContext("/v1/payment_methods", this::paymentMethods);
     server.createContext("/v1/tax_rates", this::taxRates);
+    server.createContext("/v1/charges", this::charges);
     server.start();
   }
 
@@ -69,6 +71,40 @@ class FakeStripe implements AutoCloseable {
     session.put("status", "complete");
     session.put("payment_status", "paid");
     session.put("invoice", "in_" + sessionId);
+    session.put("payment_intent", "pi_" + sessionId);
+    // Stripe issues a Checkout payment's invoice after the charge, which then names no invoice.
+    charges.put(
+        "ch_" + sessionId,
+        charge("ch_" + sessionId, session.path("amount_total").asLong(), null, "pi_" + sessionId));
+  }
+
+  /** The charge that paid a Checkout Session, or an invoice charged off session. */
+  String chargeOf(String sessionOrInvoiceId) {
+    return "ch_" + sessionOrInvoiceId;
+  }
+
+  /** Refunds the charge, adding to what earlier refunds of it returned. */
+  void refund(String chargeId, long cents) {
+    var charge = charges.get(chargeId);
+    charge.put("amount_refunded", charge.path("amount_refunded").asLong() + cents);
+    charge.put(
+        "refunded", charge.path("amount_refunded").asLong() == charge.path("amount").asLong());
+  }
+
+  void dispute(String chargeId) {
+    charges.get(chargeId).put("disputed", true);
+  }
+
+  private static ObjectNode charge(String id, long amount, String invoice, String intent) {
+    var charge = JSON.createObjectNode();
+    charge.put("id", id);
+    charge.put("amount", amount);
+    charge.put("amount_refunded", 0);
+    charge.put("refunded", false);
+    charge.put("disputed", false);
+    charge.put("invoice", invoice);
+    charge.put("payment_intent", intent);
+    return charge;
   }
 
   /** Completes a setup session as a customer saving their card does. */
@@ -86,6 +122,7 @@ class FakeStripe implements AutoCloseable {
     declineCards = false;
     checkouts.clear();
     invoices.clear();
+    charges.clear();
     detached.clear();
   }
 
@@ -147,6 +184,17 @@ class FakeStripe implements AutoCloseable {
       sessions.put(id, session);
       lastSession = id;
       answer(exchange, 200, JSON.writeValueAsString(session));
+      return;
+    }
+    if (exchange.getRequestURI().getPath().equals("/v1/checkout/sessions")) {
+      var query = exchange.getRequestURI().getQuery();
+      var intent = query.replaceAll(".*payment_intent=([^&]+).*", "$1");
+      var list = JSON.createObjectNode();
+      var data = list.putArray("data");
+      sessions.values().stream()
+          .filter(s -> intent.equals(s.path("payment_intent").asString()))
+          .forEach(data::add);
+      answer(exchange, 200, JSON.writeValueAsString(list));
       return;
     }
     var id = exchange.getRequestURI().getPath().substring("/v1/checkout/sessions/".length());
@@ -243,6 +291,9 @@ class FakeStripe implements AutoCloseable {
           return new Answer(402, "{\"error\":{\"message\":\"Your card was declined.\"}}");
         }
         invoice.put("status", "paid");
+        charges.put(
+            "ch_" + parts[3],
+            charge("ch_" + parts[3], invoice.path("total").asLong(), parts[3], "pi_" + parts[3]));
       }
       case "void" -> invoice.put("status", "void");
       default -> {
@@ -250,6 +301,18 @@ class FakeStripe implements AutoCloseable {
       }
     }
     return new Answer(200, JSON.writeValueAsString(invoice));
+  }
+
+  private void charges(HttpExchange exchange) throws IOException {
+    if (refused(exchange)) {
+      return;
+    }
+    var charge = charges.get(exchange.getRequestURI().getPath().substring("/v1/charges/".length()));
+    if (charge == null) {
+      answer(exchange, 404, "{\"error\":{\"message\":\"No such charge\"}}");
+      return;
+    }
+    answer(exchange, 200, JSON.writeValueAsString(charge));
   }
 
   private void invoiceItems(HttpExchange exchange) throws IOException {

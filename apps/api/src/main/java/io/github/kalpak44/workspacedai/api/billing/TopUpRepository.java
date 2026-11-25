@@ -17,6 +17,8 @@ interface TopUpRepository extends JpaRepository<TopUpEntity, UUID> {
 
   Optional<TopUpEntity> findByCheckoutSessionId(String checkoutSessionId);
 
+  Optional<TopUpEntity> findByStripeInvoiceId(String stripeInvoiceId);
+
   List<TopUpEntity> findAllByUserIdAndStatusNotOrderByCreatedAtDesc(
       UUID userId, TopUpStatus status);
 

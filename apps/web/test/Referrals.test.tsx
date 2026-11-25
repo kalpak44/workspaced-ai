@@ -49,7 +49,7 @@ describe("referrals", () => {
     expect(tiles).toHaveTextContent("Earned so far€12.50");
     const funnel = within(screen.getByRole("list", { name: "Your invitation funnel" })).getAllByRole("listitem");
     expect(funnel[1]).toHaveTextContent("Paid2 67%");
-    expect(funnel[2]).toHaveTextContent("Still earning you credit1 33%");
+    expect(funnel[2]).toHaveTextContent("Still earning you rewards1 33%");
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(3);
     expect(rows[0]).toHaveTextContent(/Friend 3.*Signed up/);
