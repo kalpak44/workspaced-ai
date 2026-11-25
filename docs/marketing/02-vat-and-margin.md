@@ -33,5 +33,9 @@ reverse charge instead. Either answer is a change to how `BillingService` comput
 
 ## Done
 
+On 2026-11-25 the Hetzner account (K1172079826) was moved to Ispolink EOOD with VAT ID BG206070477, which VIES
+shows as valid. The Cloud API's `/pricing` now reports `vat_rate` 0 and cx23 at €5.49 gross, so steps 1 to 3 above
+are complete. Still open: whether Hetzner reissues earlier invoices without VAT.
+
 Prices are already labelled honestly: the picker, billing page and site all say they exclude VAT, which is added at
 top-up.

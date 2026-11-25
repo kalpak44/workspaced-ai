@@ -18,13 +18,14 @@ costs and the guard that keeps every program inside that.
 | Keep the demo as a paid workspace on the same VM, from the banner, the warning and the tour's end | [04-demo-conversion.md](04-demo-conversion.md) | `27462c2`, `232557c` |
 | Tour rewritten for non-technical users: shorter, chapters, ideas to tap, a celebration, ends on keeping | [05-tour.md](05-tour.md) | `232557c` |
 | Admins are told when no plan has been available for 15 minutes, and when one is back | [01-plan-availability.md](01-plan-availability.md) | `bbcf259` |
+| VAT ID BG206070477 (Ispolink EOOD) on the Hetzner account: servers billed under reverse charge, 0% VAT | [02-vat-and-margin.md](02-vat-and-margin.md) | none, console only |
 
 ## Next, in order
 
 | # | File | What | Why here | Effort |
 |---|---|---|---|---|
 | 1 | [01-plan-availability.md](01-plan-availability.md) | "Tell me when it's back" on a sold-out plan | Nothing below matters if no workspace can be created | Small |
-| 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Add the VAT ID to Hetzner, settle OSS with an accountant | No code, and it decides whether every reward program can pay out | None |
+| 2 | [02-vat-and-margin.md](02-vat-and-margin.md) | Settle OSS and reverse charge for business customers with an accountant | Decides how `BillingService` computes VAT as sales grow | None |
 | 3 | [03-analytics.md](03-analytics.md) | Site page views, only if the funnel leaves a question it cannot answer | The funnel already counts every step after the visit | Small |
 | 5 | [05-tour.md](05-tour.md) | Bring people back to a paused tour; cut more steps once the history shows where people stop | The tour is every user's first five minutes | Small |
 | 6 | [06-billing.md](06-billing.md) | Paused days instead of the €5 fee, spending this month, then hibernate | Cheap trust fixes; hibernate is the large one and comes last | Small, then large |
@@ -37,6 +38,8 @@ costs and the guard that keeps every program inside that.
 | 13 | [13-referrals.md](13-referrals.md) | Users invite friends for credit | Loses money in the worst case until 2 is done, and needs 3's attribution | Medium |
 | 14 | [14-partners.md](14-partners.md) | Creators earn cash commission | Reuses 13's attribution; worth it only with traffic to share | Large |
 | 15 | [15-showcase.md](15-showcase.md) | Opt-in gallery of what users built | Needs users with published work first | Medium |
+| 16 | [16-recipe-authors.md](16-recipe-authors.md) | Recipe authors earn credit on paid usage of their recipes | Uses are already recorded; the reward needs 13's ledger work | Medium |
+| 17 | [17-workspace-transfer.md](17-workspace-transfer.md) | Hand a workspace to another account; the builder becomes the client's referrer | Turns freelancers into a sales channel; attribution needs 13 or 14 | Large |
 
 A file's number is its place in this list. When the order changes, rename the files so it stays true; when an item
 ships, move it to **Done** above and leave the remaining work in its file.
