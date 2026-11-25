@@ -205,6 +205,8 @@ export function installFakeApi(
     nextId: 1,
     failDelete: false,
     listed: [] as string[],
+    /** Recipe ids sent with a new session, in order. */
+    applied: [] as string[],
   };
 
   // The account's balance and top-ups; `nextStatus` is what Stripe reports on the next refresh.
@@ -330,6 +332,7 @@ export function installFakeApi(
         publishedAt: input.visibility === "PUBLIC" ? now : null,
         rating: { average: 0, count: 0 },
         myRating: null,
+        uses: 0,
         mine: true,
       };
       recipes.rows.push(recipe);
@@ -664,7 +667,7 @@ export function installFakeApi(
       return json({ name: decoded, path: `uploads/${decoded}`, size: (init!.body as Blob).size }, 201);
     }
     const sessionsRoute =
-      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort|agent|forms(?:\/[^/]+(?:\/reply)?)?))?$/.exec(url);
+      /\/api\/v1\/workspaces\/([^/]+)\/sessions(?:\/([^/]+))?(?:\/(messages(?:\/[^/]+)?|abort|agent|forms(?:\/[^/]+(?:\/reply)?)?))?(?:\?(.*))?$/.exec(url);
     if (sessionsRoute) {
       if (sessionsRoute[3] === "agent") {
         const [, workspaceId, sessionId] = sessionsRoute;
@@ -679,7 +682,7 @@ export function installFakeApi(
         }
         return json({ current: sessionAgents.get(sessionId) ?? "build", agents: agentOptions });
       }
-      return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init);
+      return sessionsResponse(sessionsRoute[1], sessionsRoute[2], sessionsRoute[3], init, sessionsRoute[4]);
     }
     const metricsRoute = /\/api\/v1\/workspaces\/([^/]+)\/metrics\?range=([\w]+)$/.exec(url);
     if (metricsRoute) {
@@ -841,12 +844,15 @@ export function installFakeApi(
     sessionId: string | undefined,
     action: string | undefined,
     init?: RequestInit,
+    query?: string,
   ) {
     if (state.harnessDown) return json({}, 503);
     const list = sessions.get(workspaceId) ?? [];
     const method = init?.method ?? "GET";
     if (!sessionId) {
       if (method === "POST") {
+        const recipe = new URLSearchParams(query).get("recipe");
+        if (recipe) recipes.applied.push(recipe);
         const id = `s-${state.nextSession++}`;
         const session: Session = {
           id,

@@ -24,4 +24,8 @@ public record RecipeSummary(
     RecipeRating rating,
     @Schema(description = "The stars the caller gave it; null when they have not rated it")
         Integer myRating,
+    @Schema(
+            description = "How many workspaces it was applied in, its author's own aside",
+            example = "40")
+        int uses,
     @Schema(description = "Whether the caller wrote it") boolean mine) {}

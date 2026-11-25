@@ -7,10 +7,14 @@ import static org.mockito.Mockito.when;
 import io.github.kalpak44.workspacedai.api.TestDatabase;
 import io.github.kalpak44.workspacedai.api.TestRuntime;
 import io.github.kalpak44.workspacedai.api.TestUsers;
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.harness.FakeOpenCode;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.provider.ApiKeyCheck;
 import io.github.kalpak44.workspacedai.api.provider.ModelProvider;
+import io.github.kalpak44.workspacedai.api.recipe.RecipeRequest;
+import io.github.kalpak44.workspacedai.api.recipe.RecipeService;
+import io.github.kalpak44.workspacedai.api.recipe.Visibility;
 import io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings;
 import io.github.kalpak44.workspacedai.api.settings.SettingsService;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -25,6 +29,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 import org.assertj.core.groups.Tuple;
 import org.junit.jupiter.api.AfterAll;
@@ -59,6 +64,8 @@ class SessionControllerTest {
   @Autowired SettingsService settings;
   @Autowired EntityManager entityManager;
   @Autowired TransactionTemplate transaction;
+  @Autowired UserRepository users;
+  @Autowired RecipeService recipes;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -440,6 +447,31 @@ class SessionControllerTest {
                 + "\"partId\":\"msg_a:text:0\",\"delta\":\"second answer here\"}");
     assertThat(sessions.findById(session.id()))
         .hasValueSatisfying(e -> assertThat(e.getTitle()).isEqualTo("Friendly greeting request"));
+  }
+
+  @Test
+  void countsARecipeOncePerWorkspaceAndNeverForItsAuthor() throws Exception {
+    var ada =
+        users
+            .findByIdpSubject(TestUsers.subject("ada@example.com"))
+            .orElseGet(() -> users.save(TestUsers.newUser("ada@example.com", "Ada", "Lovelace")))
+            .getId();
+    var hers = recipes.create(ada, "Ada", "Lovelace", recipe(Visibility.PUBLIC)).id();
+    var hidden = recipes.create(ada, "Ada", "Lovelace", recipe(Visibility.PRIVATE)).id();
+    var mine = recipes.create(TestUsers.ADMIN, "Admin", "", recipe(Visibility.PUBLIC)).id();
+
+    // None of these may stop the session: it has already started when the recipe is counted.
+    for (var id : List.of(hers, hers, hidden, mine, UUID.randomUUID())) {
+      assertThat(send("POST", "?recipe=" + id, null).statusCode()).isEqualTo(201);
+    }
+
+    assertThat(recipes.get(hers, ada).uses()).isEqualTo(1);
+    assertThat(recipes.get(hidden, ada).uses()).isZero();
+    assertThat(recipes.get(mine, TestUsers.ADMIN).uses()).isZero();
+  }
+
+  private static RecipeRequest recipe(Visibility visibility) {
+    return new RecipeRequest("WordPress", "", "websites", List.of(), visibility, "1. Install it.");
   }
 
   @Test

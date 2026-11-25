@@ -23,6 +23,7 @@ import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
@@ -134,7 +135,13 @@ public interface SessionApi {
   @PostMapping(produces = JSON)
   ResponseEntity<Session> create(
       @Parameter(description = "Workspace id", example = WORKSPACE_ID) @PathVariable
-          UUID workspaceId);
+          UUID workspaceId,
+      @Parameter(
+              description =
+                  "The recipe this session applies, counted once per workspace in the store. "
+                      + "Ignored when it names no public recipe of someone else's")
+          @RequestParam(required = false)
+          UUID recipe);
 
   @Operation(
       operationId = "deleteSession",

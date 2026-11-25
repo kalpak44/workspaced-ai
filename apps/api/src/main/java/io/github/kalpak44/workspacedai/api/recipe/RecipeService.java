@@ -117,6 +117,19 @@ public class RecipeService {
     store.unrate(id, viewer);
   }
 
+  /**
+   * Counts the recipe for the workspace once. An author applying their own recipe is not counted,
+   * and an id the caller cannot see is ignored rather than refused, since the session it came with
+   * has already started.
+   */
+  @Transactional
+  public void recordUse(UUID id, UUID viewer, UUID workspace) {
+    store
+        .find(id, viewer)
+        .filter(recipe -> recipe.visibility() == Visibility.PUBLIC && !recipe.mine())
+        .ifPresent(recipe -> store.recordUse(id, workspace, viewer));
+  }
+
   private Recipe visible(UUID id, UUID viewer) {
     return store
         .find(id, viewer)

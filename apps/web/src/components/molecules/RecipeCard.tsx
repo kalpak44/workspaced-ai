@@ -50,6 +50,7 @@ export function RecipeCard({ recipe, onOpen }: Props) {
             <span className="flex shrink-0 items-center gap-1">
               <Stars value={recipe.rating.average} />
               <span>{recipe.rating.count > 0 ? `${recipe.rating.average.toFixed(1)} (${recipe.rating.count})` : "No ratings"}</span>
+              {recipe.uses > 0 && <span title="Workspaces it was applied in">· {recipe.uses === 1 ? "1 use" : `${recipe.uses} uses`}</span>}
             </span>
           )}
         </span>

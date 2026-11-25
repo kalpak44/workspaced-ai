@@ -110,7 +110,7 @@ describe("guided public-page workflow", () => {
 
   it("recovers an empty failed recipe session through Retry without creating another session", async () => {
     api.sessions.set(workspace.id, [{ id: "retry-recipe", title: "My page", path: "/home/workspace/sessions/retry-recipe", createdAt: new Date().toISOString() }]);
-    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "Demo", category: "websites", tags: [], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: null, rating: { average: 0, count: 0 }, myRating: null, mine: false, content: "Build the predefined page" } satisfies Recipe);
+    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "Demo", category: "websites", tags: [], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: null, rating: { average: 0, count: 0 }, myRating: null, uses: 0, mine: false, content: "Build the predefined page" } satisfies Recipe);
     tour.setTourProgress({ step: S.BUILD, workspaceId: workspace.id, sessionId: "retry-recipe" });
     globalThis.history.replaceState(null, "", "/workspaces/trial/sessions/retry-recipe");
     render(<App />);
@@ -269,7 +269,7 @@ describe("guided public-page workflow", () => {
   });
 
   it("builds a public page through the Store and chat, then waits for a custom change", async () => {
-    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "A little page to make your own", category: "websites", tags: ["demo"], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: "2026-11-01T10:00:00Z", rating: { average: 0, count: 0 }, myRating: null, mine: false, content: "Prepare the page, ask to make it PUBLIC, then verify the HTTP link." } satisfies Recipe);
+    api.recipes.rows.push({ id: tour.TOUR_RECIPE_ID, title: "Simple web page", summary: "A little page to make your own", category: "websites", tags: ["demo"], visibility: "PUBLIC", author: { id: "workspaced", firstName: "workspaced", lastName: "" }, createdAt: "2026-11-01T10:00:00Z", publishedAt: "2026-11-01T10:00:00Z", rating: { average: 0, count: 0 }, myRating: null, uses: 0, mine: false, content: "Prepare the page, ask to make it PUBLIC, then verify the HTTP link." } satisfies Recipe);
     open(S.STORE);
     await title("Pick a recipe");
     await user.click(screen.getByRole("link", { name: "Store" }));

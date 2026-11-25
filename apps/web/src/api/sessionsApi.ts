@@ -98,8 +98,10 @@ export async function listSessions(workspaceId: string): Promise<Session[]> {
   return (await send(sessionsUrl(workspaceId))).json();
 }
 
-export async function createSession(workspaceId: string): Promise<Session> {
-  return (await send(sessionsUrl(workspaceId), { method: "POST" })).json();
+/** A recipe id makes the store count the recipe as used in this workspace. */
+export async function createSession(workspaceId: string, recipeId?: string): Promise<Session> {
+  const url = recipeId ? `${sessionsUrl(workspaceId)}?recipe=${encodeURIComponent(recipeId)}` : sessionsUrl(workspaceId);
+  return (await send(url, { method: "POST" })).json();
 }
 
 export async function deleteSession(workspaceId: string, sessionId: string): Promise<void> {

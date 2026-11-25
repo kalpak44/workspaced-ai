@@ -24,6 +24,10 @@ public record Recipe(
     RecipeRating rating,
     @Schema(description = "The stars the caller gave it; null when they have not rated it")
         Integer myRating,
+    @Schema(
+            description = "How many workspaces it was applied in, its author's own aside",
+            example = "40")
+        int uses,
     @Schema(description = "Whether the caller wrote it") boolean mine,
     @Schema(description = "Markdown", example = "1. Ask the user to add `DB_PASSWORD` as a secret.")
         String content) {
@@ -41,6 +45,7 @@ public record Recipe(
         publishedAt,
         rating,
         myRating,
+        uses,
         mine);
   }
 }

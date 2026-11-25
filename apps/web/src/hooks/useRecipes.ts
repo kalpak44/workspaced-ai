@@ -186,16 +186,18 @@ export async function deleteRecipe(id: string): Promise<boolean> {
 
 /**
  * Opens a new session in the workspace with the prompt queued, the same way the workspace page
- * starts one. A draft to write first goes into the workspace before the session exists.
+ * starts one. A draft to write first goes into the workspace before the session exists. Only
+ * applying names the recipe, so a revision is not counted as a use.
  */
 export async function startRecipeSession(
   workspaceId: string,
   prompt: string,
   draft?: { readonly name: string; readonly content: string },
+  recipeId?: string,
 ): Promise<boolean> {
   try {
     if (draft) await api.saveDraft(workspaceId, draft.name, draft.content);
-    const session = await createSession(workspaceId);
+    const session = await createSession(workspaceId, recipeId);
     queuePrompt(session.id, prompt);
     navigate({ name: "session", workspaceId, sessionId: session.id });
     return true;

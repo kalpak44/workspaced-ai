@@ -38,6 +38,8 @@ export interface RecipeSummary {
   readonly publishedAt: string | null;
   readonly rating: RecipeRating;
   readonly myRating: number | null;
+  /** Workspaces it was applied in, its author's own aside. */
+  readonly uses: number;
   /** Whether the signed-in user wrote it, and so may delete it. */
   readonly mine: boolean;
 }

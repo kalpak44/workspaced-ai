@@ -95,6 +95,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
                     <Stars value={recipe.rating.average} className="size-4" />
                     <span className="text-xs text-zinc-500 dark:text-zinc-400">
                       {recipe.rating.count === 0 ? "No ratings yet" : recipe.rating.count === 1 ? "1 rating" : `${recipe.rating.count} ratings`}
+                      {recipe.uses > 0 && ` · used in ${recipe.uses === 1 ? "1 workspace" : `${recipe.uses} workspaces`}`}
                     </span>
                   </div>
                 </div>
@@ -151,7 +152,7 @@ export function RecipePage({ recipeId, workspaces, onTitle }: Props) {
           actionLabel="Apply"
           actionIcon={Play}
           onClose={() => setDialog(null)}
-          onConfirm={(workspaceId) => startRecipeSession(workspaceId, applyPrompt(recipe.title, authorName(recipe.author), recipe.content))}
+          onConfirm={(workspaceId) => startRecipeSession(workspaceId, applyPrompt(recipe.title, authorName(recipe.author), recipe.content), undefined, recipe.id)}
         />
       )}
       {dialog === "revise" && (

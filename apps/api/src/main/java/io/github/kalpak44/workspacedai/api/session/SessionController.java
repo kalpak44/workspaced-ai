@@ -1,7 +1,9 @@
 package io.github.kalpak44.workspacedai.api.session;
 
+import io.github.kalpak44.workspacedai.api.auth.CurrentUser;
 import io.github.kalpak44.workspacedai.api.harness.AgentForm;
 import io.github.kalpak44.workspacedai.api.harness.ChatMessage;
+import io.github.kalpak44.workspacedai.api.recipe.RecipeService;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
@@ -15,10 +17,12 @@ public class SessionController implements SessionApi {
 
   private final SessionService service;
   private final SessionStreams streams;
+  private final RecipeService recipes;
 
-  public SessionController(SessionService service, SessionStreams streams) {
+  public SessionController(SessionService service, SessionStreams streams, RecipeService recipes) {
     this.service = service;
     this.streams = streams;
+    this.recipes = recipes;
   }
 
   @Override
@@ -38,8 +42,11 @@ public class SessionController implements SessionApi {
   }
 
   @Override
-  public ResponseEntity<Session> create(UUID workspaceId) {
+  public ResponseEntity<Session> create(UUID workspaceId, UUID recipe) {
     var session = service.create(workspaceId);
+    if (recipe != null) {
+      recipes.recordUse(recipe, CurrentUser.id(), workspaceId);
+    }
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()
             .path("/{id}")

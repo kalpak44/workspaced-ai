@@ -43,16 +43,22 @@ public class RecipeStore {
   private static final String AVERAGE = "average";
   private static final String COUNT = "count";
   private static final String MY_RATING = "myRating";
+  private static final String USES = "uses";
 
   private final EntityManager entities;
   private final RecipeRepository recipes;
   private final RecipeRatingRepository ratings;
+  private final RecipeUseRepository uses;
 
   public RecipeStore(
-      EntityManager entities, RecipeRepository recipes, RecipeRatingRepository ratings) {
+      EntityManager entities,
+      RecipeRepository recipes,
+      RecipeRatingRepository ratings,
+      RecipeUseRepository uses) {
     this.entities = entities;
     this.recipes = recipes;
     this.ratings = ratings;
+    this.uses = uses;
   }
 
   public List<Recipe> list(Filter filter, Order order, int limit, int offset) {
@@ -140,6 +146,18 @@ public class RecipeStore {
     ratings.deleteById(new RecipeRatingEntity.Key(recipe, user));
   }
 
+  /**
+   * Once per workspace. The recipe's row is locked first, so the same workspace applying it twice
+   * at once cannot insert twice and collide on the key.
+   */
+  public void recordUse(UUID recipeId, UUID workspace, UUID user) {
+    var recipe = recipes.findLockedById(recipeId).orElseThrow();
+    var key = new RecipeUseEntity.Key(recipeId, workspace);
+    if (!uses.existsById(key)) {
+      uses.save(new RecipeUseEntity(recipe, workspace, user));
+    }
+  }
+
   private HibernateCriteriaBuilder builder() {
     return (HibernateCriteriaBuilder) entities.getCriteriaBuilder();
   }
@@ -170,6 +188,10 @@ public class RecipeStore {
             cb.equal(
                 mine.get(RecipeRatingEntity_.id).get(RecipeRatingEntity_.Key_.userId), viewer));
 
+    var used = query.subquery(Long.class);
+    var use = used.from(RecipeUseEntity.class);
+    used.select(cb.count(use)).where(cb.equal(use.get(RecipeUseEntity_.recipe), recipe));
+
     var selection =
         new ArrayList<Selection<?>>(
             List.of(
@@ -186,7 +208,8 @@ public class RecipeStore {
                 author.get(UserEntity_.id).alias(AUTHOR_ID),
                 average.alias(AVERAGE),
                 count.alias(COUNT),
-                own.alias(MY_RATING)));
+                own.alias(MY_RATING),
+                used.alias(USES)));
     if (withContent) {
       selection.add(recipe.get(RecipeEntity_.content).alias(RecipeEntity_.CONTENT));
     }
@@ -248,6 +271,7 @@ public class RecipeStore {
         RecipeRating.of(
             row.get(AVERAGE, Double.class), Math.toIntExact(row.get(COUNT, Long.class))),
         own == null ? null : own.intValue(),
+        Math.toIntExact(row.get(USES, Long.class)),
         author.equals(viewer),
         withContent ? row.get(RecipeEntity_.CONTENT, String.class) : null);
   }

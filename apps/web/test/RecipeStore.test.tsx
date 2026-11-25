@@ -26,6 +26,7 @@ function recipe(overrides: Partial<Recipe> = {}): Recipe {
     publishedAt: "2026-11-01T10:00:00Z",
     rating: { average: 4.5, count: 2 },
     myRating: null,
+    uses: 3,
     mine: false,
     content: "## Steps\n1. Ask for `DB_PASSWORD` under Secrets.",
     ...overrides,
@@ -62,6 +63,7 @@ describe("recipe store", () => {
     expect(within(list).getByText("WordPress with a public address")).toBeInTheDocument();
     expect(within(list).getByText(/Grace Hopper/)).toBeInTheDocument();
     expect(within(list).getByText("4.5 (2)")).toBeInTheDocument();
+    expect(within(list).getByText("· 3 uses")).toBeInTheDocument();
     expect(within(list).queryByText("My notes app")).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "Private" }));
@@ -161,6 +163,7 @@ describe("recipe store", () => {
     await user.click(within(dialog).getByRole("button", { name: "Apply" }));
 
     await waitFor(() => expect(globalThis.location.pathname).toMatch(/^\/workspaces\/starter\/sessions\//));
+    expect(api.recipes.applied).toEqual(["wp"]);
     await waitFor(() => expect(api.prompts.at(-1)?.text).toContain('Apply this recipe to the workspace: "WordPress with a public address" by Grace Hopper.'));
     expect(api.prompts.at(-1)?.text).toContain("Ask for `DB_PASSWORD` under Secrets.");
   });
@@ -178,6 +181,8 @@ describe("recipe store", () => {
     const draft = api.recipes.drafts.get("starter")?.get("wordpress-with-a-public-address");
     expect(parseDraft(draft ?? "").fields.recipe).toBe("wp");
     await waitFor(() => expect(api.prompts.at(-1)?.text).toContain("Use PostgreSQL"));
+    // A revision is the author's own work on it, not a use.
+    expect(api.recipes.applied).toEqual([]);
   });
 
   it("publishes a recipe straight from an imported Markdown file", async () => {
