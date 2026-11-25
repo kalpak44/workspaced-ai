@@ -7,6 +7,7 @@ import io.github.kalpak44.workspacedai.api.billing.BillingService;
 import io.github.kalpak44.workspacedai.api.billing.InsufficientFundsException;
 import io.github.kalpak44.workspacedai.api.compute.ComputeProvider;
 import io.github.kalpak44.workspacedai.api.compute.ServerTypeRejectedException;
+import io.github.kalpak44.workspacedai.api.compute.ServerTypeSoldOutException;
 import io.github.kalpak44.workspacedai.api.compute.VmPricing;
 import io.github.kalpak44.workspacedai.api.compute.VmSize;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
@@ -139,8 +140,9 @@ public class WorkspaceService {
       String timeZone,
       boolean demo) {
     validTimeZone(timeZone);
-    var size = demo ? cheapestDemoSize() : serverType;
-    var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
+    var plan = demo ? Optional.<VmSize>empty() : planFor(ownerId, serverType);
+    var size = demo ? cheapestDemoSize() : plan.map(VmSize::serverType).orElse(serverType);
+    var price = plan.map(VmSize::monthlyGross);
     price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     if (demo) {
       requireDemoAvailable(ownerId);
@@ -201,7 +203,8 @@ public class WorkspaceService {
     if (demo) {
       requireDemoAvailable(ownerId);
     } else {
-      priceFor(ownerId, size).ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
+      planFor(ownerId, size)
+          .ifPresent(plan -> billing.requireCovered(ownerId, plan.monthlyGross()));
     }
     var entity =
         transactions.execute(
@@ -240,8 +243,10 @@ public class WorkspaceService {
     var ownerId = draft.getOwnerId();
     var demo = draft.isDemo();
     var provider = ModelProvider.byId(draft.getModelProvider()).orElseThrow();
-    var size = demo ? cheapestDemoSize() : draft.getServerType();
-    var price = demo ? Optional.<BigDecimal>empty() : priceFor(ownerId, size);
+    var plan = demo ? Optional.<VmSize>empty() : planFor(ownerId, draft.getServerType());
+    var size =
+        demo ? cheapestDemoSize() : plan.map(VmSize::serverType).orElse(draft.getServerType());
+    var price = plan.map(VmSize::monthlyGross);
     price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
     if (demo) {
       requireDemoAvailable(ownerId);
@@ -357,21 +362,29 @@ public class WorkspaceService {
   }
 
   /**
-   * What the owner pays a month for the size; nothing for an admin, whose workspaces are not
-   * charged.
+   * The plan the owner creates and pays for, with a blank type resolved to a concrete one so the VM
+   * is the plan it is charged as; nothing for an admin, whose workspaces are not charged.
    */
-  private Optional<BigDecimal> priceFor(UUID ownerId, String serverType) {
+  private Optional<VmSize> planFor(UUID ownerId, String serverType) {
     var admin = users.findById(ownerId).map(user -> user.getRole() == Role.ADMIN).orElse(false);
     if (admin) {
       return Optional.empty();
     }
-    return Optional.of(
-        pricing
-            .monthlyPrice(serverType)
-            .orElseThrow(
-                () ->
-                    new ServerTypeRejectedException(
-                        "server type " + serverType + " is not one /vm-sizes lists")));
+    var offered = pricing.offered(serverType);
+    if (offered.isPresent()) {
+      return offered;
+    }
+    // A listed plan that is sold out or withheld is answered as sold out, which the form offers to
+    // wait for; anything else is not a plan at all.
+    var blank = serverType == null || serverType.isBlank();
+    if (blank
+        || pricing.sizes(false).stream()
+            .anyMatch(size -> size.serverType().equals(serverType.strip()))) {
+      throw new ServerTypeSoldOutException(
+          blank ? "every plan is sold out right now" : serverType + " is sold out right now");
+    }
+    throw new ServerTypeRejectedException(
+        "server type " + serverType + " is not one /vm-sizes lists");
   }
 
   // Best effort: when the runtime cannot be reached either, a VM keeps its workspace-id label and
@@ -525,8 +538,8 @@ public class WorkspaceService {
           HttpStatus.CONFLICT, "this demo's machine is not known yet; try again shortly");
     }
     try {
-      return priceFor(ownerId, serverType);
-    } catch (ServerTypeRejectedException e) {
+      return planFor(ownerId, serverType).map(VmSize::monthlyGross);
+    } catch (ServerTypeRejectedException | ServerTypeSoldOutException e) {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "this demo's machine is not sold as a plan right now");
     }

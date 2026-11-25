@@ -277,7 +277,7 @@ class DemoTest {
 
   @Test
   void keepsTheDemoOnItsVmAndChargesItsPlanFromThen() throws Exception {
-    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    when(pricing.offered("cx23")).thenReturn(Optional.of(size("cx23", true, true, "10.65")));
     var id =
         JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
     BillingFixtures.credit(context, user, 1000);
@@ -297,7 +297,7 @@ class DemoTest {
 
   @Test
   void asksForWhatTheBalanceLacksToKeepIt() throws Exception {
-    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    when(pricing.offered("cx23")).thenReturn(Optional.of(size("cx23", true, true, "10.65")));
     var id =
         JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
 
@@ -311,7 +311,7 @@ class DemoTest {
 
   @Test
   void neitherKeepsNorSparesADemoAtItsEnd() throws Exception {
-    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    when(pricing.offered("cx23")).thenReturn(Optional.of(size("cx23", true, true, "10.65")));
     BillingFixtures.credit(context, user, 1000);
     var late =
         JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();
@@ -326,7 +326,7 @@ class DemoTest {
 
   @Test
   void leavesAKeptDemoToItsOwnerEvenOnceItsTimeHasPassed() throws Exception {
-    when(pricing.monthlyPrice("cx23")).thenReturn(Optional.of(new BigDecimal("10.65")));
+    when(pricing.offered("cx23")).thenReturn(Optional.of(size("cx23", true, true, "10.65")));
     BillingFixtures.credit(context, user, 1000);
     var id =
         JSON.readValue(send("POST", "/workspaces", demo("sk-or-1")).body(), Workspace.class).id();

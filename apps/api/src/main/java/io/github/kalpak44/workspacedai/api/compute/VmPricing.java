@@ -73,17 +73,31 @@ public class VmPricing {
   }
 
   /**
-   * What a user who is not an admin pays a month for the plan's server type, before VAT.
+   * The plan a user who is not an admin can create now, priced for them. Empty for a plan that is
+   * sold out or withheld, which would otherwise be sold at a loss.
    *
-   * @param serverType blank for the default plan
+   * @param serverType blank for the default plan, or the first available one while it is not
    */
-  public Optional<BigDecimal> monthlyPrice(String serverType) {
-    return sizes(false).stream()
-        .filter(
-            size ->
-                serverType == null || serverType.isBlank()
-                    ? size.isDefault()
-                    : size.serverType().equals(serverType.strip()))
+  public Optional<VmSize> offered(String serverType) {
+    var available = sizes(false).stream().filter(VmSize::available).toList();
+    if (serverType == null || serverType.isBlank()) {
+      return available.stream()
+          .filter(VmSize::isDefault)
+          .findFirst()
+          .or(() -> available.stream().findFirst());
+    }
+    return available.stream()
+        .filter(size -> size.serverType().equals(serverType.strip()))
+        .findFirst();
+  }
+
+  /**
+   * What a user who is not an admin pays a month for a plan's server, whether it is on sale now or
+   * not, for a VM that already runs as it.
+   */
+  public Optional<BigDecimal> planPrice(String serverType) {
+    return priced(plans.offered().stream(), vmManager.sizes(), false).stream()
+        .filter(size -> size.serverType().equals(serverType))
         .findFirst()
         .map(VmSize::monthlyGross);
   }

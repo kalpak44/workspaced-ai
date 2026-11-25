@@ -70,8 +70,8 @@ class UsageChargingTest {
           "shared",
           "x86",
           "nbg1",
-          new BigDecimal("5.49"),
-          new BigDecimal("6.59"),
+          new BigDecimal("5.03"),
+          new BigDecimal("5.99"),
           true,
           true);
   private static final long HOURLY = 14_583;

@@ -64,8 +64,9 @@ class VmPricingTest {
         .containsExactly("Starter", "Builder", "Starter Flex");
     assertThat(sizes).extracting(VmSize::isDefault).containsExactly(false, false, true);
     assertThat(sizes.get(2).recommended()).isFalse();
-    assertThat(pricing.monthlyPrice(null))
-        .hasValueSatisfying(price -> assertThat(price).isEqualByComparingTo("33.458333"));
+    assertThat(pricing.offered(null))
+        .hasValueSatisfying(
+            size -> assertThat(size.monthlyGross()).isEqualByComparingTo("33.458333"));
 
     when(vmManager.sizes())
         .thenReturn(
@@ -89,7 +90,23 @@ class VmPricingTest {
     when(vmManager.sizes()).thenReturn(List.of(server("cx23", "8.66", true)));
 
     assertThat(pricing.sizes(false).getFirst().available()).isFalse();
-    assertThat(pricing.monthlyPrice("cx23")).isPresent();
+    assertThat(pricing.offered("cx23")).isEmpty();
+    assertThat(pricing.offered(null)).isEmpty();
+  }
+
+  @Test
+  void sellsNoPlanTheUserCannotSeeOnSaleAndTakesTheFirstOnSaleForABlankType() {
+    when(vmManager.sizes())
+        .thenReturn(
+            List.of(
+                server("cx23", "7.19", false),
+                server("cx33", "10.79", true),
+                server("cpx22", "23.99", true)));
+
+    assertThat(pricing.offered("cx23")).isEmpty();
+    assertThat(pricing.offered("cpx22")).isEmpty();
+    assertThat(pricing.offered(null)).map(VmSize::serverType).hasValue("cx33");
+    assertThat(pricing.offered(" cx33 ")).map(VmSize::serverType).hasValue("cx33");
   }
 
   @Test
