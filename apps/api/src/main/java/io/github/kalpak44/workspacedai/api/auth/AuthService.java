@@ -37,6 +37,7 @@ public class AuthService {
   private final AuthProperties properties;
   private final StarterRecipes starterRecipes;
   private final TourEvents tourEvents;
+  private final TrialEmails trialEmails;
   private final org.springframework.context.ApplicationEventPublisher events;
 
   public AuthService(
@@ -51,6 +52,7 @@ public class AuthService {
       AuthProperties properties,
       StarterRecipes starterRecipes,
       TourEvents tourEvents,
+      TrialEmails trialEmails,
       org.springframework.context.ApplicationEventPublisher events) {
     this.users = users;
     this.tokens = tokens;
@@ -63,6 +65,7 @@ public class AuthService {
     this.properties = properties;
     this.starterRecipes = starterRecipes;
     this.tourEvents = tourEvents;
+    this.trialEmails = trialEmails;
     this.events = events;
   }
 
@@ -98,6 +101,11 @@ public class AuthService {
     }
     var existing = users.findByIdpSubject(subject);
     var user = existing.orElseGet(() -> create(subject, role, attribution));
+    // Recorded at every sign-in so accounts made before this was kept claim their address too;
+    // only a new account loses the trial over it.
+    if (!trialEmails.claim(user.getId(), profile.email()) && existing.isEmpty()) {
+      users.withholdFreeTrial(user.getId());
+    }
     user.signedIn(role);
     starterRecipes.claimPublisher(user.getId(), profile.email());
     return new SignIn(tokens.issue(user, profile), profile.email(), existing.isEmpty());

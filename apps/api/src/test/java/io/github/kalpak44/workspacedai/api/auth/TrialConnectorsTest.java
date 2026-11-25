@@ -102,13 +102,52 @@ class TrialConnectorsTest {
   @Test
   void provisionsAfterVerifiedSignupAndReusesTheKeyOnLaterSignIns() {
     var subject = "trial-test|" + UUID.randomUUID();
-    var profile = new Auth0Users.Profile("new@example.com", "New", "User", "");
+    var profile = new Auth0Users.Profile(UUID.randomUUID() + "@example.com", "New", "User", "");
     var first = auth.signIn(subject, profile, true, Role.USER, Attribution.NONE);
     var account = users.findByIdpSubject(subject).orElseThrow();
     assertThat(first.created()).isTrue();
     assertThat(connectors.findByOwnerIdAndTrialTrue(account.getId())).isPresent();
     auth.signIn(subject, profile, true, Role.USER, Attribution.NONE);
     verify(management).createTrial(account.getId());
+  }
+
+  @Test
+  void givesAnInboxOneTrialHoweverManyAliasesSignUpWithIt() {
+    var inbox = "trial" + UUID.randomUUID().toString().replace("-", "");
+    var first = signUp(inbox + "@gmail.com");
+    var aliases =
+        List.of(
+            signUp(inbox.charAt(0) + "." + inbox.substring(1) + "+demo@gmail.com"),
+            signUp(inbox.toUpperCase() + "@GoogleMail.com"));
+
+    assertThat(first.isDemoAvailable()).isTrue();
+    assertThat(connectors.findByOwnerIdAndTrialTrue(first.getId())).isPresent();
+    for (var alias : aliases) {
+      assertThat(alias.isDemoAvailable()).isFalse();
+      assertThat(trials.ensure(alias.getId())).isEmpty();
+      assertThat(users.claimDemo(alias.getId(), java.time.Instant.now())).isZero();
+    }
+    // The first account keeps its trial on every later sign-in.
+    auth.signIn(
+        first.getIdpSubject(),
+        new Auth0Users.Profile(inbox + "@gmail.com", "", "", ""),
+        true,
+        Role.USER,
+        Attribution.NONE);
+    assertThat(users.findById(first.getId()).orElseThrow().isDemoAvailable()).isTrue();
+  }
+
+  @Test
+  void canonicalizesOnlyWhatDeliversToTheSameInbox() {
+    assertThat(TrialEmails.canonical(" A.B+x@Example.com ")).isEqualTo("a.b@example.com");
+    assertThat(TrialEmails.canonical("a.b+x@googlemail.com")).isEqualTo("ab@gmail.com");
+  }
+
+  private UserEntity signUp(String email) {
+    var subject = "trial-test|" + UUID.randomUUID();
+    auth.signIn(
+        subject, new Auth0Users.Profile(email, "", "", ""), true, Role.USER, Attribution.NONE);
+    return users.findByIdpSubject(subject).orElseThrow();
   }
 
   @Test

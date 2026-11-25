@@ -76,7 +76,7 @@ public class LifecycleMail {
             Role.ADMIN, now.minus(SIGNED_UP).minus(WINDOW), now.minus(SIGNED_UP));
     var neverPaid = unpaid(signedUp);
     signedUp.stream()
-        .filter(user -> user.getDemoStartedAt() == null && neverPaid.contains(user.getId()))
+        .filter(user -> user.isDemoAvailable() && neverPaid.contains(user.getId()))
         .forEach(user -> tip(user, "start-trial", _ -> Notifications.startTrial()));
 
     var tried =

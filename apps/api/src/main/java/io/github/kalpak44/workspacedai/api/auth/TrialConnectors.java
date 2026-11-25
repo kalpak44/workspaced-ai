@@ -44,7 +44,8 @@ public class TrialConnectors {
     try {
       return transaction.execute(
           status -> {
-            if (users.findLockedById(ownerId).isEmpty()) return Optional.empty();
+            var owner = users.findLockedById(ownerId);
+            if (owner.filter(UserEntity::hasFreeTrial).isEmpty()) return Optional.empty();
             var current = connectors.findByOwnerIdAndTrialTrue(ownerId);
             if (current.isPresent()) return current;
             var key = management.createTrial(ownerId);

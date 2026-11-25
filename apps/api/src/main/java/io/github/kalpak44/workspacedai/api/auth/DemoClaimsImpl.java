@@ -22,7 +22,9 @@ class DemoClaimsImpl implements DemoClaims {
     update
         .set(user.get(UserEntity_.demoStartedAt), now)
         .where(
-            cb.equal(user.get(UserEntity_.id), id), cb.isNull(user.get(UserEntity_.demoStartedAt)));
+            cb.equal(user.get(UserEntity_.id), id),
+            cb.isTrue(user.get(UserEntity_.freeTrial)),
+            cb.isNull(user.get(UserEntity_.demoStartedAt)));
     return entityManager.createQuery(update).executeUpdate();
   }
 
@@ -34,6 +36,18 @@ class DemoClaimsImpl implements DemoClaims {
     var user = update.from(UserEntity.class);
     update
         .set(user.get(UserEntity_.demoStartedAt), cb.nullLiteral(Instant.class))
+        .where(cb.equal(user.get(UserEntity_.id), id));
+    return entityManager.createQuery(update).executeUpdate();
+  }
+
+  @Override
+  @Transactional
+  public int withholdFreeTrial(UUID id) {
+    var cb = entityManager.getCriteriaBuilder();
+    var update = cb.createCriteriaUpdate(UserEntity.class);
+    var user = update.from(UserEntity.class);
+    update
+        .set(user.get(UserEntity_.freeTrial), false)
         .where(cb.equal(user.get(UserEntity_.id), id));
     return entityManager.createQuery(update).executeUpdate();
   }

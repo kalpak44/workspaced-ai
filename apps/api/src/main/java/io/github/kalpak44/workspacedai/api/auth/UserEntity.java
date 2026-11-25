@@ -41,6 +41,10 @@ public class UserEntity {
   @Column(name = "demo_started_at", insertable = false, updatable = false)
   private Instant demoStartedAt;
 
+  // False when another account already had the free trial with this one's email address.
+  @Column(name = "free_trial", insertable = false, updatable = false)
+  private boolean freeTrial = true;
+
   // Where the guided tour is; tourStep is null while no tour is under way.
   @Column(name = "tour_step")
   private Integer tourStep;
@@ -98,7 +102,12 @@ public class UserEntity {
   }
 
   public boolean isDemoAvailable() {
-    return demoStartedAt == null;
+    return freeTrial && demoStartedAt == null;
+  }
+
+  /** Whether the account gets the free demo and the trial AI key at all. */
+  public boolean hasFreeTrial() {
+    return freeTrial;
   }
 
   public Instant getCreatedAt() {

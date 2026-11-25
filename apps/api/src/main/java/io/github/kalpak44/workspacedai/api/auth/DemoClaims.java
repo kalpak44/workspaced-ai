@@ -14,4 +14,7 @@ public interface DemoClaims {
 
   /** Hands the demo back after its VM failed to start, so it can be tried again. */
   int releaseDemo(UUID id);
+
+  /** Takes the demo and the trial AI key from an account whose address already had them. */
+  int withholdFreeTrial(UUID id);
 }
