@@ -69,6 +69,7 @@ public class BillingService {
   private final BillingProperties properties;
   private final JsonMapper json;
   private final NotificationService notifications;
+  private final List<TopUpRewards> rewards;
 
   BillingService(
       BillingAccountRepository accounts,
@@ -82,7 +83,8 @@ public class BillingService {
       UserRepository users,
       BillingProperties properties,
       JsonMapper json,
-      NotificationService notifications) {
+      NotificationService notifications,
+      List<TopUpRewards> rewards) {
     this.accounts = accounts;
     this.topUps = topUps;
     this.usage = usage;
@@ -95,6 +97,7 @@ public class BillingService {
     this.properties = properties;
     this.json = json;
     this.notifications = notifications;
+    this.rewards = rewards;
   }
 
   public Billing billing(UUID user) {
@@ -479,9 +482,23 @@ public class BillingService {
                   ledger.post(topUp.getUserId(), micros, Ledger.TOP_UP, topUpId.toString());
               if (credited) {
                 notifications.send(topUp.getUserId(), Notifications.topUpPaid(amount(micros)));
+                reward(topUp.getUserId(), topUpId, micros);
               }
               return credited;
             }));
+  }
+
+  // Only once the top-up itself is credited, so a reward is never paid on credit and is posted
+  // once with it, the top-up's id making each entry unique.
+  private void reward(UUID user, UUID topUpId, long micros) {
+    for (var program : rewards) {
+      for (var reward : program.paid(user, topUpId, micros)) {
+        if (reward.micros() > 0
+            && ledger.post(reward.user(), reward.micros(), reward.kind(), topUpId.toString())) {
+          notifications.send(reward.user(), reward.message().apply(amount(reward.micros())));
+        }
+      }
+    }
   }
 
   // Only a pending top-up can end unpaid; a paid one stays paid whatever arrives late. The user is

@@ -230,7 +230,7 @@ public class AuthService {
   private UserEntity create(String subject, Role role, Attribution attribution) {
     var user = users.saveAndFlush(new UserEntity(subject, role, attribution));
     notifications.send(user.getId(), Notifications.welcome(""));
-    events.publishEvent(new UserCreated(user.getId()));
+    events.publishEvent(new UserCreated(user.getId(), role, attribution.referral()));
     return user;
   }
 

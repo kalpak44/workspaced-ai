@@ -113,6 +113,9 @@ class Auth0SignIn {
               if (attribution.campaign() != null) {
                 attributes.put(Attribution.CAMPAIGN_PARAM, attribution.campaign());
               }
+              if (attribution.referral() != null) {
+                attributes.put(Attribution.REFERRAL_PARAM, attribution.referral());
+              }
             })
         .additionalParameters(
             parameters -> {

@@ -1,5 +1,6 @@
 package io.github.kalpak44.workspacedai.api.compute;
 
+import io.github.kalpak44.workspacedai.api.referral.ReferralProperties;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
@@ -25,10 +26,12 @@ public class VmPricing {
 
   private final VmManager vmManager;
   private final PlanProperties plans;
+  private final ReferralProperties referrals;
 
-  public VmPricing(VmManager vmManager, PlanProperties plans) {
+  public VmPricing(VmManager vmManager, PlanProperties plans, ReferralProperties referrals) {
     this.vmManager = vmManager;
     this.plans = plans;
+    this.referrals = referrals;
   }
 
   /**
@@ -107,10 +110,14 @@ public class VmPricing {
 
   /**
    * Whether the price keeps the minimum margin over the server's cost with VAT, which Hetzner's
-   * hourly billing raises for a VM that lives less than a month, after Stripe's fee.
+   * hourly billing raises for a VM that lives less than a month, after Stripe's fee. Referral
+   * credit is spent on servers too, so the most it can add for a paid euro raises the cost alike.
    */
   private boolean covers(PlanProperties.Plan plan, BigDecimal monthly, VmSize size) {
-    var cost = size.monthlyGross().multiply(plans.hourlyBillingFactor());
+    var cost =
+        size.monthlyGross()
+            .multiply(plans.hourlyBillingFactor())
+            .multiply(BigDecimal.ONE.add(referrals.rewardShare()));
     var kept = monthly.multiply(BigDecimal.ONE.subtract(percent(plans.stripeFeePercent())));
     var floor = monthly.multiply(percent(plans.minMarginPercent()));
     if (kept.subtract(cost).compareTo(floor) >= 0) {

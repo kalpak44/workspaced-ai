@@ -2,6 +2,32 @@
 
 Every user can invite friends. Both earn balance credit, paid only from money the friend actually pays.
 
+## Shipped
+
+- **Rewards**, configured in `workspaced.referrals`: the friend gets 10% extra on paid top-ups for 90 days after
+  sign-up, up to €10; the referrer gets 10% of them for 365 days, up to €50 per friend. Credit only, in whole cents.
+- **Profit guard:** `VmPricing` counts both shares as extra server cost (`ReferralProperties.rewardShare`), so a
+  plan that could lose money with referral credit spent on it is withheld, from Hetzner's live prices. This holds
+  even for someone who invites themselves, which is why there is no card fingerprint check yet.
+- **Attribution:** `workspaced.online/?ref=CODE`; the site's `attribution.js` and the app's sign-in carry `ref`
+  through the encrypted sign-in cookie, and `ReferralBinding` binds it once when the account is made. A referral
+  link with no `utm_source` records `referral` as the sign-up source, so the admin funnel shows it.
+- **Crediting:** `BillingService.credit` asks every `TopUpRewards` in the transaction that credits a paid top-up,
+  ledger kinds `REFERRAL_BONUS` and `REFERRAL_REWARD` with the top-up id as reference. Admins take part on neither
+  side.
+- **Page:** General settings → Referrals: link with copy and share, tiles, a funnel (signed up, paid, still
+  earning), friends numbered rather than named, and the fine print. Terms section 10 and the privacy policy describe
+  it.
+
+## Still open
+
+- Refunds and disputes do not yet reverse rewards: handle `charge.refunded` and `charge.dispute.created`, and add
+  both events to `terraform/stripe/workspaced/webhooks/`. The terms already reserve the right to remove that credit.
+- Card fingerprint check, a monthly cap on rewarded friends, an email toggle for reward notifications, an admin card
+  with the program's cost, and an "Invited by a friend?" banner on the site.
+
+## The original plan
+
 ## Rewards
 
 - **The friend:** +10% extra balance on each paid top-up during their first 3 months, capped at €10 in total.

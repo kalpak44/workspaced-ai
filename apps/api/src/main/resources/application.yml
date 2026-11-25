@@ -76,6 +76,20 @@ workspaced:
     # with VAT, plus 0.4% for its invoice.
     stripe-fee-percent: 9.5
     min-margin-percent: 10
+  # Both sides earn balance credit on an invited user's paid top-ups. The plan check above
+  # counts both shares as extra server cost, so a plan stays profitable even when someone
+  # invites themselves.
+  referrals:
+    enabled: true
+    link: https://workspaced.online/
+    referee:
+      percent: 10
+      cap: 10.00
+      period: 90d
+    referrer:
+      percent: 10
+      cap: 50.00
+      period: 365d
   # Every harness is reached through this service's tunnel to its VM. Left unset, as it is
   # locally, no workspace's harness answers.
   agent-hub:

@@ -10,13 +10,22 @@ import java.util.regex.Pattern;
  *
  * @param source utm_source, such as a site, a newsletter or a referring host; null when none
  * @param campaign utm_campaign; null when none
+ * @param referral the referral code of the user who invited them; null when none
  */
-public record Attribution(String source, String campaign) {
+public record Attribution(String source, String campaign, String referral) {
 
-  public static final Attribution NONE = new Attribution(null, null);
+  public static final Attribution NONE = new Attribution(null, null, null);
 
   static final String SOURCE_PARAM = "utm_source";
   static final String CAMPAIGN_PARAM = "utm_campaign";
+  static final String REFERRAL_PARAM = "ref";
+
+  /** The source a referral link names when the link carried none of its own. */
+  static final String REFERRAL_SOURCE = "referral";
+
+  public Attribution(String source, String campaign) {
+    this(source, campaign, null);
+  }
 
   // Carries it from the callback's cookie to the success handler on the same request.
   static final String REQUEST_ATTRIBUTE = Attribution.class.getName();
@@ -26,11 +35,16 @@ public record Attribution(String source, String campaign) {
 
   /** From the parameters of a link, or of the authorization request that kept them. */
   static Attribution of(Map<String, ?> values) {
-    return new Attribution(clean(values.get(SOURCE_PARAM)), clean(values.get(CAMPAIGN_PARAM)));
+    var referral = clean(values.get(REFERRAL_PARAM));
+    var source = clean(values.get(SOURCE_PARAM));
+    return new Attribution(
+        source == null && referral != null ? REFERRAL_SOURCE : source,
+        clean(values.get(CAMPAIGN_PARAM)),
+        referral);
   }
 
   boolean isEmpty() {
-    return source == null && campaign == null;
+    return source == null && campaign == null && referral == null;
   }
 
   private static String clean(Object value) {

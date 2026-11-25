@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import io.github.kalpak44.workspacedai.api.referral.ReferralProperties;
 import java.math.BigDecimal;
+import java.net.URI;
+import java.time.Duration;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
@@ -21,8 +24,11 @@ class VmPricingTest {
           BigDecimal.valueOf(7),
           BigDecimal.valueOf(10));
 
+  private static final ReferralProperties.Side TEN_PERCENT =
+      new ReferralProperties.Side(BigDecimal.TEN, BigDecimal.TEN, Duration.ofDays(90));
+
   private final VmManager vmManager = mock(VmManager.class);
-  private final VmPricing pricing = new VmPricing(vmManager, PLANS);
+  private final VmPricing pricing = new VmPricing(vmManager, PLANS, referrals(false));
 
   @Test
   void offersThePlansInOrderAtTheirDailyPriceAndLeavesOtherServersOut() {
@@ -84,6 +90,21 @@ class VmPricingTest {
 
     assertThat(pricing.sizes(false).getFirst().available()).isFalse();
     assertThat(pricing.monthlyPrice("cx23")).isPresent();
+  }
+
+  @Test
+  void countsReferralCreditAsServerCostSoAPlanStaysProfitableWithIt() {
+    when(vmManager.sizes()).thenReturn(List.of(server("cx23", "7.19", true)));
+    assertThat(pricing.sizes(false).getFirst().available()).isTrue();
+
+    // 10.65 less 7% leaves 9.90; 7.19 times 1.155 is 8.30, and 9.97 with 20% of it as credit.
+    var withReferrals = new VmPricing(vmManager, PLANS, referrals(true));
+    assertThat(withReferrals.sizes(false).getFirst().available()).isFalse();
+  }
+
+  private static ReferralProperties referrals(boolean enabled) {
+    return new ReferralProperties(
+        enabled, URI.create("https://workspaced.online/"), TEN_PERCENT, TEN_PERCENT);
   }
 
   private static VmSize server(String type, String monthlyGross, boolean available) {

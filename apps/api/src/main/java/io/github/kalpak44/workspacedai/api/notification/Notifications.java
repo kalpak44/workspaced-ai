@@ -105,6 +105,40 @@ public final class Notifications {
         BILLING);
   }
 
+  /**
+   * For a user whose invited friend paid a top-up.
+   *
+   * @param amount what was added, e.g. 2.50 EUR
+   */
+  public static NotificationMessage referralReward(String amount) {
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.SUCCESS,
+        "You earned a referral reward",
+        amount + " was added to your balance.",
+        "A friend you invited paid for their workspaces, so we added "
+            + amount
+            + " to your balance. Your referrals page shows what each friend has earned you.",
+        new NotificationAction("See your referrals", "/settings/referrals"));
+  }
+
+  /**
+   * For an invited user, on top of their own top-up.
+   *
+   * @param amount the bonus, e.g. 2.50 EUR
+   */
+  public static NotificationMessage referralBonus(String amount) {
+    return new NotificationMessage(
+        NotificationKind.BILLING,
+        NotificationTone.SUCCESS,
+        "Your welcome bonus",
+        amount + " extra was added to your balance.",
+        "You joined through a friend's invitation, so we added "
+            + amount
+            + " extra to your balance on top of your top-up.",
+        BILLING);
+  }
+
   public static NotificationMessage topUpFailed(String amount) {
     return new NotificationMessage(
         NotificationKind.BILLING,

@@ -1,4 +1,4 @@
-import { Funnel, KeyRound, Plug, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { Funnel, Gift, KeyRound, Plug, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { navigate } from "../../hooks/useRoute";
@@ -9,19 +9,21 @@ import { ContextLayout } from "../templates/ContextLayout";
 
 import { AiConnectorsPanel } from "../organisms/AiConnectorsPanel";
 import { FunnelPanel } from "../organisms/FunnelPanel";
+import { ReferralsPanel } from "../organisms/ReferralsPanel";
 
 const NOTES = {
   "ai-connectors": "Named AI connections for all your workspaces.",
   profile: "Your photo, name, sign-in and email.",
   mail: "Mail sent from the platform's own addresses.",
   funnel: "Where sign-ups come from and how far they get.",
+  referrals: "Invite friends and earn credit on what they pay.",
 };
 
-type Section = "profile" | "ai-connectors" | "mail" | "funnel";
+type Section = "profile" | "ai-connectors" | "referrals" | "mail" | "funnel";
 
 /** Account settings; the open section is in the URL, so a link can open Mail directly. */
 export function GeneralSettingsPage({ section: requested }: { readonly section?: string }) {
-  const section: Section = (requested === "mail" || requested === "ai-connectors" || requested === "funnel") ? requested : "profile";
+  const section: Section = (requested === "mail" || requested === "ai-connectors" || requested === "referrals" || requested === "funnel") ? requested : "profile";
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: Section) => navigate({ name: "general-settings", section: id }, { replace: true });
   const { account, saveProfile, saveMailPreferences, requestPasswordReset, enrollMfa } = useAccount();
@@ -86,7 +88,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
     <PageHeader title="General settings" description={NOTES[section]} />
     <ContextLayout contained sidebar={
       <SectionNav label="Settings sections" current={section} onSelect={(id) => { setSection(id); setNotice(""); }}
-        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, { id: "ai-connectors", label: "AI connectors", Icon: Plug }, ...(isAdmin ? [{ id: "mail", label: "Mail", Icon: Mail }, { id: "funnel", label: "Funnel", Icon: Funnel }] as const : [])]} />
+        sections={[{ id: "profile", label: "Profile", Icon: UserRound }, { id: "ai-connectors", label: "AI connectors", Icon: Plug }, { id: "referrals", label: "Referrals", Icon: Gift }, ...(isAdmin ? [{ id: "mail", label: "Mail", Icon: Mail }, { id: "funnel", label: "Funnel", Icon: Funnel }] as const : [])]} />
     }>
       <div className="w-full">
           <div className="min-w-0 flex-1">
@@ -144,6 +146,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
               </section>
             </div>
             {section === "ai-connectors" && <AiConnectorsPanel />}
+            {section === "referrals" && <ReferralsPanel />}
             {section === "mail" && isAdmin && <MailPanel />}
             {section === "funnel" && isAdmin && <FunnelPanel />}
             <Toast message={notice} />

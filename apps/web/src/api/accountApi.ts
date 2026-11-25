@@ -54,11 +54,14 @@ export const browser = {
   },
 };
 
-/** The utm_ parameters this page was opened with, passed on so the API records where a sign-up came from. */
+/**
+ * The utm_ parameters and referral code this page was opened with, passed on so the API records
+ * where a sign-up came from and who invited it.
+ */
 function attribution(): string {
   const params = new URLSearchParams(globalThis.location.search);
   const kept = new URLSearchParams();
-  for (const name of ["utm_source", "utm_campaign"]) {
+  for (const name of ["utm_source", "utm_campaign", "ref"]) {
     const value = params.get(name);
     if (value) kept.set(name, value);
   }

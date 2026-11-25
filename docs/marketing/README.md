@@ -18,6 +18,7 @@ costs and the guard that keeps every program inside that.
 | Keep the demo as a paid workspace on the same VM, from the banner, the warning and the tour's end | [04-demo-conversion.md](04-demo-conversion.md) | `27462c2`, `232557c` |
 | Tour rewritten for non-technical users: shorter, chapters, ideas to tap, a celebration, ends on keeping | [05-tour.md](05-tour.md) | `232557c` |
 | Admins are told when no plan has been available for 15 minutes, and when one is back | [01-plan-availability.md](01-plan-availability.md) | `bbcf259` |
+| Referrals: 10% extra for the friend, 10% for the referrer, guarded by the plan margin check | [13-referrals.md](13-referrals.md) | this change |
 | VAT ID BG206070477 (Ispolink EOOD) on the Hetzner account: servers billed under reverse charge, 0% VAT | [02-vat-and-margin.md](02-vat-and-margin.md) | none, console only |
 
 ## Next, in order
@@ -35,7 +36,7 @@ costs and the guard that keeps every program inside that.
 | 10 | [10-listings-and-launches.md](10-listings-and-launches.md) | Directories, Show HN, Product Hunt | A one-off spike, so only after 4 works and 3 can attribute it | Time only |
 | 11 | [11-recipe-pages.md](11-recipe-pages.md) | A search landing page per public recipe | Compounding traffic, slow to pay off | Medium |
 | 12 | [12-open-in-button.md](12-open-in-button.md) | "Open in workspaced" for GitHub READMEs | Compounding traffic; costs a demo per click-through | Medium |
-| 13 | [13-referrals.md](13-referrals.md) | Users invite friends for credit | Loses money in the worst case until 2 is done, and needs 3's attribution | Medium |
+| 13 | [13-referrals.md](13-referrals.md) | Reverse referral rewards on refunds and disputes, then the smaller extras | The program is live; this closes the refund gap | Small |
 | 14 | [14-partners.md](14-partners.md) | Creators earn cash commission | Reuses 13's attribution; worth it only with traffic to share | Large |
 | 15 | [15-showcase.md](15-showcase.md) | Opt-in gallery of what users built | Needs users with published work first | Medium |
 | 16 | [16-recipe-authors.md](16-recipe-authors.md) | Recipe authors earn credit on paid usage of their recipes | Uses are already recorded; the reward needs 13's ledger work | Medium |
