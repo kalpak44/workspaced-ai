@@ -122,6 +122,19 @@ class VmFirewallServiceTest {
   }
 
   @Test
+  void rewritesEveryFirewallInUseOnceSoOldOnesGetTheOutboundRules() {
+    var inUse = firewall(3, UUID.randomUUID().toString(), 1);
+    hetzner.firewalls.put(3L, inUse);
+    hetzner.firewalls.put(1L, firewall(1, vm().id().toString(), 0));
+
+    service.deleteOrphans();
+    service.deleteOrphans();
+
+    assertThat(hetzner.rulesSet).containsExactly(3L);
+    assertThat(hetzner.firewalls.get(3L).rules()).isEqualTo(inUse.rules());
+  }
+
+  @Test
   void deletesNothingBeforeTheInventoryIsLoaded() {
     inventoryLoaded = false;
     hetzner.firewalls.put(2L, firewall(2, UUID.randomUUID().toString(), 0));

@@ -187,6 +187,7 @@ class HttpHetznerClientTest {
     assertThat(firewall.rules()).isEmpty();
     assertThat(firewall.servers()).isZero();
     assertThat(firewall.created()).isEqualTo(Instant.parse("2026-11-14T10:00:00Z"));
+    assertSmtpClosed(hetzner.firewalls.get(id).path("rules"));
   }
 
   @Test
@@ -208,6 +209,30 @@ class HttpHetznerClientTest {
         .containsExactly(
             new FirewallRule("tcp", "8000-8100", List.of("0.0.0.0/0", "::/0"), "Blog"),
             new FirewallRule("icmp", null, List.of("10.0.0.0/8"), null));
+    assertSmtpClosed(sent);
+  }
+
+  // Hetzner allows only what an outbound rule names, so every other port must be named.
+  private static void assertSmtpClosed(tools.jackson.databind.JsonNode rules) {
+    var open = new java.util.TreeSet<Integer>();
+    var protocols = new java.util.TreeSet<String>();
+    for (var rule : rules) {
+      if (!"out".equals(rule.path("direction").asString())) {
+        continue;
+      }
+      assertThat(rule.path("destination_ips"))
+          .extracting(tools.jackson.databind.JsonNode::asString)
+          .containsExactly("0.0.0.0/0", "::/0");
+      protocols.add(rule.path("protocol").asString());
+      if ("tcp".equals(rule.path("protocol").asString())) {
+        var range = rule.path("port").asString().split("-");
+        for (var port = Integer.parseInt(range[0]); port <= Integer.parseInt(range[1]); port++) {
+          open.add(port);
+        }
+      }
+    }
+    assertThat(protocols).containsExactly("esp", "gre", "icmp", "tcp", "udp");
+    assertThat(open).hasSize(65535 - 2).doesNotContain(25, 465).contains(587);
   }
 
   @Test

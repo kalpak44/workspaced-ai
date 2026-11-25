@@ -21,6 +21,7 @@ public class FakeHetznerClient implements HetznerClient {
   public final List<String> powerActions = new ArrayList<>();
   public final Map<Long, Firewall> firewalls = new ConcurrentHashMap<>();
   public final List<Long> deletedFirewalls = new ArrayList<>();
+  public final List<Long> rulesSet = new ArrayList<>();
   public volatile List<ServerType> types = List.of();
   public volatile List<ServerType.Price> ipv4Prices = List.of();
   public volatile HetznerException failure;
@@ -123,6 +124,7 @@ public class FakeHetznerClient implements HetznerClient {
   @Override
   public void setFirewallRules(long id, List<FirewallRule> rules) {
     fail();
+    rulesSet.add(id);
     firewalls.computeIfPresent(
         id,
         (key, f) ->

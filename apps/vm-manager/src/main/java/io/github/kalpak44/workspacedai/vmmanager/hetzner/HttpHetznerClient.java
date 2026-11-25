@@ -24,6 +24,7 @@ import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.node.ArrayNode;
 
 /** Calls the Hetzner Cloud API over HTTP with the project token. */
 @Component
@@ -31,6 +32,19 @@ public class HttpHetznerClient implements HetznerClient {
 
   private static final String LABELS = "labels";
   private static final String RULES = "rules";
+
+  // Hetzner drops outbound traffic no rule allows once a firewall has one, so these allow all of
+  // it but direct SMTP (25, 465): a VM sending spam gets the whole project suspended. Submission
+  // on 587 stays open for apps that send through a mail provider. Users never see or set these.
+  private static final List<List<String>> OUTBOUND =
+      List.of(
+          List.of("tcp", "1-24"),
+          List.of("tcp", "26-464"),
+          List.of("tcp", "466-65535"),
+          List.of("udp", "1-65535"),
+          List.of("icmp"),
+          List.of("esp"),
+          List.of("gre"));
 
   private final HetznerProperties properties;
   private final HttpClient http;
@@ -140,7 +154,7 @@ public class HttpHetznerClient implements HetznerClient {
     body.put("name", name);
     var labelNode = body.putObject(LABELS);
     labels.forEach(labelNode::put);
-    body.putArray(RULES);
+    outbound(body.putArray(RULES));
     var created =
         send(
             "/firewalls",
@@ -180,11 +194,26 @@ public class HttpHetznerClient implements HetznerClient {
         node.put("description", rule.description());
       }
     }
+    outbound(array);
     send(
         "/firewalls/" + id + "/actions/set_rules",
         HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
         "POST",
         201);
+  }
+
+  private static void outbound(ArrayNode rules) {
+    for (var allowed : OUTBOUND) {
+      var node = rules.addObject();
+      node.put("direction", "out");
+      node.put("protocol", allowed.getFirst());
+      if (allowed.size() > 1) {
+        node.put("port", allowed.get(1));
+      }
+      var destinations = node.putArray("destination_ips");
+      destinations.add("0.0.0.0/0");
+      destinations.add("::/0");
+    }
   }
 
   @Override
@@ -351,7 +380,7 @@ public class HttpHetznerClient implements HetznerClient {
         server.path("status").asString());
   }
 
-  // Outbound rules are never set here, so only inbound ones are read back.
+  // Outbound rules are the fixed ones, so only inbound ones are read back.
   private static Firewall firewall(JsonNode firewall) {
     var rules = new ArrayList<FirewallRule>();
     firewall

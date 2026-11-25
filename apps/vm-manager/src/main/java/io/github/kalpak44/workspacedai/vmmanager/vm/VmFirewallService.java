@@ -13,6 +13,7 @@ import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,10 +21,11 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 /**
- * Each VM's own Cloud Firewall: made with no rules when the VM is created, so nothing reaches it
- * until a rule lets it in, and found again by its vm-id label. Hetzner refuses to delete a firewall
- * while it still applies to a server, which lasts a while after the server is deleted, so a sweep
- * deletes the ones whose VM is gone instead of the VM's delete.
+ * Each VM's own Cloud Firewall: made with no inbound rules when the VM is created, so nothing
+ * reaches it until a rule lets it in, and with outbound SMTP closed, and found again by its vm-id
+ * label. Hetzner refuses to delete a firewall while it still applies to a server, which lasts a
+ * while after the server is deleted, so a sweep deletes the ones whose VM is gone instead of the
+ * VM's delete.
  */
 @Service
 public class VmFirewallService {
@@ -44,6 +46,7 @@ public class VmFirewallService {
   private final HetznerClient hetzner;
   private final VmInventory inventory;
   private final Clock clock;
+  private final AtomicBoolean rewritten = new AtomicBoolean();
 
   public VmFirewallService(
       VmRepository vms, HetznerClient hetzner, VmInventory inventory, Clock clock) {
@@ -111,6 +114,9 @@ public class VmFirewallService {
       log.warn("could not list VM firewalls: {}", e.getMessage());
       return;
     }
+    if (!rewritten.get()) {
+      rewrite(firewalls);
+    }
     var cutoff = clock.instant().minus(GRACE);
     for (var firewall : firewalls) {
       if (firewall.servers() > 0 || firewall.created().isAfter(cutoff) || hasVm(firewall)) {
@@ -123,6 +129,24 @@ public class VmFirewallService {
         log.warn("could not delete firewall {}: {}", firewall.name(), e.getMessage());
       }
     }
+  }
+
+  // Writes each firewall in use back with its own inbound rules, once per start, so one made
+  // before the client added its fixed outbound rules gets them too.
+  private void rewrite(List<Firewall> firewalls) {
+    var failed = false;
+    for (var firewall : firewalls) {
+      if (firewall.servers() == 0) {
+        continue;
+      }
+      try {
+        hetzner.setFirewallRules(firewall.id(), firewall.rules());
+      } catch (HetznerException e) {
+        failed = true;
+        log.warn("could not rewrite firewall {}: {}", firewall.name(), e.getMessage());
+      }
+    }
+    rewritten.set(!failed);
   }
 
   private boolean hasVm(Firewall firewall) {
