@@ -20,6 +20,10 @@
     <properties>
         <java.version>25</java.version>
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+        <!-- Boot 4.2.0 manages Tomcat 11.0.27, which the image scan finds to carry
+             published Critical and High findings fixed in 11.0.29. Override only the
+             patch version until the Boot parent moves it. -->
+        <tomcat.version>11.0.29</tomcat.version>
 
         <maven.enforcer.plugin.version>3.7.0</maven.enforcer.plugin.version>
         <fmt.plugin.version>2.29</fmt.plugin.version>
