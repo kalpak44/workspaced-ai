@@ -1,7 +1,8 @@
-import { ArrowLeft, MessageSquare, Plus, Settings, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Settings } from "lucide-react";
 import type { Session } from "../../hooks/useSessions";
-import { Button, IconButton, Spinner } from "../atoms";
+import { Button, IconButton } from "../atoms";
 import { SessionDropdown } from "./SessionDropdown";
+import { SessionNavigation } from "./SessionNavigation";
 
 interface Props {
   readonly workspaceName: string;
@@ -24,24 +25,10 @@ export function SessionSidebar({ workspaceName, sessions, selectedId, loading, d
         </button>
         <IconButton data-tour="session-settings" label="Workspace settings" title="Workspace settings" icon={Settings} onClick={onSettings} className="shrink-0" />
       </div>
-      <nav aria-label="Session navigation" className="min-h-0 min-w-0 flex-1 p-3 sm:overflow-y-auto">
+      <nav aria-label="Session navigation" className="min-h-0 min-w-0 flex-1 p-3 sm:flex sm:flex-col sm:overflow-hidden">
         <div className="flex sm:hidden"><SessionDropdown sessions={sessions} selectedId={selectedId} loading={loading} deleting={deleting} onOpen={onOpen} onDelete={onDelete} /></div>
-        <div className="hidden sm:block">
-        <div className="mb-3 pl-2">
-          <h2 className="text-xs font-medium text-zinc-500 dark:text-zinc-400">Sessions</h2>
-        </div>
-        {loading ? <p className="px-2 py-2 text-xs text-zinc-500">Loading sessions…</p> :
-          <ul className="flex gap-1 overflow-x-auto sm:flex-col">
-            {[...sessions].reverse().map((session) => (
-              <li key={session.id} className={`group relative flex min-w-0 shrink-0 items-center rounded-md sm:shrink ${session.id === selectedId ? "bg-zinc-100 dark:bg-zinc-800" : "hover:bg-zinc-50 dark:hover:bg-zinc-800/50"}`}>
-                <button type="button" aria-current={session.id === selectedId ? "page" : undefined} disabled={session.available === false || deleting.has(session.id)} onClick={() => onOpen(session.id)}
-                  className="flex min-w-0 flex-1 items-center gap-2 px-2 py-2 text-left text-sm text-zinc-600 aria-[current=page]:font-medium aria-[current=page]:text-zinc-900 disabled:opacity-50 dark:text-zinc-400 dark:aria-[current=page]:text-zinc-100">
-                  <MessageSquare aria-hidden className="size-3.5 shrink-0" /><span className="truncate">{session.title ?? "New session"}</span>
-                </button>
-                {deleting.has(session.id) ? <Spinner label={`Deleting ${session.title ?? "New session"}`} className="mr-2 size-3.5 shrink-0 text-zinc-400" /> : <IconButton label={`Delete session: ${session.title ?? "New session"}`} title="Delete session" icon={Trash2} onClick={() => onDelete(session.id)} className="mr-1 shrink-0 p-1 opacity-100 hover:text-rose-600 focus:opacity-100 sm:opacity-0 sm:group-hover:opacity-100" />}
-              </li>
-            ))}
-          </ul>}
+        <div className="hidden min-h-0 flex-1 sm:flex sm:flex-col">
+          <SessionNavigation sessions={sessions} selectedId={selectedId} loading={loading} deleting={deleting} onOpen={onOpen} onDelete={onDelete} />
         </div>
       </nav>
       <div className="shrink-0 p-3 pl-0 sm:border-t sm:border-zinc-200 sm:pl-3 dark:border-zinc-800 [&>button]:w-full [&>button]:justify-center">

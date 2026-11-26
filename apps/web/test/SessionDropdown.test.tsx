@@ -17,6 +17,28 @@ function setup() {
 }
 
 describe("mobile session dropdown", () => {
+  it("keeps scheduled runs separate and opens their group for the current session", async () => {
+    const user = userEvent.setup();
+    const onOpen = vi.fn();
+    render(<SessionDropdown sessions={[...sessions,
+      { id: "run1", title: "Approval watch", path: "/run1", createdAt: "2026-11-04T10:00:00Z", task: "approval-watch" },
+      { id: "run2", title: "Approval watch", path: "/run2", createdAt: "2026-11-04T10:05:00Z", task: "approval-watch" },
+    ]} selectedId="run2" loading={false} deleting={new Set()} onOpen={onOpen} onDelete={vi.fn()} />);
+    await user.click(screen.getByRole("button", { name: "Choose session" }));
+    expect(screen.getByRole("combobox", { name: "Sessions shown" })).toHaveValue("scheduled");
+    expect(screen.queryByRole("button", { name: "Project plan" })).not.toBeInTheDocument();
+    const runs = screen.getAllByRole("button", { name: "Approval watch" });
+    expect(runs[0]).toHaveAttribute("aria-current", "page");
+    expect(runs[0].querySelector("time")).toHaveAttribute("dateTime", "2026-11-04T10:05:00Z");
+    await user.type(screen.getByRole("searchbox"), "approval-watch");
+    expect(screen.getAllByRole("button", { name: "Approval watch" })).toHaveLength(2);
+    await user.selectOptions(screen.getByRole("combobox"), "user");
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Approval watch" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Project plan" }));
+    expect(onOpen).toHaveBeenCalledWith("plan");
+  });
+
   it("searches all sessions and switches to a match without deleting it", async () => {
     const { user, onOpen, onDelete, trigger } = setup();
     expect(trigger).toHaveTextContent("Project plan");
