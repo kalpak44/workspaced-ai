@@ -1,6 +1,6 @@
 # Public site
 
-`apps/site` is workspaced.online: a landing page, customer support, the privacy policy and the terms of service.
+`apps/site` is workspaced.online: a landing page, customer support, the privacy policy, the terms of service and the acceptable-use policy.
 Plain HTML with one Tailwind stylesheet, so search engines index the full text of every page. The only script is
 the privacy notice's.
 
@@ -16,6 +16,6 @@ change to every page. The notice shows on every page until a visitor agrees, whi
 also needs a line in `src/sitemap.xml`. nginx serves `/support` from `support.html`, redirects `/support.html` to
 `/support` and `www.workspaced.online` to the apex, so each page has one URL.
 
-`privacy.html` and `terms.html` describe how the product behaves — no backups, pausing and deletion when the balance
+`privacy.html`, `terms.html` and `acceptable-use.html` describe how the product behaves — no backups, pausing and deletion when the balance
 runs out, the reactivation fee, the user's own OpenRouter key, the sub-processors. Changing any of those means
 updating them and their "Last updated" date.
