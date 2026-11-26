@@ -172,8 +172,10 @@ kept in Vault at `secret/workspaced-vm-manager-secrets` under `hcloud-token`, an
 (Nuremberg, Germany) unless `WORKSPACED_HETZNER_LOCATION` says otherwise. A size sold out there is offered, and
 created, in the first of `WORKSPACED_HETZNER_FALLBACK_LOCATIONS` (`fsn1` by default) that has it, so the API's plans keep
 their server rather than going unavailable; each option names its location. VMs are created from `WORKSPACED_HETZNER_IMAGE`
-(`ubuntu-24.04`). `WORKSPACED_HETZNER_SSH_KEYS` names project SSH keys to put on every VM; left empty, Hetzner emails
-the account a root password for each one instead.
+(`ubuntu-24.04`). `WORKSPACED_HETZNER_SSH_KEYS` names project SSH keys to put on every VM. Left empty, as it is,
+every VM gets `workspaced-ai-no-login`, a key the VM manager uploads once and whose private half was never kept: a
+server created with no key gets a root password Hetzner emails to the account owner. Do not configure a key whose
+private half is stored anywhere; SSH is off on the image, so no key is ever needed to reach a VM.
 
 ## Compute providers
 
