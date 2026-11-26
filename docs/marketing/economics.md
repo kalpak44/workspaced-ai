@@ -41,6 +41,27 @@ A plan's *cost share* is its server's cost over its price. It is highest on Pro 
 
 Per plan in the worst case: Starter €0.127, Builder €0.162, Pro €0.116, Starter Flex €0.113.
 
+## Per plan and location
+
+A VM is created in nbg1, or in fsn1 or hel1 when its size is sold out there, and is priced from the location it lands
+in. The worst case is a month at the plan's price with an international card, both referral rewards on every euro, and
+VAT paid to Hetzner. Hetzner's prices on 2026-11-26:
+
+| Plan | Location | Price a month | Kept after Stripe | Server + IPv4 with VAT | Worst-case cost | Profit | Margin |
+|---|---|---|---|---|---|---|---|
+| Starter (cx23) | nbg1, fsn1, hel1 | €10.65 | €9.63 | €5.99 | €8.30 | €1.33 | 13% |
+| Builder (cx33) | nbg1, fsn1, hel1 | €16.73 | €15.14 | €8.99 | €12.46 | €2.68 | 16% |
+| Pro (cx43) | nbg1, fsn1, hel1 | €28.90 | €26.15 | €16.49 | €22.86 | €3.30 | 11% |
+| Starter Flex (cpx22) | nbg1, fsn1 | €34.98 | €31.66 | €19.99 | €27.71 | €3.95 | 11% |
+| Starter Flex (cpx22) | hel1 | €34.98 | €31.66 | €16.99 | €23.55 | €8.11 | 23% |
+
+- *Kept after Stripe* is the price less 9.5%; *worst-case cost* is server + IPv4 × 1.155 (hourly billing) × 1.2 (both
+  referral rewards), the same sum `compute/VmPricing` checks.
+- The IPv4 address is €0.50 a month in every EU location and is deleted with its VM. IPv6 is free.
+- The US and Singapore locations are left out: the privacy policy promises EU data centres, they do not sell the cx
+  line, and cpx22 costs €26.49 in sin with 1 TB of traffic instead of 21 TB.
+- Pro and Starter Flex are closest to the 10% floor, so a Hetzner price rise withholds them first.
+
 ## What a reward really costs
 
 | Reward | Real cost per €1 given |
