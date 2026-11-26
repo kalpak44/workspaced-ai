@@ -43,11 +43,12 @@ workspaced:
     # A Read & Write token of the Hetzner Cloud project VMs live in. Unset, the app still
     # starts, and anything that needs Hetzner answers 503.
     token: ${WORKSPACED_HETZNER_TOKEN:}
-    # Nuremberg, Germany. fsn1 (Falkenstein) is the other German location.
+    # Nuremberg, Germany. The fallbacks are the other EU locations, fsn1 and hel1: the
+    # privacy policy promises EU data centres, so the US and Singapore ones are left out.
     location: ${WORKSPACED_HETZNER_LOCATION:nbg1}
     # Comma-separated, tried in order for a server type sold out above, so a plan keeps its
     # server instead of going unavailable.
-    fallback-locations: ${WORKSPACED_HETZNER_FALLBACK_LOCATIONS:fsn1}
+    fallback-locations: ${WORKSPACED_HETZNER_FALLBACK_LOCATIONS:fsn1,hel1}
     image: ${WORKSPACED_HETZNER_IMAGE:ubuntu-24.04}
     # Comma-separated names of project SSH keys put on every VM. Empty, Hetzner emails a root
     # password for each one instead.

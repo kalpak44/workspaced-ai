@@ -6,7 +6,7 @@ each pinned to one Hetzner server type (`workspaced.plans`), and Hetzner sells t
 
 ## Done
 
-- **Fallback locations** in the VM manager (`WORKSPACED_HETZNER_FALLBACK_LOCATIONS`, `fsn1` by default): a type sold out
+- **Fallback locations** in the VM manager (`WORKSPACED_HETZNER_FALLBACK_LOCATIONS`, `fsn1,hel1` by default): a type sold out
   in nbg1 is offered and created in the first fallback that has it, on the same server at the same cost.
 - **No stand-in at the plan's price.** A pricier server behind a plan would sell at a loss (cpx22 at Starter's price
   loses about €17 a month), so a plan sold out everywhere shows as unavailable instead.

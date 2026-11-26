@@ -31,12 +31,14 @@ class VmOptionControllerTest {
 
   private final HttpClient http = HttpClient.newHttpClient();
 
-  // cx22 is deprecated, cx43 is not sold in nbg1, and cx53 does not exist at all.
+  // cx22 is deprecated, cx43 is not sold in nbg1, and cx53 does not exist at all. No
+  // fallbacks, so the default ones cannot offer cx43 from hel1.
   @DynamicPropertySource
   static void hetzner(DynamicPropertyRegistry registry) {
     registry.add("workspaced.hetzner.token", () -> "t0ken");
     registry.add("workspaced.hetzner.base-url", HETZNER::url);
     registry.add("workspaced.hetzner.location", () -> "nbg1");
+    registry.add("workspaced.hetzner.fallback-locations", () -> "");
     registry.add("workspaced.vm.server-types", () -> "cx23,cx33,cx22,cx43,cx53");
   }
 
