@@ -142,24 +142,37 @@ class HttpHetznerClientTest {
     hetzner.snapshot(42, "workspace-vm", "2026-11-14T00:00:00Z");
     hetzner.snapshot(43, "other", "2026-11-15T00:00:00Z");
 
-    client("t0ken", "image=workspace-vm")
-        .createServer(
-            new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 7));
+    var image = client("t0ken", "image=workspace-vm").bootImage();
 
-    var body = hetzner.createBodies.getFirst();
-    assertThat(body.path("image").asString()).isEqualTo("42");
-    assertThat(body.has("user_data")).isFalse();
+    assertThat(image).isEqualTo(new BootImage("42", false));
+  }
+
+  @Test
+  void knowsASnapshotLabelledAsFilteringItsOwnTraffic() {
+    hetzner.snapshot(42, "workspace-vm", "2026-11-14T00:00:00Z");
+    hetzner.images.get(42L).withObject("labels").put("firewall", "host");
+
+    assertThat(client("t0ken", "image=workspace-vm").bootImage())
+        .isEqualTo(new BootImage("42", true));
+    assertThat(client("t0ken").bootImage()).isEqualTo(new BootImage("ubuntu-24.04", false));
+  }
+
+  @Test
+  void uploadsAnSshKeyOnlyWhenNoneHasItsName() {
+    var client = client("t0ken");
+    var id = client.sshKey("no-login", () -> "ssh-ed25519 AAAA no-login");
+
+    assertThat(client.sshKey("no-login", () -> "ssh-ed25519 BBBB no-login")).isEqualTo(id);
+    assertThat(hetzner.sshKeys).hasSize(1);
   }
 
   @Test
   void createsNothingWhenNoSnapshotCarriesTheLabel() {
     var client = client("t0ken", "image=workspace-vm");
-    var spec = new ServerSpec("vm-1", "cx23", "nbg1", "ubuntu-24.04", List.of(), Map.of(), null, 7);
 
-    assertThatThrownBy(() -> client.createServer(spec))
+    assertThatThrownBy(client::bootImage)
         .isInstanceOf(HetznerException.class)
         .hasMessageContaining("no snapshot is labelled image=workspace-vm");
-    assertThat(hetzner.createBodies).isEmpty();
   }
 
   @Test

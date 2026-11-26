@@ -43,9 +43,11 @@ type hub struct {
 	heartbeats []string
 	// heartbeatBody is the body of the latest heartbeat, signature verified.
 	heartbeatBody []byte
-	pub           ed25519.PublicKey
-	counts        map[string]int
-	bad           []string
+	// firewall is raw JSON every heartbeat answers with; empty leaves the field out.
+	firewall string
+	pub      ed25519.PublicKey
+	counts   map[string]int
+	bad      []string
 }
 
 func newHub(t *testing.T, enrollStatus ...int) (*hub, *httptest.Server) {
@@ -118,6 +120,10 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
+		if h.firewall != "" {
+			_, _ = fmt.Fprintf(w, `{"status":%q,"firewall":%s}`, status, h.firewall)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(map[string]string{"status": status})
 	case "/api/v1/agent/harness":
 		if !h.verify(r, body) {

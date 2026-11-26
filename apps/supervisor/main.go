@@ -40,6 +40,7 @@ func main() {
 		OperatorRetry: 60 * time.Second,
 		Heartbeat:     30 * time.Second,
 		MemInfo:       "/proc/meminfo",
+		FirewallFile:  envOr("SUPERVISOR_FIREWALL_FILE", "/var/lib/workspaced/firewall.d/rules.nft"),
 		Docker:        docker.New(socket),
 		HealthURL:     strings.TrimRight(harness, "/") + "/api/info",
 		HealthPoll:    2 * time.Second,

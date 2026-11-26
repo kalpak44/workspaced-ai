@@ -2,6 +2,7 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HeartbeatAnswerDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HeartbeatDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmMetricsDto;
@@ -276,15 +277,12 @@ public interface VmApi {
       description =
           "Periodically while the VM runs, relayed by the agent hub; refreshes lastSeenAt and "
               + "keeps the memory reading it carries for the metrics. Answers the VM so the VM "
-              + "learns its status, RESTARTING among them.")
+              + "learns its status, RESTARTING among them, and the inbound rules it applies.")
   @ApiResponse(
       responseCode = "200",
       description = "Recorded.",
       content =
-          @Content(
-              mediaType = JSON,
-              schema = @Schema(implementation = VmDto.class),
-              examples = @ExampleObject(VM_EXAMPLE)))
+          @Content(mediaType = JSON, schema = @Schema(implementation = HeartbeatAnswerDto.class)))
   @ApiResponse(
       responseCode = "404",
       description = "There is no such VM.",
@@ -300,7 +298,7 @@ public interface VmApi {
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/{id}/heartbeat", produces = JSON)
-  ResponseEntity<VmDto> heartbeat(
+  ResponseEntity<HeartbeatAnswerDto> heartbeat(
       @PathVariable UUID id, @Valid @RequestBody(required = false) HeartbeatDto body);
 
   @Operation(

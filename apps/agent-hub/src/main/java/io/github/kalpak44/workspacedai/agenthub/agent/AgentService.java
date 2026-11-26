@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.agenthub.agent;
 
 import io.github.kalpak44.workspacedai.agenthub.AgentHubProperties;
+import io.github.kalpak44.workspacedai.agenthub.vmmanager.Heartbeat;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmManagerClient;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmMemory;
 import java.nio.charset.StandardCharsets;
@@ -53,9 +54,10 @@ public class AgentService {
    * As {@link #ready}, for the report sent every 30 seconds after it. The VM's memory reading is
    * passed on when the body carries a plausible one; any other body still counts as a heartbeat.
    *
-   * @return the VM's status at the VM manager, so the VM learns when to restart its harness
+   * @return the VM's status at the VM manager, so the VM learns when to restart its harness, and
+   *     the inbound rules it applies itself
    */
-  public String heartbeat(SignedRequest request) {
+  public Heartbeat heartbeat(SignedRequest request) {
     var vmId = authenticate(request);
     store.touch(vmId, clock.instant());
     return vmManager.heartbeat(vmId, memory(request.body()));

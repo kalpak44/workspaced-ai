@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * The Hetzner Cloud API, as far as this app uses it. An interface so the services above it are
@@ -27,6 +28,19 @@ public interface HetznerClient {
    * @param labelSelector in Hetzner's label selector syntax
    */
   List<Server> servers(String labelSelector);
+
+  /**
+   * The newest snapshot carrying the configured label, or the configured image when none is set.
+   *
+   * @throws HetznerException when no snapshot carries the label
+   */
+  BootImage bootImage();
+
+  /**
+   * The id of the project's SSH key with this name, uploaded from {@code publicKey} when there is
+   * none.
+   */
+  long sshKey(String name, Supplier<String> publicKey);
 
   /** Returns as soon as Hetzner accepts it; the server then boots on its own. */
   CreatedServer createServer(ServerSpec spec);

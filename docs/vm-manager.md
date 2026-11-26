@@ -39,24 +39,32 @@ deleted, and a VM whose server or secrets could not be deleted is kept so the de
 
 ### Firewall
 
-Every VM gets a Cloud Firewall of its own, `vm-<vm id>`, labelled with its VM and workspace ids, made with no rules
-and named in the server's create request, so nothing reaches a VM until a rule lets it in, not even while it boots.
-SSH is masked in the image, so the only ports a rule can open are ones the workspace publishes.
+A VM filters inbound traffic itself when its snapshot is labelled `firewall=host`. Its image loads an nftables table
+that drops everything before the network comes up; the supervisor writes the rules each heartbeat carries into
+`/var/lib/workspaced/firewall.d/rules.nft`, and a path unit reloads the table, all of it or none. The rules are kept in
+Vault at `secret/workspaced-ai/vms/<vm id>/firewall`. Such VMs sit behind a shared Cloud Firewall, labelled
+`role=shared`, that lets every inbound packet through and closes outbound SMTP; a new one is made once each holds 100
+servers, so Hetzner's 50 firewalls per account no longer cap the VMs. A null `firewall` in the heartbeat, which the VM
+manager answers when Vault cannot be read, leaves the VM's rules as they are; an empty list closes it.
+
+A VM from an older snapshot has a Cloud Firewall of its own instead, `vm-<vm id>`, labelled with its VM and workspace
+ids, made with no rules and named in the server's create request. Either way nothing reaches a VM until a rule lets
+it in, not even while it boots. SSH is masked in the image, so the only ports a rule can open are ones the workspace
+publishes.
 
 | Method | Path                        | Body                                                                | Answers                              |
 |--------|-----------------------------|---------------------------------------------------------------------|--------------------------------------|
-| `GET`  | `/api/v1/vms/{id}/firewall` |                                                                     | `200` and the rules, `404`, or `409` |
-| `PUT`  | `/api/v1/vms/{id}/firewall` | `{"rules": [{"protocol": "tcp", "port": "8080", "sourceIps": []}]}` | `200`, `400`, `404`, or `409`        |
+| `GET`  | `/api/v1/vms/{id}/firewall` |                                                                     | `200` and the rules, or `404`        |
+| `PUT`  | `/api/v1/vms/{id}/firewall` | `{"rules": [{"protocol": "tcp", "port": "8080", "sourceIps": []}]}` | `200`, `400`, or `404`               |
 
 A `PUT` replaces every rule, as Hetzner does; an empty list closes the VM again. A rule is `tcp` or `udp` with a port
 or range (`8000-8100`), or `icmp` with none; no `sourceIps` lets in anyone over IPv4 and IPv6, and a bare address
 means that one address. A source with host bits set (`10.0.0.1/8`) is refused rather than rounded, and a VM holds at
-most 50 rules of at most 20 sources each. `409` is a VM created before it had a firewall of its own.
+most 50 rules of at most 20 sources each.
 
 Hetzner refuses to delete a firewall while it still applies to a server, which lasts a while after the server is
 deleted, so the VM's delete leaves it and a sweep every ten minutes deletes each labelled firewall that applies to no
-server and whose VM is gone. Hetzner allows 50 firewalls per account, so that is also the cap on VMs until Hetzner
-raises it.
+server and whose VM is gone. A shared firewall has no VM id and is never swept.
 
 ### Enrollment
 

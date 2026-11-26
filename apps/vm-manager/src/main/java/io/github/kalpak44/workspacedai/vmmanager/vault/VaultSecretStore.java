@@ -91,7 +91,11 @@ public class VaultSecretStore implements SecretStore {
 
   private String path(UUID vmId, Entry entry) {
     var path = properties.prefix() + "/" + vmId;
-    return entry == Entry.SYSTEM ? path + "/system" : path;
+    return switch (entry) {
+      case SECRETS -> path;
+      case SYSTEM -> path + "/system";
+      case FIREWALL -> path + "/firewall";
+    };
   }
 
   // A removed secret would otherwise stay readable in the entry's history.

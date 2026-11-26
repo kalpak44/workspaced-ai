@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.vmmanager.MutableClock;
 import io.github.kalpak44.workspacedai.vmmanager.agent.AgentHub;
+import io.github.kalpak44.workspacedai.vmmanager.hetzner.BootImage;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FakeHetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerProperties;
@@ -19,6 +20,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
  * The service on its own: an in-memory store, Hetzner kept in memory too, a hand-moved clock, and
@@ -84,7 +86,14 @@ class VmServiceTest {
           HETZNER_PROPERTIES,
           () -> inventoryLoaded,
           new VmSecretService(vms, secrets),
-          new VmFirewallService(vms, hetzner, () -> inventoryLoaded, clock),
+          new VmFirewallService(
+              vms,
+              hetzner,
+              () -> inventoryLoaded,
+              clock,
+              new InMemorySecretStore(),
+              JsonMapper.builder().build()),
+          new NoLoginSshKey(hetzner),
           agentHub,
           published::add,
           clock);
@@ -212,6 +221,30 @@ class VmServiceTest {
         .isSameAs(hetzner.createFailure);
     assertThat(hetzner.firewalls).isEmpty();
     assertThat(hetzner.deletedFirewalls).hasSize(1);
+  }
+
+  @Test
+  void putsAServerFromAnImageThatFiltersItselfBehindTheSharedFirewallOnly() {
+    hetzner.bootImage = new BootImage("123", true);
+
+    service.create(workspace, user, null, KEY, ENV);
+
+    var spec = hetzner.created.getFirst();
+    assertThat(spec.image()).isEqualTo("123");
+    var firewall = hetzner.firewalls.get(spec.firewall());
+    assertThat(firewall.labels()).containsEntry("role", "shared").doesNotContainKey("vm-id");
+    assertThat(firewall.rules()).isEqualTo(VmFirewallService.OPEN);
+  }
+
+  @Test
+  void neverDeletesTheSharedFirewallWhenHetznerRefusesTheServer() {
+    hetzner.bootImage = new BootImage("123", true);
+    hetzner.createFailure = new HetznerException("Hetzner answered 422 on POST /servers");
+
+    assertThatThrownBy(() -> service.create(workspace, user, null, KEY, ENV))
+        .isSameAs(hetzner.createFailure);
+    assertThat(hetzner.firewalls).hasSize(1);
+    assertThat(hetzner.deletedFirewalls).isEmpty();
   }
 
   @Test

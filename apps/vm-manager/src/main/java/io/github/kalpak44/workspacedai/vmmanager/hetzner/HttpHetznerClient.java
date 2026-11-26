@@ -20,6 +20,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
+import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -32,6 +33,8 @@ public class HttpHetznerClient implements HetznerClient {
 
   private static final String LABELS = "labels";
   private static final String RULES = "rules";
+  // The snapshot label the image build sets once its VMs filter inbound traffic themselves.
+  private static final String HOST_FIREWALL = "host";
 
   // Hetzner drops outbound traffic no rule allows once a firewall has one, so these allow all of
   // it but direct SMTP (25, 465): a VM sending spam gets the whole project suspended. Submission
@@ -104,12 +107,11 @@ public class HttpHetznerClient implements HetznerClient {
    */
   @Override
   public CreatedServer createServer(ServerSpec spec) {
-    var image = properties.hasImageSelector() ? newestSnapshot() : spec.image();
     var body = json.createObjectNode();
     body.put("name", spec.name());
     body.put("server_type", spec.serverType());
     body.put("location", spec.location());
-    body.put("image", image);
+    body.put("image", spec.image());
     body.put("start_after_create", true);
     var keys = body.putArray("ssh_keys");
     spec.sshKeys().forEach(keys::add);
@@ -274,7 +276,11 @@ public class HttpHetznerClient implements HetznerClient {
    * Looked up on every create, so a VM always starts from the latest build. None at all fails the
    * create rather than falling back to a plain image the rest of the system does not expect.
    */
-  private String newestSnapshot() {
+  @Override
+  public BootImage bootImage() {
+    if (!properties.hasImageSelector()) {
+      return new BootImage(properties.image(), false);
+    }
     var selector = URLEncoder.encode(properties.imageSelector(), StandardCharsets.UTF_8);
     var images =
         get("/images?type=snapshot&sort=created:desc&per_page=1&label_selector=" + selector)
@@ -282,7 +288,44 @@ public class HttpHetznerClient implements HetznerClient {
     if (images.isEmpty()) {
       throw new HetznerException("no snapshot is labelled " + properties.imageSelector());
     }
-    return images.get(0).path("id").asString();
+    var newest = images.get(0);
+    return new BootImage(
+        newest.path("id").asString(),
+        HOST_FIREWALL.equals(newest.path(LABELS).path("firewall").asString()));
+  }
+
+  @Override
+  public long sshKey(String name, Supplier<String> publicKey) {
+    var found = findSshKey(name);
+    if (found >= 0) {
+      return found;
+    }
+    var body = json.createObjectNode();
+    body.put("name", name);
+    body.put("public_key", publicKey.get());
+    try {
+      return send(
+              "/ssh_keys",
+              HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)),
+              "POST",
+              201)
+          .path("ssh_key")
+          .path("id")
+          .asLong();
+    } catch (HetznerException e) {
+      // Another create uploaded it first, and Hetzner refuses a second key by that name.
+      var raced = findSshKey(name);
+      if (raced >= 0) {
+        return raced;
+      }
+      throw e;
+    }
+  }
+
+  private long findSshKey(String name) {
+    var keys =
+        get("/ssh_keys?name=" + URLEncoder.encode(name, StandardCharsets.UTF_8)).path("ssh_keys");
+    return keys.isEmpty() ? -1 : keys.get(0).path("id").asLong();
   }
 
   private JsonNode get(String path) {

@@ -41,8 +41,17 @@ class HttpVmManagerClientTest {
     var client = client(URI.create(fake.url() + "/"));
     client.ready(vm);
     fake.vmStatus = "RESTARTING";
-    assertThat(client.heartbeat(vm, null)).isEqualTo("RESTARTING");
+    assertThat(client.heartbeat(vm, null)).isEqualTo(new Heartbeat("RESTARTING", null));
     assertThat(fake.reports).containsExactly("ready " + vm, "heartbeat " + vm);
+  }
+
+  @Test
+  void passesTheFirewallRulesOnAsTheyCame() {
+    fake.firewall = "[{\"protocol\":\"tcp\",\"port\":\"443\"}]";
+
+    var rules = client(fake.url()).heartbeat(vm, null).firewall();
+
+    assertThat(rules.get(0).path("port").asString()).isEqualTo("443");
   }
 
   @Test

@@ -19,6 +19,7 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 /** Against Hetzner kept in memory and a hand-moved clock, so caching and staleness are exact. */
 class VmMetricsServiceTest {
@@ -48,7 +49,14 @@ class VmMetricsServiceTest {
           hetznerProperties,
           () -> true,
           new VmSecretService(vms, new InMemorySecretStore()),
-          new VmFirewallService(vms, hetzner, () -> true, clock),
+          new VmFirewallService(
+              vms,
+              hetzner,
+              () -> true,
+              clock,
+              new InMemorySecretStore(),
+              JsonMapper.builder().build()),
+          new NoLoginSshKey(hetzner),
           new AgentHub() {
             @Override
             public Optional<String> bootstrap(UUID vmId) {

@@ -117,11 +117,13 @@ class VmControllerTest {
 
     var heartbeat = send("POST", "/" + vm.id() + "/heartbeat", null);
     assertThat(heartbeat.statusCode()).isEqualTo(200);
-    var beat = JSON.readValue(heartbeat.body(), VmDto.class);
-    assertThat(beat.status()).isEqualTo("RESTARTING");
-    assertThat(beat.lastSeenAt()).isAfterOrEqualTo(ready.lastSeenAt());
-    assertThat(JSON.readValue(send("GET", "/" + vm.id(), null).body(), VmDto.class))
-        .isEqualTo(beat);
+    var beat = JSON.readTree(heartbeat.body());
+    assertThat(beat.path("status").asString()).isEqualTo("RESTARTING");
+    // No rules set, so the VM is handed an empty list to apply rather than none at all.
+    assertThat(beat.path("firewall").isArray()).isTrue();
+    assertThat(beat.path("firewall")).isEmpty();
+    var seen = JSON.readValue(send("GET", "/" + vm.id(), null).body(), VmDto.class);
+    assertThat(seen.lastSeenAt()).isAfterOrEqualTo(ready.lastSeenAt());
   }
 
   @Test

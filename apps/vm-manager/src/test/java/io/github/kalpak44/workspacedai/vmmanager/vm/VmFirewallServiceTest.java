@@ -14,15 +14,18 @@ import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import tools.jackson.databind.json.JsonMapper;
 
 class VmFirewallServiceTest {
 
   final MutableClock clock = new MutableClock(Instant.parse("2026-11-14T10:00:00Z"));
   final FakeHetznerClient hetzner = new FakeHetznerClient();
   final VmRepository vms = new InMemoryVmRepository();
+  final InMemorySecretStore secrets = new InMemorySecretStore();
   boolean inventoryLoaded = true;
   final VmFirewallService service =
-      new VmFirewallService(vms, hetzner, () -> inventoryLoaded, clock);
+      new VmFirewallService(
+          vms, hetzner, () -> inventoryLoaded, clock, secrets, JsonMapper.builder().build());
 
   @Test
   void setsTheRulesOfTheVmsOwnFirewallOnly() {
@@ -38,12 +41,56 @@ class VmFirewallServiceTest {
   }
 
   @Test
-  void refusesAVmWithNoFirewallOrNoVmAtAll() {
-    var vm = vm().id();
+  void refusesAVmThatDoesNotExist() {
     var unknown = UUID.randomUUID();
 
-    assertThatThrownBy(() -> service.rules(vm)).isInstanceOf(FirewallMissingException.class);
     assertThatThrownBy(() -> service.rules(unknown)).isInstanceOf(VmNotFoundException.class);
+  }
+
+  @Test
+  void keepsTheRulesOfAVmWithNoFirewallOfItsOwnForItToApply() {
+    var vm = vm().id();
+    assertThat(service.rules(vm)).isEmpty();
+    assertThat(service.hostRules(vm)).contains(List.of());
+
+    var set = service.setRules(vm, List.of(rule("tcp", "443", List.of())));
+
+    assertThat(service.rules(vm)).isEqualTo(set);
+    assertThat(service.hostRules(vm)).contains(set);
+    assertThat(hetzner.rulesSet).isEmpty();
+    // Read back from Vault, as after a restart.
+    var restarted =
+        new VmFirewallService(
+            vms, hetzner, () -> true, clock, secrets, JsonMapper.builder().build());
+    assertThat(restarted.hostRules(vm)).contains(set);
+  }
+
+  @Test
+  void handsAVmNoRulesWhenVaultCannotBeReadSoItKeepsItsOwn() {
+    var vm = vm().id();
+    secrets.failure = new IllegalStateException("Vault is down");
+
+    assertThat(service.hostRules(vm)).isEmpty();
+  }
+
+  @Test
+  void putsVmsBehindASharedFirewallThatLetsEverythingInUntilItIsFull() {
+    var first = service.shared();
+    assertThat(service.shared()).isEqualTo(first);
+    assertThat(hetzner.firewalls.get(first).rules()).isEqualTo(VmFirewallService.OPEN);
+
+    var full = hetzner.firewalls.get(first);
+    hetzner.firewalls.put(
+        first,
+        new Firewall(
+            full.id(),
+            full.name(),
+            full.created(),
+            full.labels(),
+            full.rules(),
+            VmFirewallService.SHARED_SERVERS));
+
+    assertThat(service.shared()).isNotEqualTo(first);
   }
 
   @Test

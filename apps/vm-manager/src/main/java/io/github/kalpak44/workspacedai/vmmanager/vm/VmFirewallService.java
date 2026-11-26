@@ -4,14 +4,17 @@ import io.github.kalpak44.workspacedai.vmmanager.hetzner.Firewall;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.FirewallRule;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerClient;
 import io.github.kalpak44.workspacedai.vmmanager.hetzner.HetznerException;
+import io.github.kalpak44.workspacedai.vmmanager.vm.SecretStore.Entry;
 import java.net.InetAddress;
 import java.time.Clock;
 import java.time.Duration;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.regex.Pattern;
@@ -19,13 +22,17 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
+import tools.jackson.core.JacksonException;
+import tools.jackson.databind.json.JsonMapper;
 
 /**
- * Each VM's own Cloud Firewall: made with no inbound rules when the VM is created, so nothing
- * reaches it until a rule lets it in, and with outbound SMTP closed, and found again by its vm-id
- * label. Hetzner refuses to delete a firewall while it still applies to a server, which lasts a
- * while after the server is deleted, so a sweep deletes the ones whose VM is gone instead of the
- * VM's delete.
+ * A VM's inbound rules, kept in one of two places by the image it booted from. One that filters its
+ * own traffic keeps them in Vault, applies what each heartbeat hands its supervisor, and sits
+ * behind a shared Cloud Firewall that lets everything in and keeps outbound SMTP closed. An older
+ * one has a Cloud Firewall of its own, made with no inbound rules and found again by its vm-id
+ * label, which caps the VMs at Hetzner's limit on firewalls. Hetzner refuses to delete a firewall
+ * while it still applies to a server, which lasts a while after the server is deleted, so a sweep
+ * deletes the ones whose VM is gone instead of the VM's delete.
  */
 @Service
 public class VmFirewallService {
@@ -39,6 +46,17 @@ public class VmFirewallService {
   private static final Pattern PORT = Pattern.compile("(\\d{1,5})(?:-(\\d{1,5}))?");
   // A firewall is made just before its server; younger than this, its VM may not be saved yet.
   private static final Duration GRACE = Duration.ofMinutes(10);
+  static final String ROLE = "role";
+  static final String SHARED = "shared";
+  // Hetzner documents no cap on the servers one firewall applies to; this stays well clear of one.
+  static final int SHARED_SERVERS = 100;
+  // The VM drops what its own rules do not let in, so the shared firewall lets everything through.
+  static final List<FirewallRule> OPEN =
+      List.of(
+          new FirewallRule("tcp", "1-65535", ANYWHERE, null),
+          new FirewallRule("udp", "1-65535", ANYWHERE, null),
+          new FirewallRule("icmp", null, ANYWHERE, null));
+  private static final String RULES = "rules";
 
   private static final Logger log = LoggerFactory.getLogger(VmFirewallService.class);
 
@@ -46,14 +64,25 @@ public class VmFirewallService {
   private final HetznerClient hetzner;
   private final VmInventory inventory;
   private final Clock clock;
+  private final SecretStore store;
+  private final JsonMapper json;
   private final AtomicBoolean rewritten = new AtomicBoolean();
+  // Read by every heartbeat; this instance is the only writer, so it never goes stale.
+  private final Map<UUID, List<FirewallRule>> hostRules = new ConcurrentHashMap<>();
 
   public VmFirewallService(
-      VmRepository vms, HetznerClient hetzner, VmInventory inventory, Clock clock) {
+      VmRepository vms,
+      HetznerClient hetzner,
+      VmInventory inventory,
+      Clock clock,
+      SecretStore store,
+      JsonMapper json) {
     this.vms = vms;
     this.hetzner = hetzner;
     this.inventory = inventory;
     this.clock = clock;
+    this.store = store;
+    this.json = json;
   }
 
   /** Made before the server it protects, so the server is behind it from its first boot. */
@@ -66,8 +95,36 @@ public class VmFirewallService {
             HetznerVmInventory.WORKSPACE_ID, workspaceId.toString()));
   }
 
+  /**
+   * A shared firewall with room for one more server, made when every one is full. One whose rules
+   * never landed is passed over, or its VMs could never be reached whatever their rules say.
+   */
+  long shared() {
+    var pool =
+        hetzner.firewalls(
+            HetznerVmInventory.MANAGED_BY
+                + "="
+                + HetznerVmInventory.MANAGER
+                + ","
+                + ROLE
+                + "="
+                + SHARED);
+    for (var firewall : pool) {
+      if (firewall.servers() < SHARED_SERVERS && !firewall.rules().isEmpty()) {
+        return firewall.id();
+      }
+    }
+    var id =
+        hetzner.createFirewall(
+            "vms-" + UUID.randomUUID(),
+            Map.of(HetznerVmInventory.MANAGED_BY, HetznerVmInventory.MANAGER, ROLE, SHARED));
+    hetzner.setFirewallRules(id, OPEN);
+    return id;
+  }
+
   public List<FirewallRule> rules(UUID vmId) {
-    return firewall(vmId).rules();
+    requireVm(vmId);
+    return own(vmId).map(Firewall::rules).orElseGet(() -> storedRules(vmId));
   }
 
   /**
@@ -77,15 +134,62 @@ public class VmFirewallService {
    */
   public List<FirewallRule> setRules(UUID vmId, List<FirewallRule> rules) {
     var valid = validate(rules);
-    var firewall = firewall(vmId);
-    hetzner.setFirewallRules(firewall.id(), valid);
+    requireVm(vmId);
+    var own = own(vmId);
+    if (own.isPresent()) {
+      hetzner.setFirewallRules(own.get().id(), valid);
+    } else {
+      var text = json.writeValueAsString(valid);
+      store.update(vmId, Entry.FIREWALL, _ -> Map.of(RULES, text));
+      hostRules.put(vmId, valid);
+    }
     return valid;
   }
 
-  private Firewall firewall(UUID vmId) {
+  /**
+   * What a VM that filters its own traffic is to apply; empty when they cannot be read now, so the
+   * VM keeps the ones it has rather than closing every port. A VM with a firewall of its own gets
+   * none it acts on, since its image applies none.
+   */
+  public Optional<List<FirewallRule>> hostRules(UUID vmId) {
+    try {
+      return Optional.of(storedRules(vmId));
+    } catch (RuntimeException e) {
+      log.warn("could not read the firewall rules of VM {}: {}", vmId, e.getMessage());
+      return Optional.empty();
+    }
+  }
+
+  private List<FirewallRule> storedRules(UUID vmId) {
+    return hostRules.computeIfAbsent(
+        vmId,
+        id -> {
+          var text = store.read(id, Entry.FIREWALL).get(RULES);
+          if (text == null) {
+            return List.of();
+          }
+          try {
+            return List.of(json.readValue(text, FirewallRule[].class));
+          } catch (JacksonException e) {
+            throw new IllegalStateException(
+                "the firewall rules of VM " + id + " are unreadable", e);
+          }
+        });
+  }
+
+  /** Drops what is kept of a deleted VM's rules; its Vault entry goes with its secrets. */
+  void forget(UUID vmId) {
+    hostRules.remove(vmId);
+  }
+
+  private void requireVm(UUID vmId) {
     if (vms.findById(vmId).isEmpty()) {
       throw new VmNotFoundException(vmId);
     }
+  }
+
+  // Only a VM from an image without its own filtering has one.
+  private Optional<Firewall> own(UUID vmId) {
     return hetzner
         .firewalls(
             HetznerVmInventory.MANAGED_BY
@@ -96,8 +200,7 @@ public class VmFirewallService {
                 + "="
                 + vmId)
         .stream()
-        .findFirst()
-        .orElseThrow(() -> new FirewallMissingException(vmId));
+        .findFirst();
   }
 
   /** Only once the inventory is loaded, or every firewall would look like its VM is gone. */

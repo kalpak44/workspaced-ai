@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
+import java.util.function.Supplier;
 
 /**
  * A HetznerClient that keeps servers in memory, for testing the services above it without HTTP.
@@ -29,6 +30,8 @@ public class FakeHetznerClient implements HetznerClient {
   public volatile ServerMetrics metrics = new ServerMetrics(List.of(), Map.of());
   public final List<String> metricsCalls = new ArrayList<>();
   public int typeCalls;
+  public volatile BootImage bootImage = new BootImage("ubuntu-24.04", false);
+  public final Map<String, String> sshKeys = new ConcurrentHashMap<>();
   private final AtomicLong ids = new AtomicLong(1000);
 
   /** Matches Hetzner's selector syntax as far as this app uses it: comma-joined key=value pairs. */
@@ -36,6 +39,19 @@ public class FakeHetznerClient implements HetznerClient {
     return Arrays.stream(selector.split(","))
         .map(term -> term.split("=", 2))
         .allMatch(kv -> kv[1].equals(labels.get(kv[0])));
+  }
+
+  @Override
+  public BootImage bootImage() {
+    fail();
+    return bootImage;
+  }
+
+  @Override
+  public long sshKey(String name, Supplier<String> publicKey) {
+    fail();
+    sshKeys.computeIfAbsent(name, _ -> publicKey.get());
+    return 77;
   }
 
   @Override

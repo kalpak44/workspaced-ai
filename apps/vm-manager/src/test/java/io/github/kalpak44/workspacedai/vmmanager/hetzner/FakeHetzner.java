@@ -80,6 +80,7 @@ public class FakeHetzner implements AutoCloseable {
   public final Map<Long, ObjectNode> servers = new ConcurrentHashMap<>();
   public final Map<Long, ObjectNode> firewalls = new ConcurrentHashMap<>();
   public final Map<Long, ObjectNode> images = new ConcurrentHashMap<>();
+  public final Map<String, ObjectNode> sshKeys = new ConcurrentHashMap<>();
   public final List<String> metricsQueries = new CopyOnWriteArrayList<>();
   public volatile int status = 200;
   private final AtomicLong ids = new AtomicLong(5000);
@@ -106,6 +107,7 @@ public class FakeHetzner implements AutoCloseable {
     server.createContext("/servers", this::servers);
     server.createContext("/firewalls", this::firewalls);
     server.createContext("/images", this::images);
+    server.createContext("/ssh_keys", this::sshKeys);
     server.start();
   }
 
@@ -211,6 +213,38 @@ public class FakeHetzner implements AutoCloseable {
       }
       default -> answer(exchange, 405, "{}");
     }
+  }
+
+  // GET by ?name=, and POST, which Hetzner refuses with 409 for a name already taken.
+  private void sshKeys(HttpExchange exchange) throws IOException {
+    record(exchange);
+    if ("POST".equals(exchange.getRequestMethod())) {
+      var request = JSON.readTree(exchange.getRequestBody());
+      var name = request.path("name").asString();
+      if (sshKeys.containsKey(name)) {
+        answer(exchange, 409, "{}");
+        return;
+      }
+      var key = JSON.createObjectNode();
+      key.put("id", ids.incrementAndGet());
+      key.put("name", name);
+      key.put("public_key", request.path("public_key").asString());
+      sshKeys.put(name, key);
+      var body = JSON.createObjectNode();
+      body.set("ssh_key", key);
+      answer(exchange, 201, body.toString());
+      return;
+    }
+    var name =
+        URLDecoder.decode(exchange.getRequestURI().getRawQuery(), StandardCharsets.UTF_8)
+            .replaceAll(".*name=([^&]*).*", "$1");
+    var list = JSON.createArrayNode();
+    if (sshKeys.containsKey(name)) {
+      list.add(sshKeys.get(name));
+    }
+    var body = JSON.createObjectNode();
+    body.set("ssh_keys", list);
+    answer(exchange, 200, body.toString());
   }
 
   /** A snapshot labelled {@code image=<image>}, as the image build leaves it. */

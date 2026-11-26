@@ -38,6 +38,8 @@ type Supervisor struct {
 	Heartbeat     time.Duration
 	// MemInfo is read into every heartbeat; empty sends none.
 	MemInfo string
+	// FirewallFile receives the inbound rules each heartbeat carries; empty applies none.
+	FirewallFile string
 
 	Docker        Docker
 	HealthURL     string
@@ -236,9 +238,16 @@ func (s *Supervisor) heartbeat(ctx context.Context, c *Client, log *slog.Logger)
 			log.Warn("heartbeat failed", "status", status, "error", errString(err))
 			continue
 		}
-		// An older hub answers 204 with no body; that means nothing to act on.
-		var hb struct{ Status string }
-		_ = json.Unmarshal(body, &hb)
+		// An older hub answers 204 with no body; that means nothing to act on. A null or absent
+		// firewall leaves the applied rules alone, while an empty list closes every port.
+		var hb struct {
+			Status   string
+			Firewall *[]FirewallRule
+		}
+		err = json.Unmarshal(body, &hb)
+		if err == nil && hb.Firewall != nil {
+			s.applyFirewall(*hb.Firewall, log)
+		}
 		switch hb.Status {
 		case "RESTARTING":
 			log.Info("workspace restart requested, recreating the harness")

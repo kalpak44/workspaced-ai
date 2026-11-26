@@ -56,8 +56,8 @@ public class AgentController {
       @RequestHeader(name = "X-Agent-Timestamp", required = false) String timestamp,
       @RequestHeader(name = "X-Agent-Signature", required = false) String signature,
       @RequestBody(required = false) byte[] body) {
-    var status = agents.heartbeat(signed(request, vmId, timestamp, signature, body));
-    return ResponseEntity.ok(new HeartbeatDto(status));
+    var heartbeat = agents.heartbeat(signed(request, vmId, timestamp, signature, body));
+    return ResponseEntity.ok(new HeartbeatDto(heartbeat.status(), heartbeat.firewall()));
   }
 
   /** The VM manager's body as it came; no-store, because it carries the VM's secret values. */

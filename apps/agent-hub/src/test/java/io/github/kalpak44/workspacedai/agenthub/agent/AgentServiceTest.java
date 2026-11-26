@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import io.github.kalpak44.workspacedai.agenthub.AgentHubProperties;
 import io.github.kalpak44.workspacedai.agenthub.MutableClock;
+import io.github.kalpak44.workspacedai.agenthub.vmmanager.Heartbeat;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmManagerClient;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmMemory;
 import io.github.kalpak44.workspacedai.agenthub.vmmanager.VmNotFoundException;
@@ -38,10 +39,10 @@ class AgentServiceTest {
         }
 
         @Override
-        public String heartbeat(UUID vmId, VmMemory memory) {
+        public Heartbeat heartbeat(UUID vmId, VmMemory memory) {
           report("heartbeat", vmId);
           memories.add(memory == null ? "none" : memory.toString());
-          return "RESTARTING";
+          return new Heartbeat("RESTARTING", null);
         }
 
         @Override
@@ -118,7 +119,7 @@ class AgentServiceTest {
 
   @Test
   void answersTheHeartbeatWithTheVmsStatus() {
-    assertThat(service.heartbeat(signed(HEARTBEAT, now()))).isEqualTo("RESTARTING");
+    assertThat(service.heartbeat(signed(HEARTBEAT, now())).status()).isEqualTo("RESTARTING");
   }
 
   @Test

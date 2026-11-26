@@ -8,11 +8,10 @@ import java.util.Map;
  *
  * @param name a hostname, unique within the project
  * @param sshKeys names or ids of project SSH keys to install; may be empty
- * @param image the image name; ignored when the client is configured to pick a snapshot by label
+ * @param image the image name or snapshot id, as {@link HetznerClient#bootImage} names it
  * @param labels what the server is for; the VM manager rebuilds its inventory from them
  * @param userData cloud-config the server reads on its first boot; null for none
- * @param firewall the Cloud Firewall it is created behind, so nothing reaches it before its rules
- *     say so
+ * @param firewall the Cloud Firewall it is created behind from its first boot
  */
 public record ServerSpec(
     String name,

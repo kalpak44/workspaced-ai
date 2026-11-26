@@ -33,13 +33,15 @@ public class HttpVmManagerClient implements VmManagerClient {
   }
 
   @Override
-  public String heartbeat(UUID vmId, VmMemory memory) {
+  public Heartbeat heartbeat(UUID vmId, VmMemory memory) {
     var report = memory == null ? null : json.writeValueAsString(Map.of("memory", memory));
     var body = send(vmId, "POST", "heartbeat", report);
     try {
-      var status = json.readTree(body).path("status");
+      var answer = json.readTree(body);
+      var status = answer.path("status");
       if (status.isString()) {
-        return status.asString();
+        var firewall = answer.path("firewall");
+        return new Heartbeat(status.asString(), firewall.isArray() ? firewall : null);
       }
     } catch (JacksonException e) {
       throw new VmManagerException("VM manager answered a heartbeat that is not JSON", e);

@@ -142,7 +142,7 @@ class AgentHubRoutesTest {
     assertThat(signed(vm, agent, "/agent/ready", now()).statusCode()).isEqualTo(204);
     var heartbeat = signed(vm, agent, "/agent/heartbeat", now());
     assertThat(heartbeat.statusCode()).isEqualTo(200);
-    assertThat(heartbeat.body()).isEqualTo("{\"status\":\"READY\"}");
+    assertThat(heartbeat.body()).isEqualTo("{\"status\":\"READY\",\"firewall\":null}");
     assertThat(VM_MANAGER.reports).contains("ready " + vm, "heartbeat " + vm);
     assertThat(agents.findById(vm).map(AgentEntity::getLastSeenAt).orElseThrow())
         .isEqualTo(CLOCK.instant());

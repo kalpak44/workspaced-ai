@@ -41,6 +41,7 @@ public class VmService {
   private final VmInventory inventory;
   private final VmSecretService secrets;
   private final VmFirewallService firewalls;
+  private final NoLoginSshKey noLoginKey;
   private final AgentHub agentHub;
   private final ApplicationEventPublisher events;
   private final Clock clock;
@@ -53,6 +54,7 @@ public class VmService {
       VmInventory inventory,
       VmSecretService secrets,
       VmFirewallService firewalls,
+      NoLoginSshKey noLoginKey,
       AgentHub agentHub,
       ApplicationEventPublisher events,
       Clock clock) {
@@ -63,6 +65,7 @@ public class VmService {
     this.inventory = inventory;
     this.secrets = secrets;
     this.firewalls = firewalls;
+    this.noLoginKey = noLoginKey;
     this.agentHub = agentHub;
     this.events = events;
     this.clock = clock;
@@ -134,19 +137,27 @@ public class VmService {
     }
     var id = UUID.randomUUID();
     CreatedServer server;
-    Long firewall = null;
+    // Only a firewall made for this VM alone is deleted with a failed create, never a shared one.
+    Long ownFirewall = null;
     try {
       secrets.init(id, openRouterApiKey, environment);
       var userData = agentHub.bootstrap(id).orElse(null);
-      firewall = firewalls.create(id, workspaceId);
+      var image = hetzner.bootImage();
+      long firewall;
+      if (image.hostFirewall()) {
+        firewall = firewalls.shared();
+      } else {
+        ownFirewall = firewalls.create(id, workspaceId);
+        firewall = ownFirewall;
+      }
       server =
           hetzner.createServer(
               new ServerSpec(
                   "vm-" + id,
                   type,
                   option.location(),
-                  hetznerProperties.image(),
-                  hetznerProperties.sshKeys(),
+                  image.image(),
+                  sshKeys(),
                   Map.of(
                       HetznerVmInventory.MANAGED_BY, HetznerVmInventory.MANAGER,
                       HetznerVmInventory.VM_ID, id.toString(),
@@ -155,7 +166,7 @@ public class VmService {
                   userData,
                   firewall));
     } catch (RuntimeException e) {
-      forget(id, firewall);
+      forget(id, ownFirewall);
       // Hetzner can sell out between the list and the create.
       if (e instanceof HetznerException failure && failure.status() == RESOURCE_UNAVAILABLE) {
         throw new ServerTypeSoldOutException(type);
@@ -189,11 +200,17 @@ public class VmService {
     var vm = get(id);
     hetzner.deleteServer(vm.serverId());
     secrets.deleteAll(id);
+    firewalls.forget(id);
     agentHub.revoke(id);
     if (!vms.deleteById(id)) {
       throw new VmNotFoundException(id);
     }
     events.publishEvent(new VmEvent.Deleted(id));
+  }
+
+  private List<String> sshKeys() {
+    var configured = hetznerProperties.sshKeys();
+    return configured.isEmpty() ? List.of(Long.toString(noLoginKey.id())) : configured;
   }
 
   // Best effort: the create has already failed, and that failure is the one to report.

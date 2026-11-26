@@ -3,10 +3,13 @@ package io.github.kalpak44.workspacedai.vmmanager.vm.web;
 import io.github.kalpak44.workspacedai.vmmanager.vm.ComputeProvider;
 import io.github.kalpak44.workspacedai.vmmanager.vm.HarnessService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.MetricsRange;
+import io.github.kalpak44.workspacedai.vmmanager.vm.VmFirewallService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmMetricsService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.VmService;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.CreateVmDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.FirewallRuleDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HarnessDto;
+import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HeartbeatAnswerDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.HeartbeatDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDto;
 import io.github.kalpak44.workspacedai.vmmanager.vm.web.dto.VmDtoMapper;
@@ -31,13 +34,16 @@ public class VmController implements VmApi {
   private final VmMetricsService metrics;
   private final VmEventStream events;
   private final VmDtoMapper mapper;
+  private final VmFirewallService firewalls;
 
   public VmController(
       VmService service,
       HarnessService harnesses,
       VmMetricsService metrics,
       VmEventStream events,
-      VmDtoMapper mapper) {
+      VmDtoMapper mapper,
+      VmFirewallService firewalls) {
+    this.firewalls = firewalls;
     this.service = service;
     this.harnesses = harnesses;
     this.metrics = metrics;
@@ -107,12 +113,24 @@ public class VmController implements VmApi {
   }
 
   @Override
-  public ResponseEntity<VmDto> heartbeat(UUID id, HeartbeatDto body) {
+  public ResponseEntity<HeartbeatAnswerDto> heartbeat(UUID id, HeartbeatDto body) {
     var vm = service.heartbeat(id);
     if (body != null && body.memory() != null) {
       metrics.report(id, body.memory().totalBytes(), body.memory().availableBytes());
     }
-    return ResponseEntity.ok(mapper.toDto(vm));
+    var rules =
+        firewalls
+            .hostRules(id)
+            .map(
+                list ->
+                    list.stream()
+                        .map(
+                            r ->
+                                new FirewallRuleDto(
+                                    r.protocol(), r.port(), r.sourceIps(), r.description()))
+                        .toList())
+            .orElse(null);
+    return ResponseEntity.ok(new HeartbeatAnswerDto(vm.status().name(), rules));
   }
 
   @Override

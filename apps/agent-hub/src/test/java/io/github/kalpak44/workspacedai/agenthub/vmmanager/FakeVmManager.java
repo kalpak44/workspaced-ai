@@ -30,6 +30,8 @@ public class FakeVmManager implements AutoCloseable {
   public final Set<UUID> gone = ConcurrentHashMap.newKeySet();
   public volatile int status = 0;
   public volatile String vmStatus = "READY";
+  // Raw JSON for the heartbeat's firewall field; null leaves it out.
+  public volatile String firewall;
   public volatile String body;
 
   public FakeVmManager() {
@@ -68,7 +70,13 @@ public class FakeVmManager implements AutoCloseable {
             ? body
             : route.equals("harness")
                 ? HARNESS
-                : "{\"id\":\"" + id + "\",\"status\":\"" + vmStatus + "\"}";
+                : "{\"id\":\""
+                    + id
+                    + "\",\"status\":\""
+                    + vmStatus
+                    + "\""
+                    + (firewall == null ? "" : ",\"firewall\":" + firewall)
+                    + "}";
     var bytes = code == 200 ? answer.getBytes(StandardCharsets.UTF_8) : new byte[0];
     // HttpServer takes -1 as "no body".
     exchange.sendResponseHeaders(code, bytes.length == 0 ? -1 : bytes.length);
