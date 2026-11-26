@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { parseRoute, type Route, routePath } from "../src/lib/routes";
 import { formatPrice, formatTokens } from "../src/lib/format";
 import { timeAgo } from "../src/lib/time";
+import nginxConf from "../nginx.conf?raw";
 
 describe("routes", () => {
   const routes: Route[] = [
@@ -22,6 +23,23 @@ describe("routes", () => {
   it("reads back every path it writes", () => {
     for (const route of routes) {
       expect(parseRoute(routePath(route))).toEqual(route);
+    }
+  });
+
+  // nginx answers 404 for any path outside its page pattern, so a section added to the router
+  // alone would work while navigating and break on reload.
+  it("is a path nginx serves the app on, and junk is not", () => {
+    const location = /location ~ (\^\/\([^)]+\)\(\/\|\$\))/.exec(nginxConf)?.[1];
+    expect(location).toBeDefined();
+    const pages = new RegExp(location as string);
+    const paths = [...routes, { name: "store" }, { name: "recipe", recipeId: "r1" }]
+      .map((route) => routePath(route as Route))
+      .filter((path) => path !== "/");
+    for (const path of [...paths, "/verify-email", "/connect/openrouter"]) {
+      expect(pages.test(path), path).toBe(true);
+    }
+    for (const path of ["/.env", "/wp-admin/install.php", "/.git/HEAD", "/settingsx"]) {
+      expect(pages.test(path), path).toBe(false);
     }
   });
 
