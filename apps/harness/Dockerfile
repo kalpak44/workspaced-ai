@@ -25,14 +25,16 @@ ARG PIP_SHA256=931c303696af6fa3417112103b1cad26890e5a07eccb5b99783700e33f2b8aad
 # fixed modules, so pin its static binary and verify it rather than the package.
 ARG YQ_VERSION=4.54.2
 ARG YQ_SHA256=44c7759059b4910827a0059a2757b22001e59360cdecdb2ef8dedc4b6c7e9f32
-# Alpine 3.24's docker-cli-buildx 0.38.1 and docker-cli-compose 5.6.1 embed
-# golang.org/x/net and github.com/klauspost/compress versions with published Critical
-# and High findings. Upstream 0.39.0 and 5.7.1 carry the fixed modules, so pin their
-# static plugins and verify them rather than waiting for a rebuilt package.
+# Alpine 3.24's docker-cli-buildx and docker-cli-compose embed golang.org/x/net and
+# github.com/klauspost/compress versions with published Critical and High findings.
+# Pin the upstream plugins and verify them rather than waiting for a rebuilt package:
+# compose 5.8.1 carries klauspost/compress 1.20.5, which fixes GO-2026-6865. No
+# upstream release yet carries the x/net fix, and buildx 0.39.1 still bundles
+# go-archive 0.2.0, so those findings stay reported.
 ARG BUILDX_VERSION=0.39.0
 ARG BUILDX_SHA256=5fb31a097304fbf6dd4038649a0decf32c2b9510e4047acd7d68b9d700c46194
-ARG COMPOSE_VERSION=5.7.1
-ARG COMPOSE_SHA256=af426722a8af5de812fcee30cc1c39f0639f5f723cbadefb25e5d4db054064cf
+ARG COMPOSE_VERSION=5.8.1
+ARG COMPOSE_SHA256=cf2713394ca63900da5d00e0be12045634cea93a504e1ab2f2ae24eed7f2d359
 
 FROM alpine:3.24 AS fetch
 ARG OPENCODE_VERSION
