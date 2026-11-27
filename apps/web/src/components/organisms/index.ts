@@ -21,3 +21,4 @@ export { NotificationMenu } from "./NotificationMenu";
 export { formatMetric, MetricChart } from "./MetricChart";
 export { WorkspaceHeader, type WorkspaceView } from "./WorkspaceHeader";
 export { CommandPalette } from "./CommandPalette";
+export { FloatingTerminal } from "./FloatingTerminal";

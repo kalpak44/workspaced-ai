@@ -1,5 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
+import { setDetachedTerminal, useDetachedTerminal } from "../../hooks/useDetachedTerminal";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useNotifications } from "../../hooks/useNotifications";
 import { useTheme } from "../../hooks/useTheme";
@@ -7,7 +8,7 @@ import { useWorkspaces } from "../../hooks/useWorkspaces";
 import { reportTourAction, setTourProgress, TOUR_STEP, useStoredTour, useTourProgress } from "../../lib/tour";
 import { DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
-import { CommandPalette, CreateWorkspaceDialog, DeleteWorkspaceDialog, DemoTour, KeepWorkspaceDialog, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
+import { CommandPalette, CreateWorkspaceDialog, FloatingTerminal, DeleteWorkspaceDialog, DemoTour, KeepWorkspaceDialog, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
 import { AppLayout } from "../templates";
 import { SessionPage } from "./SessionPage";
 import { SettingsPage } from "./SettingsPage";
@@ -105,6 +106,12 @@ export function WorkspacesPage() {
       navigate({ name: "home" }, { replace: true });
     }
   }, [loading, workspaceId, workspace]);
+
+  // The detached terminal closes with its workspace, wherever it was deleted.
+  const detached = useDetachedTerminal();
+  useEffect(() => {
+    if (!loading && !error && detached && !workspaces.some((w) => w.id === detached.workspaceId && !deleting.has(w.id))) setDetachedTerminal(null);
+  }, [loading, error, detached, workspaces, deleting]);
 
   // Dropped once read, so a reload does not welcome the user again.
   useEffect(() => {
@@ -229,6 +236,7 @@ export function WorkspacesPage() {
       )}
     >
       {page}
+      <FloatingTerminal />
       <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} workspaces={workspaces} current={workspace}
         theme={theme} onThemeChange={setTheme} onNewWorkspace={openNew} />
       {newName !== null && (

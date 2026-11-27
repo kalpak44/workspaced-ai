@@ -2,6 +2,8 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { App } from "../src/App";
+import { setDetachedTerminal } from "../src/hooks/useDetachedTerminal";
+import { navigate } from "../src/hooks/useRoute";
 import type { TerminalSession } from "../src/api/terminalsApi";
 import { installFakeApi } from "./fakeApi";
 
@@ -37,6 +39,7 @@ beforeEach(() => {
   vi.stubGlobal("WebSocket", FakeSocket);
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   api = installFakeApi();
+  setDetachedTerminal(null);
   history.replaceState(null, "", "/workspaces/starter/terminal");
 });
 
@@ -160,5 +163,59 @@ describe("workspace terminals", () => {
     api.state.failTerminalCreate = false;
     await user.click(screen.getByRole("button", { name: "New terminal" }));
     await screen.findByRole("heading", { name: "Terminal 1" });
+  });
+
+  it("detaches a shell into a window that stays open on other pages, and attaches it back", async () => {
+    api.terminals.set("starter", [terminal(1)]);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Terminal 1" });
+    await waitFor(() => expect(lastSocket()?.url).toContain("/terminals/pty_1/connect"));
+    const pageSocket = lastSocket();
+    await user.click(screen.getByRole("button", { name: "Detach terminal" }));
+    const window = await screen.findByRole("dialog", { name: "Detached terminal: Terminal 1" });
+    expect(pageSocket.closed).toBe(true);
+    expect(screen.getByRole("heading", { name: "Open in a detached window" })).toBeInTheDocument();
+    await waitFor(() => expect(lastSocket()).not.toBe(pageSocket));
+    const windowSocket = lastSocket();
+    act(() => navigate({ name: "settings", workspaceId: "starter" }));
+    await waitFor(() => expect(screen.queryByRole("heading", { name: "Open in a detached window" })).not.toBeInTheDocument());
+    expect(screen.getByRole("dialog", { name: "Detached terminal: Terminal 1" })).toBe(window);
+    expect(windowSocket.closed).toBe(false);
+    await user.click(within(window).getByRole("button", { name: "Attach terminal to its page" }));
+    await screen.findByRole("heading", { name: "Terminal 1" });
+    expect(screen.queryByRole("dialog", { name: /Detached terminal/ })).not.toBeInTheDocument();
+    expect(windowSocket.closed).toBe(true);
+    await waitFor(() => expect(lastSocket().url).toContain("/terminals/pty_1/connect"));
+    expect(api.fetchFn.mock.calls.filter(([, init]) => init?.method === "DELETE")).toHaveLength(0);
+  });
+
+  it("deletes the shell when the detached window is closed, after asking", async () => {
+    api.terminals.set("starter", [terminal(1), terminal(2)]);
+    const user = userEvent.setup();
+    render(<App />);
+    await screen.findByRole("heading", { name: "Terminal 1" });
+    await user.click(screen.getByRole("button", { name: "Detach terminal" }));
+    const window = await screen.findByRole("dialog", { name: "Detached terminal: Terminal 1" });
+    await user.click(within(window).getByRole("button", { name: "Close and delete terminal" }));
+    await user.click(within(window).getByRole("button", { name: "Cancel" }));
+    expect(api.terminals.get("starter")).toHaveLength(2);
+    await user.click(within(window).getByRole("button", { name: "Close and delete terminal" }));
+    api.state.failTerminalDelete = true;
+    await user.click(within(window).getByRole("button", { name: "Delete terminal" }));
+    await within(window).findByText(/Could not delete the terminal/);
+    expect(api.terminals.get("starter")).toHaveLength(2);
+    api.state.failTerminalDelete = false;
+    await user.click(within(window).getByRole("button", { name: "Delete terminal" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: /Detached terminal/ })).not.toBeInTheDocument());
+    expect(api.terminals.get("starter")?.map((item) => item.id)).toEqual(["pty_2"]);
+  });
+
+  it("offers no detached window on a phone", async () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({ matches: query === "(max-width: 639px)", addEventListener() {}, removeEventListener() {} }));
+    api.terminals.set("starter", [terminal(1)]);
+    render(<App />);
+    await screen.findByRole("heading", { name: "Terminal 1" });
+    expect(screen.queryByRole("button", { name: "Detach terminal" })).not.toBeInTheDocument();
   });
 });
