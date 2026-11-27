@@ -41,17 +41,19 @@ public class WorkspaceAiCredits {
 
   public Status status(UUID workspaceId, UUID viewerId) {
     var observation = read(workspaceId);
-    var threshold = users.findById(viewerId).orElseThrow().getAiCreditWarningUsd();
+    var threshold =
+        observation.trial()
+            ? new BigDecimal("0.20")
+            : users.findById(viewerId).orElseThrow().getAiCreditWarningUsd();
     var remaining = observation.remaining();
     return new Status(
         remaining,
         threshold,
-        !observation.demo()
-            && !observation.trial()
+        (observation.trial() || !observation.demo())
             && remaining != null
             && remaining.compareTo(threshold) < 0,
         remaining != null && remaining.signum() <= 0,
-        observation.trial() || observation.demo());
+        observation.trial());
   }
 
   /** A fresh check before every prompt, including edits and resumed form replies. */

@@ -73,7 +73,7 @@ public class AiConnectorController {
   @io.swagger.v3.oas.annotations.Operation(
       summary = "Read workspace AI credit availability",
       description =
-          "Available to all workspace members. Remaining USD is null when unavailable or unlimited. Low warnings exclude demo/trial. No connector secrets or identifiers are returned.")
+          "Available to all workspace members. Remaining USD is null when unavailable or unlimited. Trial connectors warn below $0.20 in every workspace. Other demo low warnings are hidden; exhausted credits are always reported. No connector secrets or identifiers are returned.")
   @GetMapping("/workspaces/{id}/ai-credits")
   public ResponseEntity<WorkspaceAiCredits.Status> credits(@PathVariable UUID id) {
     return ResponseEntity.ok()

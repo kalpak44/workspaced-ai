@@ -555,10 +555,10 @@ export function installFakeApi(
       const workspace = rows.find(row => row.id === creditsRoute[1]);
       if (!workspace) return json({}, 404);
       const connector = connectors.find(row => row.id === workspaceConnectors.get(workspace.id));
-      const trial = connector?.trial === true || workspace.demo === true;
+      const trial = connector?.trial === true;
       const remainingUsd = connector?.trial ? state.trialRemaining : state.aiRemaining;
-      const warningThresholdUsd = auth.account.aiCreditWarningUsd ?? 1;
-      return json({ remainingUsd, warningThresholdUsd, low: !trial && remainingUsd !== null && remainingUsd < warningThresholdUsd,
+      const warningThresholdUsd = trial ? 0.2 : auth.account.aiCreditWarningUsd ?? 1;
+      return json({ remainingUsd, warningThresholdUsd, low: (trial || !workspace.demo) && remainingUsd !== null && remainingUsd < warningThresholdUsd,
         exhausted: remainingUsd !== null && remainingUsd <= 0, trial });
     }
     const connectorMetricsRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/metrics$/.exec(url);

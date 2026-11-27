@@ -19,9 +19,9 @@ export function AiCreditWarningSettings() {
     catch { setMessage("Could not save the threshold. Please try again."); }
     finally { setBusy(false); }
   }}>
-    <div><h2 className="font-semibold">AI credit warnings</h2><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Warn when your workspace's AI connector has less than this amount left. Applies to your view of shared workspaces too. Demo and trial banners stay hidden.</p></div>
+    <div><h2 className="font-semibold">AI credit warnings</h2><p className="mt-1 text-sm text-zinc-500 dark:text-zinc-400">Warn when your workspace's AI connector has less than this amount left. Applies to your view of shared workspaces too. Trial connectors always warn below $0.20.</p></div>
     <div className="flex flex-wrap items-end gap-3">
-      <div className="w-44"><TextField id="ai-credit-warning" label="Warning threshold (USD)" type="number" min="0" max="100000" step="0.01" value={value} onChange={event => { setDraft(event.target.value); setMessage(""); }} hint="Default $1.00. Set 0 to hide low-credit warnings." /></div>
+      <div className="w-44"><TextField id="ai-credit-warning" label="Warning threshold (USD)" type="number" min="0" max="100000" step="0.01" value={value} onChange={event => { setDraft(event.target.value); setMessage(""); }} hint="Default $1.00. Set 0 to hide low-credit warnings for personal connectors." /></div>
       <Button label="Save threshold" type="submit" busy={busy} disabled={!valid || amount === saved} />
     </div>
     <p className="text-xs text-zinc-500">Sending is always disabled when the connector has no credits left.</p>

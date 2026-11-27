@@ -643,11 +643,12 @@ no browser is open, and never return or log credentials. No additional email is 
 `GET /api/v1/workspaces/{id}/ai-credits` is available to the owner and collaborators and uses `Cache-Control: no-store`.
 It returns `remainingUsd` (null if unavailable or unlimited), `warningThresholdUsd`, `low`, `exhausted`, and `trial`.
 Only credit availability is shared; connector identifiers, names and keys stay private. The default warning threshold
-is $1, with `low` true strictly below it. Demo and trial connectors suppress warnings; zero credits still block sending.
+is $1, with `low` true strictly below it. Trial connectors always warn below $0.20 in any workspace, including demo workspaces. Other demo low-credit warnings
+are hidden. Zero credits show a red error banner and block sending for every token.
 
 `PUT /api/v1/account/ai-credit-preferences` accepts `{"warningThresholdUsd":1.00}` and returns the updated account.
 The value is a USD amount from 0 to 100000, with at most two decimal places. The setting persists per user, including
-their view of shared workspaces. Zero suppresses low-credit warnings, not the exhausted-credit restriction.
+their view of shared workspaces. Zero suppresses personal-connector low warnings, not trial warnings or the exhausted-credit restriction.
 
 For saved OpenRouter connectors, message sends, edits that regenerate, and form replies check current provider credits
 on the server. Exhaustion returns `402` before prompting the harness. Existing conversations remain readable. Unknown

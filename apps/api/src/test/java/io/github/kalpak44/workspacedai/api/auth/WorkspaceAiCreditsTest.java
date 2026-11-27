@@ -145,7 +145,7 @@ class WorkspaceAiCreditsTest {
     jdbc.update("update ai_connector set trial=true where id=?", connector);
     var status = credits.status(workspace, owner.getId());
     assertThat(status.trial()).isTrue();
-    assertThat(status.low()).isFalse();
+    assertThat(status.low()).isTrue();
     assertThat(status.exhausted()).isTrue();
     var id = UUID.randomUUID();
     sessions.saveAndFlush(
@@ -160,6 +160,25 @@ class WorkspaceAiCreditsTest {
         .isEqualTo(402);
     remaining("0.01");
     assertThatCode(() -> credits.requireCredits(workspace)).doesNotThrowAnyException();
+  }
+
+  @Test
+  void warnsForTrialTokensBelowTwentyCentsInEveryWorkspaceRegardlessOfUserThreshold() {
+    jdbc.update("update ai_connector set trial=true where id=?", connector);
+    jdbc.update("update app_user set ai_credit_warning_usd=0 where id=?", member.getId());
+    for (var demo : new boolean[] {false, true}) {
+      jdbc.update("update workspace set demo=? where id=?", demo, workspace);
+      remaining("0.20");
+      assertThat(credits.status(workspace, member.getId()).low()).isFalse();
+      remaining("0.19");
+      var status = credits.status(workspace, member.getId());
+      assertThat(status.warningThresholdUsd()).isEqualByComparingTo("0.20");
+      assertThat(status.low()).isTrue();
+      assertThat(status.trial()).isTrue();
+      assertThat(status.exhausted()).isFalse();
+      remaining("0");
+      assertThat(credits.status(workspace, member.getId()).exhausted()).isTrue();
+    }
   }
 
   @Test

@@ -7,7 +7,8 @@ import jakarta.validation.constraints.NotNull;
 import java.math.BigDecimal;
 
 /**
- * Warning threshold in USD; zero disables low-credit warnings, never the exhausted-credit block.
+ * Warning threshold in USD; zero disables personal-connector low warnings, never trial warnings or
+ * the exhausted-credit block.
  */
 public record AiCreditPreferences(
     @NotNull @DecimalMin("0.00") @DecimalMax("100000.00") @Digits(integer = 6, fraction = 2)
