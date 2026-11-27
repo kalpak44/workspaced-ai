@@ -31,7 +31,7 @@
         <sonar.plugin.version>5.9.0.7382</sonar.plugin.version>
         <!-- springdoc 3.x is the line built for Boot 4; 2.x targets Boot 3. -->
         <spring-doc.version>3.2.1</spring-doc.version>
-        <shedlock.version>7.11.0</shedlock.version>
+        <shedlock.version>7.12.0</shedlock.version>
         <commonmark.version>0.33.0</commonmark.version>
 
         <!-- The floor `mvn verify` enforces. It lives here rather than in a CI step so a
