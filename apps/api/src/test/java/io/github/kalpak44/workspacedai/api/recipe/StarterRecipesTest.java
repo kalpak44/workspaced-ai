@@ -27,25 +27,18 @@ import org.springframework.web.server.ResponseStatusException;
 @Import({TestDatabase.class, TestRuntime.class})
 class StarterRecipesTest {
   private static final Map<String, String> SOURCES =
-      Map.of(
-          "simple-web-page",
-          "b00d",
-          "wordpress",
-          "b001",
-          "gmail",
-          "b006",
-          "google-calendar",
-          "b007",
-          "ciela-mcp",
-          "b008",
-          "telegram-remote-control",
-          "b009",
-          "telegram-personal-account",
-          "b00a",
-          "godaddy-domain",
-          "b00b",
-          "authenticated-browser",
-          "b00c");
+      Map.ofEntries(
+          Map.entry("simple-web-page", "b00d"),
+          Map.entry("wordpress", "b001"),
+          Map.entry("gmail", "b006"),
+          Map.entry("google-calendar", "b007"),
+          Map.entry("ciela-mcp", "b008"),
+          Map.entry("telegram-remote-control", "b009"),
+          Map.entry("telegram-personal-account", "b00a"),
+          Map.entry("godaddy-domain", "b00b"),
+          Map.entry("authenticated-browser", "b00c"),
+          Map.entry("github", "b00e"),
+          Map.entry("gitlab", "b00f"));
 
   private static final UUID CIELA = UUID.fromString("00000000-0000-4000-8000-00000000b008");
   private static final UUID BROWSER = UUID.fromString("00000000-0000-4000-8000-00000000b00c");
