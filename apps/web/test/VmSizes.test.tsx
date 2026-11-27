@@ -166,6 +166,25 @@ describe("VM sizes", () => {
       "Your balance of €3.00 does not cover 7 days of your workspaces with this one (€4.50). Add €1.50, then create the workspace.",
     );
     expect(within(hint).getByRole("link", { name: "Add funds" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("radio", { name: /^Starter/ })).toBeInTheDocument();
+  });
+
+  it("updates Next when choosing a plan at or above the available balance", async () => {
+    const api = installFakeApi();
+    api.auth.account = { ...api.auth.account, role: "USER" };
+    api.billing.balanceCents = 245;
+    api.billing.monthlySpendCents = 0;
+    const user = userEvent.setup();
+    await openSizes(user);
+    await screen.findByRole("status", { name: "Balance" });
+
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    await user.click(screen.getByRole("radio", { name: /^Pro/ }));
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: /^Starter/ }));
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
   it("tells an admin nothing of the balance, since their workspaces are free", async () => {
@@ -174,6 +193,7 @@ describe("VM sizes", () => {
     await openSizes(user);
 
     expect(screen.queryByRole("status", { name: "Balance" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
   it("says when the balance is short and links to adding funds", async () => {

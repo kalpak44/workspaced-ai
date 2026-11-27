@@ -143,6 +143,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const { billing } = useBilling();
   // Admins' workspaces are free, so only everyone else is told what one costs them.
   const charged = account !== null && account.role !== "ADMIN";
+  const insufficientFunds = charged && billing !== null && chosen !== undefined && coverWith(billing, chosen).shortCents > 0;
   const provider = providers.providers.find((p) => p.id === providerId);
   const nameInput = useRef<HTMLInputElement>(null);
   const types = useRef<HTMLFieldSetElement>(null);
@@ -256,6 +257,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
 
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
+    if (step === 1 && insufficientFunds) return;
     if (step === 0 && onNameChosen) {
       if (name.trim()) onNameChosen(name.trim());
       return;
@@ -419,7 +421,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   if (step === 0) {
     next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!name.trim()} />;
   } else if (step === 1) {
-    next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!serverType || status !== "ready"} />;
+    next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!serverType || status !== "ready" || insufficientFunds} />;
   } else if (connecting) {
     next = (
       <Button
