@@ -28,6 +28,27 @@ async function openSizes(user: User) {
 const warning = () => screen.queryByRole("status", { name: "Sizes unavailable" });
 
 describe("VM sizes", () => {
+  it("blocks creation with an exhausted trial connector and enables it for a funded connector", async () => {
+    const api = installFakeApi();
+    api.connectors.push(
+      { id: "trial", name: "Trial", provider: "openrouter", trial: true },
+      { id: "personal", name: "Personal", provider: "openrouter" },
+    );
+    api.state.trialRemaining = 0;
+    const user = userEvent.setup();
+    await openSizes(user);
+    await user.click(screen.getByRole("button", { name: "Next" }));
+    await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("This AI connector has no credits remaining.");
+    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+    await user.selectOptions(screen.getByRole("combobox", { name: "AI connector" }), "personal");
+    await waitFor(() => expect(screen.getByRole("button", { name: "Create workspace" })).toBeEnabled());
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+    await user.selectOptions(screen.getByRole("combobox", { name: "AI connector" }), "trial");
+    await screen.findByRole("alert");
+    expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();
+  });
+
   it("shows each plan with its price, in order, and starts on the default", async () => {
     installFakeApi();
     const user = userEvent.setup();

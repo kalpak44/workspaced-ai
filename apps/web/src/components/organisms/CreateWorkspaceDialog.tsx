@@ -1,6 +1,7 @@
 import { ArrowLeft, ArrowRight, Check, Plug, Sparkles, Wallet } from "lucide-react";
 import { type SubmitEvent, useEffect, useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
+import { useConnectorMetrics } from "../../hooks/useConnectorMetrics";
 import { type Billing, useBilling } from "../../hooks/useBilling";
 import { useModelProviders } from "../../hooks/useModelProviders";
 import { type OpenRouterConnectStatus, useOpenRouterConnect } from "../../hooks/useOpenRouterConnect";
@@ -155,6 +156,14 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   });
   const note = connectNote(openRouter.status);
   const selected = connectors.connectors.find(connector => connector.id === connectorId);
+  const creditCheckId = step === LAST && selected?.provider === "openrouter" ? selected.id : "";
+  const connectorUsage = useConnectorMetrics(creditCheckId, 30_000);
+  const remainingCredits = connectorUsage.metrics?.limitRemaining
+    ?? (connectorUsage.metrics?.usage != null && (connectorUsage.metrics.limit != null || selected?.trial)
+      ? (connectorUsage.metrics.limit ?? 1) - connectorUsage.metrics.usage : null);
+  const noConnectorCredits = remainingCredits !== null && remainingCredits <= 0;
+  const checkingConnectorCredits = !!creditCheckId && !connectorUsage.metrics && !connectorUsage.error;
+  const connectorCreditBlocked = noConnectorCredits || checkingConnectorCredits;
   const ownConnectors = connectors.connectors.filter(c => c.provider === providerId);
   const connecting = !connectorId && provider?.id === "openrouter" && !pasting;
   const popupOpen = openRouter.status === "waiting" || openRouter.status === "exchanging";
@@ -228,6 +237,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
 
   // Every new key becomes a named personal connector before the workspace uses it.
   const finish = async (key: string) => {
+    if (connectorCreditBlocked) return;
     if ((!connectorId || selected?.trial) && !accepted) return;
     setPending(true);
     setRejected(false);
@@ -371,6 +381,8 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         {connectors.error && <p role="alert" className="text-sm text-rose-600">{connectors.error}</p>}
         {connectorError && <p role="alert" className="text-sm text-rose-600">{connectorError}</p>}
         {connectorId && rejected && <p role="alert" className="text-sm text-rose-600">The provider rejected this connector's key. Select another connector.</p>}
+        {checkingConnectorCredits && <p role="status" className="text-sm text-zinc-500">Checking connector credits…</p>}
+        {noConnectorCredits && <p role="alert" className="text-sm text-rose-600 dark:text-rose-400">This AI connector has no credits remaining. Select another connector or add a funded key.</p>}
         {connecting && (
           <div className="flex flex-col gap-2 text-sm text-zinc-600 dark:text-zinc-400">
             <p>Sign in to OpenRouter and approve a key for this workspace. It is saved to your account, so later workspaces can reuse it.</p>
@@ -439,7 +451,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         type="submit"
         icon={ArrowRight}
         busy={pending}
-        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || (!!selected?.trial && !accepted) || rejected}
+        disabled={!provider || (!connectorId && (!apiKey.trim() || !accepted)) || (!!selected?.trial && !accepted) || rejected || connectorCreditBlocked}
       />
     );
   }
