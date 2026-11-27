@@ -1,5 +1,6 @@
-import { Activity, Check, ChevronsUpDown, Cpu, LayoutGrid, MessageSquare, Plus, RotateCw, Settings, SquareTerminal } from "lucide-react";
+import { Activity, Check, ChevronsUpDown, Cpu, LayoutGrid, MessageSquare, Plus, RotateCw, Settings, SquareTerminal, Users } from "lucide-react";
 import { type MouseEvent, useCallback, useEffect, useRef, useState } from "react";
+import { useAccount } from "../../hooks/useAccount";
 import { useDismiss } from "../../hooks/useDismiss";
 import { navigate, type Route } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
@@ -42,6 +43,9 @@ export function WorkspaceHeader({ workspace, workspaces, current, deleting, onRe
   const closeSwitcher = useCallback(() => setSwitching(false), []);
   useDismiss(switcher, switching, closeSwitcher);
   const tabBar = useRef<HTMLElement>(null);
+  const { account } = useAccount();
+  const isShared = (other: Workspace) => !!account && !!other.ownerId && other.ownerId !== account.id;
+  const shared = isShared(workspace);
 
   // On a narrow screen the tabs scroll sideways; the open one is always brought into view.
   useEffect(() => {
@@ -71,7 +75,9 @@ export function WorkspaceHeader({ workspace, workspaces, current, deleting, onRe
       <div className="mx-auto w-full max-w-5xl px-4 pt-5 sm:px-6 sm:pt-6">
       <div className="flex flex-wrap items-end gap-x-6 border-b border-zinc-200 lg:flex-nowrap dark:border-zinc-800">
       <div className="order-1 flex min-w-0 flex-1 items-center gap-3 pb-3 lg:flex-none">
-        <span aria-hidden className="hidden size-9 shrink-0 items-center justify-center rounded-lg bg-zinc-900 text-sm font-semibold text-white uppercase sm:flex dark:bg-white dark:text-zinc-900">
+        <span aria-hidden className={`hidden size-9 shrink-0 items-center justify-center rounded-lg text-sm font-semibold uppercase sm:flex ${
+          shared ? "bg-sky-600 text-white dark:bg-sky-500 dark:text-sky-950" : "bg-zinc-900 text-white dark:bg-white dark:text-zinc-900"
+        }`}>
           {workspace.name.trim().charAt(0) || "W"}
         </span>
         <div className="min-w-0 flex-1">
@@ -94,8 +100,11 @@ export function WorkspaceHeader({ workspace, workspaces, current, deleting, onRe
                       <MenuItem key={other.id} className="gap-2 rounded-md px-3 py-2"
                         onClick={() => { setSwitching(false); navigate({ name: VIEW_ROUTE[current], workspaceId: other.id }); }}>
                         <span className="flex min-w-0 items-center gap-2">
-                          <span aria-hidden className="flex size-6 shrink-0 items-center justify-center rounded-md bg-zinc-100 text-[11px] font-semibold uppercase dark:bg-zinc-800">{other.name.trim().charAt(0) || "W"}</span>
+                          <span aria-hidden className={`flex size-6 shrink-0 items-center justify-center rounded-md text-[11px] font-semibold uppercase ${
+                            isShared(other) ? "bg-sky-100 text-sky-700 dark:bg-sky-900/50 dark:text-sky-300" : "bg-zinc-100 dark:bg-zinc-800"
+                          }`}>{other.name.trim().charAt(0) || "W"}</span>
                           <span className="truncate">{other.name}</span>
+                          {isShared(other) && <Users aria-label="Shared with you" className="size-3.5 shrink-0 text-sky-600 dark:text-sky-400" />}
                         </span>
                         {other.id === workspace.id && <Check aria-hidden className="size-4 shrink-0 text-zinc-500" />}
                       </MenuItem>
@@ -117,6 +126,11 @@ export function WorkspaceHeader({ workspace, workspaces, current, deleting, onRe
               <span aria-hidden className={`size-1.5 rounded-full ${status.dot}`} />
               {status.label}
             </span>
+            {shared && (
+              <span className="flex items-center gap-1 font-medium text-sky-700 dark:text-sky-400">
+                <Users aria-hidden className="size-3" />Shared with you
+              </span>
+            )}
             {workspace.model && <span className="hidden truncate font-mono sm:inline">· {workspace.model}</span>}
           </p>
         </div>

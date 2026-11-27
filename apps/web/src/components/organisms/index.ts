@@ -1,5 +1,6 @@
 export { ChatModelPicker } from "./ChatModelPicker";
 export { ChatPanel } from "./ChatPanel";
+export { CollaboratorsPanel } from "./CollaboratorsPanel";
 export { CreateWorkspaceDialog } from "./CreateWorkspaceDialog";
 export { KeepWorkspaceDialog } from "./KeepWorkspaceDialog";
 export { DeleteWorkspaceDialog } from "./DeleteWorkspaceDialog";

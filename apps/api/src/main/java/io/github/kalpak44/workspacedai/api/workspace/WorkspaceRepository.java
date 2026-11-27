@@ -7,6 +7,8 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Query;
+import org.springframework.data.repository.query.Param;
 
 public interface WorkspaceRepository
     extends JpaRepository<WorkspaceEntity, UUID>, WorkspaceUpdates {
@@ -20,8 +22,33 @@ public interface WorkspaceRepository
   /** Oldest first; the id breaks ties between workspaces created in the same instant. */
   List<WorkspaceEntity> findAllByOwnerIdOrderByCreatedAtAscIdAsc(UUID ownerId);
 
-  /** As above, without the drafts, which nobody but the dialog that made them knows of. */
-  List<WorkspaceEntity> findAllByOwnerIdAndDraftFalseOrderByCreatedAtAscIdAsc(UUID ownerId);
+  /**
+   * Those the user owns or was invited to, oldest first, without the drafts, which nobody but the
+   * dialog that made them knows of.
+   */
+  @Query(
+      value =
+          """
+          SELECT w.* FROM workspace w
+          WHERE NOT w.draft
+            AND (w.owner_id = :user
+              OR EXISTS (SELECT 1 FROM workspace_collaborator c
+                         WHERE c.workspace_id = w.id AND c.user_id = :user))
+          ORDER BY w.created_at, w.id
+          """,
+      nativeQuery = true)
+  List<WorkspaceEntity> findAllReachableBy(@Param("user") UUID user);
+
+  /** Whether the user owns or collaborates on it; empty when no workspace has that id. */
+  @Query(
+      value =
+          """
+          SELECT w.owner_id = :user OR EXISTS (SELECT 1 FROM workspace_collaborator c
+                                               WHERE c.workspace_id = w.id AND c.user_id = :user)
+          FROM workspace w WHERE w.id = :id
+          """,
+      nativeQuery = true)
+  Optional<Boolean> findAccess(@Param("id") UUID id, @Param("user") UUID user);
 
   /** The account's demo that has not been launched yet, which a second tour picks up again. */
   Optional<WorkspaceEntity> findFirstByOwnerIdAndModelProviderAndDemoTrueAndDraftTrue(
@@ -43,6 +70,17 @@ public interface WorkspaceRepository
   List<IdOnly> findBySessionTtlEnabledTrue();
 
   Optional<OwnerOnly> findOwnerById(UUID id);
+
+  /** Its owner and its collaborators; empty when no workspace has that id. */
+  @Query(
+      value =
+          """
+          SELECT w.owner_id FROM workspace w WHERE w.id = :id
+          UNION
+          SELECT c.user_id FROM workspace_collaborator c WHERE c.workspace_id = :id
+          """,
+      nativeQuery = true)
+  List<UUID> findMemberIds(@Param("id") UUID id);
 
   default List<UUID> findAllIds() {
     return ids(findAllProjectedBy());

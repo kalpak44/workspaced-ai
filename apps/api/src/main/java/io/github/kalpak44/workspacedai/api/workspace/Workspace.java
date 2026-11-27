@@ -37,7 +37,12 @@ public record Workspace(
                 "When a demo is deleted; null for every other workspace, and for a demo"
                     + " whose VM has not started yet",
             example = "2026-11-19T18:00:00Z")
-        Instant expiresAt) {
+        Instant expiresAt,
+    @Schema(
+            description =
+                "The user who created it, and pays for it; everyone else on it is a collaborator",
+            example = "8d0f5a4e-2b7c-4f1e-9c3a-6e5d4c3b2a10")
+        UUID ownerId) {
 
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
     return new Workspace(
@@ -50,6 +55,7 @@ public record Workspace(
         status,
         entity.isSecretsPendingRestart(),
         entity.isDemo(),
-        entity.getExpiresAt());
+        entity.getExpiresAt(),
+        entity.getOwnerId());
   }
 }

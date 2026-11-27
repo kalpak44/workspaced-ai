@@ -27,7 +27,7 @@ public class SessionController implements SessionApi {
 
   @Override
   public ResponseEntity<List<Session>> list(UUID workspaceId) {
-    return ResponseEntity.ok(service.list(workspaceId));
+    return ResponseEntity.ok(service.list(workspaceId, CurrentUser.id()));
   }
 
   @Override
@@ -43,7 +43,7 @@ public class SessionController implements SessionApi {
 
   @Override
   public ResponseEntity<Session> create(UUID workspaceId, UUID recipe) {
-    var session = service.create(workspaceId);
+    var session = service.create(workspaceId, CurrentUser.id());
     if (recipe != null) {
       recipes.recordUse(recipe, CurrentUser.id(), workspaceId);
     }

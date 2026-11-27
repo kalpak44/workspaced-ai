@@ -88,7 +88,9 @@ public interface SessionApi {
   @Operation(
       operationId = "listSessions",
       summary = "List a workspace's sessions",
-      description = "Oldest first.")
+      description =
+          "Oldest first: those the caller started and its scheduled tasks' runs. A session"
+              + " another collaborator started is neither listed nor reachable, and answers 404.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",

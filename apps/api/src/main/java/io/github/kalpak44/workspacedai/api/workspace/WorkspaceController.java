@@ -113,6 +113,7 @@ public class WorkspaceController implements WorkspaceApi {
 
   @Override
   public ResponseEntity<Void> delete(UUID id) {
+    requireOwner(id);
     if (!service.delete(id)) {
       throw notFound(id);
     }
@@ -135,7 +136,19 @@ public class WorkspaceController implements WorkspaceApi {
 
   @Override
   public ResponseEntity<Workspace> keep(UUID id) {
+    requireOwner(id);
     return ResponseEntity.ok(service.keep(id).orElseThrow(() -> notFound(id)));
+  }
+
+  /**
+   * A collaborator may do everything in a workspace but end it or pay for it: both are its owner's
+   * money. A workspace that does not exist is left for the call itself to answer 404.
+   */
+  private void requireOwner(UUID id) {
+    if (service.ownerOf(id).filter(owner -> !owner.equals(CurrentUser.id())).isPresent()) {
+      throw new ResponseStatusException(
+          HttpStatus.FORBIDDEN, "only the workspace's owner can do that");
+    }
   }
 
   private static ResponseStatusException notFound(UUID id) {

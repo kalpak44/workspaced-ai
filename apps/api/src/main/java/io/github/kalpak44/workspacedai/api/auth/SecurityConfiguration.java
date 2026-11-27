@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.auth;
 
 import com.nimbusds.jose.jwk.source.ImmutableSecret;
+import io.github.kalpak44.workspacedai.api.session.WorkspaceSessionRepository;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
 import jakarta.servlet.DispatcherType;
 import jakarta.servlet.FilterChain;
@@ -71,8 +72,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 /**
  * Every route needs a signed-in user except signing in, health and the API docs. A user reaches a
- * workspace, and everything under it (sessions, secrets, settings, terminals), only if they own it;
- * anyone else is told it does not exist, so ids cannot be probed.
+ * workspace, and everything under it (sessions, secrets, settings, terminals), only if they own it
+ * or were invited to it; anyone else is told it does not exist, so ids cannot be probed.
  *
  * <p>Auth0 signs users in (see {@link Auth0SignIn}); the token is a JWT the API then signs itself.
  * Browsers carry it in an HttpOnly cookie, because EventSource and WebSocket cannot set an
@@ -131,6 +132,7 @@ public class SecurityConfiguration {
   SecurityFilterChain api(
       HttpSecurity http,
       WorkspaceRepository workspaces,
+      WorkspaceSessionRepository sessions,
       UserRepository users,
       ClientRegistrationRepository registrations,
       AuthService auth,
@@ -159,6 +161,10 @@ public class SecurityConfiguration {
                     .permitAll()
                     .requestMatchers("/workspaces/events")
                     .authenticated()
+                    .requestMatchers(
+                        "/workspaces/{workspaceId}/sessions/{sessionId}",
+                        "/workspaces/{workspaceId}/sessions/{sessionId}/**")
+                    .access(ownSession(workspaces, sessions))
                     .requestMatchers("/workspaces/{workspaceId}", "/workspaces/{workspaceId}/**")
                     .access(ownedWorkspace(workspaces))
                     .requestMatchers(adminOnly)
@@ -417,16 +423,46 @@ public class SecurityConfiguration {
   }
 
   /**
-   * Allows a workspace route only to its owner. An id that is not a UUID, or that no workspace has,
-   * is let through for the controller to answer 400 or 404 as it always has. The id is parsed the
-   * way the controller binds it: a stricter parse here would let " <uuid>" through as "not a UUID"
-   * while the controller trims it and acts on that workspace.
+   * Allows a workspace route only to its owner and its collaborators. An id that is not a UUID, or
+   * that no workspace has, is let through for the controller to answer 400 or 404 as it always has.
+   * The id is parsed the way the controller binds it: a stricter parse here would let " <uuid>"
+   * through as "not a UUID" while the controller trims it and acts on that workspace.
    */
   private static AuthorizationManager<RequestAuthorizationContext> ownedWorkspace(
       WorkspaceRepository workspaces) {
     return (authentication, context) ->
         new AuthorizationDecision(
             owns(authentication.get(), context.getVariables().get("workspaceId"), workspaces));
+  }
+
+  /**
+   * Allows a session's routes only to the user who started it, or, for a scheduled task's run, to
+   * anyone on the workspace, so collaborators never read one another's chats. An id that is not a
+   * UUID, or that no session there has, is let through for the controller to answer as before.
+   */
+  private static AuthorizationManager<RequestAuthorizationContext> ownSession(
+      WorkspaceRepository workspaces, WorkspaceSessionRepository sessions) {
+    return (authentication, context) -> {
+      var variables = context.getVariables();
+      var user = authentication.get();
+      if (!owns(user, variables.get("workspaceId"), workspaces)) {
+        return new AuthorizationDecision(false);
+      }
+      UUID workspace;
+      UUID session;
+      try {
+        workspace = CONVERSIONS.convert(variables.get("workspaceId"), UUID.class);
+        session = CONVERSIONS.convert(variables.get("sessionId"), UUID.class);
+      } catch (ConversionException _) {
+        return new AuthorizationDecision(true);
+      }
+      if (workspace == null || session == null) {
+        return new AuthorizationDecision(true);
+      }
+      var subject = ((JwtAuthenticationToken) user).getToken().getSubject();
+      return new AuthorizationDecision(
+          sessions.findVisibility(workspace, session, UUID.fromString(subject)).orElse(true));
+    };
   }
 
   private static boolean owns(
@@ -444,7 +480,7 @@ public class SecurityConfiguration {
       return false;
     }
     var user = UUID.fromString(token.getToken().getSubject());
-    return workspaces.findOwnerIdById(id).map(user::equals).orElse(true);
+    return workspaces.findAccess(id, user).orElse(true);
   }
 
   private static void unauthorized(
@@ -458,7 +494,7 @@ public class SecurityConfiguration {
 
   /**
    * A missing CSRF token is the client's to fix, so it says so, as does an admin-only route. Any
-   * other denial is a workspace the user does not own, which answers as one that does not exist.
+   * other denial is a workspace the user may not reach, which answers as one that does not exist.
    */
   private static void denied(
       HttpServletRequest request,

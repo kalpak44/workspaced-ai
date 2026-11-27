@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { acceptInvitation, removeCollaborator } from "../api/collaboratorsApi";
 import { ApiError } from "../api/http";
 import {
   createDraftWorkspace,
@@ -15,7 +16,9 @@ import {
   type Workspace,
   type WorkspaceStatus,
 } from "../api/workspacesApi";
+import { takeInvitation } from "../lib/invitation";
 import { WORKSPACE_SETTINGS_CHANGED } from "../lib/workspaceChanges";
+import { navigate } from "./useRoute";
 import { BROWSER_TIME_ZONE } from "../lib/timeZones";
 
 export type { NewWorkspace, Workspace, WorkspaceStatus } from "../api/workspacesApi";
@@ -86,6 +89,25 @@ export function useWorkspaces() {
     globalThis.addEventListener(WORKSPACE_SETTINGS_CHANGED, refresh);
     return () => { active = false; globalThis.removeEventListener(WORKSPACE_SETTINGS_CHANGED, refresh); };
   }, []);
+
+  // An invitation link opened before signing in is accepted once the list is in, then opened.
+  useEffect(() => {
+    if (loading) return;
+    const code = takeInvitation();
+    if (code === null) return;
+    acceptInvitation(code)
+      .then(async ({ workspaceId }) => {
+        setWorkspaces(await listWorkspaces());
+        navigate({ name: "workspace", workspaceId });
+      })
+      .catch((failure: unknown) => {
+        setError(failure instanceof ApiError && failure.status === 403
+          ? "That invitation was sent to another email address. Sign in with that address to accept it."
+          : failure instanceof ApiError && failure.status === 404
+            ? "That invitation has expired or was already used. Ask for a new one."
+            : "Could not accept the invitation");
+      });
+  }, [loading]);
 
   // Pushed rather than polled. EventSource reconnects by itself, and every connection
   // opens with a full snapshot, so a dropped stream cannot leave a status stale.
@@ -213,6 +235,27 @@ export function useWorkspaces() {
     );
   };
 
+  /** Leaves a workspace shared with the user; its owner's own is never left, only deleted. */
+  const leave = (id: string, userId: string) => {
+    const settle = () =>
+      setDeleting((current) => {
+        const next = new Set(current);
+        next.delete(id);
+        return next;
+      });
+    setDeleting((current) => new Set(current).add(id));
+    removeCollaborator(id, userId).then(
+      () => {
+        setWorkspaces((current) => current.filter((w) => w.id !== id));
+        settle();
+      },
+      () => {
+        settle();
+        setError("Could not leave the workspace");
+      },
+    );
+  };
+
   /** A change the API has already accepted elsewhere, e.g. a new model from the settings page. */
   const patch = (id: string, changes: Partial<Workspace>) =>
     setWorkspaces((current) => current.map((w) => (w.id === id ? { ...w, ...changes } : w)));
@@ -236,6 +279,7 @@ export function useWorkspaces() {
     rename,
     restart,
     remove,
+    leave,
     patch,
   };
 }

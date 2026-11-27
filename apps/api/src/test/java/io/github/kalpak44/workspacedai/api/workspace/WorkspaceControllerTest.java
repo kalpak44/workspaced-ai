@@ -219,7 +219,8 @@ class WorkspaceControllerTest {
                 WorkspaceStatus.READY,
                 false,
                 false,
-                null));
+                null,
+                TestUsers.ADMIN));
     assertThat(list()).extracting(Workspace::name).containsExactly("New");
   }
 

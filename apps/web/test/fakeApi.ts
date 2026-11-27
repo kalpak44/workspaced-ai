@@ -2,6 +2,7 @@ import { act } from "@testing-library/react";
 import { vi } from "vitest";
 import type { Account } from "../src/api/accountApi";
 import type { DailySpend, TopUp, WorkspaceSpend } from "../src/api/billingApi";
+import type { Collaborator } from "../src/api/collaboratorsApi";
 import type { DnsRecord, WorkspaceDomain } from "../src/api/domainsApi";
 import type { ApiNotification } from "../src/api/notificationsApi";
 import type { FirewallRule } from "../src/api/firewallApi";
@@ -135,6 +136,11 @@ export function installFakeApi(
   // Each workspace's domains. The zone is the last two labels; connected.example stands in for a
   // DNS provider that applies the template itself.
   const domains = new Map<string, WorkspaceDomain[]>();
+  // Who is on each workspace after its owner, as the API lists them; filled by the tests.
+  const collaborators = new Map<string, Collaborator[]>();
+  // Every address invited, and the workspace each invitation code opens.
+  const invited: { workspaceId: string; email: string }[] = [];
+  const invitationCodes = new Map<string, string>();
   const mcp = new Map<string, McpServer[]>();
   const terminals = new Map<string, TerminalSession[]>();
   const sessionAgents = new Map<string, string>();
@@ -457,6 +463,47 @@ export function installFakeApi(
     return json(auth.account);
   }
 
+  function collaboratorsResponse(url: string, init?: RequestInit): Response | null {
+    const method = init?.method ?? "GET";
+    if (url.endsWith("/api/v1/invitations/accept")) {
+      const { code } = JSON.parse(String(init!.body)) as { code: string };
+      const workspaceId = invitationCodes.get(code);
+      invitationCodes.delete(code);
+      return workspaceId ? json({ workspaceId }) : json({ detail: "this invitation has expired or has already been used" }, 404);
+    }
+    const route = /\/api\/v1\/workspaces\/([^/]+)\/(collaborators|invitations)(?:\/([^/]+))?$/.exec(url);
+    if (!route) return null;
+    const [, workspaceId, kind, id] = route;
+    const workspace = rows.find((w) => w.id === workspaceId);
+    if (!workspace) return json({}, 404);
+    const ownerId = workspace.ownerId ?? auth.account.id;
+    const others = collaborators.get(workspaceId) ?? [];
+    if (kind === "collaborators" && method === "GET") {
+      const owner: Collaborator = { userId: ownerId, invitationId: null, email: ownerId === auth.account.id ? auth.account.email : "owner@example.com",
+        status: "OWNER", invitedBy: null, since: null, expiresAt: null };
+      return json([owner, ...others]);
+    }
+    if (kind === "invitations" && method === "POST") {
+      const { email } = JSON.parse(String(init!.body)) as { email: string };
+      if (others.some((c) => c.email === email)) return json({ detail: "that address is already on this workspace" }, 409);
+      invited.push({ workspaceId, email });
+      const invitation: Collaborator = { userId: null, invitationId: `inv-${invited.length}`, email: null, status: "PENDING",
+        invitedBy: auth.account.email, since: new Date().toISOString(), expiresAt: new Date(Date.now() + 24 * 3600_000).toISOString() };
+      collaborators.set(workspaceId, [...others, invitation]);
+      return json(invitation, 201);
+    }
+    if (method === "DELETE") {
+      const removingSelf = kind === "collaborators" && id === auth.account.id;
+      if (ownerId !== auth.account.id && !removingSelf) return json({ detail: "only the workspace's owner can do that" }, 403);
+      const left = others.filter((c) => (kind === "invitations" ? c.invitationId : c.userId) !== id);
+      if (left.length === others.length) return json({}, 404);
+      collaborators.set(workspaceId, left);
+      if (removingSelf) rows.splice(rows.indexOf(workspace), 1);
+      return new Response(null, { status: 204 });
+    }
+    return json({}, 405);
+  }
+
   const fetchFn = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = String(input);
     if (url.endsWith("/actuator/health/readiness")) {
@@ -484,6 +531,10 @@ export function installFakeApi(
     }
     if (state.fail) {
       return new Response(null, { status: state.fail });
+    }
+    const collaboratorsAnswer = collaboratorsResponse(url, init);
+    if (collaboratorsAnswer) {
+      return collaboratorsAnswer;
     }
     const noticeRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/acknowledgement$/.exec(url);
     if (noticeRoute) return new Response(null, { status: connectors.some(connector => connector.id === noticeRoute[1]) ? 204 : 404 });
@@ -978,5 +1029,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { connectors, connectorKeys, workspaceConnectors, drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { collaborators, invited, invitationCodes, connectors, connectorKeys, workspaceConnectors, drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

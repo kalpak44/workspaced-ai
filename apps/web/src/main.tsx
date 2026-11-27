@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { App } from "./App";
 import { AppRecoveryBoundary } from "./components/templates/AppRecoveryBoundary";
+import { captureInvitation } from "./lib/invitation";
 import { relayOpenRouterCallback } from "./lib/openRouterCallback";
 import "./style.css";
 
@@ -14,6 +15,7 @@ const container = document.getElementById("root");
 export const appRoot: Root | null = container && !relayOpenRouterCallback() ? createRoot(container) : null;
 
 if (appRoot) {
+  captureInvitation();
   appRoot.render(
     <StrictMode>
       <AppRecoveryBoundary><App /></AppRecoveryBoundary>

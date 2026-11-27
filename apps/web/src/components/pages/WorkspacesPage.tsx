@@ -1,3 +1,4 @@
+import { LogOut } from "lucide-react";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { setDetachedTerminal, useDetachedTerminal } from "../../hooks/useDetachedTerminal";
@@ -6,7 +7,7 @@ import { useNotifications } from "../../hooks/useNotifications";
 import { useTheme } from "../../hooks/useTheme";
 import { useWorkspaces } from "../../hooks/useWorkspaces";
 import { reportTourAction, setTourProgress, TOUR_STEP, useStoredTour, useTourProgress } from "../../lib/tour";
-import { DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
+import { ConfirmDeleteDialog, DemoBanner, EmptyState, ErrorBanner, PageHeader } from "../molecules";
 import { WorkspacesOverview } from "./WorkspacesOverview";
 import { CommandPalette, CreateWorkspaceDialog, FloatingTerminal, DeleteWorkspaceDialog, DemoTour, KeepWorkspaceDialog, RestartWorkspaceDialog, TopBar, WorkspaceHeader, type WorkspaceView } from "../organisms";
 import { AppLayout } from "../templates";
@@ -44,6 +45,7 @@ export function WorkspacesPage() {
     rename,
     restart,
     remove,
+    leave,
     patch,
   } = useWorkspaces();
   // The name the create dialog opens with; null while it is closed.
@@ -66,8 +68,10 @@ export function WorkspacesPage() {
   const tour = useTourProgress();
   const stored = useStoredTour();
   const notices = useNotifications();
-  const demo = workspaces.find((w) => w.demo) ?? null;
-  const keeping = workspaces.find((w) => w.id === keepingId && w.demo) ?? null;
+  // Only the account's own demo: one shared by its owner is theirs to keep, and to tour.
+  const ownDemo = (w: (typeof workspaces)[number]) => w.demo === true && (!w.ownerId || w.ownerId === account?.id);
+  const demo = workspaces.find(ownDemo) ?? null;
+  const keeping = workspaces.find((w) => w.id === keepingId && ownDemo(w)) ?? null;
 
   // The warning before a demo ends links here with ?keep, to open the same dialog.
   useEffect(() => {
@@ -97,6 +101,8 @@ export function WorkspacesPage() {
   const workspaceId = "workspaceId" in route ? route.workspaceId : null;
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const deleteTarget = workspaces.find((w) => w.id === deleteId) ?? null;
+  // A collaborator's Delete leaves the workspace; only its owner can end it.
+  const leaving = !!deleteTarget && !!account && !!deleteTarget.ownerId && deleteTarget.ownerId !== account.id;
   const restartTarget = workspaces.find((w) => w.id === restartId) ?? null;
 
   // A workspace that is gone — deleted here or in another tab, or a stale link — falls back to
@@ -177,6 +183,7 @@ export function WorkspacesPage() {
         section={route.section}
         onChanged={(changes) => patch(workspace.id, changes)}
         onRestart={() => openRestart(workspace.id)}
+        onLeave={() => setDeleteId(workspace.id)}
       />
     );
   } else if (route.name === "monitoring") {
@@ -268,7 +275,17 @@ export function WorkspacesPage() {
           }}
         />
       )}
-      {deleteTarget && (
+      {deleteTarget && leaving && account && (
+        <ConfirmDeleteDialog title="Leave workspace" description={deleteTarget.name} confirmLabel="Leave" confirmIcon={LogOut} busy={false}
+          onClose={() => setDeleteId(null)}
+          onConfirm={() => {
+            leave(deleteTarget.id, account.id);
+            setDeleteId(null);
+          }}>
+          You will lose access to {deleteTarget.name} until someone invites you again. Nothing in it is deleted, and the chat sessions you started stay there, unseen by anyone else.
+        </ConfirmDeleteDialog>
+      )}
+      {deleteTarget && !leaving && (
         <DeleteWorkspaceDialog
           name={deleteTarget.name}
           onClose={() => setDeleteId(null)}

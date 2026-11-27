@@ -41,9 +41,10 @@ them. Recipe authors' names are read from Auth0 as recipes are shown, and an aut
 `POST /account/password-reset` has Auth0 mail the user a link to choose a new password: `204`, or `502` when Auth0 cannot
 be reached. Accounts are managed in Auth0; the API has no user administration.
 
-The app is multi-tenant by workspace. Each workspace has an owner; `GET /workspaces` and the `/workspaces/events` stream
-show only the caller's, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
-against the owner before it runs. Another user's workspace answers `404`, exactly as one that does not exist.
+The app is multi-tenant by workspace. Each workspace has an owner and may have collaborators (see
+[Workspace collaborators](#workspace-collaborators)); `GET /workspaces` and the `/workspaces/events` stream show only
+those the caller is on, and every route under `/workspaces/{id}` — sessions, secrets, settings, terminals — is checked
+against them before it runs. Anyone else's workspace answers `404`, exactly as one that does not exist.
 
 | Variable                | Default | Meaning                                                                       |
 |-------------------------|---------|-------------------------------------------------------------------------------|
@@ -187,6 +188,8 @@ The API no longer needs `pods/exec`. Persistent homes require these additional s
 Each workspace pod runs the agent harness, [opencode](https://opencode.ai) (`apps/harness`), as `opencode serve`.
 A session is one OpenCode V2 session working in the shared directory `/home/workspace/project`. The database
 holds the session's id, that path and opencode's id for it; the conversation itself lives in the harness.
+A session belongs to the user who started it: in a shared workspace nobody else lists it, and its routes answer them
+`404`. A scheduled task's runs belong to the workspace and are listed to everyone on it.
 
 | Method   | Path                                                    | Body                 | Answers                                 |
 |----------|---------------------------------------------------------|----------------------|-----------------------------------------|
@@ -392,6 +395,27 @@ and `recipe` only tells the app which of the user's recipes to offer to delete.
 | `DELETE` | `/api/v1/workspaces/{id}/recipe-drafts/{name}` |                  | `204`, or `404` for no such draft      |
 
 Names and sizes are as for instructions, and a workspace that is not running answers `503`.
+
+## Workspace collaborators
+
+Anyone on a workspace invites others by email. The invitation's link (`/invitation#<code>`) works once, for 24 hours,
+for whoever signs in — with an existing account or a new one — as the address it was sent to. A free demo cannot be
+shared (`409`) until it is kept as a paid workspace. A collaborator may do
+everything but delete the workspace or keep a demo (`403`), both being the owner's money, and the workspace keeps
+running on the owner's AI connector, which only the owner can change. Only the owner removes collaborators or withdraws
+invitations; a collaborator may remove themselves, which is leaving.
+
+The database keeps no address: a collaborator is a user id, shown with the email Auth0 has for them, and an invitation
+holds only an HMAC of the address (keyed with `WORKSPACED_JWT_SECRET`) and a SHA-256 of its code. An open invitation is
+therefore listed without an address. Expired invitations are deleted hourly. The mail goes from the no-reply sender.
+
+| Method   | Path                                                   | Body               | Answers                                                         |
+|----------|--------------------------------------------------------|--------------------|-----------------------------------------------------------------|
+| `GET`    | `/api/v1/workspaces/{id}/collaborators`                |                    | `200`: the owner, then `APPLIED` collaborators, then `PENDING` invitations |
+| `POST`   | `/api/v1/workspaces/{id}/invitations`                  | `{"email": "…"}`   | `201`; `409` already on it or past 50 collaborators / 20 open invitations; `429` same address within a minute |
+| `DELETE` | `/api/v1/workspaces/{id}/invitations/{invitationId}`   |                    | `204`; `403` unless the owner                                   |
+| `DELETE` | `/api/v1/workspaces/{id}/collaborators/{userId}`       |                    | `204`; `403` unless the owner or that user; `409` for the owner |
+| `POST`   | `/api/v1/invitations/accept`                           | `{"code": "…"}`    | `200` `{"workspaceId"}`; `403` another address; `404` expired or used |
 
 ## Workspace secrets
 

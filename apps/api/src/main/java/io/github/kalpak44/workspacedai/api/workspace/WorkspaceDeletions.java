@@ -58,7 +58,7 @@ class WorkspaceDeletions implements SmartLifecycle {
         "select pg_notify(?, ?)",
         (RowCallbackHandler) _ -> {},
         CHANNEL,
-        deleted.id() + ":" + deleted.ownerId());
+        deleted.id() + ":" + deleted.userId());
   }
 
   /**

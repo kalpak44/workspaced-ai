@@ -388,6 +388,13 @@ public interface WorkspaceApi {
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class),
               examples = @ExampleObject(NOT_FOUND_EXAMPLE)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The caller is a collaborator; only the owner can do this.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
   @DeleteMapping("/{id}")
   ResponseEntity<Void> delete(
       @Parameter(description = "Workspace id", example = "3f2c6a52-8a8e-4c1e-9a43-5c0d3c7e2b11")
@@ -435,6 +442,13 @@ public interface WorkspaceApi {
       responseCode = "409",
       description =
           "It is not a running demo, is about to be deleted, or runs on a machine no plan sells.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The caller is a collaborator; only the owner can do this.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,

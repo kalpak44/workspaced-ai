@@ -2,6 +2,7 @@ import { LogIn, MailCheck, RotateCw, UserPlus } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { type ResendResult, type SignedOutReason, useAccount } from "../../hooks/useAccount";
 import { useTheme } from "../../hooks/useTheme";
+import { hasPendingInvitation } from "../../lib/invitation";
 import { readStored, writeStored } from "../../lib/storage";
 import { Button, Logo, Spinner } from "../atoms";
 
@@ -12,7 +13,7 @@ const VERIFY_PATH = "/verify-email";
 const REDIRECTED_AT = "workspaced:sign-in-redirect";
 const LOOP_WINDOW_MS = 10_000;
 
-type View = "redirecting" | "sign-in" | "failed" | "verify" | SignedOutReason;
+type View = "redirecting" | "sign-in" | "invited" | "failed" | "verify" | SignedOutReason;
 
 function initialView(reason: SignedOutReason | undefined): View {
   if (reason === "signing-out") return reason;
@@ -20,6 +21,8 @@ function initialView(reason: SignedOutReason | undefined): View {
   if (pathname === VERIFY_PATH) return "verify";
   if (new URLSearchParams(search).has("error")) return "failed";
   if (reason) return reason;
+  // Someone invited may have no account yet, so they choose rather than land on sign-in.
+  if (hasPendingInvitation()) return "invited";
   return Date.now() - Number(readStored(REDIRECTED_AT)) < LOOP_WINDOW_MS ? "sign-in" : "redirecting";
 }
 
@@ -110,6 +113,17 @@ export function LoginPage({ reason }: { readonly reason?: SignedOutReason }) {
           {/* The API can no longer tell who signed up, so only a new sign-in sends another. */}
           {resent !== "expired" && <Button label="Resend email" icon={RotateCw} variant="secondary" busy={resending} disabled={leaving !== null} onClick={() => void resend()} />}
           <Button label="Use a different account" icon={UserPlus} variant="secondary" busy={leaving === "sign-up"} disabled={leaving === "sign-in"} onClick={() => leave("sign-up")} />
+        </div>
+      </Card>
+    );
+  }
+
+  if (view === "invited") {
+    return (
+      <Card title="You're invited" intro="Sign in, or create an account, with the email address the invitation was sent to. You'll join the workspace as soon as you're in.">
+        <div className="flex flex-col gap-2 [&>button]:w-full">
+          {signInButton}
+          <Button label="Create account" variant="secondary" icon={UserPlus} busy={leaving === "sign-up"} disabled={leaving === "sign-in"} onClick={() => leave("sign-up")} />
         </div>
       </Card>
     );

@@ -90,7 +90,7 @@ class SessionFilesTest {
         workspaces
             .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
             .id();
-    var created = sessions.create(workspace);
+    var created = sessions.create(workspace, TestUsers.ADMIN);
     session = created.id();
     folder = created.path();
   }

@@ -42,7 +42,9 @@ class SessionWithoutHarnessTest {
   @Test
   void defersAutomaticDeletionUntilTheHarnessCanCleanUpItsFiles() {
     var stored =
-        sessions.save(new WorkspaceSessionEntity(UUID.randomUUID(), workspace, "/p", "ses_1"));
+        sessions.save(
+            new WorkspaceSessionEntity(
+                UUID.randomUUID(), workspace, TestUsers.ADMIN, "/p", "ses_1"));
     settings.setSessionTtl(
         workspace, new io.github.kalpak44.workspacedai.api.settings.SessionTtlSettings(true, 1));
     assertThat(expiry.candidates(workspace)).isEmpty();
@@ -53,10 +55,12 @@ class SessionWithoutHarnessTest {
 
   @Test
   void cannotStartOrChatInASessionWithNoHarness() {
-    assertThatThrownBy(() -> service.create(workspace))
+    assertThatThrownBy(() -> service.create(workspace, TestUsers.ADMIN))
         .isInstanceOf(HarnessUnavailableException.class);
     var stored =
-        sessions.save(new WorkspaceSessionEntity(UUID.randomUUID(), workspace, "/p", "ses_1"));
+        sessions.save(
+            new WorkspaceSessionEntity(
+                UUID.randomUUID(), workspace, TestUsers.ADMIN, "/p", "ses_1"));
     assertThatThrownBy(() -> service.send(workspace, stored.getId(), "hi"))
         .isInstanceOf(HarnessUnavailableException.class);
     assertThatThrownBy(() -> service.target(workspace, stored.getId()))
@@ -66,7 +70,9 @@ class SessionWithoutHarnessTest {
   @Test
   void stillDeletesASessionWhoseHarnessIsGone() {
     var stored =
-        sessions.save(new WorkspaceSessionEntity(UUID.randomUUID(), workspace, "/p", "ses_1"));
+        sessions.save(
+            new WorkspaceSessionEntity(
+                UUID.randomUUID(), workspace, TestUsers.ADMIN, "/p", "ses_1"));
     service.delete(workspace, stored.getId());
     assertThat(sessions.findAll()).isEmpty();
   }

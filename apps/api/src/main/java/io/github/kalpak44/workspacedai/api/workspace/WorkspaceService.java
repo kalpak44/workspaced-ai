@@ -102,10 +102,13 @@ public class WorkspaceService {
     this.demosAtOnce = demosAtOnce;
   }
 
-  /** The workspaces one user owns; nobody sees another user's, and drafts are not listed. */
+  /**
+   * The workspaces one user owns or was invited to; nobody sees anyone else's, and drafts are not
+   * listed.
+   */
   @Transactional(readOnly = true)
-  public List<Workspace> list(UUID ownerId) {
-    var entities = repository.findAllByOwnerIdAndDraftFalseOrderByCreatedAtAscIdAsc(ownerId);
+  public List<Workspace> list(UUID userId) {
+    var entities = repository.findAllReachableBy(userId);
     var statuses = runtime.statuses(entities.stream().map(WorkspaceEntity::getId).toList());
     return entities.stream().map(e -> Workspace.of(e, statuses.get(e.getId()))).toList();
   }
@@ -589,8 +592,10 @@ public class WorkspaceService {
                       notifications.send(owner.get(), note);
                     }
                   });
+          // Read before the delete, which takes the collaborators with it.
+          var members = repository.findMemberIds(id);
           repository.deleteById(id);
-          events.publishEvent(new WorkspaceDeleted(id, owner.get()));
+          members.forEach(user -> events.publishEvent(new WorkspaceDeleted(id, user)));
         });
     return true;
   }
@@ -655,6 +660,12 @@ public class WorkspaceService {
   @Transactional(readOnly = true)
   public Optional<UUID> ownerOf(UUID id) {
     return repository.findOwnerIdById(id);
+  }
+
+  /** Its owner and its collaborators; empty when no workspace has that id. */
+  @Transactional(readOnly = true)
+  public List<UUID> membersOf(UUID id) {
+    return repository.findMemberIds(id);
   }
 
   private WorkspaceStatus statusOf(UUID id) {

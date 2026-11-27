@@ -54,11 +54,14 @@ public class SessionService {
     this.catalogues = catalogues;
   }
 
-  /** Reconciles the durable index with OpenCode before returning it. */
-  public List<Session> list(UUID workspaceId) {
+  /**
+   * The sessions the user started there, and its tasks' runs, reconciled with OpenCode before they
+   * are returned. Another collaborator's sessions are never listed.
+   */
+  public List<Session> list(UUID workspaceId, UUID userId) {
     requireWorkspace(workspaceId);
     var endpoint = runtime.harness(workspaceId);
-    var stored = sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId);
+    var stored = sessions.findAllVisible(workspaceId, userId);
     if (endpoint.isEmpty()) {
       return stored.stream().map(Session::of).toList();
     }
@@ -71,12 +74,11 @@ public class SessionService {
       // The durable index remains useful while a replacement pod is starting.
       return stored.stream().map(Session::of).toList();
     }
-    var snapshot = stored;
     return transactions.execute(
         _ -> {
           // Updated by query, not by changing the entities: a session deleted while this runs
           // would otherwise fail the whole list when its row turns out to be gone.
-          for (var entity : snapshot) {
+          for (var entity : stored) {
             var current = remote.get(entity.getHarnessSessionId());
             var available = current != null;
             var title = available && current.title() != null ? current.title() : entity.getTitle();
@@ -84,9 +86,7 @@ public class SessionService {
               sessions.reconcile(entity.getId(), available, title);
             }
           }
-          return sessions.findAllByWorkspaceIdOrderByCreatedAtAscIdAsc(workspaceId).stream()
-              .map(Session::of)
-              .toList();
+          return sessions.findAllVisible(workspaceId, userId).stream().map(Session::of).toList();
         });
   }
 
@@ -95,16 +95,16 @@ public class SessionService {
    * row needs its id. Whatever was made is removed again if a later step fails, rather than left
    * with nothing pointing at it.
    */
-  public Session create(UUID workspaceId) {
-    return create(workspaceId, null);
+  public Session create(UUID workspaceId, UUID userId) {
+    return create(workspaceId, userId, null);
   }
 
   /** A scheduled task's run: titled with the task's name, and kept marked as its run. */
   public Session createForTask(UUID workspaceId, String task) {
-    return create(workspaceId, task);
+    return create(workspaceId, null, task);
   }
 
-  private Session create(UUID workspaceId, String task) {
+  private Session create(UUID workspaceId, UUID userId, String task) {
     requireWorkspace(workspaceId);
     var endpoint = endpoint(workspaceId);
     var id = UUID.randomUUID();
@@ -116,7 +116,7 @@ public class SessionService {
       harnessId = harness.createSession(endpoint, path, task);
       return Session.of(
           sessions.saveAndFlush(
-              new WorkspaceSessionEntity(id, workspaceId, path, harnessId, task)));
+              new WorkspaceSessionEntity(id, workspaceId, userId, path, harnessId, task)));
     } catch (RuntimeException e) {
       if (harnessId != null) {
         harness.deleteSession(endpoint, path, harnessId);

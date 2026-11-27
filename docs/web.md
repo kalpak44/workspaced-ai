@@ -58,6 +58,7 @@ already answers every path with `index.html`, which is what makes a deep link lo
 | `/workspaces/<id>/settings`            | its MCP servers and secrets                              |
 | `/workspaces/<id>/terminal`            | an interactive Bash PTY through the workspace's OpenCode V2 service |
 | `/store`                               | the recipe store: Public and Private tabs, search, categories, sort |
+| `/invitation#<code>`                   | an invitation link: the code is kept until someone signs in, then accepted and its workspace opened |
 | `/store/<recipe>`                      | one recipe: its steps, author, dates, rating, Apply              |
 
 The **Store** link in the top bar opens the recipe store. A recipe is Markdown the agent follows to set something up;
@@ -148,3 +149,10 @@ notification with the deletion time. The notification bell refreshes immediately
 keep the final step retryable; skipping does not send it. The existing reaper sends a warning
 30 minutes before deletion and a final notification only after the runtime is gone. None of
 these three notifications sends email.
+
+A workspace shared with the user is tinted sky blue, with a Shared badge, on its card, in the header and in the
+switcher. Its menu offers Invite people, which opens Settings → Collaborators, and Leave workspace in place of Delete;
+leaving asks first. A free demo shows neither Invite people nor the Collaborators section.
+Settings → Collaborators lists everyone with their status — Owner, Applied, Pending with its expiry — and invites by
+email; only the owner sees Remove and Revoke, and a collaborator gets Leave on their own row. A collaborator does not
+see the AI connector picker: the workspace runs on the owner's.

@@ -106,8 +106,8 @@ class RemoteCallsOutsideTransactionsTest {
     var workspace =
         workspaces.create(
             TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC");
-    var session = sessions.create(workspace.id());
-    sessions.list(workspace.id());
+    var session = sessions.create(workspace.id(), TestUsers.ADMIN);
+    sessions.list(workspace.id(), TestUsers.ADMIN);
     sessions.messages(workspace.id(), session.id());
     sessions.send(workspace.id(), session.id(), "hello");
     sessions.edit(workspace.id(), session.id(), "msg_1", "hello again");

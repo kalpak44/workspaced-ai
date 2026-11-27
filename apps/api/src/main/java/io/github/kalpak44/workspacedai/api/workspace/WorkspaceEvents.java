@@ -15,8 +15,8 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 /**
- * Fans each workspace status change out to the open event streams of the user who owns it. Changes
- * arrive on the runtime's own thread, which only queues them on each browser's own {@link
+ * Fans each workspace status change out to the open event streams of its owner and collaborators.
+ * Changes arrive on the runtime's own thread, which only queues them on each browser's own {@link
  * SseOutbox}: a browser that stops reading must not hold up that thread, or every other browser.
  */
 @Component
@@ -30,7 +30,7 @@ public class WorkspaceEvents {
   private final WorkspaceService service;
   private final ApplicationEventPublisher events;
 
-  private record Subscriber(UUID ownerId, SseOutbox outbox) {}
+  private record Subscriber(UUID userId, SseOutbox outbox) {}
 
   public WorkspaceEvents(
       WorkspaceService service, WorkspaceRuntime runtime, ApplicationEventPublisher events) {
@@ -43,36 +43,37 @@ public class WorkspaceEvents {
    * Registers before it queues the snapshot, so a change landing in between arrives twice rather
    * than not at all; a repeated status is harmless to the client.
    */
-  public SseEmitter subscribe(UUID ownerId) {
+  public SseEmitter subscribe(UUID userId) {
     // 0 disables the async timeout: the stream lives as long as the client keeps it open.
     var emitter = new SseEmitter(0L);
     var outbox = new SseOutbox(emitter, "workspace-events");
     emitter.onCompletion(() -> forget(emitter));
     emitter.onTimeout(() -> forget(emitter));
     emitter.onError(_ -> forget(emitter));
-    subscribers.put(emitter, new Subscriber(ownerId, outbox));
-    for (var workspace : service.list(ownerId)) {
+    subscribers.put(emitter, new Subscriber(userId, outbox));
+    for (var workspace : service.list(userId)) {
       outbox.offer(event(workspace.id(), workspace.status()));
     }
     return emitter;
   }
 
   /**
-   * To the owner's browsers, and to whatever in the API acts on a workspace becoming ready. A
-   * workspace already gone has no owner left to tell; its deleted event has covered that.
+   * To its members' browsers, and to whatever in the API acts on a workspace becoming ready. A
+   * workspace already gone has no one left to tell; its deleted event has covered that.
    */
   void publish(UUID id, WorkspaceStatus status) {
-    service.ownerOf(id).ifPresent(owner -> sendTo(owner, () -> event(id, status)));
+    service.membersOf(id).forEach(user -> sendTo(user, () -> event(id, status)));
     events.publishEvent(new WorkspaceStatusChanged(id, status));
   }
 
   /**
-   * Tells the owner's clients on this instance the workspace is gone. {@link WorkspaceDeletions}
-   * calls it on every instance once the delete has committed, whichever one made it. Without it,
-   * another open tab would only see the VM disappear and show the workspace as failed.
+   * Tells one user's clients on this instance the workspace is gone, or gone for them. {@link
+   * WorkspaceDeletions} calls it on every instance once the delete has committed, whichever one
+   * made it. Without it, another open tab would only see the VM disappear and show the workspace as
+   * failed.
    */
-  void publishDeleted(UUID id, UUID ownerId) {
-    sendTo(ownerId, () -> SseEmitter.event().name(DELETED).data(Map.of("id", id)));
+  void publishDeleted(UUID id, UUID userId) {
+    sendTo(userId, () -> SseEmitter.event().name(DELETED).data(Map.of("id", id)));
   }
 
   /** A comment line every half minute, so a proxy never sees the stream as idle. */
@@ -82,9 +83,9 @@ public class WorkspaceEvents {
   }
 
   /** A builder per browser: building one appends to it, so it cannot be shared. */
-  private void sendTo(UUID ownerId, Supplier<SseEmitter.SseEventBuilder> event) {
+  private void sendTo(UUID userId, Supplier<SseEmitter.SseEventBuilder> event) {
     subscribers.values().stream()
-        .filter(s -> s.ownerId().equals(ownerId))
+        .filter(s -> s.userId().equals(userId))
         .forEach(s -> s.outbox().offer(event.get()));
   }
 

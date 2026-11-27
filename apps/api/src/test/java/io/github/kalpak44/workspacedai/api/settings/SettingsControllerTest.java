@@ -138,7 +138,7 @@ class SettingsControllerTest {
         .isEqualTo("anthropic/claude-haiku-5.5");
 
     // Every reply from now on uses it.
-    var session = sessions.create(workspace);
+    var session = sessions.create(workspace, TestUsers.ADMIN);
     sessions.send(workspace, session.id(), "Hello");
     assertThat(OPENCODE.requests)
         .anySatisfy(

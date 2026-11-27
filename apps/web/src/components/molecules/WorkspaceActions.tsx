@@ -1,7 +1,9 @@
-import { Activity, type LucideIcon, MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2 } from "lucide-react";
+import { Activity, LogOut, type LucideIcon, MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2, UserPlus } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
+import { useIsShared } from "../../hooks/useCollaborators";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useIsMobile } from "../../hooks/useIsMobile";
+import { navigate } from "../../hooks/useRoute";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { IconButton } from "../atoms";
 import { Menu, MenuItem } from "./Menu";
@@ -13,6 +15,7 @@ export interface WorkspaceActionHandlers {
   readonly onTerminal: () => void;
   readonly onMonitoring: () => void;
   readonly onRestart: () => void;
+  /** Deletes the workspace, or for a collaborator, leaves it. */
   readonly onDelete: () => void;
 }
 
@@ -36,6 +39,8 @@ export function WorkspaceActions({ workspace, deleting = false, className = "", 
   // A VM that is still starting, or paused, has no shell to open, nothing to measure and nothing
   // to restart.
   const starting = workspace.status === "INITIALIZING" || workspace.status === "PAUSED";
+  // Only its owner can end a workspace; anyone else on it can only leave.
+  const shared = useIsShared(workspace);
 
   const item = (label: string, Icon: LucideIcon, run: () => void, disabled = false, danger = false) => (
     <MenuItem className="gap-2 rounded-md px-3 py-2" danger={danger} disabled={disabled} onClick={() => { setOpen(false); run(); }}>
@@ -48,8 +53,12 @@ export function WorkspaceActions({ workspace, deleting = false, className = "", 
     {item("Terminal", SquareTerminal, handlers.onTerminal, starting)}
     {item("Monitoring", Activity, handlers.onMonitoring, starting)}
     {item("Restart", RotateCw, handlers.onRestart, starting)}
+    {/* A free demo is its owner's trial and cannot be shared. */}
+    {!workspace.demo && item("Invite people", UserPlus, () => navigate({ name: "settings", workspaceId: workspace.id, section: "collaborators" }))}
     <div className="mx-2 my-1 border-t border-zinc-200 dark:border-zinc-700" />
-    {item("Delete workspace", Trash2, handlers.onDelete, false, true)}
+    {shared
+      ? item("Leave workspace", LogOut, handlers.onDelete, false, true)
+      : item("Delete workspace", Trash2, handlers.onDelete, false, true)}
   </>;
 
   return (

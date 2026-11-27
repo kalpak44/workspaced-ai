@@ -36,6 +36,11 @@ public class WorkspaceSessionEntity {
   @Column(length = 63, updatable = false)
   private String task;
 
+  // Who started it, the only user who sees it; null for a task's run, which everyone on the
+  // workspace sees, and for one whose user has gone.
+  @Column(name = "user_id", updatable = false)
+  private UUID userId;
+
   public boolean isAvailable() {
     return available;
   }
@@ -52,14 +57,19 @@ public class WorkspaceSessionEntity {
     // For JPA.
   }
 
-  public WorkspaceSessionEntity(UUID id, UUID workspaceId, String path, String harnessSessionId) {
-    this(id, workspaceId, path, harnessSessionId, null);
+  public WorkspaceSessionEntity(
+      UUID id, UUID workspaceId, UUID userId, String path, String harnessSessionId) {
+    this(id, workspaceId, userId, path, harnessSessionId, null);
   }
 
+  /**
+   * @param userId who started it; ignored for a task's run, which belongs to the workspace
+   */
   public WorkspaceSessionEntity(
-      UUID id, UUID workspaceId, String path, String harnessSessionId, String task) {
+      UUID id, UUID workspaceId, UUID userId, String path, String harnessSessionId, String task) {
     this.id = id;
     this.workspaceId = workspaceId;
+    this.userId = task == null ? userId : null;
     this.path = path;
     this.harnessSessionId = harnessSessionId;
     this.task = task;
@@ -93,6 +103,10 @@ public class WorkspaceSessionEntity {
 
   public String getTask() {
     return task;
+  }
+
+  public UUID getUserId() {
+    return userId;
   }
 
   public Instant getCreatedAt() {

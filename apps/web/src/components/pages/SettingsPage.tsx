@@ -1,10 +1,11 @@
-import { CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Shield, Variable } from "lucide-react";
+import { CalendarClock, Clock, FileText, Globe, KeyRound, Plug, Shield, Users, Variable } from "lucide-react";
 import { lazy, Suspense } from "react";
+import { useIsShared } from "../../hooks/useCollaborators";
 import { useMcpServers } from "../../hooks/useMcpServers";
 import { navigate } from "../../hooks/useRoute";
 import { useSecrets } from "../../hooks/useSecrets";
 import type { Workspace } from "../../hooks/useWorkspaces";
-import { McpPanel, SecretsPanel } from "../organisms";
+import { CollaboratorsPanel, McpPanel, SecretsPanel } from "../organisms";
 import { DomainsPanel } from "../organisms/DomainsPanel";
 import { FirewallPanel } from "../organisms/FirewallPanel";
 import { SessionTtlPanel } from "../organisms/SessionTtlPanel";
@@ -21,6 +22,8 @@ interface Props {
   /** Hears what a change made to the workspace, such as that it now needs a restart. */
   readonly onChanged: (changes: Partial<Workspace>) => void;
   readonly onRestart: () => void;
+  /** A collaborator leaves the workspace. */
+  readonly onLeave: () => void;
 }
 
 import { WorkspaceAiConnectorPanel } from "../organisms/WorkspaceAiConnectorPanel";
@@ -34,6 +37,7 @@ const SECTIONS = [
   { id: "domains", label: "Domains", Icon: Globe },
   { id: "instructions", label: "Instructions", Icon: FileText },
   { id: "tasks", label: "Tasks", Icon: CalendarClock },
+  { id: "collaborators", label: "Collaborators", Icon: Users },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -45,18 +49,21 @@ const InstructionsPanel = lazy(() =>
 const TasksPanel = lazy(() => import("../organisms/TasksPanel").then((panel) => ({ default: panel.TasksPanel })));
 
 /** Workspace integrations and secrets, using the same layout as general settings. */
-export function SettingsPage({ workspace, section: requested, onChanged, onRestart }: Props) {
-  const section: SectionId = SECTIONS.find((s) => s.id === requested)?.id ?? "mcp";
+export function SettingsPage({ workspace, section: requested, onChanged, onRestart, onLeave }: Props) {
+  // A free demo is its owner's trial and cannot be shared, so it has no collaborators to show.
+  const sections = workspace.demo ? SECTIONS.filter((s) => s.id !== "collaborators") : SECTIONS;
+  const section: SectionId = sections.find((s) => s.id === requested)?.id ?? "mcp";
   // Replaced rather than pushed, so Back leaves settings instead of stepping through sections.
   const setSection = (id: SectionId) => navigate({ name: "settings", workspaceId: workspace.id, section: id }, { replace: true });
   const mcp = useMcpServers(workspace.id);
   const secrets = useSecrets(workspace.id, () => onChanged({ restartRequired: true }));
+  const shared = useIsShared(workspace);
 
   return (
     <ContextLayout
       contained
       sidebar={
-        <SectionNav label="Workspace settings sections" sections={SECTIONS} current={section} onSelect={setSection} />
+        <SectionNav label="Workspace settings sections" sections={sections} current={section} onSelect={setSection} />
       }
     >
       <div className="w-full">
@@ -76,6 +83,7 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
         )}
         {section === "firewall" && <FirewallPanel key={workspace.id} workspaceId={workspace.id} />}
         {section === "domains" && <DomainsPanel key={workspace.id} workspaceId={workspace.id} />}
+        {section === "collaborators" && <CollaboratorsPanel key={workspace.id} workspace={workspace} onLeave={onLeave} />}
         <div hidden={section !== "sessions"}>
           <SessionTtlPanel key={workspace.id} workspaceId={workspace.id} />
         </div>
@@ -92,7 +100,8 @@ export function SettingsPage({ workspace, section: requested, onChanged, onResta
         </div>
         <div hidden={section !== "secrets"} className="space-y-6">
           {workspace.restartRequired && <RestartRequiredBanner restartDisabled={workspace.status === "INITIALIZING" || workspace.status === "PAUSED"} onRestart={onRestart} />}
-          {section === "secrets" && <WorkspaceAiConnectorPanel key={workspace.id} workspace={workspace} onChanged={onChanged} />}
+          {/* The connector is the owner's, chosen from the owner's own; a collaborator cannot pick one. */}
+          {section === "secrets" && !shared && <WorkspaceAiConnectorPanel key={workspace.id} workspace={workspace} onChanged={onChanged} />}
           <SecretsPanel
             workspaceId={workspace.id}
             secrets={secrets.secrets.filter(secret => !secret.managed)}

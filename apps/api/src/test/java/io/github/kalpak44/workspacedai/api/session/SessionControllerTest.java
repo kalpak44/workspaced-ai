@@ -317,7 +317,8 @@ class SessionControllerTest {
   void keepsTheSharedProjectWhenDeletingASessionFromBeforeFolders() throws Exception {
     var id = UUID.randomUUID();
     sessions.saveAndFlush(
-        new WorkspaceSessionEntity(id, workspace, Harness.PROJECT_ROOT, FakeOpenCode.SESSION));
+        new WorkspaceSessionEntity(
+            id, workspace, TestUsers.ADMIN, Harness.PROJECT_ROOT, FakeOpenCode.SESSION));
     assertThat(send("DELETE", "/" + id, null).statusCode()).isEqualTo(204);
     assertThat(OPENCODE.shellCommands).isEmpty();
   }

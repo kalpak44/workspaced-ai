@@ -22,6 +22,8 @@ export interface Workspace {
   readonly serverType?: string | null;
   /** ISO 8601; null until a demo's VM has started, and for every other workspace. */
   readonly expiresAt?: string | null;
+  /** Who created it and pays for it; anyone else on it is a collaborator. */
+  readonly ownerId?: string;
 }
 
 /** The key is checked with the provider before anything is created, and never shown again. */
