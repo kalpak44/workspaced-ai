@@ -1,3 +1,4 @@
+import { ApiError } from "../api/http";
 import { useEffect, useRef, useState } from "react";
 import {
   abortSession,
@@ -185,11 +186,11 @@ export function useChat(
       setBusy(true);
       setPending({ text: prompt.text, after: 0 });
       prompt.request ??= sendMessage(workspaceId, sessionId, prompt.text).finally(() => queued.delete(sessionId));
-      prompt.request.catch(() => {
+      prompt.request.catch((cause: unknown) => {
         if (active) {
           setBusy(false);
           setPending(null);
-          setError("Could not send the message");
+          setError(cause instanceof ApiError && cause.status === 402 ? "AI credits have run out. Ask the workspace owner to top up or choose a funded connector." : "Could not send the message");
         }
       });
     }
@@ -212,10 +213,10 @@ export function useChat(
     setPending({ text, after: sentCount(latestMessages.current) });
     return sendMessage(workspaceId, sessionId, text).then(
       () => true,
-      () => {
+      (cause: unknown) => {
         setBusy(false);
         setPending(null);
-        setError("Could not send the message");
+        setError(cause instanceof ApiError && cause.status === 402 ? "AI credits have run out. Ask the workspace owner to top up or choose a funded connector." : "Could not send the message");
         return false;
       },
     );
@@ -235,10 +236,10 @@ export function useChat(
       });
       await reload.current();
       return true;
-    } catch {
+    } catch (cause) {
       setBusy(false);
       await reload.current();
-      setError("Could not edit the message. Reload the conversation before retrying.");
+      setError(cause instanceof ApiError && cause.status === 402 ? "AI credits have run out. Ask the workspace owner to top up or choose a funded connector." : "Could not edit the message. Reload the conversation before retrying.");
       return false;
     }
   };

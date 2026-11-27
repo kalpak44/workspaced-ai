@@ -68,6 +68,9 @@ public interface SessionApi {
       @PathVariable UUID workspaceId, @PathVariable UUID sessionId);
 
   @Operation(summary = "Answer an agent question and allow execution to continue")
+  @ApiResponse(
+      responseCode = "402",
+      description = "AI credits have run out; the form is not resumed.")
   @PostMapping(path = "/{sessionId}/forms/{formId}/reply", consumes = JSON)
   ResponseEntity<Void> replyForm(
       @PathVariable UUID workspaceId,
@@ -223,6 +226,9 @@ public interface SessionApi {
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "402",
+      description = "AI credits have run out; the message is not sent.")
   @PostMapping(path = "/{sessionId}/messages", consumes = JSON)
   ResponseEntity<Void> send(
       @Parameter(description = "Workspace id", example = WORKSPACE_ID) @PathVariable
@@ -241,6 +247,9 @@ public interface SessionApi {
   @ApiResponse(
       responseCode = "503",
       description = "The harness is unavailable or refused the edit.")
+  @ApiResponse(
+      responseCode = "402",
+      description = "AI credits have run out; no message is changed.")
   @PutMapping(path = "/{sessionId}/messages/{messageId}", consumes = JSON)
   ResponseEntity<Void> edit(
       @PathVariable UUID workspaceId,

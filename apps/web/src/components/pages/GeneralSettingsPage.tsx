@@ -7,6 +7,7 @@ import { PageHeader, SectionNav, Toast } from "../molecules";
 import { MailPanel } from "../organisms";
 import { ContextLayout } from "../templates/ContextLayout";
 
+import { AiCreditWarningSettings } from "../organisms/AiCreditWarningSettings";
 import { AiConnectorsPanel } from "../organisms/AiConnectorsPanel";
 import { FunnelPanel } from "../organisms/FunnelPanel";
 import { ReferralsPanel } from "../organisms/ReferralsPanel";
@@ -152,7 +153,7 @@ export function GeneralSettingsPage({ section: requested }: { readonly section?:
                 </SettingRow>
               </section>
             </div>
-            {section === "ai-connectors" && <AiConnectorsPanel />}
+            {section === "ai-connectors" && <><AiCreditWarningSettings /><AiConnectorsPanel /></>}
             {section === "referrals" && <ReferralsPanel />}
             {section === "mail" && isAdmin && <MailPanel />}
             {section === "funnel" && isAdmin && <FunnelPanel />}

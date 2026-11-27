@@ -110,11 +110,12 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
     );
   }
   const regular = sizes.filter((size) => size.recommended);
-  const standIns = sizes.filter((size) => !size.recommended && size.available);
+  const standIns = sizes.filter((size) => !size.recommended);
+  const availableStandIns = standIns.filter((size) => size.available);
   // What the email waits for: one of the regular plans, not the pricier stand-in.
   const regularSoldOut = !regular.some((size) => size.available);
   const selected = sizes.find((size) => size.serverType === value);
-  const showingFlex = selected ? !selected.recommended : tariff ? tariff === "flex" : regularSoldOut && standIns.length > 0;
+  const showingFlex = selected ? !selected.recommended : tariff ? tariff === "flex" : regularSoldOut && availableStandIns.length > 0;
   const shown = showingFlex ? standIns : regular;
   const switchTariff = () => {
     const target = showingFlex ? regular : standIns;
@@ -136,7 +137,7 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
   };
   let message = "Pick another plan, or check again in a while.";
   if (regularSoldOut) {
-    message = standIns.length > 0
+    message = availableStandIns.length > 0
       ? `${regularNames} are sold out right now, usually for a few hours. Until they are back you can take one of these, at a higher price, or wait.`
       : `${regularNames} are sold out right now. They usually come back within a few hours, so check again in a while.`;
   }

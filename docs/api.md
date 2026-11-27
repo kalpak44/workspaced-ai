@@ -94,8 +94,9 @@ the order they were created.
 
 `/vm-sizes` lists the plans in `workspaced.plans.offered`: Starter (cx23), Builder (cx33) and Pro (cx43), each a fixed
 daily price before VAT. An admin sees what the plan's VM costs, server and IPv4 address; everyone else sees the plan's
-price. A plan marked `fallback` (Starter Flex, cpx22) is listed, as the default and with `recommended` false, only
-while every other plan is sold out. A plan is listed as unavailable while its server is sold out, and also while its price, less Stripe's fee, no
+price. Plans marked `fallback` (Starter Flex, Builder Flex and Dedicated) are always listed with `recommended` false
+so users can explicitly choose the higher-priced tariffs. The first available fallback becomes the default only
+while every normal plan is sold out. A plan is listed as unavailable while its server is sold out, and also while its price, less Stripe's fee, no
 longer keeps `min-margin-percent` over the server's cost with VAT times `hourly-billing-factor`; the API logs an error
 then, so a Hetzner price rise withholds the plan instead of selling it at a loss. The site's `pricing.html` states the
 same prices, so a change to one is a change to both.
@@ -636,3 +637,19 @@ to 50 least-recently-checked keys per run, starting after one minute and repeati
 a sweep finishes. Configure `workspaced.openrouter.alert-interval` and `alert-batch-size` to tune
 this; batches are capped at 100. Checks use each user's own encrypted inference key, including when
 no browser is open, and never return or log credentials. No additional email is sent.
+
+### Workspace AI credits
+
+`GET /api/v1/workspaces/{id}/ai-credits` is available to the owner and collaborators and uses `Cache-Control: no-store`.
+It returns `remainingUsd` (null if unavailable or unlimited), `warningThresholdUsd`, `low`, `exhausted`, and `trial`.
+Only credit availability is shared; connector identifiers, names and keys stay private. The default warning threshold
+is $1, with `low` true strictly below it. Demo and trial connectors suppress warnings; zero credits still block sending.
+
+`PUT /api/v1/account/ai-credit-preferences` accepts `{"warningThresholdUsd":1.00}` and returns the updated account.
+The value is a USD amount from 0 to 100000, with at most two decimal places. The setting persists per user, including
+their view of shared workspaces. Zero suppresses low-credit warnings, not the exhausted-credit restriction.
+
+For saved OpenRouter connectors, message sends, edits that regenerate, and form replies check current provider credits
+on the server. Exhaustion returns `402` before prompting the harness. Existing conversations remain readable. Unknown
+or unlimited balances are not treated as zero. The client checks on page entry, every 30 seconds, on window focus,
+after a reply finishes, and when the user chooses Check again.

@@ -8,6 +8,10 @@ import { ChatModelPicker, SessionList } from "../organisms";
 import { DeleteSessionDialog } from "../organisms/DeleteSessionDialog";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
+import { useWorkspaceAiCredits } from "../../hooks/useWorkspaceAiCredits";
+import { useAccount } from "../../hooks/useAccount";
+import { AiCreditBanner } from "../molecules/AiCreditBanner";
+
 interface Props {
   readonly workspace: Workspace;
   readonly deleting: boolean;
@@ -17,6 +21,9 @@ interface Props {
 /** A workspace's sessions, and the box that starts a new one. */
 export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
   const ready = workspace.status === "READY" && !deleting;
+  const credits = useWorkspaceAiCredits(ready ? workspace.id : null);
+  const { account } = useAccount();
+  const creditNotice = <AiCreditBanner status={credits.status} owner={!workspace.ownerId || workspace.ownerId === account?.id} onRefresh={credits.refresh} />;
   const sessions = useSessions(ready ? workspace.id : null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleteMany, setDeleteMany] = useState<readonly string[] | null>(null);
@@ -30,6 +37,7 @@ export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
    * session first; if one fails, the session is removed again and the text and files stay here.
    */
   const start = async (text: string) => {
+    if (credits.blocked) return false;
     const session = await sessions.create();
     if (!session) {
       return false;
@@ -50,6 +58,8 @@ export function WorkspacePage({ workspace, deleting, onModelChanged }: Props) {
       <h1 className="sr-only">{workspace.name}</h1>
       {ready ? (
         <SessionList
+          sendDisabled={credits.blocked}
+          creditNotice={creditNotice}
           modelControl={<ChatModelPicker workspace={workspace} onChanged={onModelChanged} />}
           sessions={sessions.sessions}
           loading={sessions.loading}

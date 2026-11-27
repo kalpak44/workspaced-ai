@@ -80,6 +80,15 @@ public interface AccountApi {
   ResponseEntity<Account> updateMailPreferences(@RequestBody MailPreferences preferences);
 
   @Operation(
+      operationId = "updateAiCreditPreferences",
+      summary = "Set the AI credit warning threshold",
+      description =
+          "USD threshold for workspace warnings, default 1. Warnings appear strictly below it. Zero hides low-credit warnings; exhausted credits still block sending. Applies to the signed-in user, including when collaborating.")
+  @PutMapping(path = "/ai-credit-preferences", consumes = JSON, produces = JSON)
+  ResponseEntity<Account> updateAiCreditPreferences(
+      @Valid @RequestBody AiCreditPreferences preferences);
+
+  @Operation(
       operationId = "saveTour",
       summary = "Save where the guided tour is",
       description =

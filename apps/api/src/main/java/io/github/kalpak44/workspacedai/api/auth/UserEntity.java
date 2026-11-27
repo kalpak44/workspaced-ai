@@ -77,6 +77,17 @@ public class UserEntity {
   @Column(name = "tips_mail", insertable = false, nullable = false)
   private boolean tipsMail = true;
 
+  @Column(name = "ai_credit_warning_usd", nullable = false, precision = 8, scale = 2)
+  private java.math.BigDecimal aiCreditWarningUsd = java.math.BigDecimal.ONE;
+
+  public java.math.BigDecimal getAiCreditWarningUsd() {
+    return aiCreditWarningUsd;
+  }
+
+  public void setAiCreditWarningUsd(java.math.BigDecimal threshold) {
+    aiCreditWarningUsd = threshold;
+  }
+
   protected UserEntity() {
     // For JPA.
   }

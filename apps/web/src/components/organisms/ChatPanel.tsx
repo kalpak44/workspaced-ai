@@ -18,6 +18,7 @@ interface Props {
   readonly onStop: () => void;
   readonly onEdit: (messageId: string, text: string) => Promise<boolean>;
   readonly modelControl?: ReactNode;
+  readonly creditNotice?: ReactNode;
   readonly forms: readonly AgentForm[];
   readonly onAnswer: (id: string, answer?: FormAnswer) => Promise<boolean>;
   readonly attachments?: readonly Attachment[];
@@ -26,7 +27,7 @@ interface Props {
 }
 
 /** One session's conversation, with the composer pinned below it. */
-export function ChatPanel({ messages, loading, busy, disabled = false, error, onDismissError, onSend, onStop, onEdit, modelControl, forms, onAnswer, attachments, onAttach, onDetach }: Props) {
+export function ChatPanel({ messages, loading, busy, disabled = false, error, onDismissError, onSend, onStop, onEdit, modelControl, creditNotice, forms, onAnswer, attachments, onAttach, onDetach }: Props) {
   const [editing, setEditing] = useState<ChatMessage | null>(null);
   // Keep the editor mounted even if a revert event removes the original message before
   // the request settles. A failed replacement must leave the draft available to copy.
@@ -88,7 +89,7 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
           <ChatMessageEditor
             key={message.id}
             message={editing}
-            busy={busy}
+            busy={busy || disabled}
             onCancel={() => setEditing(null)}
             onSave={async (text) => {
               const saved = await onEdit(message.id, text);
@@ -124,6 +125,7 @@ export function ChatPanel({ messages, loading, busy, disabled = false, error, on
             <ArrowDown aria-hidden className="size-3.5" />Jump to latest
           </button>
         )}
+        {creditNotice}
         <ChatComposer busy={busy} disabled={disabled || editing !== null || forms.length > 0} modelControl={modelControl} autoFocus onSend={onSend} onStop={onStop}
           attachments={attachments} onAttach={onAttach} onDetach={onDetach} />
         <p className="mt-2 text-center text-xs text-zinc-400 pointer-coarse:hidden">

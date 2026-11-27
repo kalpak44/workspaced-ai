@@ -19,7 +19,8 @@ public record Account(
         boolean demoAvailable,
     @Schema(description = "Where the guided tour is; null while no tour is under way")
         TourProgress tour,
-    MailPreferences mail) {
+    MailPreferences mail,
+    java.math.BigDecimal aiCreditWarningUsd) {
 
   static Account of(UserEntity user, Auth0Users.Profile profile) {
     return new Account(
@@ -31,6 +32,7 @@ public record Account(
         user.getRole(),
         user.isDemoAvailable(),
         user.getTourProgress(),
-        user.getMailPreferences());
+        user.getMailPreferences(),
+        user.getAiCreditWarningUsd());
   }
 }

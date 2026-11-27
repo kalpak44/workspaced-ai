@@ -13,6 +13,8 @@ type Tab = "user" | "scheduled";
 
 interface Props {
   readonly modelControl?: ReactNode;
+  readonly creditNotice?: ReactNode;
+  readonly sendDisabled?: boolean;
   readonly sessions: readonly Session[];
   readonly loading: boolean;
   readonly deleting: ReadonlySet<string>;
@@ -89,7 +91,9 @@ export function SessionList(props: Props) {
       <div>
         <h2 className="mb-1 text-xl font-semibold tracking-tight sm:text-2xl">Start a session</h2>
         <p className="mb-5 text-sm text-zinc-500 dark:text-zinc-400">Describe a task and the agent starts working on it, or pick up a recent conversation below.</p>
+        {props.creditNotice}
         <ChatComposer
+          disabled={props.sendDisabled}
           busy={false}
           modelControl={props.modelControl}
           autoFocus

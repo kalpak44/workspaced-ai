@@ -66,6 +66,54 @@ class VmSizesTest {
   }
 
   @Test
+  void listsFlexAlongsideAvailableNormalPlansSoUsersCanSwitchTariffs() throws Exception {
+    var normal =
+        new VmSize(
+            null,
+            "cx23",
+            true,
+            2,
+            4.0,
+            40,
+            "shared",
+            "x86",
+            "nbg1",
+            new BigDecimal("3.00"),
+            new BigDecimal("4.00"),
+            true,
+            false,
+            true);
+    var flex =
+        new VmSize(
+            null,
+            "cpx22",
+            false,
+            2,
+            4.0,
+            80,
+            "shared",
+            "x86",
+            "nbg1",
+            new BigDecimal("12.00"),
+            new BigDecimal("15.00"),
+            false,
+            false,
+            true);
+    when(vmManager.sizes()).thenReturn(List.of(normal, flex));
+
+    var response = list();
+    assertThat(response.statusCode()).isEqualTo(200);
+    var sizes = JSON.readTree(response.body());
+    assertThat(sizes.size()).isEqualTo(2);
+    assertThat(sizes.get(0).get("plan").asString()).isEqualTo("Starter");
+    assertThat(sizes.get(0).get("available").asBoolean()).isTrue();
+    assertThat(sizes.get(0).get("isDefault").asBoolean()).isTrue();
+    assertThat(sizes.get(1).get("plan").asString()).isEqualTo("Starter Flex");
+    assertThat(sizes.get(1).get("available").asBoolean()).isTrue();
+    assertThat(sizes.get(1).get("isDefault").asBoolean()).isFalse();
+  }
+
+  @Test
   void showsAnAdminTheCostAndEveryoneElseThePlanPrice() throws Exception {
     when(vmManager.sizes()).thenReturn(List.of(CX23));
     var name = "vera-" + UUID.randomUUID();

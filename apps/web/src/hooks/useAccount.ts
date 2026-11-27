@@ -87,6 +87,9 @@ export function useAccount() {
     async saveMailPreferences(preferences: Partial<api.MailPreferences>) {
       set({ status: "signed-in", account: await api.updateMailPreferences(preferences) });
     },
+    async saveAiCreditPreferences(threshold: number) {
+      set({ status: "signed-in", account: await api.updateAiCreditPreferences(threshold) });
+    },
     requestPasswordReset: api.requestPasswordReset,
     enrollMfa: api.enrollMfa,
   };

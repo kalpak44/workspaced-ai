@@ -154,6 +154,14 @@ public class AuthService {
     return Account.of(user, profile);
   }
 
+  @Transactional
+  public Account updateAiCreditPreferences(
+      UUID userId, Auth0Users.Profile profile, AiCreditPreferences preferences) {
+    var user = user(userId);
+    user.setAiCreditWarningUsd(preferences.warningThresholdUsd());
+    return Account.of(user, profile);
+  }
+
   /** Null ends the tour. */
   @Transactional
   public void saveTour(UUID userId, TourProgress progress) {

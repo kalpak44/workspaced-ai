@@ -40,6 +40,12 @@ public class AccountController implements AccountApi {
   }
 
   @Override
+  public ResponseEntity<Account> updateAiCreditPreferences(AiCreditPreferences preferences) {
+    return ResponseEntity.ok(
+        service.updateAiCreditPreferences(CurrentUser.id(), CurrentUser.profile(), preferences));
+  }
+
+  @Override
   public ResponseEntity<Void> saveTour(TourProgress progress) {
     service.saveTour(CurrentUser.id(), progress);
     return ResponseEntity.noContent().build();

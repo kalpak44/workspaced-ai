@@ -173,6 +173,8 @@ export function installFakeApi(
     createStatus: "READY" as WorkspaceStatus,
     // When set, POST or DELETE waits on it, so a test can look at the UI mid-request.
     trialRemaining: 1 as number | null,
+    aiRemaining: 7.5 as number | null,
+    aiCreditsFail: false,
     holdCreate: null as Promise<void> | null,
     holdDelete: null as Promise<void> | null,
     holdRestart: null as Promise<void> | null,
@@ -452,6 +454,8 @@ export function installFakeApi(
       if (auth.failMail) return json({}, 500);
       // As the API does: a preference left out keeps its value.
       auth.account = { ...auth.account, mail: { balanceReminders: true, tips: true, ...auth.account.mail, ...JSON.parse(String(init?.body)) } };
+    } else if (url.endsWith("/account/ai-credit-preferences")) {
+      auth.account = { ...auth.account, aiCreditWarningUsd: JSON.parse(String(init?.body)).warningThresholdUsd };
     } else if (url.endsWith("/account/tour")) {
       auth.account = { ...auth.account, tour: init?.method === "PUT" ? JSON.parse(String(init.body)) : null };
       return new Response(null, { status: 204 });
@@ -545,6 +549,18 @@ export function installFakeApi(
     }
     const noticeRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/acknowledgement$/.exec(url);
     if (noticeRoute) return new Response(null, { status: connectors.some(connector => connector.id === noticeRoute[1]) ? 204 : 404 });
+    const creditsRoute = /\/api\/v1\/workspaces\/([^/]+)\/ai-credits$/.exec(url);
+    if (creditsRoute) {
+      if (state.aiCreditsFail) return json({}, 503);
+      const workspace = rows.find(row => row.id === creditsRoute[1]);
+      if (!workspace) return json({}, 404);
+      const connector = connectors.find(row => row.id === workspaceConnectors.get(workspace.id));
+      const trial = connector?.trial === true || workspace.demo === true;
+      const remainingUsd = connector?.trial ? state.trialRemaining : state.aiRemaining;
+      const warningThresholdUsd = auth.account.aiCreditWarningUsd ?? 1;
+      return json({ remainingUsd, warningThresholdUsd, low: !trial && remainingUsd !== null && remainingUsd < warningThresholdUsd,
+        exhausted: remainingUsd !== null && remainingUsd <= 0, trial });
+    }
     const connectorMetricsRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/metrics$/.exec(url);
     if (connectorMetricsRoute) {
       if (!connectors.some(connector => connector.id === connectorMetricsRoute[1])) return json({}, 404);

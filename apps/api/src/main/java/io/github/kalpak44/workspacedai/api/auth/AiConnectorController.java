@@ -33,9 +33,11 @@ public class AiConnectorController {
   public record Selection(@NotNull UUID connectorId) {}
 
   private final AiConnectorService service;
+  private final WorkspaceAiCredits credits;
 
-  public AiConnectorController(AiConnectorService service) {
+  public AiConnectorController(AiConnectorService service, WorkspaceAiCredits credits) {
     this.service = service;
+    this.credits = credits;
   }
 
   @GetMapping("/ai-connectors")
@@ -66,6 +68,17 @@ public class AiConnectorController {
   @ResponseStatus(HttpStatus.NO_CONTENT)
   public void delete(@PathVariable UUID id) {
     service.delete(id);
+  }
+
+  @io.swagger.v3.oas.annotations.Operation(
+      summary = "Read workspace AI credit availability",
+      description =
+          "Available to all workspace members. Remaining USD is null when unavailable or unlimited. Low warnings exclude demo/trial. No connector secrets or identifiers are returned.")
+  @GetMapping("/workspaces/{id}/ai-credits")
+  public ResponseEntity<WorkspaceAiCredits.Status> credits(@PathVariable UUID id) {
+    return ResponseEntity.ok()
+        .cacheControl(org.springframework.http.CacheControl.noStore())
+        .body(credits.status(id, CurrentUser.id()));
   }
 
   @GetMapping("/workspaces/{id}/ai-connector")

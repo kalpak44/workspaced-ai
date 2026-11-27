@@ -38,6 +38,7 @@ public class SessionService {
   private final Harness harness;
   private final TransactionTemplate transactions;
   private final ModelCatalogues catalogues;
+  private final io.github.kalpak44.workspacedai.api.auth.WorkspaceAiCredits credits;
 
   public SessionService(
       WorkspaceRepository workspaces,
@@ -45,13 +46,15 @@ public class SessionService {
       WorkspaceRuntime runtime,
       Harness harness,
       TransactionTemplate transactions,
-      ModelCatalogues catalogues) {
+      ModelCatalogues catalogues,
+      io.github.kalpak44.workspacedai.api.auth.WorkspaceAiCredits credits) {
     this.workspaces = workspaces;
     this.sessions = sessions;
     this.runtime = runtime;
     this.harness = harness;
     this.transactions = transactions;
     this.catalogues = catalogues;
+    this.credits = credits;
   }
 
   /**
@@ -191,6 +194,7 @@ public class SessionService {
       UUID workspaceId, UUID sessionId, String formId, Map<String, Object> answer) {
     awaitSession(workspaceId, sessionId);
     var target = target(workspaceId, sessionId);
+    credits.requireCredits(workspaceId);
     harness.replyForm(target.endpoint(), target.harnessSessionId(), formId, answer);
   }
 
@@ -203,6 +207,7 @@ public class SessionService {
   /** With the workspace's chosen model, so a change of model applies from the next message. */
   public void send(UUID workspaceId, UUID sessionId, String text) {
     var session = awaitSession(workspaceId, sessionId);
+    credits.requireCredits(workspaceId);
     harness.prompt(
         endpoint(workspaceId),
         session.getPath(),
@@ -213,6 +218,7 @@ public class SessionService {
 
   public void edit(UUID workspaceId, UUID sessionId, String messageId, String text) {
     var session = awaitSession(workspaceId, sessionId);
+    credits.requireCredits(workspaceId);
     var endpoint = endpoint(workspaceId);
     var message =
         harness.messages(endpoint, session.getPath(), session.getHarnessSessionId()).stream()

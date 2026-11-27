@@ -35,26 +35,21 @@ public class VmPricing {
   }
 
   /**
-   * Every plan Hetzner still offers the server for, in the configured order, priced for the user. A
-   * fallback plan is offered, as the default, only while no other plan is available.
+   * Every configured tariff stays visible. Flex becomes the default only when normal plans sell
+   * out.
    */
   public List<VmSize> sizes(boolean admin) {
     var sizes = vmManager.sizes();
     var regular = priced(plans.offered().stream().filter(plan -> !plan.fallback()), sizes, admin);
-    if (regular.stream().anyMatch(VmSize::available)) {
-      return regular;
-    }
     var fallbacks =
-        priced(plans.offered().stream().filter(PlanProperties.Plan::fallback), sizes, admin)
-            .stream()
-            .filter(VmSize::available)
-            .toList();
-    if (fallbacks.isEmpty()) {
-      return regular;
-    }
+        priced(plans.offered().stream().filter(PlanProperties.Plan::fallback), sizes, admin);
+    var fallbackDefault =
+        regular.stream().anyMatch(VmSize::available)
+            ? null
+            : fallbacks.stream().filter(VmSize::available).findFirst().orElse(null);
     var all = new ArrayList<VmSize>();
-    regular.forEach(size -> all.add(size.withDefault(false)));
-    fallbacks.forEach(size -> all.add(size.withDefault(size == fallbacks.getFirst())));
+    regular.forEach(size -> all.add(size.withDefault(fallbackDefault == null && size.isDefault())));
+    fallbacks.forEach(size -> all.add(size.withDefault(size == fallbackDefault)));
     return List.copyOf(all);
   }
 

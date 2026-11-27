@@ -91,6 +91,18 @@ describe("VM sizes", () => {
     expect(screen.queryByRole("radio", { name: /Flex/ })).not.toBeInTheDocument();
   });
 
+  it("keeps the tariff switch visible when Flex is sold out", async () => {
+    const api = installFakeApi();
+    api.state.vmSizes.push({ ...api.state.vmSizes[0], plan: "Starter Flex", serverType: "cpx22", recommended: false, isDefault: false, available: false });
+    const user = userEvent.setup();
+    await openSizes(user);
+    await user.click(screen.getByRole("button", { name: "Show Flex tariffs" }));
+    expect(screen.getByRole("radio", { name: /Starter Flex.*Sold out/ })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Show normal tariffs" }));
+    expect(screen.getByRole("radio", { name: /^Starter/ })).toBeChecked();
+  });
+
   it("shows a sold-out plan but does not let it be chosen", async () => {
     const api = installFakeApi();
     api.state.vmSizes[0].available = false;

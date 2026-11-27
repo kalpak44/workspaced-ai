@@ -42,12 +42,14 @@ class VmPricingTest {
 
     var sizes = pricing.sizes(false);
 
-    assertThat(sizes).extracting(VmSize::plan).containsExactly("Starter", "Builder");
+    assertThat(sizes)
+        .extracting(VmSize::plan)
+        .containsExactly("Starter", "Builder", "Starter Flex");
     assertThat(sizes.getFirst().isDefault()).isTrue();
     assertThat(sizes.getFirst().available()).isFalse();
     assertThat(sizes.getFirst().monthlyGross()).isEqualByComparingTo("10.645833");
     assertThat(sizes.get(1).monthlyGross()).isEqualByComparingTo("16.729167");
-    assertThat(sizes).extracting(VmSize::featured).containsExactly(false, true);
+    assertThat(sizes).extracting(VmSize::featured).containsExactly(false, true, false);
   }
 
   @Test
@@ -76,7 +78,9 @@ class VmPricingTest {
                 server("cx23", "7.19", false),
                 server("cx33", "10.79", true),
                 server("cpx22", "23.99", true)));
-    assertThat(pricing.sizes(false)).extracting(VmSize::plan).containsExactly("Starter", "Builder");
+    assertThat(pricing.sizes(false))
+        .extracting(VmSize::plan)
+        .containsExactly("Starter", "Builder", "Starter Flex");
   }
 
   @Test
@@ -106,7 +110,7 @@ class VmPricingTest {
                 server("cpx22", "23.99", true)));
 
     assertThat(pricing.offered("cx23")).isEmpty();
-    assertThat(pricing.offered("cpx22")).isEmpty();
+    assertThat(pricing.offered("cpx22")).map(VmSize::serverType).hasValue("cpx22");
     assertThat(pricing.offered(null)).map(VmSize::serverType).hasValue("cx33");
     assertThat(pricing.offered(" cx33 ")).map(VmSize::serverType).hasValue("cx33");
   }

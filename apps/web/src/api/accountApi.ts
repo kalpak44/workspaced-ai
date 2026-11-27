@@ -18,6 +18,7 @@ export interface Account {
   /** Where the guided tour is, so any browser resumes it; null while none is under way. */
   readonly tour?: TourProgress | null;
   readonly mail?: MailPreferences;
+  readonly aiCreditWarningUsd?: number;
 }
 
 /** The platform mail a user may turn off; pauses, deletions and failed top-ups are always mailed. */
@@ -138,4 +139,8 @@ export async function saveTour(progress: TourProgress | null): Promise<void> {
 /** Auth0 emails the signed-in user a link to set a new password. */
 export async function requestPasswordReset(): Promise<void> {
   await send(`${ACCOUNT_URL}/password-reset`, { method: "POST" });
+}
+
+export async function updateAiCreditPreferences(warningThresholdUsd: number): Promise<Account> {
+  return (await send(`${ACCOUNT_URL}/ai-credit-preferences`, { method: "PUT", body: JSON.stringify({ warningThresholdUsd }) })).json();
 }

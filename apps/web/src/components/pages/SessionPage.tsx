@@ -15,6 +15,10 @@ import { SessionSidebar } from "../organisms/SessionSidebar";
 import { ContextLayout } from "../templates/ContextLayout";
 import { WorkspaceStatusView } from "./WorkspaceStatusView";
 
+import { useWorkspaceAiCredits } from "../../hooks/useWorkspaceAiCredits";
+import { useAccount } from "../../hooks/useAccount";
+import { AiCreditBanner } from "../molecules/AiCreditBanner";
+
 interface Props {
   readonly workspace: Workspace;
   readonly sessionId: string;
@@ -30,10 +34,14 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
   const tourCanSend = !tour || (tour.workspaceId === workspace.id && tour.sessionId === sessionId
     && (tour.step === TOUR_STEP.CONFIRM_PUBLIC || tour.step === TOUR_STEP.DESIGN));
   const ready = workspace.status === "READY" && !deleting;
+  const credits = useWorkspaceAiCredits(ready ? workspace.id : null);
+  const { account } = useAccount();
+  const creditNotice = <AiCreditBanner status={credits.status} owner={!workspace.ownerId || workspace.ownerId === account?.id} onRefresh={credits.refresh} />;
   const sessions = useSessions(ready ? workspace.id : null);
   const chat = useChat(ready ? workspace.id : null, ready ? sessionId : null, sessions.retitle);
   const agents = useSessionAgents(ready ? workspace.id : null, ready ? sessionId : null);
   const files = useSessionFiles(ready ? workspace.id : null, ready ? sessionId : null);
+  useEffect(() => { if (!chat.busy) credits.refresh(); }, [chat.busy, credits.refresh]);
   const switchingAgent = agents.saving !== null;
   const session = sessions.sessions.find((s) => s.id === sessionId);
   const title = session?.title ?? "New session";
@@ -93,9 +101,11 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
           messages={chat.messages}
           loading={chat.loading && chat.messages.length === 0}
           busy={chat.busy}
-          disabled={switchingAgent || !tourCanSend}
+          creditNotice={creditNotice}
+          disabled={switchingAgent || !tourCanSend || credits.blocked}
           forms={chat.forms}
           onAnswer={async (id, answer) => {
+            if (credits.blocked && answer !== undefined) return false;
             const expected = publicTourAnswer(chat.forms);
             const accepted = await chat.answerForm(id, answer);
             if (accepted && tour?.step === TOUR_STEP.CONFIRM_PUBLIC && expected?.id === id
@@ -111,9 +121,9 @@ export function SessionPage({ workspace, sessionId, deleting, onTitle, onModelCh
             files.dismissLinkError();
           }}
           modelControl={<><ChatAgentPicker agents={agents} disabled={chat.busy || chat.forms.length > 0} /><ChatModelPicker workspace={workspace} disabled={chat.busy || switchingAgent} onChanged={onModelChanged} /></>}
-          onEdit={chat.edit}
+          onEdit={(id, text) => credits.blocked ? Promise.resolve(false) : chat.edit(id, text)}
           onSend={async (text) => {
-            if (!tourCanSend) return false;
+            if (!tourCanSend || credits.blocked) return false;
             if (tour && (tour.step === TOUR_STEP.CONFIRM_PUBLIC ? text !== TOUR_PUBLIC_PROMPT
               : text !== TOUR_DESIGN_PROMPT && !TOUR_DESIGN_IDEAS.includes(text))) return false;
             const sent = await chat.send(files.withAttachments(text));
