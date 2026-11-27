@@ -49,14 +49,25 @@ describe("VM sizes", () => {
     expect(screen.getAllByText("Recommended")).toHaveLength(1);
   });
 
-  it("hides the stand-in plans while a regular plan can be had", async () => {
+  it("lets users choose Flex even while regular plans are available, and switch back", async () => {
     const api = installFakeApi();
     api.state.vmSizes[0].available = false;
     api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: false, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 34.979167, monthlyGross: 34.979167, recommended: false, featured: false, available: true });
-    await openSizes(userEvent.setup());
+    const user = userEvent.setup();
+    await openSizes(user);
 
     expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cx43"]);
     expect(warning()).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Show Flex tariffs" }));
+    expect(screen.getByRole("radio", { name: /Starter Flex.*€1\.15 a day/ })).toBeChecked();
+    expect(screen.getAllByRole("radio")).toHaveLength(1);
+    expect(screen.getByText("Flex tariffs · higher price")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+
+    await user.click(screen.getByRole("button", { name: "Show normal tariffs" }));
+    expect(screen.getByRole("radio", { name: /^Builder/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^Starter/ })).toBeDisabled();
+    expect(screen.queryByRole("radio", { name: /Flex/ })).not.toBeInTheDocument();
   });
 
   it("shows a sold-out plan but does not let it be chosen", async () => {
@@ -82,6 +93,12 @@ describe("VM sizes", () => {
     expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cpx22"]);
     expect(screen.getByRole("radio", { name: /Starter Flex.*€1\.15 a day/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Show normal tariffs" }));
+    expect(screen.getAllByRole("radio")).toHaveLength(3);
+    expect(screen.getAllByRole("radio").every((radio) => (radio as HTMLInputElement).disabled)).toBe(true);
+    expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
+    await user.click(screen.getByRole("button", { name: "Show Flex tariffs" }));
+    expect(screen.getByRole("radio", { name: /Starter Flex/ })).toBeChecked();
   });
 
   it("emails the user once a plan is back, when they ask while every plan is sold out", async () => {

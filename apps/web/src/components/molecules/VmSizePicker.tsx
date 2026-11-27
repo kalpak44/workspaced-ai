@@ -1,4 +1,4 @@
-import { BellRing, Check, RotateCw, TriangleAlert } from "lucide-react";
+import { ArrowLeftRight, BellRing, Check, RotateCw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import type { VmSize } from "../../hooks/useVmSizes";
 import { formatMoney } from "../../lib/format";
@@ -87,13 +87,12 @@ interface Props {
 }
 
 /**
- * The regular plans, each with its price; a sold-out one shows but cannot be chosen. While every
- * regular plan is sold out, the pricier stand-ins take their place, and a warning says so and offers
- * to check again or email once one is back.
+ * Start with regular plans, or Flex when those are sold out. Users can explicitly switch tariffs.
  */
 export function VmSizePicker({ sizes, status, value, disabled = false, soldOut = null, onChange, onReload, waiting = false, onWait }: Props) {
   const [asking, setAsking] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [tariff, setTariff] = useState<"normal" | "flex" | null>(null);
   if (status === "loading") {
     return (
       <div className="flex items-center gap-2 rounded-lg border border-dashed border-zinc-300 px-4 py-3 text-sm text-zinc-500 dark:border-zinc-700 dark:text-zinc-400">
@@ -114,8 +113,15 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
   const standIns = sizes.filter((size) => !size.recommended && size.available);
   // What the email waits for: one of the regular plans, not the pricier stand-in.
   const regularSoldOut = !regular.some((size) => size.available);
-  // The pricier stand-ins only take the place of the regular plans while every one is sold out.
-  const shown = regularSoldOut && standIns.length > 0 ? standIns : regular;
+  const selected = sizes.find((size) => size.serverType === value);
+  const showingFlex = selected ? !selected.recommended : tariff ? tariff === "flex" : regularSoldOut && standIns.length > 0;
+  const shown = showingFlex ? standIns : regular;
+  const switchTariff = () => {
+    const target = showingFlex ? regular : standIns;
+    setTariff(showingFlex ? "normal" : "flex");
+    onChange(target.find((size) => size.isDefault && size.available)?.serverType
+      ?? target.find((size) => size.available)?.serverType ?? "");
+  };
   const regularNames = listOf(regular.map((size) => size.plan));
   const ask = async () => {
     setAsking(true);
@@ -156,6 +162,16 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
               <Button label="Email me when a plan is back" variant="secondary" icon={BellRing} busy={asking} disabled={disabled} onClick={() => void ask()} />
             )}
           </div>
+        </div>
+      )}
+      {regular.length > 0 && standIns.length > 0 && (
+        <div className="flex items-center justify-between gap-3 text-xs">
+          <span className="font-medium text-zinc-700 dark:text-zinc-300">{showingFlex ? "Flex tariffs · higher price" : "Normal tariffs"}</span>
+          <button type="button" disabled={disabled} onClick={switchTariff}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-md px-2 py-1.5 font-medium text-zinc-600 hover:bg-zinc-100 hover:text-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-400 disabled:opacity-50 dark:text-zinc-400 dark:hover:bg-zinc-800 dark:hover:text-zinc-100">
+            <ArrowLeftRight aria-hidden className="size-3.5" />
+            {showingFlex ? "Show normal tariffs" : "Show Flex tariffs"}
+          </button>
         </div>
       )}
       <div className="grid gap-2 sm:grid-cols-3 sm:gap-3">

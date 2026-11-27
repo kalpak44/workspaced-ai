@@ -176,10 +176,9 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   // A size that is sold out after a reload cannot stay chosen.
   useEffect(() => {
     if (status !== "ready") return;
-    if (!serverType || !sizes.some((s) => s.serverType === serverType && s.available)) {
-      setServerType(initialVmSize(sizes));
-    }
-  }, [sizes, status, serverType]);
+    setServerType((current) => sizes.some((s) => s.serverType === current && s.available)
+      ? current : initialVmSize(sizes));
+  }, [sizes, status]);
 
   useEffect(() => {
     if (!providerId && providers.providers.length === 1) {
