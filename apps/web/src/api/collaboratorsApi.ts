@@ -45,6 +45,11 @@ export async function removeCollaborator(workspaceId: string, userId: string): P
   await send(`${workspaceUrl(workspaceId)}/collaborators/${safe(userId)}`, { method: "DELETE" });
 }
 
+/** From the in-app notification: the signed-in address is what admits the user. */
+export async function acceptInvitationById(invitationId: string): Promise<{ readonly workspaceId: string }> {
+  return (await send(`/api/v1/invitations/${safe(invitationId)}/accept`, { method: "POST" })).json();
+}
+
 /** The code travels in the body, so it stays out of access logs. */
 export async function acceptInvitation(code: string): Promise<{ readonly workspaceId: string }> {
   const body = JSON.stringify({ code });

@@ -90,7 +90,8 @@ public interface SessionApi {
       summary = "List a workspace's sessions",
       description =
           "Oldest first: those the caller started and its scheduled tasks' runs. A session"
-              + " another collaborator started is neither listed nor reachable, and answers 404.")
+              + " another collaborator started is neither listed nor reachable here, and answers"
+              + " 404; it is still on the shared VM, where anyone on the workspace can read it.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",

@@ -5,6 +5,7 @@ import { App } from "../src/App";
 import { WorkspaceCard } from "../src/components/molecules";
 import { CollaboratorsPanel } from "../src/components/organisms";
 import { resetAccount } from "../src/hooks/useAccount";
+import { isOwner, isShared } from "../src/hooks/useCollaborators";
 import type { Workspace } from "../src/hooks/useWorkspaces";
 import { useWorkspaces } from "../src/hooks/useWorkspaces";
 import { captureInvitation, hasPendingInvitation } from "../src/lib/invitation";
@@ -111,6 +112,18 @@ describe("workspace collaborators", () => {
     expect(hasPendingInvitation()).toBe(false);
   });
 
+  it("accepts an invitation from its notification and opens the workspace", async () => {
+    const api = installFakeApi([MINE]);
+    api.invitationCodes.set("inv-1", "shared");
+    api.rows.push(SHARED);
+    globalThis.history.replaceState(null, "", "/invitations/inv-1");
+
+    render(<App />);
+
+    await waitFor(() => expect(globalThis.location.pathname).toBe("/workspaces/shared"));
+    expect(api.invitationCodes.has("inv-1")).toBe(false);
+  });
+
   it("says why an expired invitation could not be accepted", async () => {
     installFakeApi([MINE]);
     globalThis.history.replaceState(null, "", "/invitation#gone");
@@ -154,7 +167,14 @@ describe("workspace collaborators", () => {
     render(<ul><WorkspaceCard workspace={demo} deleting={false} {...handlers} /></ul>);
 
     await user.click(screen.getByRole("button", { name: "Actions for Trial" }));
-    expect(screen.getByRole("menuitem", { name: "Delete workspace" })).toBeInTheDocument();
+    expect(await screen.findByRole("menuitem", { name: "Delete workspace" })).toBeInTheDocument();
     expect(screen.queryByRole("menuitem", { name: "Invite people" })).not.toBeInTheDocument();
+  });
+
+  it("offers Delete only to the owner, and to no one while the account is unknown", () => {
+    expect(isOwner(MINE, "admin-id")).toBe(true);
+    expect(isOwner(SHARED, "admin-id")).toBe(false);
+    expect(isOwner(MINE, undefined)).toBe(false);
+    expect(isShared(SHARED, undefined)).toBe(false);
   });
 });

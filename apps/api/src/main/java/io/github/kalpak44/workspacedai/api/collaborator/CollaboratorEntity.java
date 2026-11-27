@@ -37,14 +37,19 @@ class CollaboratorEntity {
   @Column(name = "joined_at", nullable = false, updatable = false)
   private Instant joinedAt;
 
+  // What this user calls the workspace; the owner's name for it is the workspace's own.
+  @Column(nullable = false, length = 100)
+  private String name;
+
   protected CollaboratorEntity() {
     // For JPA.
   }
 
-  CollaboratorEntity(UUID workspaceId, UUID userId, UUID invitedBy) {
+  CollaboratorEntity(UUID workspaceId, UUID userId, UUID invitedBy, String name) {
     this.workspaceId = workspaceId;
     this.userId = userId;
     this.invitedBy = invitedBy;
+    this.name = name;
     // Postgres keeps microseconds, so the value read back later equals this one.
     this.joinedAt = Instant.now().truncatedTo(ChronoUnit.MICROS);
   }
@@ -59,5 +64,9 @@ class CollaboratorEntity {
 
   Instant getJoinedAt() {
     return joinedAt;
+  }
+
+  String getName() {
+    return name;
   }
 }

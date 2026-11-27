@@ -47,4 +47,10 @@ public class CollaboratorsController implements CollaboratorsApi {
     return ResponseEntity.ok(
         service.accept(CurrentUser.id(), CurrentUser.profile().email(), request.code()));
   }
+
+  @Override
+  public ResponseEntity<AcceptedInvitation> acceptById(UUID invitationId) {
+    return ResponseEntity.ok(
+        service.accept(CurrentUser.id(), CurrentUser.profile().email(), invitationId));
+  }
 }

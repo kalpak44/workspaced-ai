@@ -312,6 +312,22 @@ public final class Notifications {
         BILLING);
   }
 
+  /** For a user who already has an account, beside the mailed link. */
+  public static NotificationMessage invitation(UUID invitationId, String inviter, String name) {
+    return new NotificationMessage(
+        NotificationKind.WORKSPACE,
+        NotificationTone.INFO,
+        "Invitation to " + name,
+        inviter + " invited you to collaborate on " + name + ".",
+        inviter
+            + " invited you to collaborate on the workspace "
+            + name
+            + ". Accepting adds it to your workspaces; it keeps running on its owner's account."
+            + " The invitation expires 24 hours after it was sent. If you weren't expecting it,"
+            + " ignore it: nothing happens unless you accept.",
+        new NotificationAction("Accept invitation", "/invitations/" + invitationId));
+  }
+
   public static NotificationMessage workspaceCreated(UUID id, String name) {
     return new NotificationMessage(
         NotificationKind.WORKSPACE,

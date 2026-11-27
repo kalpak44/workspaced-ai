@@ -81,14 +81,16 @@ public interface CollaboratorsApi {
       responseCode = "409",
       description =
           "The workspace is a free demo, which cannot be shared; the address is already on it;"
-              + " or it has 50 collaborators or 20 open invitations.",
+              + " or its 5 collaborator seats, open invitations included, are taken.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
   @ApiResponse(
       responseCode = "429",
-      description = "That address was invited less than a minute ago.",
+      description =
+          "That address was invited less than a minute ago, or the caller has sent 50"
+              + " invitations in the last 24 hours.",
       content =
           @Content(
               mediaType = PROBLEM_JSON,
@@ -126,8 +128,10 @@ public interface CollaboratorsApi {
       operationId = "removeCollaborator",
       summary = "Remove a collaborator",
       description =
-          "Only the owner removes others; a collaborator may remove themselves to leave. The"
-              + " sessions they started stay in the workspace, unseen by anyone else.")
+          "Only the owner removes others; a collaborator may remove themselves to leave. Their"
+              + " open terminals and session streams are closed at once. The sessions they"
+              + " started stay in the workspace, and stay on its VM, which everyone on it can"
+              + " read from a terminal.")
   @ApiResponse(responseCode = "204", description = "Removed.")
   @ApiResponse(
       responseCode = "403",
@@ -180,6 +184,49 @@ public interface CollaboratorsApi {
           @Content(
               mediaType = PROBLEM_JSON,
               schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "The workspace already has 5 collaborators; the invitation still works.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
   @PostMapping(path = "/invitations/accept", consumes = JSON, produces = JSON)
   ResponseEntity<AcceptedInvitation> accept(@Valid @RequestBody AcceptInvitationRequest request);
+
+  @Operation(
+      operationId = "acceptInvitationById",
+      summary = "Accept an invitation from its notification",
+      description =
+          "What the in-app notification an existing account gets does, in place of the mailed"
+              + " link. It admits only a user signed in with the address it was sent to.")
+  @ApiResponse(
+      responseCode = "200",
+      description = "Joined, or already on the workspace.",
+      content =
+          @Content(mediaType = JSON, schema = @Schema(implementation = AcceptedInvitation.class)))
+  @ApiResponse(
+      responseCode = "403",
+      description = "The invitation was sent to another address.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "404",
+      description = "No such invitation: expired, revoked or already used.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @ApiResponse(
+      responseCode = "409",
+      description = "The workspace already has 5 collaborators.",
+      content =
+          @Content(
+              mediaType = PROBLEM_JSON,
+              schema = @Schema(implementation = ProblemDetail.class)))
+  @PostMapping(path = "/invitations/{invitationId}/accept", produces = JSON)
+  ResponseEntity<AcceptedInvitation> acceptById(
+      @Parameter(description = "Invitation id") @PathVariable UUID invitationId);
 }

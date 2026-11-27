@@ -35,6 +35,11 @@ public class FakeAuth0Users implements Auth0Users {
   }
 
   @Override
+  public List<String> subjectsByEmail(String email) {
+    return List.of("test|" + email);
+  }
+
+  @Override
   public void updateNames(String subject, String givenName, String familyName) {
     name(subject, givenName, familyName);
   }

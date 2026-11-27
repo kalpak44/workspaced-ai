@@ -219,6 +219,76 @@ class CollaboratorsTest {
     verify(mailer, never()).send(any());
   }
 
+  @Test
+  void holdsAtMostFiveSeatsCountingOpenInvitations() throws Exception {
+    for (var i = 0; i < CollaboratorService.MAX_COLLABORATORS; i++) {
+      assertThat(
+              send(
+                      owner,
+                      "POST",
+                      "/workspaces/" + workspace + "/invitations",
+                      "{\"email\":\"seat" + i + "@example.com\"}")
+                  .statusCode())
+          .isEqualTo(201);
+    }
+
+    var refused =
+        send(
+            owner,
+            "POST",
+            "/workspaces/" + workspace + "/invitations",
+            "{\"email\":\"one-too-many@example.com\"}");
+
+    assertThat(refused.statusCode()).isEqualTo(409);
+  }
+
+  @Test
+  void capsTheInvitationMailOneUserSendsADay() throws Exception {
+    for (var i = 0; i < CollaboratorService.MAX_MAILS_PER_DAY; i++) {
+      jdbc.update("insert into invitation_mail (inviter) values (?)", owner.getId());
+    }
+
+    var refused = send(owner, "POST", "/workspaces/" + workspace + "/invitations", invite(ana));
+
+    assertThat(refused.statusCode()).isEqualTo(429);
+    verify(mailer, never()).send(any());
+  }
+
+  @Test
+  void anExistingAccountIsToldInTheAppAndAcceptsFromThere() throws Exception {
+    send(owner, "POST", "/workspaces/" + workspace + "/invitations", invite(ana));
+
+    var notifications = JSON.readTree(send(ana, "GET", "/notifications", null).body());
+    var invitation =
+        notifications
+            .valueStream()
+            .filter(n -> n.get("title").asString().equals("Invitation to Research"))
+            .findFirst()
+            .orElseThrow();
+    var path = invitation.get("action").get("path").asString();
+    assertThat(path).startsWith("/invitations/");
+
+    // The id admits only the address it was sent to.
+    assertThat(send(bob, "POST", path + "/accept", null).statusCode()).isEqualTo(403);
+    assertThat(send(ana, "POST", path + "/accept", null).statusCode()).isEqualTo(200);
+    assertThat(workspaces(ana)).extracting(Workspace::id).containsExactly(workspace);
+    assertThat(send(ana, "POST", path + "/accept", null).statusCode()).isEqualTo(404);
+  }
+
+  @Test
+  void eachUserNamesTheWorkspaceForThemselves() throws Exception {
+    join(ana);
+
+    assertThat(send(ana, "PUT", "/workspaces/" + workspace, "{\"name\":\"Ana's\"}").statusCode())
+        .isEqualTo(200);
+    assertThat(
+            send(owner, "PUT", "/workspaces/" + workspace, "{\"name\":\"Owner's\"}").statusCode())
+        .isEqualTo(200);
+
+    assertThat(workspaces(ana)).extracting(Workspace::name).containsExactly("Ana's");
+    assertThat(workspaces(owner)).extracting(Workspace::name).containsExactly("Owner's");
+  }
+
   private void join(UserEntity user) throws Exception {
     clearInvocations(mailer);
     send(owner, "POST", "/workspaces/" + workspace + "/invitations", invite(user));

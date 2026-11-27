@@ -33,6 +33,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.function.Function;
+import java.util.stream.Collectors;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -110,7 +111,11 @@ public class WorkspaceService {
   public List<Workspace> list(UUID userId) {
     var entities = repository.findAllReachableBy(userId);
     var statuses = runtime.statuses(entities.stream().map(WorkspaceEntity::getId).toList());
-    return entities.stream().map(e -> Workspace.of(e, statuses.get(e.getId()))).toList();
+    var names = collaboratorNames(userId);
+    return entities.stream()
+        .map(e -> Workspace.of(e, statuses.get(e.getId())))
+        .map(w -> w.named(names.getOrDefault(w.id(), w.name())))
+        .toList();
   }
 
   /** A workspace the owner's balance pays for, as {@link #create} with demo false makes one. */
@@ -410,15 +415,38 @@ public class WorkspaceService {
     return Base64.getUrlEncoder().withoutPadding().encodeToString(bytes);
   }
 
+  /**
+   * Renames it for the user alone: the owner renames the workspace itself, which collaborators do
+   * not see, and a collaborator renames only their own name for it.
+   */
   @Transactional
-  public Optional<Workspace> rename(UUID id, String name) {
+  public Optional<Workspace> rename(UUID id, UUID userId, String name) {
     return repository
         .findById(id)
         .map(
             entity -> {
-              entity.setName(name);
-              return Workspace.of(entity, statusOf(id));
+              if (entity.getOwnerId().equals(userId)) {
+                entity.setName(name);
+              } else {
+                repository.renameForCollaborator(id, userId, name);
+              }
+              return Workspace.of(entity, statusOf(id)).named(name);
             });
+  }
+
+  /** The workspace under the name this user gave it. */
+  @Transactional(readOnly = true)
+  public Workspace asSeenBy(Workspace workspace, UUID userId) {
+    var name = collaboratorNames(userId).get(workspace.id());
+    return name == null ? workspace : workspace.named(name);
+  }
+
+  private Map<UUID, String> collaboratorNames(UUID userId) {
+    return repository.findCollaboratorNames(userId).stream()
+        .collect(
+            Collectors.toMap(
+                WorkspaceRepository.CollaboratorName::getWorkspaceId,
+                WorkspaceRepository.CollaboratorName::getName));
   }
 
   /**

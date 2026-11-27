@@ -1,6 +1,7 @@
 import { LogOut } from "lucide-react";
-import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
+import { isOwner, isShared } from "../../hooks/useCollaborators";
 import { setDetachedTerminal, useDetachedTerminal } from "../../hooks/useDetachedTerminal";
 import { navigate, useRoute } from "../../hooks/useRoute";
 import { useNotifications } from "../../hooks/useNotifications";
@@ -46,6 +47,7 @@ export function WorkspacesPage() {
     restart,
     remove,
     leave,
+    acceptById,
     patch,
   } = useWorkspaces();
   // The name the create dialog opens with; null while it is closed.
@@ -102,7 +104,8 @@ export function WorkspacesPage() {
   const workspace = workspaces.find((w) => w.id === workspaceId) ?? null;
   const deleteTarget = workspaces.find((w) => w.id === deleteId) ?? null;
   // A collaborator's Delete leaves the workspace; only its owner can end it.
-  const leaving = !!deleteTarget && !!account && !!deleteTarget.ownerId && deleteTarget.ownerId !== account.id;
+  const leaving = !!deleteTarget && isShared(deleteTarget, account?.id);
+  const deletable = !!deleteTarget && isOwner(deleteTarget, account?.id);
   const restartTarget = workspaces.find((w) => w.id === restartId) ?? null;
 
   // A workspace that is gone — deleted here or in another tab, or a stale link — falls back to
@@ -136,6 +139,16 @@ export function WorkspacesPage() {
 
   const onSessionTitle = useCallback((title: string) => setPageTitle(title), []);
 
+  // A notification's Accept lands here; the route is replaced once the invitation is settled.
+  const invitationId = route.name === "invitation" ? route.invitationId : null;
+  // Once per id: a second request would find it used, and send the user home with an error.
+  const accepted = useRef<string | null>(null);
+  useEffect(() => {
+    if (invitationId === null || loading || accepted.current === invitationId) return;
+    accepted.current = invitationId;
+    acceptById(invitationId);
+  }, [invitationId, loading, acceptById]);
+
   let page;
   let tabTitle: string;
   if (route.name === "general-settings") {
@@ -150,6 +163,9 @@ export function WorkspacesPage() {
   } else if (route.name === "notification") {
     tabTitle = "Notification";
     page = <Suspense fallback={<EmptyState busy title="Loading notification…" hint="Fetching it" />}><NotificationPage key={route.notificationId} notificationId={route.notificationId} /></Suspense>;
+  } else if (route.name === "invitation") {
+    tabTitle = "Invitation";
+    page = <EmptyState busy title="Joining the workspace…" hint="Accepting the invitation" />;
   } else if (route.name === "store") {
     tabTitle = "Recipe store";
     page = <Suspense fallback={<EmptyState busy title="Loading the store…" hint="Fetching recipes" />}><StorePage /></Suspense>;
@@ -282,10 +298,10 @@ export function WorkspacesPage() {
             leave(deleteTarget.id, account.id);
             setDeleteId(null);
           }}>
-          You will lose access to {deleteTarget.name} until someone invites you again. Nothing in it is deleted, and the chat sessions you started stay there, unseen by anyone else.
+          You will lose access to {deleteTarget.name} until someone invites you again. Nothing in it is deleted, and the chat sessions you started stay there.
         </ConfirmDeleteDialog>
       )}
-      {deleteTarget && !leaving && (
+      {deleteTarget && deletable && (
         <DeleteWorkspaceDialog
           name={deleteTarget.name}
           onClose={() => setDeleteId(null)}

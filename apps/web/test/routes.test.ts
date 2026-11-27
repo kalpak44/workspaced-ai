@@ -12,6 +12,7 @@ describe("routes", () => {
     { name: "billing" },
     { name: "notifications" },
     { name: "notification", notificationId: "n1" },
+    { name: "invitation", invitationId: "i1" },
     { name: "workspace", workspaceId: "w1" },
     { name: "settings", workspaceId: "w1" },
     { name: "terminal", workspaceId: "w1" },
@@ -35,10 +36,10 @@ describe("routes", () => {
     const paths = [...routes, { name: "store" }, { name: "recipe", recipeId: "r1" }]
       .map((route) => routePath(route as Route))
       .filter((path) => path !== "/");
-    for (const path of [...paths, "/verify-email", "/connect/openrouter"]) {
+    for (const path of [...paths, "/verify-email", "/connect/openrouter", "/invitation"]) {
       expect(pages.test(path), path).toBe(true);
     }
-    for (const path of ["/.env", "/wp-admin/install.php", "/.git/HEAD", "/settingsx"]) {
+    for (const path of ["/.env", "/wp-admin/install.php", "/.git/HEAD", "/settingsx", "/invitationsx"]) {
       expect(pages.test(path), path).toBe(false);
     }
   });

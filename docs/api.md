@@ -403,19 +403,32 @@ for whoever signs in — with an existing account or a new one — as the addres
 shared (`409`) until it is kept as a paid workspace. A collaborator may do
 everything but delete the workspace or keep a demo (`403`), both being the owner's money, and the workspace keeps
 running on the owner's AI connector, which only the owner can change. Only the owner removes collaborators or withdraws
-invitations; a collaborator may remove themselves, which is leaving.
+invitations; a collaborator may remove themselves, which is leaving. A workspace has at most 5 collaborators besides its
+owner, and an open invitation holds one of those seats. An invitee who already has an account also gets an in-app
+notification whose action, `/invitations/{id}`, accepts by id (`POST /api/v1/invitations/{id}/accept`); the signed-in,
+Auth0-verified address is what admits them, exactly as with the mailed code. Each user names a workspace for themselves:
+the owner's rename changes `workspace.name`, a collaborator's changes their own `workspace_collaborator.name`, which
+starts as the workspace's name when they join; neither reaches anyone else. Losing a workspace, by removal or deletion, closes
+that user's terminal WebSockets and session event streams on every instance.
+
+Sessions are listed per user, but that is a view, not a privacy boundary: everyone on a workspace shares its VM, its
+terminals, its secrets and the harness's own session store. Treat a collaborator as fully trusted on the VM.
 
 The database keeps no address: a collaborator is a user id, shown with the email Auth0 has for them, and an invitation
 holds only an HMAC of the address (keyed with `WORKSPACED_JWT_SECRET`) and a SHA-256 of its code. An open invitation is
-therefore listed without an address. Expired invitations are deleted hourly. The mail goes from the no-reply sender.
+therefore listed without an address. Expired invitations are deleted hourly. The mail goes from the no-reply sender,
+at most 50 a day per inviter, counted in `invitation_mail` so that withdrawing an invitation does not free the allowance.
+Addresses are read from Auth0 through a ten-minute in-memory cache; when Auth0 fails, the list shows the rest without
+them rather than failing.
 
 | Method   | Path                                                   | Body               | Answers                                                         |
 |----------|--------------------------------------------------------|--------------------|-----------------------------------------------------------------|
 | `GET`    | `/api/v1/workspaces/{id}/collaborators`                |                    | `200`: the owner, then `APPLIED` collaborators, then `PENDING` invitations |
-| `POST`   | `/api/v1/workspaces/{id}/invitations`                  | `{"email": "…"}`   | `201`; `409` already on it or past 50 collaborators / 20 open invitations; `429` same address within a minute |
+| `POST`   | `/api/v1/workspaces/{id}/invitations`                  | `{"email": "…"}`   | `201`; `409` already on it, or its 5 seats (collaborators plus open invitations) are taken; `429` same address within a minute, or 50 sent by the caller in 24 hours |
 | `DELETE` | `/api/v1/workspaces/{id}/invitations/{invitationId}`   |                    | `204`; `403` unless the owner                                   |
 | `DELETE` | `/api/v1/workspaces/{id}/collaborators/{userId}`       |                    | `204`; `403` unless the owner or that user; `409` for the owner |
-| `POST`   | `/api/v1/invitations/accept`                           | `{"code": "…"}`    | `200` `{"workspaceId"}`; `403` another address; `404` expired or used |
+| `POST`   | `/api/v1/invitations/{invitationId}/accept`            |                    | as below, by id, from the in-app notification |
+| `POST`   | `/api/v1/invitations/accept`                           | `{"code": "…"}`    | `200` `{"workspaceId"}`; `403` another address; `404` expired or used; `409` already 5 collaborators |
 
 ## Workspace secrets
 

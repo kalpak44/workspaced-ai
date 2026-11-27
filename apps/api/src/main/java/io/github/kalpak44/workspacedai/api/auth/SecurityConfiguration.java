@@ -98,6 +98,7 @@ public class SecurityConfiguration {
   // The conversion Spring MVC binds a UUID path variable with, which trims surrounding whitespace.
   private static final ConversionService CONVERSIONS = DefaultConversionService.getSharedInstance();
   private static final int MIN_SECRET_BYTES = 32;
+  private static final String WORKSPACE_ID = "workspaceId";
 
   private static final String[] PUBLIC = {
     Auth0SignIn.AUTHORIZATION + "/*",
@@ -432,26 +433,27 @@ public class SecurityConfiguration {
       WorkspaceRepository workspaces) {
     return (authentication, context) ->
         new AuthorizationDecision(
-            owns(authentication.get(), context.getVariables().get("workspaceId"), workspaces));
+            owns(authentication.get(), context.getVariables().get(WORKSPACE_ID), workspaces));
   }
 
   /**
    * Allows a session's routes only to the user who started it, or, for a scheduled task's run, to
-   * anyone on the workspace, so collaborators never read one another's chats. An id that is not a
-   * UUID, or that no session there has, is let through for the controller to answer as before.
+   * anyone on the workspace, so the app never shows one collaborator another's chats. It is not a
+   * privacy boundary: everyone on a workspace shares its VM, where the chats are stored. An id that
+   * is not a UUID, or that no session there has, is let through for the controller to answer.
    */
   private static AuthorizationManager<RequestAuthorizationContext> ownSession(
       WorkspaceRepository workspaces, WorkspaceSessionRepository sessions) {
     return (authentication, context) -> {
       var variables = context.getVariables();
       var user = authentication.get();
-      if (!owns(user, variables.get("workspaceId"), workspaces)) {
+      if (!owns(user, variables.get(WORKSPACE_ID), workspaces)) {
         return new AuthorizationDecision(false);
       }
       UUID workspace;
       UUID session;
       try {
-        workspace = CONVERSIONS.convert(variables.get("workspaceId"), UUID.class);
+        workspace = CONVERSIONS.convert(variables.get(WORKSPACE_ID), UUID.class);
         session = CONVERSIONS.convert(variables.get("sessionId"), UUID.class);
       } catch (ConversionException _) {
         return new AuthorizationDecision(true);

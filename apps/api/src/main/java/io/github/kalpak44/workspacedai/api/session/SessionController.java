@@ -105,6 +105,7 @@ public class SessionController implements SessionApi {
 
   @Override
   public ResponseEntity<SseEmitter> events(UUID workspaceId, UUID sessionId) {
-    return ResponseEntity.ok(streams.subscribe(service.target(workspaceId, sessionId)));
+    return ResponseEntity.ok(
+        streams.subscribe(service.target(workspaceId, sessionId), CurrentUser.id()));
   }
 }

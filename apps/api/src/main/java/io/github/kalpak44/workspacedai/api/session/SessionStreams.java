@@ -4,6 +4,7 @@ import io.github.kalpak44.workspacedai.api.SseOutbox;
 import io.github.kalpak44.workspacedai.api.harness.Harness;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEvent;
 import io.github.kalpak44.workspacedai.api.harness.HarnessEventEnvelope;
+import io.github.kalpak44.workspacedai.api.workspace.WorkspaceAccessEnded;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -40,7 +41,10 @@ public class SessionStreams {
     this.sessions = sessions;
   }
 
-  public synchronized SseEmitter subscribe(SessionService.Target target) {
+  /**
+   * @param userId who is watching, so their streams close when they lose the workspace
+   */
+  public synchronized SseEmitter subscribe(SessionService.Target target, UUID userId) {
     var emitter = new SseEmitter(0L);
     try {
       emitter.send(SseEmitter.event().comment("connected"));
@@ -49,7 +53,8 @@ public class SessionStreams {
       return emitter;
     }
     var subscriber =
-        new Subscriber(target, emitter, new SseOutbox(emitter, "session-events-" + target.id()));
+        new Subscriber(
+            target, userId, emitter, new SseOutbox(emitter, "session-events-" + target.id()));
     subscribers.put(emitter, subscriber);
     var hub = hubs.computeIfAbsent(target.workspaceId(), ignored -> new Hub());
     hub.add(subscriber);
@@ -154,6 +159,23 @@ public class SessionStreams {
     }
   }
 
+  /** A removed collaborator's chat stays theirs, but they stop watching it. */
+  @EventListener
+  void accessEnded(WorkspaceAccessEnded ended) {
+    ArrayList<SseEmitter> closing;
+    synchronized (this) {
+      closing =
+          new ArrayList<>(
+              subscribers.values().stream()
+                  .filter(s -> s.target.workspaceId().equals(ended.workspaceId()))
+                  .filter(s -> ended.userId().equals(s.userId))
+                  .map(Subscriber::emitter)
+                  .toList());
+      closing.forEach(this::close);
+    }
+    closing.forEach(SseEmitter::complete);
+  }
+
   @EventListener(ContextClosedEvent.class)
   void closeAll() {
     ArrayList<Hub> closing;
@@ -174,7 +196,8 @@ public class SessionStreams {
         });
   }
 
-  private record Subscriber(SessionService.Target target, SseEmitter emitter, SseOutbox outbox) {}
+  private record Subscriber(
+      SessionService.Target target, UUID userId, SseEmitter emitter, SseOutbox outbox) {}
 
   private static final class Hub {
     private final Map<String, Set<Subscriber>> sessions = new HashMap<>();

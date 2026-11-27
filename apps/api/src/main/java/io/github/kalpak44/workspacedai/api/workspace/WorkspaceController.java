@@ -98,7 +98,7 @@ public class WorkspaceController implements WorkspaceApi {
   @Override
   public ResponseEntity<Workspace> rename(UUID id, WorkspaceRequest request) {
     return service
-        .rename(id, request.trimmedName())
+        .rename(id, CurrentUser.id(), request.trimmedName())
         .map(ResponseEntity::ok)
         .orElseThrow(() -> notFound(id));
   }
@@ -107,6 +107,7 @@ public class WorkspaceController implements WorkspaceApi {
   public ResponseEntity<Workspace> setTimeZone(UUID id, TimeZoneRequest request) {
     return service
         .setTimeZone(id, request.timeZone().strip())
+        .map(workspace -> service.asSeenBy(workspace, CurrentUser.id()))
         .map(ResponseEntity::ok)
         .orElseThrow(() -> notFound(id));
   }

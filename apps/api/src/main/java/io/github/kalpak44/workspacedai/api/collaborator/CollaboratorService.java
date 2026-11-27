@@ -5,6 +5,8 @@ import io.github.kalpak44.workspacedai.api.auth.AuthProperties;
 import io.github.kalpak44.workspacedai.api.auth.UserEntity;
 import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.mail.MailService;
+import io.github.kalpak44.workspacedai.api.notification.NotificationService;
+import io.github.kalpak44.workspacedai.api.notification.Notifications;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceDeleted;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceRepository;
@@ -23,13 +25,18 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import net.javacrumbs.shedlock.spring.annotation.SchedulerLock;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.http.HttpStatus;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -48,13 +55,23 @@ import org.springframework.web.server.ResponseStatusException;
 public class CollaboratorService {
 
   static final Duration VALID_FOR = Duration.ofHours(24);
-  // Each invitation is a mail from our domain, so a workspace can send only so many at once.
-  static final int MAX_PENDING = 20;
-  static final int MAX_COLLABORATORS = 50;
+  // Besides the owner. An open invitation holds a seat, so accepting can never go past it.
+  static final int MAX_COLLABORATORS = 5;
   // The same address is mailed again only after this, so a double click sends one mail.
   static final Duration RESEND_AFTER = Duration.ofMinutes(1);
+  // Withdrawing and re-inviting frees a workspace's slots, so this caps the mail itself, per user.
+  static final int MAX_MAILS_PER_DAY = 50;
+  // Auth0's Management API is rate limited; addresses almost never change.
+  static final Duration EMAIL_TTL = Duration.ofMinutes(10);
+  private static final int MAX_CACHED_EMAILS = 10_000;
 
+  private static final Logger LOG = LoggerFactory.getLogger(CollaboratorService.class);
   private static final SecureRandom RANDOM = new SecureRandom();
+  private static final String MARKDOWN = "\\`*_[]<>~|!";
+
+  private record CachedEmail(String email, Instant at) {}
+
+  private final Map<String, CachedEmail> cachedEmails = new ConcurrentHashMap<>();
 
   private final CollaboratorRepository collaborators;
   private final InvitationRepository invitations;
@@ -62,6 +79,7 @@ public class CollaboratorService {
   private final UserRepository users;
   private final Auth0Users auth0Users;
   private final MailService mail;
+  private final NotificationService notifications;
   private final AuthProperties properties;
   private final TransactionTemplate transactions;
   private final ApplicationEventPublisher events;
@@ -73,6 +91,7 @@ public class CollaboratorService {
       UserRepository users,
       Auth0Users auth0Users,
       MailService mail,
+      NotificationService notifications,
       AuthProperties properties,
       TransactionTemplate transactions,
       ApplicationEventPublisher events) {
@@ -82,6 +101,7 @@ public class CollaboratorService {
     this.users = users;
     this.auth0Users = auth0Users;
     this.mail = mail;
+    this.notifications = notifications;
     this.properties = properties;
     this.transactions = transactions;
     this.events = events;
@@ -169,6 +189,14 @@ public class CollaboratorService {
     var sent =
         transactions.execute(
             _ -> {
+              // Serializes the inviter's mail, so the daily cap holds across workspaces.
+              users.findLockedById(inviter).orElseThrow();
+              if (invitations.countMailsSince(inviter, now.minus(Duration.ofDays(1)))
+                  >= MAX_MAILS_PER_DAY) {
+                throw new ResponseStatusException(
+                    HttpStatus.TOO_MANY_REQUESTS,
+                    "you can send at most " + MAX_MAILS_PER_DAY + " invitations a day");
+              }
               // Serializes invitations into one workspace, so the caps hold.
               var workspace =
                   workspaces
@@ -178,11 +206,6 @@ public class CollaboratorService {
               if (workspace.isDemo()) {
                 throw new ResponseStatusException(
                     HttpStatus.CONFLICT, "a demo workspace cannot be shared");
-              }
-              if (collaborators.countByWorkspaceId(workspaceId) >= MAX_COLLABORATORS) {
-                throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "a workspace can have at most " + MAX_COLLABORATORS + " collaborators");
               }
               var invitation =
                   invitations
@@ -194,18 +217,26 @@ public class CollaboratorService {
                 throw new ResponseStatusException(
                     HttpStatus.TOO_MANY_REQUESTS, "that address was invited a moment ago");
               }
-              if (invitation == null
-                  && invitations.countByWorkspaceIdAndExpiresAtAfter(workspaceId, now)
-                      >= MAX_PENDING) {
-                throw new ResponseStatusException(
-                    HttpStatus.CONFLICT,
-                    "a workspace can have at most " + MAX_PENDING + " open invitations");
+              // Reinviting an address reuses its seat rather than taking another.
+              var reused = invitation != null && invitation.getExpiresAt().isAfter(now) ? 1 : 0;
+              if (collaborators.countByWorkspaceId(workspaceId)
+                      + invitations.countByWorkspaceIdAndExpiresAtAfter(workspaceId, now)
+                      - reused
+                  >= MAX_COLLABORATORS) {
+                throw full();
               }
               if (invitation == null) {
                 invitation = new InvitationEntity(workspaceId, emailHash(address));
               }
               invitation.reissue(sha256(code), inviter, now, now.plus(VALID_FOR));
-              return new Sent(invitations.saveAndFlush(invitation), workspace.getName());
+              invitations.recordMail(inviter, now);
+              // Named in the mail as the inviter calls it, which only they may have chosen.
+              var name =
+                  collaborators
+                      .findByWorkspaceIdAndUserId(workspaceId, inviter)
+                      .map(CollaboratorEntity::getName)
+                      .orElse(workspace.getName());
+              return new Sent(invitations.saveAndFlush(invitation), name);
             });
     try {
       mail.notify(
@@ -218,6 +249,7 @@ public class CollaboratorService {
       throw e;
     }
     var invitation = sent.invitation();
+    notifyInvitee(address, inviterEmail, sent.workspaceName(), invitation.getId());
     return new Collaborator(
         null,
         invitation.getId(),
@@ -234,12 +266,25 @@ public class CollaboratorService {
    * for the right one.
    */
   public AcceptedInvitation accept(UUID userId, String userEmail, String code) {
+    return accept(userId, userEmail, () -> invitations.findLockedByCodeHash(sha256(code.strip())));
+  }
+
+  /**
+   * As {@link #accept(UUID, String, String)}, by the invitation's id, from the notification an
+   * existing account gets. The address is what admits the user: Auth0 has verified it, which the
+   * mailed code would only prove again.
+   */
+  public AcceptedInvitation accept(UUID userId, String userEmail, UUID invitationId) {
+    return accept(userId, userEmail, () -> invitations.findLockedById(invitationId));
+  }
+
+  private AcceptedInvitation accept(
+      UUID userId, String userEmail, Supplier<Optional<InvitationEntity>> find) {
     var now = Instant.now();
     return transactions.execute(
         _ -> {
           var invitation =
-              invitations
-                  .findLockedByCodeHash(sha256(code.strip()))
+              find.get()
                   .filter(i -> i.getExpiresAt().isAfter(now))
                   .orElseThrow(
                       () -> notFound("this invitation has expired or has already been used"));
@@ -249,12 +294,23 @@ public class CollaboratorService {
                 "this invitation was sent to another address; sign in with that one to accept it");
           }
           var workspaceId = invitation.getWorkspaceId();
+          // Serializes joining, so two people accepting at once cannot both take the last seat.
+          var workspace =
+              workspaces
+                  .findLockedById(workspaceId)
+                  .orElseThrow(() -> notFound("no workspace " + workspaceId));
+          var owner = workspace.getOwnerId();
+          var joins =
+              !owner.equals(userId)
+                  && !collaborators.existsByWorkspaceIdAndUserId(workspaceId, userId);
+          if (joins && collaborators.countByWorkspaceId(workspaceId) >= MAX_COLLABORATORS) {
+            throw full();
+          }
           invitations.delete(invitation);
-          var owner = workspace(workspaceId).getOwnerId();
-          if (!owner.equals(userId)
-              && !collaborators.existsByWorkspaceIdAndUserId(workspaceId, userId)) {
+          if (joins) {
             collaborators.save(
-                new CollaboratorEntity(workspaceId, userId, invitation.getInvitedBy()));
+                new CollaboratorEntity(
+                    workspaceId, userId, invitation.getInvitedBy(), workspace.getName()));
           }
           return new AcceptedInvitation(workspaceId);
         });
@@ -282,6 +338,22 @@ public class CollaboratorService {
         });
   }
 
+  /**
+   * Tells an invitee who already has an account in the app too, where they can accept it. The mail
+   * has gone already, so an Auth0 failure here only costs them the shortcut.
+   */
+  private void notifyInvitee(String address, String inviter, String workspace, UUID invitation) {
+    try {
+      var message = Notifications.invitation(invitation, inviter, workspace);
+      auth0Users.subjectsByEmail(address).stream()
+          .map(users::findByIdpSubject)
+          .flatMap(Optional::stream)
+          .forEach(user -> notifications.send(user.getId(), message));
+    } catch (RuntimeException e) {
+      LOG.warn("could not notify an invitee in the app", e);
+    }
+  }
+
   /** Withdraws an open invitation, whose link then stops working. Only the owner may. */
   public void revoke(UUID workspaceId, UUID invitationId, UUID caller) {
     transactions.executeWithoutResult(
@@ -299,27 +371,58 @@ public class CollaboratorService {
   @Scheduled(fixedDelayString = "${workspaced.invitations.cleanup-interval:PT1H}")
   @SchedulerLock(name = "workspace-invitations", lockAtMostFor = "PT5M")
   void deleteExpired() {
-    transactions.executeWithoutResult(_ -> invitations.deleteExpired(Instant.now()));
+    var now = Instant.now();
+    transactions.executeWithoutResult(
+        _ -> {
+          invitations.deleteExpired(now);
+          invitations.deleteMailsBefore(now.minus(Duration.ofDays(1)));
+        });
   }
 
   private WorkspaceEntity workspace(UUID id) {
     return workspaces.findById(id).orElseThrow(() -> notFound("no workspace " + id));
   }
 
-  /** Each user's address as Auth0 has it; a user Auth0 no longer knows is left out. */
+  /**
+   * Each user's address as Auth0 has it; a user Auth0 no longer knows is left out. Once Auth0 fails
+   * a lookup the rest are left out too, rather than failing the page or adding to a rate limit.
+   */
   private Map<UUID, String> emails(Collection<UUID> userIds) {
     var subjects =
         users.findAllById(Set.copyOf(userIds)).stream()
             .collect(Collectors.toMap(UserEntity::getId, UserEntity::getIdpSubject));
     var emails = new HashMap<UUID, String>();
-    subjects.forEach(
-        (id, subject) -> {
-          var email = auth0Users.email(subject);
-          if (!email.isBlank()) {
-            emails.put(id, email);
-          }
-        });
+    var now = Instant.now();
+    var reachable = true;
+    for (var entry : subjects.entrySet()) {
+      var email = cachedEmail(entry.getValue(), now);
+      if (email == null && reachable) {
+        try {
+          email = auth0Users.email(entry.getValue());
+          cacheEmail(entry.getValue(), email, now);
+        } catch (RuntimeException e) {
+          LOG.warn("could not read collaborators' addresses from Auth0", e);
+          reachable = false;
+        }
+      }
+      if (email != null && !email.isBlank()) {
+        emails.put(entry.getKey(), email);
+      }
+    }
     return emails;
+  }
+
+  /** Null when not cached, or cached too long ago. */
+  private String cachedEmail(String subject, Instant now) {
+    var cached = cachedEmails.get(subject);
+    return cached != null && cached.at().plus(EMAIL_TTL).isAfter(now) ? cached.email() : null;
+  }
+
+  private void cacheEmail(String subject, String email, Instant now) {
+    if (cachedEmails.size() >= MAX_CACHED_EMAILS) {
+      cachedEmails.clear();
+    }
+    cachedEmails.put(subject, new CachedEmail(email, now));
   }
 
   private String invitationText(String inviter, String workspace, String code) {
@@ -343,7 +446,14 @@ public class CollaboratorService {
    * link in a mail sent from our domain.
    */
   static String plain(String text) {
-    return text.replaceAll("([\\\\`*_\\[\\]<>~|!])", "\\\\$1");
+    var escaped = new StringBuilder(text.length());
+    for (var c : text.toCharArray()) {
+      if (MARKDOWN.indexOf(c) >= 0) {
+        escaped.append('\\');
+      }
+      escaped.append(c);
+    }
+    return escaped.toString();
   }
 
   static String normalize(String email) {
@@ -384,6 +494,14 @@ public class CollaboratorService {
 
   private static ResponseStatusException notFound(String reason) {
     return new ResponseStatusException(HttpStatus.NOT_FOUND, reason);
+  }
+
+  private static ResponseStatusException full() {
+    return new ResponseStatusException(
+        HttpStatus.CONFLICT,
+        "a workspace can have at most "
+            + MAX_COLLABORATORS
+            + " collaborators, open invitations included");
   }
 
   private static ResponseStatusException onlyOwner() {

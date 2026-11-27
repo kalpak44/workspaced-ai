@@ -74,6 +74,7 @@ public class WorkspaceEvents {
    */
   void publishDeleted(UUID id, UUID userId) {
     sendTo(userId, () -> SseEmitter.event().name(DELETED).data(Map.of("id", id)));
+    events.publishEvent(new WorkspaceAccessEnded(id, userId));
   }
 
   /** A comment line every half minute, so a proxy never sees the stream as idle. */

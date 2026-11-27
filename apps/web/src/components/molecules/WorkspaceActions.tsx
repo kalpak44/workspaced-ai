@@ -1,6 +1,6 @@
 import { Activity, LogOut, type LucideIcon, MoreHorizontal, Pencil, RotateCw, Settings, SquareTerminal, Trash2, UserPlus } from "lucide-react";
 import { useCallback, useRef, useState } from "react";
-import { useIsShared } from "../../hooks/useCollaborators";
+import { useIsOwner, useIsShared } from "../../hooks/useCollaborators";
 import { useDismiss } from "../../hooks/useDismiss";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { navigate } from "../../hooks/useRoute";
@@ -41,6 +41,7 @@ export function WorkspaceActions({ workspace, deleting = false, className = "", 
   const starting = workspace.status === "INITIALIZING" || workspace.status === "PAUSED";
   // Only its owner can end a workspace; anyone else on it can only leave.
   const shared = useIsShared(workspace);
+  const owner = useIsOwner(workspace);
 
   const item = (label: string, Icon: LucideIcon, run: () => void, disabled = false, danger = false) => (
     <MenuItem className="gap-2 rounded-md px-3 py-2" danger={danger} disabled={disabled} onClick={() => { setOpen(false); run(); }}>
@@ -55,10 +56,9 @@ export function WorkspaceActions({ workspace, deleting = false, className = "", 
     {item("Restart", RotateCw, handlers.onRestart, starting)}
     {/* A free demo is its owner's trial and cannot be shared. */}
     {!workspace.demo && item("Invite people", UserPlus, () => navigate({ name: "settings", workspaceId: workspace.id, section: "collaborators" }))}
-    <div className="mx-2 my-1 border-t border-zinc-200 dark:border-zinc-700" />
-    {shared
-      ? item("Leave workspace", LogOut, handlers.onDelete, false, true)
-      : item("Delete workspace", Trash2, handlers.onDelete, false, true)}
+    {(shared || owner) && <div className="mx-2 my-1 border-t border-zinc-200 dark:border-zinc-700" />}
+    {shared && item("Leave workspace", LogOut, handlers.onDelete, false, true)}
+    {owner && item("Delete workspace", Trash2, handlers.onDelete, false, true)}
   </>;
 
   return (

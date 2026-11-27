@@ -44,6 +44,22 @@ public record Workspace(
             example = "8d0f5a4e-2b7c-4f1e-9c3a-6e5d4c3b2a10")
         UUID ownerId) {
 
+  /** As one user sees it: a collaborator names the workspace for themselves. */
+  Workspace named(String name) {
+    return new Workspace(
+        id,
+        name,
+        modelProvider,
+        serverType,
+        model,
+        timeZone,
+        status,
+        restartRequired,
+        demo,
+        expiresAt,
+        ownerId);
+  }
+
   static Workspace of(WorkspaceEntity entity, WorkspaceStatus status) {
     return new Workspace(
         entity.getId(),

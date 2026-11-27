@@ -1,6 +1,7 @@
 package io.github.kalpak44.workspacedai.api.terminal;
 
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
+import io.github.kalpak44.workspacedai.api.workspace.WorkspaceAccessEnded;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.util.Arrays;
@@ -8,6 +9,8 @@ import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
+import org.springframework.context.event.EventListener;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
@@ -27,6 +30,10 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
 
   private final TerminalService service;
   private final Map<String, WorkspaceTerminal> terminals = new ConcurrentHashMap<>();
+  private final Map<String, Owner> owners = new ConcurrentHashMap<>();
+
+  // Whose connection it is, so it can be cut when that user loses the workspace.
+  private record Owner(UUID workspaceId, UUID userId, WebSocketSession session) {}
 
   public TerminalWebSocketHandler(TerminalService service) {
     this.service = service;
@@ -46,6 +53,11 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
               () -> close(session, CloseStatus.NORMAL.withReason("shell exited")));
       if (session.isOpen()) {
         terminals.put(session.getId(), terminal);
+        if (raw.getPrincipal() instanceof JwtAuthenticationToken token) {
+          owners.put(
+              session.getId(),
+              new Owner(id, UUID.fromString(token.getToken().getSubject()), session));
+        }
       } else {
         terminal.close();
       }
@@ -86,10 +98,20 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
 
   @Override
   public void afterConnectionClosed(WebSocketSession session, CloseStatus status) {
+    owners.remove(session.getId());
     var terminal = terminals.remove(session.getId());
     if (terminal != null) {
       terminal.close();
     }
+  }
+
+  /** A removed collaborator's shell is cut at once, not when they next close the tab. */
+  @EventListener
+  void accessEnded(WorkspaceAccessEnded ended) {
+    owners.values().stream()
+        .filter(o -> o.workspaceId().equals(ended.workspaceId()))
+        .filter(o -> o.userId().equals(ended.userId()))
+        .forEach(o -> close(o.session(), CloseStatus.POLICY_VIOLATION.withReason("access ended")));
   }
 
   @Override

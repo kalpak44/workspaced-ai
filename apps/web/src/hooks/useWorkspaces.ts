@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from "react";
-import { acceptInvitation, removeCollaborator } from "../api/collaboratorsApi";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { acceptInvitation, acceptInvitationById, removeCollaborator } from "../api/collaboratorsApi";
 import { ApiError } from "../api/http";
 import {
   createDraftWorkspace,
@@ -90,24 +90,29 @@ export function useWorkspaces() {
     return () => { active = false; globalThis.removeEventListener(WORKSPACE_SETTINGS_CHANGED, refresh); };
   }, []);
 
+  /** Joins the workspace an invitation opens, then opens it; home, saying why, if it cannot. */
+  const join = useCallback((accepting: Promise<{ readonly workspaceId: string }>) => {
+    accepting
+      .then(async ({ workspaceId }) => {
+        setWorkspaces(await listWorkspaces());
+        navigate({ name: "workspace", workspaceId }, { replace: true });
+      })
+      .catch((error_: unknown) => {
+        setError(acceptFailure(error_));
+        navigate({ name: "home" }, { replace: true });
+      });
+  }, []);
+
   // An invitation link opened before signing in is accepted once the list is in, then opened.
   useEffect(() => {
     if (loading) return;
     const code = takeInvitation();
     if (code === null) return;
-    acceptInvitation(code)
-      .then(async ({ workspaceId }) => {
-        setWorkspaces(await listWorkspaces());
-        navigate({ name: "workspace", workspaceId });
-      })
-      .catch((failure: unknown) => {
-        setError(failure instanceof ApiError && failure.status === 403
-          ? "That invitation was sent to another email address. Sign in with that address to accept it."
-          : failure instanceof ApiError && failure.status === 404
-            ? "That invitation has expired or was already used. Ask for a new one."
-            : "Could not accept the invitation");
-      });
-  }, [loading]);
+    join(acceptInvitation(code));
+  }, [loading, join]);
+
+  /** Accepts an invitation from its notification. */
+  const acceptById = useCallback((invitationId: string) => join(acceptInvitationById(invitationId)), [join]);
 
   // Pushed rather than polled. EventSource reconnects by itself, and every connection
   // opens with a full snapshot, so a dropped stream cannot leave a status stale.
@@ -215,7 +220,8 @@ export function useWorkspaces() {
     });
   };
 
-  const remove = (id: string) => {
+  /** Drops the workspace from the list once the request has gone through, or says it failed. */
+  const drop = (id: string, request: Promise<void>, failed: string) => {
     const settle = () =>
       setDeleting((current) => {
         const next = new Set(current);
@@ -223,38 +229,23 @@ export function useWorkspaces() {
         return next;
       });
     setDeleting((current) => new Set(current).add(id));
-    deleteWorkspace(id).then(
+    request.then(
       () => {
         setWorkspaces((current) => current.filter((w) => w.id !== id));
         settle();
       },
       () => {
         settle();
-        setError("Could not delete the workspace");
+        setError(failed);
       },
     );
   };
 
+  const remove = (id: string) => drop(id, deleteWorkspace(id), "Could not delete the workspace");
+
   /** Leaves a workspace shared with the user; its owner's own is never left, only deleted. */
-  const leave = (id: string, userId: string) => {
-    const settle = () =>
-      setDeleting((current) => {
-        const next = new Set(current);
-        next.delete(id);
-        return next;
-      });
-    setDeleting((current) => new Set(current).add(id));
-    removeCollaborator(id, userId).then(
-      () => {
-        setWorkspaces((current) => current.filter((w) => w.id !== id));
-        settle();
-      },
-      () => {
-        settle();
-        setError("Could not leave the workspace");
-      },
-    );
-  };
+  const leave = (id: string, userId: string) =>
+    drop(id, removeCollaborator(id, userId), "Could not leave the workspace");
 
   /** A change the API has already accepted elsewhere, e.g. a new model from the settings page. */
   const patch = (id: string, changes: Partial<Workspace>) =>
@@ -280,6 +271,20 @@ export function useWorkspaces() {
     restart,
     remove,
     leave,
+    acceptById,
     patch,
   };
+}
+
+function acceptFailure(error: unknown): string {
+  if (error instanceof ApiError && error.status === 403) {
+    return "That invitation was sent to another email address. Sign in with that address to accept it.";
+  }
+  if (error instanceof ApiError && error.status === 404) {
+    return "That invitation has expired or was already used. Ask for a new one.";
+  }
+  if (error instanceof ApiError && error.status === 409) {
+    return "That workspace already has as many collaborators as it can. Ask its owner to make room.";
+  }
+  return "Could not accept the invitation";
 }

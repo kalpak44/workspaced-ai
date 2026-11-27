@@ -5,16 +5,20 @@ import static org.mockito.AdditionalMatchers.aryEq;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
+import io.github.kalpak44.workspacedai.api.workspace.WorkspaceAccessEnded;
 import java.io.OutputStream;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.web.socket.BinaryMessage;
 import org.springframework.web.socket.CloseStatus;
 import org.springframework.web.socket.TextMessage;
@@ -52,5 +56,37 @@ class TerminalWebSocketHandlerTest {
     verify(session).sendMessage(message.capture());
     assertThat(message.getValue().getPayload().array())
         .isEqualTo("ready".getBytes(StandardCharsets.UTF_8));
+  }
+
+  @Test
+  void cutsOnlyTheConnectionsOfTheUserWhoLostTheWorkspace() throws Exception {
+    var service = mock(TerminalService.class);
+    when(service.connect(any(), any(), any(), any())).thenReturn(mock(WorkspaceTerminal.class));
+    var handler = new TerminalWebSocketHandler(service);
+    var workspace = UUID.randomUUID();
+    var removed = UUID.randomUUID();
+    var owner = UUID.randomUUID();
+    var hers = socket("socket-1", workspace, removed);
+    var his = socket("socket-2", workspace, owner);
+    handler.afterConnectionEstablished(hers);
+    handler.afterConnectionEstablished(his);
+
+    handler.accessEnded(new WorkspaceAccessEnded(workspace, removed));
+
+    verify(hers).close(any(CloseStatus.class));
+    verify(his, never()).close(any(CloseStatus.class));
+  }
+
+  private static WebSocketSession socket(String id, UUID workspace, UUID user) {
+    var session = mock(WebSocketSession.class);
+    when(session.getId()).thenReturn(id);
+    when(session.getUri())
+        .thenReturn(
+            URI.create(
+                "ws://localhost/api/v1/workspaces/" + workspace + "/terminals/pty_1/connect"));
+    when(session.isOpen()).thenReturn(true);
+    var jwt = Jwt.withTokenValue("t").header("alg", "HS256").subject(user.toString()).build();
+    when(session.getPrincipal()).thenReturn(new JwtAuthenticationToken(jwt));
+    return session;
   }
 }

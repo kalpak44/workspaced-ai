@@ -7,6 +7,7 @@ import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Lock;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -70,6 +71,34 @@ public interface WorkspaceRepository
   List<IdOnly> findBySessionTtlEnabledTrue();
 
   Optional<OwnerOnly> findOwnerById(UUID id);
+
+  /** What a collaborator calls each workspace they are on. */
+  interface CollaboratorName {
+    UUID getWorkspaceId();
+
+    String getName();
+  }
+
+  @Query(
+      value =
+          """
+          SELECT c.workspace_id AS workspaceId, c.name AS name
+          FROM workspace_collaborator c WHERE c.user_id = :user
+          """,
+      nativeQuery = true)
+  List<CollaboratorName> findCollaboratorNames(@Param("user") UUID user);
+
+  /** Renames it for one collaborator alone; 0 when they are not on it. */
+  @Modifying
+  @Query(
+      value =
+          """
+          UPDATE workspace_collaborator SET name = :name
+          WHERE workspace_id = :id AND user_id = :user
+          """,
+      nativeQuery = true)
+  int renameForCollaborator(
+      @Param("id") UUID id, @Param("user") UUID user, @Param("name") String name);
 
   /** Its owner and its collaborators; empty when no workspace has that id. */
   @Query(

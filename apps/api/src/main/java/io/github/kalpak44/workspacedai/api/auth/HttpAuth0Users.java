@@ -10,6 +10,7 @@ import java.net.http.HttpResponse.BodyHandlers;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -48,6 +49,21 @@ public class HttpAuth0Users implements Auth0Users {
         read(call(authorized("users/" + encode(subject) + "?fields=email&include_fields=true")))
             .path("email");
     return email.isString() ? email.asString() : "";
+  }
+
+  @Override
+  public List<String> subjectsByEmail(String email) {
+    var users =
+        read(
+            call(
+                authorized(
+                    "users-by-email?fields=user_id&include_fields=true&email=" + encode(email))));
+    return users
+        .valueStream()
+        .map(user -> user.path("user_id"))
+        .filter(JsonNode::isString)
+        .map(JsonNode::asString)
+        .toList();
   }
 
   @Override

@@ -471,6 +471,13 @@ export function installFakeApi(
       invitationCodes.delete(code);
       return workspaceId ? json({ workspaceId }) : json({ detail: "this invitation has expired or has already been used" }, 404);
     }
+    const byId = /\/api\/v1\/invitations\/([^/]+)\/accept$/.exec(url);
+    if (byId && method === "POST") {
+      // Invitation ids from notifications open the same workspaces the mailed codes do.
+      const workspaceId = invitationCodes.get(byId[1]);
+      invitationCodes.delete(byId[1]);
+      return workspaceId ? json({ workspaceId }) : json({ detail: "this invitation has expired or has already been used" }, 404);
+    }
     const route = /\/api\/v1\/workspaces\/([^/]+)\/(collaborators|invitations)(?:\/([^/]+))?$/.exec(url);
     if (!route) return null;
     const [, workspaceId, kind, id] = route;

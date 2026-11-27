@@ -1,4 +1,4 @@
-import { Crown, LogOut, Mail, Trash2, UserPlus, Users } from "lucide-react";
+import { Crown, LogOut, type LucideIcon, Mail, Trash2, UserPlus, Users } from "lucide-react";
 import { type SubmitEvent, useState } from "react";
 import { useAccount } from "../../hooks/useAccount";
 import { type Collaborator, type CollaboratorStatus, useCollaborators } from "../../hooks/useCollaborators";
@@ -27,16 +27,22 @@ const LEFT = new Intl.RelativeTimeFormat("en", { numeric: "always" });
  */
 function expiresIn(iso: string, now: number = Date.now()): string {
   const minutes = Math.max(1, Math.round((Date.parse(iso) - now) / 60_000));
-  return `expires ${minutes < 60 ? LEFT.format(minutes, "minute") : LEFT.format(Math.round(minutes / 60), "hour")}`;
+  const left = minutes < 60 ? LEFT.format(minutes, "minute") : LEFT.format(Math.round(minutes / 60), "hour");
+  return `expires ${left}`;
 }
+
+const ICONS: Record<Collaborator["status"], LucideIcon> = { OWNER: Crown, PENDING: Mail, APPLIED: Users };
 
 function detail(collaborator: Collaborator): string {
   const by = collaborator.invitedBy ? ` by ${collaborator.invitedBy}` : "";
   if (collaborator.status === "OWNER") return "Created the workspace and pays for it";
   if (collaborator.status === "PENDING") {
-    return `Sent${by}${collaborator.since ? ` ${timeAgo(collaborator.since)}` : ""}${collaborator.expiresAt ? ` · ${expiresIn(collaborator.expiresAt)}` : ""}`;
+    const sent = collaborator.since ? " " + timeAgo(collaborator.since) : "";
+    const expiry = collaborator.expiresAt ? " · " + expiresIn(collaborator.expiresAt) : "";
+    return `Sent${by}${sent}${expiry}`;
   }
-  return `Invited${by}${collaborator.since ? ` · joined ${timeAgo(collaborator.since)}` : ""}`;
+  const joined = collaborator.since ? " · joined " + timeAgo(collaborator.since) : "";
+  return `Invited${by}${joined}`;
 }
 
 /**
@@ -84,7 +90,7 @@ export function CollaboratorsPanel({ workspace, onLeave }: Props) {
   return (
     <SettingsSection
       title="Collaborators"
-      description="Invite people by email to work in this workspace with you. They can do everything but delete it, and it keeps running on the owner's AI connector. Each person sees only the chat sessions they started. Only the owner can remove people."
+      description="Invite up to 5 people by email to work in this workspace with you; an open invitation holds a place until it is accepted. They can do everything but delete it, and it keeps running on the owner's AI connector. Everyone shares the workspace's computer, so invite only people you trust with its files, secrets and chats: the app lists only the sessions each person started, but anyone can read the rest from a terminal. Only the owner can remove people."
     >
       {error && <ErrorBanner message={error} onDismiss={dismissError} />}
       <form onSubmit={submit} className="flex flex-col gap-3 rounded-md bg-zinc-50 p-4 sm:flex-row sm:items-start dark:bg-zinc-900/60">
@@ -118,7 +124,7 @@ export function CollaboratorsPanel({ workspace, onLeave }: Props) {
         <ul aria-label="Collaborators" className="divide-y divide-zinc-200 overflow-hidden rounded-lg border border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
           {collaborators.map((collaborator) => {
             const status = STATUS[collaborator.status];
-            const Icon = collaborator.status === "OWNER" ? Crown : collaborator.status === "PENDING" ? Mail : Users;
+            const Icon = ICONS[collaborator.status];
             const name = collaborator.email ?? (collaborator.status === "PENDING" ? "Invitation by email" : "Unknown user");
             return (
               <li key={collaborator.invitationId ?? collaborator.userId} className="flex min-w-0 items-center gap-3 px-3 py-2.5 transition-colors hover:bg-zinc-50 dark:hover:bg-zinc-800/40">
@@ -152,7 +158,7 @@ export function CollaboratorsPanel({ workspace, onLeave }: Props) {
         >
           {confirming.status === "PENDING"
             ? "Its link stops working at once. You can invite the same address again."
-            : `${confirming.email ?? "They"} will lose access to ${workspace.name} at once. The chat sessions they started stay in the workspace, unseen by anyone else.`}
+            : `${confirming.email ?? "They"} will lose access to ${workspace.name} at once, and their open terminals close. The chat sessions they started stay in the workspace. Anything they copied while they had access, such as secrets, stays with them, so change those secrets if you need to.`}
         </ConfirmDeleteDialog>
       )}
     </SettingsSection>

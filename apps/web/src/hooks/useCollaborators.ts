@@ -18,7 +18,24 @@ export type InviteResult = { readonly ok: true } | { readonly ok: false; readonl
 /** Whether the signed-in user is on this workspace by invitation rather than as its owner. */
 export function useIsShared(workspace: Pick<Workspace, "ownerId">): boolean {
   const { account } = useAccount();
-  return !!account && !!workspace.ownerId && workspace.ownerId !== account.id;
+  return isShared(workspace, account?.id);
+}
+
+/**
+ * Whether the signed-in user owns it, and so may delete it. False until the account has loaded, so
+ * a collaborator is never offered Delete while their role is still unknown.
+ */
+export function useIsOwner(workspace: Pick<Workspace, "ownerId">): boolean {
+  const { account } = useAccount();
+  return isOwner(workspace, account?.id);
+}
+
+export function isShared(workspace: Pick<Workspace, "ownerId">, userId: string | undefined): boolean {
+  return !!userId && !!workspace.ownerId && workspace.ownerId !== userId;
+}
+
+export function isOwner(workspace: Pick<Workspace, "ownerId">, userId: string | undefined): boolean {
+  return !!userId && (!workspace.ownerId || workspace.ownerId === userId);
 }
 
 /** Who is on a workspace, and inviting, revoking and removing them. */
@@ -51,10 +68,10 @@ export function useCollaborators(workspaceId: string) {
       await inviteCollaborator(workspaceId, email.trim());
       load();
       return { ok: true };
-    } catch (failure) {
-      if (failure instanceof ApiError && failure.status === 400) return { ok: false, message: "Enter a valid email address" };
-      if (failure instanceof ApiError && failure.detail && [409, 429].includes(failure.status)) {
-        return { ok: false, message: failure.detail.charAt(0).toUpperCase() + failure.detail.slice(1) };
+    } catch (error_) {
+      if (error_ instanceof ApiError && error_.status === 400) return { ok: false, message: "Enter a valid email address" };
+      if (error_ instanceof ApiError && error_.detail && [409, 429].includes(error_.status)) {
+        return { ok: false, message: error_.detail.charAt(0).toUpperCase() + error_.detail.slice(1) };
       }
       return { ok: false, message: "Could not send the invitation" };
     }

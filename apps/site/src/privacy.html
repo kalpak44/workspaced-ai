@@ -38,7 +38,7 @@
     <main class="flex-1">
       <article class="mx-auto max-w-3xl px-4 py-14 sm:py-20">
         <h1 class="text-3xl font-semibold tracking-tight sm:text-4xl">Privacy policy</h1>
-        <p class="mt-3 text-sm text-zinc-500">Draft · Last updated 25 November 2026</p>
+        <p class="mt-3 text-sm text-zinc-500">Draft · Last updated 27 November 2026</p>
         <div class="mt-6 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-200">
           <strong class="font-semibold">Draft, for information.</strong>
           This policy is a working draft published while Workspaced AI is in public beta, so you can see how we intend to
@@ -81,6 +81,13 @@
             <li><strong>Referrals</strong> - your invitation code, and for each account that signed up with it, which account
               invited it, when it signed up and first paid, and the referral credit each side received. The person who invited you
               sees only those dates and amounts, never your name or email address.</li>
+            <li><strong>Collaborators and invitations</strong> - when someone invites you into their Workspace, we email you at
+              the address they gave, and if you already have an account we also show you a notification in the app. Until you
+              accept, we keep only a keyed hash of that address, enough to check that whoever accepts signed in with it, and we
+              delete it once the invitation is accepted, withdrawn or expires after 24 hours. Once you join, everyone on the
+              Workspace sees your email address in its list of collaborators, and you see theirs; who invited whom and when you
+              joined are kept until you leave or are removed. We also record when each invitation email was sent and by whom, to
+              limit how many one person can send, and delete that record after a day.</li>
             <li><strong>Workspace metadata</strong> - workspace names, machine size, status, the names (not values) of your
               secrets and variables, firewall rules, connected domain names, and usage records needed to bill you.</li>
             <li><strong>Secrets</strong> - the values of your API keys and secrets, including your OpenRouter key, kept encrypted
@@ -97,7 +104,9 @@
           </ul>
           <p>
             <strong>Workspace content</strong> - your files, conversations with the agent, terminal sessions and anything you run -
-            is stored on the virtual machine of that Workspace. We do not access it in the normal course of running the Service.
+            is stored on the virtual machine of that Workspace. Everyone its owner invites into it shares that machine and can
+            read what is on it, including other collaborators' conversations and its secrets. We do not access it in the normal
+            course of running the Service.
             We may access it only when you ask us to for support, when strictly necessary to investigate a security incident or
             abuse, or when required by law.
           </p>
