@@ -148,6 +148,7 @@ class PlanOutagesTest {
         BigDecimal.TEN,
         BigDecimal.TEN,
         recommended,
+        false,
         available);
   }
 
@@ -168,6 +169,7 @@ class PlanOutagesTest {
                     BigDecimal.TEN,
                     BigDecimal.TEN,
                     true,
+                    false,
                     !soldOut)));
   }
 

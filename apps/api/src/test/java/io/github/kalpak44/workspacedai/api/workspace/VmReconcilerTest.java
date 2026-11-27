@@ -44,6 +44,7 @@ class VmReconcilerTest {
           new BigDecimal("5.03"),
           new BigDecimal("5.99"),
           true,
+          false,
           true);
 
   @MockitoBean VmManager vmManager;

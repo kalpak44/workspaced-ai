@@ -17,9 +17,10 @@ class VmPricingTest {
   private static final PlanProperties PLANS =
       new PlanProperties(
           List.of(
-              new PlanProperties.Plan("Starter", "cx23", new BigDecimal("0.35"), false),
-              new PlanProperties.Plan("Builder", "cx33", new BigDecimal("0.55"), false),
-              new PlanProperties.Plan("Starter Flex", "cpx22", new BigDecimal("1.10"), true)),
+              new PlanProperties.Plan("Starter", "cx23", new BigDecimal("0.35"), false, false),
+              new PlanProperties.Plan("Builder", "cx33", new BigDecimal("0.55"), false, true),
+              new PlanProperties.Plan(
+                  "Starter Flex", "cpx22", new BigDecimal("1.10"), true, false)),
           new BigDecimal("1.155"),
           BigDecimal.valueOf(7),
           BigDecimal.valueOf(10));
@@ -46,6 +47,7 @@ class VmPricingTest {
     assertThat(sizes.getFirst().available()).isFalse();
     assertThat(sizes.getFirst().monthlyGross()).isEqualByComparingTo("10.645833");
     assertThat(sizes.get(1).monthlyGross()).isEqualByComparingTo("16.729167");
+    assertThat(sizes).extracting(VmSize::featured).containsExactly(false, true);
   }
 
   @Test
@@ -137,6 +139,7 @@ class VmPricingTest {
         "nbg1",
         new BigDecimal(monthlyGross),
         new BigDecimal(monthlyGross),
+        false,
         false,
         available);
   }

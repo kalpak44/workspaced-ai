@@ -43,6 +43,7 @@ class VmSizesTest {
           new BigDecimal("5.49"),
           new BigDecimal("6.59"),
           true,
+          false,
           true);
 
   @LocalServerPort int port;

@@ -59,6 +59,7 @@ public class HttpVmManager implements VmManager {
               option.path("monthlyNet").decimalValue(),
               option.path("monthlyGross").decimalValue(),
               option.path("recommended").asBoolean(),
+              false,
               option.path("available").asBoolean(true)));
     }
     return List.copyOf(sizes);

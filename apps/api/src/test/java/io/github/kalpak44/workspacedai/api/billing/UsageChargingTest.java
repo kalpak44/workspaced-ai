@@ -73,6 +73,7 @@ class UsageChargingTest {
           new BigDecimal("5.03"),
           new BigDecimal("5.99"),
           true,
+          false,
           true);
   private static final long HOURLY = 14_583;
   private static final long MONTH = 730 * HOURLY;

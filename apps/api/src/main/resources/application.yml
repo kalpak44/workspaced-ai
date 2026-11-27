@@ -51,7 +51,8 @@ workspaced:
     url: ${WORKSPACED_VM_MANAGER_URL:}
   # What a workspace can be created as: a fixed daily price, before VAT, for one Hetzner server
   # type each. The first is the default; a fallback plan is offered only while every other plan
-  # is sold out. The site's pricing.html states these prices too.
+  # is sold out; the featured one is highlighted as the plan most users should take. The site's
+  # pricing.html states these prices too.
   plans:
     offered:
       - name: Starter
@@ -60,6 +61,7 @@ workspaced:
       - name: Builder
         server-type: cx33
         daily-price: 0.55
+        featured: true
       - name: Pro
         server-type: cx43
         daily-price: 0.95

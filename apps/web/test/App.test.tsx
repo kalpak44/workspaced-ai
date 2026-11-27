@@ -53,8 +53,8 @@ type User = ReturnType<typeof userEvent.setup>;
 /** The step after the name: move on, wait for the VM types, and pick one if asked. */
 async function chooseVmType(user: User, type?: string) {
   await user.click(screen.getByRole("button", { name: "Next" }));
-  const radio = await screen.findByRole("radio", { name: new RegExp(type ?? "cx23") });
-  if (type) await user.click(radio);
+  await screen.findAllByRole("radio");
+  if (type) await user.click(screen.getAllByRole("radio").find((radio) => (radio as HTMLInputElement).value === type)!);
 }
 
 /** The last step: move on from the VM type, and paste a key for the preselected provider. */
@@ -119,7 +119,7 @@ describe("App", () => {
     expect(field).toHaveFocus();
     // Enter moves on from the name and the default VM type, then creates once a key is typed.
     await user.keyboard("{Enter}");
-    await screen.findByRole("radio", { name: /cx23/ });
+    await screen.findByRole("radio", { name: /^Starter/ });
     await user.keyboard("{Enter}");
     await user.click(await screen.findByRole("button", { name: "Paste a key instead" }));
     await waitFor(() => expect(screen.getByLabelText("OpenRouter API key")).toHaveFocus());
@@ -206,10 +206,10 @@ describe("App", () => {
     expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("VM type");
     const types = screen.getByRole("group", { name: "VM type" });
     expect(within(types).getAllByRole("radio")).toHaveLength(3);
-    expect(within(types).getByRole("radio", { name: /cx23/ })).toBeChecked();
-    expect(within(types).getByRole("radio", { name: /2 vCPU · 4 GB RAM · 40 GB disk/ })).toBeInTheDocument();
-    expect(within(types).getByRole("radio", { name: /4 vCPU · 8 GB RAM · 80 GB disk/ })).not.toBeChecked();
-    expect(types).toHaveTextContent("€0.35 a day€10.65 a month");
+    expect(within(types).getByRole("radio", { name: /^Starter/ })).toBeChecked();
+    expect(within(types).getByRole("radio", { name: /2 vCPU.*4 GB RAM.*40 GB disk/ })).toBeInTheDocument();
+    expect(within(types).getByRole("radio", { name: /4 vCPU.*8 GB RAM.*80 GB disk/ })).not.toBeChecked();
+    expect(types).toHaveTextContent("€0.35 a day €10.65 a month");
     expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
   });
 
@@ -226,7 +226,7 @@ describe("App", () => {
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("Research");
     await user.click(screen.getByRole("button", { name: "Next" }));
-    expect(await screen.findByRole("radio", { name: /cx33/ })).toBeChecked();
+    expect(await screen.findByRole("radio", { name: /^Builder/ })).toBeChecked();
   });
 
   it("says so when the VM types cannot be loaded", async () => {
@@ -295,7 +295,7 @@ describe("App", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent("Could not save the AI connector");
     expect(screen.getByLabelText("OpenRouter API key")).toHaveValue("sk-or-v1-test");
     await user.click(screen.getByRole("button", { name: "Back" }));
-    expect(screen.getByRole("radio", { name: /cx33/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /^Builder/ })).toBeChecked();
     await user.click(screen.getByRole("button", { name: "Back" }));
     expect(screen.getByRole("textbox", { name: "Name" })).toHaveValue("New Workspace");
   });

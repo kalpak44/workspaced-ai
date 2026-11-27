@@ -22,7 +22,7 @@ type User = ReturnType<typeof userEvent.setup>;
 async function openSizes(user: User) {
   render(<Dialog />);
   await user.click(screen.getByRole("button", { name: "Next" }));
-  await screen.findByRole("radio", { name: /cx23/ });
+  await screen.findByRole("radio", { name: /^Starter/ });
 }
 
 const warning = () => screen.queryByRole("status", { name: "Sizes unavailable" });
@@ -35,9 +35,27 @@ describe("VM sizes", () => {
 
     const radios = screen.getAllByRole("radio");
     expect(radios.map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cx43"]);
-    expect(screen.getByRole("radio", { name: /Starter/ })).toBeChecked();
-    expect(screen.getByRole("radio", { name: /Starter.*2 vCPU · 4 GB RAM · 40 GB disk · cx23.*€0\.35 a day.*€10\.65 a month.*€0\.015\/hour/ })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: /^Starter/ })).toBeChecked();
+    expect(screen.getByRole("radio", { name: /Starter.*€0\.35 a day.*€10\.65 a month.*€0\.015\/hour.*2 vCPU.*4 GB RAM.*40 GB disk/ })).toBeInTheDocument();
     expect(screen.getByText("Prices exclude VAT, which is added when you top up. Billed by the hour from your balance; delete the workspace any time and its charges stop.")).toBeInTheDocument();
+    expect(warning()).not.toBeInTheDocument();
+  });
+
+  it("badges the featured plan as recommended, and only that one", async () => {
+    installFakeApi();
+    await openSizes(userEvent.setup());
+
+    expect(screen.getByRole("radio", { name: /^Builder Recommended/ })).not.toBeChecked();
+    expect(screen.getAllByText("Recommended")).toHaveLength(1);
+  });
+
+  it("hides the stand-in plans while a regular plan can be had", async () => {
+    const api = installFakeApi();
+    api.state.vmSizes[0].available = false;
+    api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: false, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 34.979167, monthlyGross: 34.979167, recommended: false, featured: false, available: true });
+    await openSizes(userEvent.setup());
+
+    expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cx23", "cx33", "cx43"]);
     expect(warning()).not.toBeInTheDocument();
   });
 
@@ -47,21 +65,22 @@ describe("VM sizes", () => {
     const user = userEvent.setup();
     await openSizes(user);
 
-    expect(screen.getByRole("radio", { name: /Starter · unavailable/ })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: /Starter.*Sold out/ })).toBeDisabled();
     expect(screen.getAllByRole("radio").some((radio) => (radio as HTMLInputElement).checked)).toBe(false);
     expect(warning()).not.toBeInTheDocument();
   });
 
-  it("offers the stand-in plan while every other plan is sold out, and says why", async () => {
+  it("offers the stand-in plan in place of the regular ones while they are all sold out, and says why", async () => {
     const api = installFakeApi();
     for (const size of api.state.vmSizes) size.available = false;
-    api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: true, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 34.979167, monthlyGross: 34.979167, recommended: false, available: true });
+    api.state.vmSizes.push({ plan: "Starter Flex", serverType: "cpx22", isDefault: true, cores: 2, memoryGb: 4, diskGb: 80, cpuType: "shared", architecture: "x86", location: "nbg1", monthlyNet: 34.979167, monthlyGross: 34.979167, recommended: false, featured: false, available: true });
     api.state.vmSizes[0].isDefault = false;
     const user = userEvent.setup();
     await openSizes(user);
 
-    expect(warning()).toHaveTextContent("Every plan is sold out right now, so Starter Flex is offered in their place");
-    expect(screen.getByRole("radio", { name: /Starter Flex.*cpx22.*€1\.15 a day/ })).toBeChecked();
+    expect(warning()).toHaveTextContent("Starter, Builder and Pro are sold out right now, usually for a few hours. Until they are back you can take one of these");
+    expect(screen.getAllByRole("radio").map((radio) => (radio as HTMLInputElement).value)).toEqual(["cpx22"]);
+    expect(screen.getByRole("radio", { name: /Starter Flex.*€1\.15 a day/ })).toBeChecked();
     expect(screen.getByRole("button", { name: "Next" })).toBeEnabled();
   });
 
@@ -93,7 +112,7 @@ describe("VM sizes", () => {
     const user = userEvent.setup();
     await openSizes(user);
 
-    expect(warning()).toHaveTextContent("Every plan is sold out right now.");
+    expect(warning()).toHaveTextContent("Starter, Builder and Pro are sold out right now.");
     expect(warning()).not.toHaveTextContent(/hetzner/i);
     expect(screen.getByRole("button", { name: "Next" })).toBeDisabled();
 
@@ -173,7 +192,7 @@ describe("VM sizes", () => {
     await user.click(screen.getByRole("button", { name: "Create workspace" }));
 
     expect(await screen.findByRole("status", { name: "Sizes unavailable" })).toHaveTextContent("Starter is no longer available.");
-    await waitFor(() => expect(screen.getByRole("radio", { name: /cx23/ })).toBeDisabled());
+    await waitFor(() => expect(screen.getByRole("radio", { name: /^Starter/ })).toBeDisabled());
     expect(api.rows.map((w) => w.name)).not.toContain("Research");
   });
 });

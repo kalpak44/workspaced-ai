@@ -119,6 +119,7 @@ public class VmPricing {
         admin ? size.monthlyNet() : monthly,
         admin ? size.monthlyGross() : monthly,
         !plan.fallback(),
+        plan.featured(),
         size.available() && covered);
   }
 

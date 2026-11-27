@@ -377,6 +377,7 @@ class DemoTest {
         new BigDecimal(price),
         new BigDecimal(price),
         true,
+        false,
         available);
   }
 

@@ -67,7 +67,7 @@ async function openProviderStep() {
   const user = userEvent.setup();
   render(<Dialog />);
   await user.click(screen.getByRole("button", { name: "Next" }));
-  await screen.findByRole("radio", { name: /cx23/ });
+  await screen.findByRole("radio", { name: /^Starter/ });
   await user.click(screen.getByRole("button", { name: "Next" }));
   await screen.findByRole("button", { name: "Connect OpenRouter" });
   await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
@@ -80,7 +80,7 @@ describe("Connect OpenRouter", () => {
     const user = userEvent.setup();
     render(<Dialog />);
     await user.click(screen.getByRole("button", { name: "Next" }));
-    await screen.findByRole("radio", { name: /cx23/ });
+    await screen.findByRole("radio", { name: /^Starter/ });
     await user.click(screen.getByRole("button", { name: "Next" }));
     await waitFor(() => expect(screen.getByRole("combobox", { name: "AI connector" })).toHaveValue("trial-connector"));
     expect(screen.getByRole("button", { name: "Create workspace" })).toBeDisabled();

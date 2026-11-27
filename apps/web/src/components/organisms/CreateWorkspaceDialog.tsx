@@ -448,6 +448,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
       title="New workspace"
       description={onNameChosen ? "Name it, connect OpenRouter, then confirm the free trial machine." : undefined}
       onClose={close}
+      wide={step === 1}
     >
       <form data-tour="workspace-name-form" onSubmit={submit} className="flex min-h-0 flex-col overflow-hidden">
         <ModalBody>

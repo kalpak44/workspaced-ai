@@ -37,6 +37,10 @@ public record VmSize(
             example = "true")
         boolean recommended,
     @Schema(
+            description = "The plan most users should take, highlighted where the plans are shown",
+            example = "false")
+        boolean featured,
+    @Schema(
             description = "False while Hetzner has it sold out, when a create is refused",
             example = "true")
         boolean available) {
@@ -56,6 +60,7 @@ public record VmSize(
         monthlyNet,
         monthlyGross,
         recommended,
+        featured,
         available);
   }
 }

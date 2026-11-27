@@ -36,10 +36,12 @@ public record PlanProperties(
    * @param dailyPrice what a user who is not an admin pays a day, before VAT, in EUR
    * @param fallback offered only while every other plan is sold out, on a pricier server that is
    *     more often in stock
+   * @param featured the one most users should take, highlighted where the plans are shown
    */
   public record Plan(
       @NotBlank String name,
       @NotBlank String serverType,
       @NotNull @DecimalMin(value = "0", inclusive = false) BigDecimal dailyPrice,
-      boolean fallback) {}
+      boolean fallback,
+      boolean featured) {}
 }
