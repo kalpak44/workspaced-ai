@@ -72,7 +72,8 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
     );
   }
   const allSoldOut = !sizes.some((size) => size.available);
-  const standIn = sizes.find((size) => !size.recommended && size.available);
+  const standIns = sizes.filter((size) => !size.recommended && size.available);
+  const standIn = standIns[0];
   // What the email waits for: one of the regular plans, not the pricier stand-in.
   const regularSoldOut = !sizes.some((size) => size.recommended && size.available);
   const ask = async () => {
@@ -101,7 +102,7 @@ export function VmSizePicker({ sizes, status, value, disabled = false, soldOut =
               {allSoldOut
                 ? "Every plan is sold out right now. They usually come back within a few hours, so check again in a while."
                 : standIn
-                  ? `Every plan is sold out right now, so ${standIn.plan} is offered in their place until they are back, usually within a few hours. It costs more, so you can also wait and check again.`
+                  ? `Every plan is sold out right now, so ${standIns.length > 1 ? `${standIns.map((size) => size.plan).join(", ")} are` : `${standIn.plan} is`} offered in their place until they are back, usually within a few hours. ${standIns.length > 1 ? "They cost" : "It costs"} more, so you can also wait and check again.`
                   : "Pick another plan, or check again in a while."}
             </p>
           </div>

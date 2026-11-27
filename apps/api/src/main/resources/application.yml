@@ -69,6 +69,15 @@ workspaced:
         server-type: cpx22
         daily-price: 1.15
         fallback: true
+      # Larger stand-ins for while cpx22 is out too, each priced to pass the margin check.
+      - name: Builder Flex
+        server-type: cpx32
+        daily-price: 2.15
+        fallback: true
+      - name: Dedicated
+        server-type: ccx13
+        daily-price: 2.60
+        fallback: true
     # A plan is withheld unless, after Stripe's fee, its price keeps this margin over its server's
     # cost with VAT, raised by Hetzner's hourly billing before the monthly cap.
     hourly-billing-factor: 1.155
