@@ -86,6 +86,17 @@ public class VmWorkspaceRuntime implements WorkspaceRuntime {
   }
 
   @Override
+  public void restartProvider(UUID id, long revision, String provider, String key) {
+    vmManager.restartProvider(id, revision, provider, key);
+  }
+
+  @Override
+  public ProviderReceipt providerReceipt(UUID id) {
+    var result = vmManager.providerReceipt(id);
+    return new ProviderReceipt(result.revision(), result.readyRevision());
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     vmManager.putSecret(workspaceId, name, value);
   }

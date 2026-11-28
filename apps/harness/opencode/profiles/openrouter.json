@@ -1,0 +1,31 @@
+{
+  "policies": [
+    {
+      "action": "provider.use",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "openrouter",
+      "effect": "allow"
+    }
+  ],
+  "model": "openrouter/deepseek/deepseek-v4.1-flash",
+  "agents": {
+    "title": {
+      "model": "openrouter/anthropic/claude-haiku-5.5"
+    }
+  },
+  "providers": {
+    "openrouter": {
+      "settings": {
+        "baseURL": "{env:OPENROUTER_BASE_URL}"
+      },
+      "headers": {
+        "HTTP-Referer": "https://workspaced.online",
+        "X-Title": "workspaced"
+      }
+    }
+  }
+}

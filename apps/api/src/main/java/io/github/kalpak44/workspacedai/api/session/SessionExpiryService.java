@@ -24,12 +24,15 @@ public class SessionExpiryService {
   private final WorkspaceSessionRepository sessions;
   private final WorkspaceRuntime runtime;
   private final Harness harness;
+  private final io.github.kalpak44.workspacedai.api.auth.AiUsage usage;
 
   public SessionExpiryService(
       WorkspaceRepository workspaces,
       WorkspaceSessionRepository sessions,
       WorkspaceRuntime runtime,
-      Harness harness) {
+      Harness harness,
+      io.github.kalpak44.workspacedai.api.auth.AiUsage usage) {
+    this.usage = usage;
     this.workspaces = workspaces;
     this.sessions = sessions;
     this.runtime = runtime;
@@ -76,6 +79,7 @@ public class SessionExpiryService {
             .collect(Collectors.toMap(HarnessSession::id, Function.identity()));
     var cutoff = Instant.now().minus(workspace.getSessionTtlHours(), ChronoUnit.HOURS);
     if (!expired(session, remote, cutoff)) return false;
+    if (remote.containsKey(session.getHarnessSessionId())) usage.collect(session);
     harness.deleteSession(endpoint, session.getPath(), session.getHarnessSessionId());
     if (session.getPath().startsWith(Harness.SESSIONS_ROOT + "/")) {
       harness.removeDirectory(endpoint, session.getPath());

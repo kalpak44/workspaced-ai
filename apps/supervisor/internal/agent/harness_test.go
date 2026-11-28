@@ -3,8 +3,10 @@ package agent
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"reflect"
 	"slices"
 	"strconv"
@@ -409,5 +411,61 @@ func TestConfigHash(t *testing.T) {
 	}
 	if len(ConfigHash(a)) != 64 {
 		t.Errorf("hash %q is not hex sha256", ConfigHash(a))
+	}
+}
+
+func TestRevisionChangesContainerIdentity(t *testing.T) {
+	a := defaultHarness()
+	b := defaultHarness()
+	a.Revision = 1
+	b.Revision = 2
+	if ConfigHash(a) == ConfigHash(b) {
+		t.Fatal("restart revisions must force distinct containers even for the same key")
+	}
+}
+
+func TestManagedProfileHealthRefusesMissingOrDifferentProvider(t *testing.T) {
+	var body string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		fmt.Fprint(w, body)
+	}))
+	defer srv.Close()
+	s := &Supervisor{HTTP: srv.Client(), HarnessURL: srv.URL}
+	h := Harness{Revision: 1, Environment: map[string]string{"WORKSPACED_AI_PROVIDER": "openai"}}
+	body = `[{"type":"document","path":"/home/workspace/.config/opencode/opencode.json","info":{"model":{"providerID":"openai"}}}]`
+	if s.profileHealthy(context.Background(), h) {
+		t.Fatal("legacy/global config is not managed profile proof")
+	}
+	body = `[{"type":"document","path":"/etc/opencode/opencode.json","info":{"policies":[{"action":"provider.use","resource":"*","effect":"deny"},{"action":"provider.use","resource":"openai","effect":"allow"}]}},{"type":"document","path":"/etc/opencode/opencode.json","info":{"model":{"providerID":"openai"},"agents":{"title":{"model":{"providerID":"openai"}}}}}]`
+	if !s.profileHealthy(context.Background(), h) {
+		t.Fatal("matching managed profile should be ready")
+	}
+	h.Environment["WORKSPACED_AI_PROVIDER"] = "openrouter"
+	if s.profileHealthy(context.Background(), h) {
+		t.Fatal("wrong provider cannot acknowledge readiness")
+	}
+}
+
+// Opt-in, no-inference check against a locally started pinned harness container.
+func TestManagedProfileHealthWithPinnedHarness(t *testing.T) {
+	base := os.Getenv("WORKSPACED_TEST_HARNESS_URL")
+	if base == "" {
+		t.Skip("set WORKSPACED_TEST_HARNESS_URL for local pinned-harness check")
+	}
+	provider := os.Getenv("WORKSPACED_TEST_PROVIDER")
+	s := &Supervisor{HTTP: &http.Client{}, HarnessURL: base}
+	s.keepPassword(map[string]string{"OPENCODE_SERVER_PASSWORD": "profile-test"})
+	h := Harness{Revision: 1, Environment: map[string]string{"WORKSPACED_AI_PROVIDER": provider}}
+	if !s.profileHealthy(context.Background(), h) {
+		t.Fatal("pinned harness did not confirm selected managed profile")
+	}
+	other := "openai"
+	if provider == "openai" {
+		other = "openrouter"
+	}
+	h.Environment["WORKSPACED_AI_PROVIDER"] = other
+	if s.profileHealthy(context.Background(), h) {
+		t.Fatal("pinned harness confirmed the wrong provider")
 	}
 }

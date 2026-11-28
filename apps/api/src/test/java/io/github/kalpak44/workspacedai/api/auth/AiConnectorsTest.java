@@ -93,7 +93,7 @@ class AiConnectorsTest {
   }
 
   @Test
-  void reusesConnectorAndKeepsWorkspaceWhenItIsDeleted() throws Exception {
+  void reusesConnectorAndRefusesImplicitTrialFallbackOnDisconnect() throws Exception {
     when(management.configured()).thenReturn(true);
     when(management.createTrial(any()))
         .thenReturn(
@@ -123,11 +123,10 @@ class AiConnectorsTest {
                 .isSecretsPendingRestart())
         .isTrue();
     assertThat(send("DELETE", "/ai-connectors/" + id, null, TestUsers.bearer(port)).statusCode())
-        .isEqualTo(204);
-    assertThat(send("GET", path, null, TestUsers.bearer(port)).statusCode()).isEqualTo(200);
-    assertThat(send("GET", path, null, TestUsers.bearer(port)).body()).contains("\"trial\":true");
+        .isEqualTo(409);
+    assertThat(send("GET", path, null, TestUsers.bearer(port)).body()).contains(id);
     assertThat(workspaces.existsById(UUID.fromString(workspaceId))).isTrue();
-    verify(runtime).replaceProviderKey(UUID.fromString(workspaceId), "private-key");
+    verify(runtime, never()).replaceProviderKey(any(), any());
     verify(runtime, never()).putSecret(any(), any(), any());
   }
 

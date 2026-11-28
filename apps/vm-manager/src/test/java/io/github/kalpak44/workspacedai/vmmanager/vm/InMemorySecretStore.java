@@ -13,6 +13,7 @@ class InMemorySecretStore implements SecretStore {
   final Map<UUID, Map<String, String>> entries = new ConcurrentHashMap<>();
   final Map<UUID, Map<String, String>> system = new ConcurrentHashMap<>();
   final Map<UUID, Map<String, String>> firewall = new ConcurrentHashMap<>();
+  final Map<UUID, Map<String, String>> provider = new ConcurrentHashMap<>();
   volatile RuntimeException failure;
 
   /** Fails only writes to the system entry, so the first of two writes can land. */
@@ -42,6 +43,7 @@ class InMemorySecretStore implements SecretStore {
     entries.remove(vmId);
     system.remove(vmId);
     firewall.remove(vmId);
+    provider.remove(vmId);
   }
 
   private Map<UUID, Map<String, String>> of(Entry entry) {
@@ -49,6 +51,7 @@ class InMemorySecretStore implements SecretStore {
       case SECRETS -> entries;
       case SYSTEM -> system;
       case FIREWALL -> firewall;
+      case PROVIDER -> provider;
     };
   }
 

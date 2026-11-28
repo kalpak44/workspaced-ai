@@ -37,6 +37,45 @@ class OpenCodeHarnessTest {
   }
 
   @Test
+  void defersUsageWhenUpstreamRepeatsAPaginationCursor() {
+    opencode.messageResponse = "{\"data\":[],\"cursor\":{\"next\":\"repeated\"}}";
+    assertThatThrownBy(() -> harness.usageHistory(opencode.endpoint(), FakeOpenCode.SESSION))
+        .isInstanceOf(HarnessUnavailableException.class)
+        .hasMessageContaining("converge");
+  }
+
+  @Test
+  void readsCompletedUsageWithoutMessageContentAndRejectsMalformedTokenCounts() {
+    opencode.messageResponse =
+        """
+        {"data":[{"id":"msg_input","type":"user","text":"Private contents"},
+        {"id":"msg_step","type":"assistant","model":{"providerID":"openai","id":"gpt-6.1-sol"},"time":{"completed":123},
+        "tokens":{"input":9,"output":5,"reasoning":2,"cache":{"read":3,"write":0}}},
+        {"id":"msg_bad","type":"assistant","time":{"completed":124},"tokens":{"input":-1,"output":5,"reasoning":0,"cache":{"read":0,"write":0}}}],"cursor":{}}
+        """;
+    var usage = harness.usageHistory(opencode.endpoint(), FakeOpenCode.SESSION);
+    assertThat(usage).hasSize(3);
+    assertThat(usage.get(1).tokens()).isEqualTo(new UsageMessage.Tokens(9, 5, 2, 3, 0));
+    assertThat(usage.get(1).completedAt()).isEqualTo(123);
+    assertThat(usage.get(2).tokens()).isNull();
+    assertThat(usage.toString()).doesNotContain("Private contents");
+  }
+
+  @Test
+  void selectsActiveProviderBeforeResumingAPausedForm() {
+    harness.replyForm(
+        opencode.endpoint(),
+        FakeOpenCode.SESSION,
+        "frm_age",
+        Map.of("age", 35),
+        new Harness.ModelRef("openai", "gpt-6.1-sol"));
+    var model = opencode.requests.get(opencode.requests.size() - 2);
+    assertThat(model.path()).endsWith("/model");
+    assertThat(model.body()).contains("\"providerID\":\"openai\"", "\"id\":\"gpt-6.1-sol\"");
+    assertThat(opencode.requests.getLast().body()).isEqualTo("{\"answer\":{\"age\":35}}");
+  }
+
+  @Test
   void validatesV2AndResolvesTheProjectLocation() {
     harness.validate(opencode.endpoint(), DIRECTORY);
     assertThat(opencode.requests)

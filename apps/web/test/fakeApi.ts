@@ -111,9 +111,12 @@ export function installFakeApi(
   ],
 ) {
   const rows = [...initial];
+  const usage: import("../src/api/aiConnectorsApi").WorkspacedUsage[] = [];
   const connectors: { id: string; name: string; provider: string; trial?: boolean }[] = [];
   const connectorKeys = new Map<string, string>();
   const workspaceConnectors = new Map<string, string>();
+  const pendingConnectors = new Map<string, string>();
+  const providerPhases = new Map<string, { phase: string; error: string | null }>();
   // Created without a key: unlisted until launched, as the API keeps them.
   const drafts = new Map<string, Omit<Workspace, "status">>();
   const launched: { id: string; apiKey: string }[] = [];
@@ -547,6 +550,7 @@ export function installFakeApi(
     if (collaboratorsAnswer) {
       return collaboratorsAnswer;
     }
+    if (url.endsWith("/api/v1/ai-usage")) return json(usage);
     const noticeRoute = /\/api\/v1\/ai-connectors\/([^/]+)\/acknowledgement$/.exec(url);
     if (noticeRoute) return new Response(null, { status: connectors.some(connector => connector.id === noticeRoute[1]) ? 204 : 404 });
     const creditsRoute = /\/api\/v1\/workspaces\/([^/]+)\/ai-credits$/.exec(url);
@@ -581,13 +585,18 @@ export function installFakeApi(
         const index = connectors.findIndex(c => c.id === connectorRoute[1]);
         if (index < 0) return json({}, 404);
         if (connectors[index].trial) return json({}, 409);
-        const trial = connectors.find(connector => connector.trial);
-        const affected = [...workspaceConnectors].filter(([, connectorId]) => connectorId === connectorRoute[1]);
-        if (affected.length && !trial) return json({}, 503);
-        for (const [workspaceId] of affected) { workspaceConnectors.set(workspaceId, trial!.id); markRestartRequired(workspaceId, true); }
+        if ([...workspaceConnectors.values(), ...pendingConnectors.values()].includes(connectorRoute[1])) return json({}, 409);
         connectors.splice(index, 1); return new Response(null, { status: 204 });
       }
       return json(connectors);
+    }
+    const bindingRoute = /\/api\/v1\/workspaces\/([^/]+)\/ai-connector\/status$/.exec(url);
+    if (bindingRoute) {
+      const id = bindingRoute[1];
+      const workspace = rows.find(row => row.id === id);
+      const current = connectors.find(c => c.id === workspaceConnectors.get(id)) ?? null;
+      const pending = connectors.find(c => c.id === pendingConnectors.get(id)) ?? null;
+      return json({ active: current, pending, choices: connectors.filter(c => c.provider === "openrouter" || c.provider === "openai"), ...providerPhases.get(id) ?? { phase: "NONE", error: null }, restartRequired: workspace?.restartRequired ?? false });
     }
     const selectionRoute = /\/api\/v1\/workspaces\/([^/]+)\/ai-connector$/.exec(url);
     if (selectionRoute) {
@@ -596,7 +605,8 @@ export function installFakeApi(
         const connectorId = JSON.parse(String(init.body)).connectorId;
         const connector = connectors.find(c => c.id === connectorId);
         if (!connector) return json({}, 404);
-        workspaceConnectors.set(id, connectorId); markRestartRequired(id, true); return json(connector);
+        if (["APPLYING", "ROLLING_BACK", "BLOCKED"].includes(providerPhases.get(id)?.phase ?? "")) return json({}, 409);
+        pendingConnectors.set(id, connectorId); providerPhases.set(id, { phase: "STAGED", error: null }); markRestartRequired(id, true); return json(connector);
       }
       const current = connectors.find(c => c.id === workspaceConnectors.get(id));
       return current ? json(current) : new Response(null, { status: 204 });
@@ -816,7 +826,8 @@ export function installFakeApi(
       if (!rows.some((workspace) => workspace.id === restartRoute[1])) return json({}, 404);
       if (state.failRestart) return json({}, 503);
       restarted.push(restartRoute[1]);
-      markRestartRequired(restartRoute[1], false);
+      if (pendingConnectors.has(restartRoute[1])) providerPhases.set(restartRoute[1], { phase: "APPLYING", error: null });
+      else markRestartRequired(restartRoute[1], false);
       return new Response(null, { status: 202 });
     }
     const launchRoute = /\/api\/v1\/workspaces\/([^/]+)\/launch$/.exec(url);
@@ -1052,5 +1063,5 @@ export function installFakeApi(
   vi.stubGlobal("EventSource", FakeEventSource);
   /** The calls the code under test made, without the CSRF token fetch `send` makes first. */
   const apiCalls = () => fetchFn.mock.calls.filter(([url]) => !String(url).endsWith("/api/v1/auth/csrf"));
-  return { collaborators, invited, invitationCodes, connectors, connectorKeys, workspaceConnectors, drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
+  return { usage, pendingConnectors, providerPhases, collaborators, invited, invitationCodes, connectors, connectorKeys, workspaceConnectors, drafts, launched, billing, mail, notifications, recipes, domains, firewalls, sessionFiles, instructions, tasks, variables, apiCalls, auth, restarted, sessionTtl, rows, secrets, sent, sessions, messages, forms, answers, prompts, aborted, mcp, mcpPosted, terminals, sessionAgents, agentOptions, catalogue, state, fetchFn };
 }

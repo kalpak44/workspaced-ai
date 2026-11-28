@@ -28,6 +28,8 @@ import org.springframework.web.servlet.support.ServletUriComponentsBuilder;
  */
 @RestController
 public class VmController implements VmApi {
+  private final io.github.kalpak44.workspacedai.vmmanager.vm.ProviderBindingService
+      providerBindings;
 
   private final VmService service;
   private final HarnessService harnesses;
@@ -42,7 +44,9 @@ public class VmController implements VmApi {
       VmMetricsService metrics,
       VmEventStream events,
       VmDtoMapper mapper,
-      VmFirewallService firewalls) {
+      VmFirewallService firewalls,
+      io.github.kalpak44.workspacedai.vmmanager.vm.ProviderBindingService providerBindings) {
+    this.providerBindings = providerBindings;
     this.firewalls = firewalls;
     this.service = service;
     this.harnesses = harnesses;
@@ -109,7 +113,9 @@ public class VmController implements VmApi {
 
   @Override
   public ResponseEntity<VmDto> ready(UUID id) {
-    return ResponseEntity.ok(mapper.toDto(service.ready(id)));
+    return ResponseEntity.ok(
+        mapper.toDto(
+            providerBindings.receipt(id).revision() == null ? service.ready(id) : service.get(id)));
   }
 
   @Override
@@ -130,7 +136,15 @@ public class VmController implements VmApi {
                                     r.protocol(), r.port(), r.sourceIps(), r.description()))
                         .toList())
             .orElse(null);
-    return ResponseEntity.ok(new HeartbeatAnswerDto(vm.status().name(), rules));
+    var binding = providerBindings.receipt(id);
+    return ResponseEntity.ok(
+        new HeartbeatAnswerDto(
+            vm.status() != io.github.kalpak44.workspacedai.vmmanager.vm.VmStatus.STOPPED
+                    && binding.revision() != null
+                    && !java.util.Objects.equals(binding.revision(), binding.readyRevision())
+                ? "RESTARTING"
+                : vm.status().name(),
+            rules));
   }
 
   @Override
@@ -141,6 +155,7 @@ public class VmController implements VmApi {
   @Override
   public ResponseEntity<HarnessDto> harness(UUID id) {
     var harness = harnesses.get(id);
-    return ResponseEntity.ok(new HarnessDto(harness.image(), harness.environment()));
+    return ResponseEntity.ok(
+        new HarnessDto(harness.image(), harness.environment(), harness.revision()));
   }
 }

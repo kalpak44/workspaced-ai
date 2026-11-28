@@ -1,27 +1,29 @@
-import { useEffect } from "react";
 import { useWorkspaceAiConnector } from "../../hooks/useWorkspaceAiConnector";
-import { useAiConnectors } from "../../hooks/useAiConnectors";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { SettingsSection } from "../molecules";
 import { Button, Select } from "../atoms";
 
+const providerName = (provider: string) => provider === "openai" ? "OpenAI API key" : provider === "openrouter" ? "OpenRouter" : provider;
 export function WorkspaceAiConnectorPanel({ workspace, onChanged }: { readonly workspace: Workspace; readonly onChanged: (changes: Partial<Workspace>) => void }) {
-  const { connectors, loading, error: loadError } = useAiConnectors();
-  const { selected, setSelected, current, reading, busy, error, save } = useWorkspaceAiConnector(workspace, onChanged);
-  const available = connectors.filter(connector => connector.provider === workspace.modelProvider).sort((left, right) => Number(!!right.trial) - Number(!!left.trial));
-  useEffect(() => {
-    if (loading || reading || available.some(connector => connector.id === selected)) return;
-    setSelected(available[0]?.id ?? "");
-  }, [available, selected, loading, reading, setSelected]);
-  return <SettingsSection title="System secrets" description="Set by the workspace for its agent; a secret or variable cannot override them."><form aria-label="AI connector" className="space-y-3" onSubmit={event => { event.preventDefault(); void save(); }}>
-    <label htmlFor="workspace-ai-connector" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">
-      AI connector <code className="ml-1 font-mono text-xs text-zinc-500">{workspace.modelProvider === "openrouter" ? "OPENROUTER_API_KEY" : "Provider API key"}</code>
-    </label>
-    <Select id="workspace-ai-connector" aria-label="Saved connector" className="w-full" value={selected} disabled={loading || reading || busy || available.length === 0} onChange={event => setSelected(event.target.value)}>
+  const { selected, setSelected, current, status, reading, busy, error, save } = useWorkspaceAiConnector(workspace, onChanged);
+  const available = [...status?.choices ?? []].sort((left, right) => Number(!!right.trial) - Number(!!left.trial));
+  const changing = status?.phase === "APPLYING" || status?.phase === "ROLLING_BACK" || status?.phase === "BLOCKED";
+  return <SettingsSection title="System secrets" description="Set by the workspace for its agent; a secret or variable cannot override them."><form aria-label="AI connector" className="min-w-0 space-y-3" onSubmit={event => { event.preventDefault(); void save(); }}>
+    <label htmlFor="workspace-ai-connector" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">AI connector <code className="ml-1 font-mono text-xs text-zinc-500">{(status?.active?.provider ?? workspace.modelProvider) === "openai" ? "OPENAI_API_KEY" : "OPENROUTER_API_KEY"}</code></label>
+    <Select id="workspace-ai-connector" aria-label="Saved connector" className="w-full min-w-0" value={selected} disabled={reading || busy || changing || available.length === 0} onChange={event => setSelected(event.target.value)}>
       {available.map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}
     </Select>
-    <p className="text-xs text-zinc-500 dark:text-zinc-400">{!loading && available.length === 0 ? "No connectors available. Create one in General settings." : "Choose a saved connector. Changes apply after a restart."} <a href="/settings/ai-connectors" className="underline underline-offset-4">Manage AI connectors in General settings</a>.</p>
-    <div className="flex justify-end"><Button label="Save connector" type="submit" busy={busy} disabled={!selected || selected === current || reading || loading} /></div>
-    {(error || loadError) && <p role="alert" className="text-sm text-rose-600">{error || loadError}</p>}
+    {status && <div className="space-y-1 break-words text-sm" aria-live="polite">
+      <p aria-label="Active AI connector">Active (last confirmed): {status.active ? `${status.active.name} · ${providerName(status.active.provider)}` : `Legacy ${providerName(workspace.modelProvider)} configuration`}</p>
+      {status.pending && <p aria-label="Pending AI connector">Pending: {status.pending.name} · {providerName(status.pending.provider)}</p>}
+      {status.phase === "STAGED" && !status.error && <p role="status">Restart required. The pending connector is not active yet.</p>}
+      {status.phase === "APPLYING" && <p role="status">Restarting with the pending connector. Waiting for verified readiness.</p>}
+      {status.phase === "ROLLING_BACK" && <p role="alert">Restart failed. Restoring the previous connector and waiting for readiness. Sending is blocked.</p>}
+      {status.phase === "STAGED" && status.error && <p role="alert">Restart failed. The previous connector was restored; the pending choice is not active. Restart to try again.</p>}
+      {status.phase === "BLOCKED" && <p role="alert">The provider change could not be verified. Sending is blocked. Restart to retry recovery.</p>}
+    </div>}
+    <p className="text-xs text-zinc-500 dark:text-zinc-400">{!reading && available.length === 0 ? "No supported connectors available. Create one in General settings." : "Choose a saved connector. Changes apply only after a verified restart."} <a href="/settings/ai-connectors" className="underline underline-offset-4">Manage AI connectors in General settings</a>.</p>
+    <div className="flex justify-end"><Button label="Save connector" type="submit" busy={busy} disabled={!status || !selected || selected === current || reading || changing} /></div>
+    {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
   </form></SettingsSection>;
 }

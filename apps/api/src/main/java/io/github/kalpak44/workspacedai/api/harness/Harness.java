@@ -103,6 +103,31 @@ public interface Harness {
 
   List<ChatMessage> messages(HarnessEndpoint endpoint, String directory, String sessionId);
 
+  default List<UsageMessage> usageHistory(HarnessEndpoint endpoint, String sessionId) {
+    return List.of();
+  }
+
+  default void prompt(
+      HarnessEndpoint endpoint,
+      String directory,
+      String sessionId,
+      String text,
+      ModelRef model,
+      String inputId) {
+    prompt(endpoint, directory, sessionId, text, model);
+  }
+
+  default void editMessage(
+      HarnessEndpoint endpoint,
+      String directory,
+      String sessionId,
+      String messageId,
+      String text,
+      ModelRef model,
+      String inputId) {
+    editMessage(endpoint, directory, sessionId, messageId, text, model);
+  }
+
   /**
    * Whether this session is executing a reply, including one started before a browser connected.
    */
@@ -112,6 +137,16 @@ public interface Harness {
 
   void replyForm(
       HarnessEndpoint endpoint, String sessionId, String formId, Map<String, Object> answer);
+
+  /** Select the active model before a paused reply resumes after a provider change. */
+  default void replyForm(
+      HarnessEndpoint endpoint,
+      String sessionId,
+      String formId,
+      Map<String, Object> answer,
+      ModelRef model) {
+    replyForm(endpoint, sessionId, formId, answer);
+  }
 
   void cancelForm(HarnessEndpoint endpoint, String sessionId, String formId);
 

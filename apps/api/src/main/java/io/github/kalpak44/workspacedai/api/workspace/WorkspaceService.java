@@ -56,6 +56,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class WorkspaceService {
+  private final io.github.kalpak44.workspacedai.api.auth.ProviderBindings providerBindings;
 
   private static final Logger log = LoggerFactory.getLogger(WorkspaceService.class);
   private static final SecureRandom RANDOM = new SecureRandom();
@@ -88,7 +89,9 @@ public class WorkspaceService {
       BillingService billing,
       NotificationService notifications,
       @Value("${workspaced.demo.length:PT4H}") Duration demoLength,
-      @Value("${workspaced.demo.at-once:20}") int demosAtOnce) {
+      @Value("${workspaced.demo.at-once:20}") int demosAtOnce,
+      io.github.kalpak44.workspacedai.api.auth.ProviderBindings providerBindings) {
+    this.providerBindings = providerBindings;
     this.repository = repository;
     this.runtime = runtime;
     this.events = events;
@@ -155,6 +158,9 @@ public class WorkspaceService {
     if (demo) {
       requireDemoAvailable(ownerId);
     }
+    if (provider != ModelProvider.OPENROUTER)
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Create with OpenRouter, then use the gated connector restart flow");
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
@@ -259,6 +265,9 @@ public class WorkspaceService {
     if (demo) {
       requireDemoAvailable(ownerId);
     }
+    if (provider != ModelProvider.OPENROUTER)
+      throw new ResponseStatusException(
+          HttpStatus.CONFLICT, "Create with OpenRouter, then use the gated connector restart flow");
     if (!keyCheck.accepts(provider, apiKey)) {
       throw new ApiKeyRejectedException(provider);
     }
@@ -457,7 +466,7 @@ public class WorkspaceService {
   @Transactional
   public Optional<Workspace> setTimeZone(UUID id, String timeZone) {
     validTimeZone(timeZone);
-    var entity = repository.findById(id);
+    var entity = repository.findLockedById(id);
     if (entity.isEmpty()) {
       return Optional.empty();
     }
@@ -653,7 +662,6 @@ public class WorkspaceService {
    * Returns once the reboot is under way; the status stream reports it starting and then ready. It
    * reads the secrets afresh, so none is left pending. False when no workspace has that id.
    */
-  @Transactional
   public boolean restart(UUID id) {
     var entity = repository.findById(id);
     if (entity.isEmpty()) {
@@ -663,12 +671,20 @@ public class WorkspaceService {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "the workspace is paused until the balance is topped up");
     }
-    entity.get().setSecretsPendingRestart(false);
+    if (providerBindings.restart(id)) return true;
+    var configurationRevision = entity.get().getConfigurationRevision();
     try {
       runtime.restart(id);
     } catch (IllegalStateException e) {
       throw new ResponseStatusException(HttpStatus.CONFLICT, "workspace cannot be restarted", e);
     }
+    transactions.executeWithoutResult(
+        _ -> {
+          var current = repository.findLockedById(id).orElseThrow();
+          if (current.getProviderChange().phase.equals("NONE")
+              && current.getConfigurationRevision() == configurationRevision)
+            current.setSecretsPendingRestart(false);
+        });
     return true;
   }
 

@@ -47,10 +47,17 @@ RUN apk add --no-cache curl \
  && install -m 0755 package/bin/opencode /opencode
 
 FROM alpine:3.24 AS config
-RUN apk add --no-cache libgcc libstdc++
+RUN apk add --no-cache libgcc libstdc++ jq
 COPY --from=fetch /opencode /usr/local/bin/opencode
-COPY opencode/ /stage/.config/opencode/
-RUN HOME=/stage opencode debug config > /dev/null
+COPY opencode/ /usr/share/harness/opencode/
+# Validate both profiles with the pinned binary at the same managed path as runtime.
+RUN mkdir -p /tmp/workspaced-opencode \
+ && ln -s /tmp/workspaced-opencode /etc/opencode \
+ && for profile in openrouter openai; do \
+      jq -s '.[0] * .[1]' /usr/share/harness/opencode/common.json \
+        "/usr/share/harness/opencode/profiles/$profile.json" > /etc/opencode/opencode.json; \
+      HOME=/stage opencode --standalone debug config > /dev/null || exit 1; \
+    done
 
 FROM alpine:3.24
 ARG OPENCODE_VERSION
@@ -120,10 +127,11 @@ RUN apk add --no-cache --upgrade zlib bash ca-certificates curl git libgcc libst
  && rm /var/log/apk.log
 
 COPY --from=fetch /opencode /usr/local/bin/opencode
-# Kept out of the home: the pod mounts a fresh volume over it, which would hide anything
-# baked in there. start.sh copies it across instead. Not /etc/opencode: opencode reads that
-# as a managed config directory of its own, loading the plugin twice and writing into it.
-COPY --from=config /stage/.config/opencode/opencode.json /usr/share/harness/opencode/opencode.json
+# Only non-secret templates are baked in. The root is read-only and OpenCode writes
+# into config directories, so startup reconstructs one managed config in /tmp. Never
+# copy these defaults into the home as well: that loads instructions/policies twice.
+COPY --from=config /usr/share/harness/opencode/ /usr/share/harness/opencode/
+RUN ln -s /tmp/workspaced-opencode /etc/opencode
 # What every agent is told: system.md, the guide to this container, which OpenCode reads from
 # here, read-only; and defaults/, the user's starting instructions, which start.sh copies into
 # the home on the first start, where the user and the agent can change them.

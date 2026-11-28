@@ -3,6 +3,8 @@ import { acknowledgeConnector, createAiConnector, deleteAiConnector, listAiConne
 import { WORKSPACE_SETTINGS_CHANGED } from "../lib/workspaceChanges";
 import { ApiError } from "../api/http";
 
+export const isConnectorInUse = (cause: unknown) => cause instanceof ApiError && cause.status === 409;
+
 export const isRejectedConnectorKey = (cause: unknown) => cause instanceof ApiError && cause.status === 422;
 
 export function useAiConnectors() {

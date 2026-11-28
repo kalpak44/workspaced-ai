@@ -65,7 +65,9 @@ class SessionControllerTest {
   @Autowired EntityManager entityManager;
   @Autowired TransactionTemplate transaction;
   @Autowired UserRepository users;
+  @Autowired io.github.kalpak44.workspacedai.api.ClusterLocks routingLocks;
   @Autowired RecipeService recipes;
+  @Autowired io.github.kalpak44.workspacedai.api.auth.AiUsage usage;
   @MockitoBean ApiKeyCheck keyCheck;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -95,6 +97,7 @@ class SessionControllerTest {
     repository.deleteAll();
     OPENCODE.requests.clear();
     OPENCODE.title = null;
+    OPENCODE.messageResponse = null;
     OPENCODE.agent = "build";
     OPENCODE.rejectAgentSwitch = false;
     OPENCODE.rejectAgentList = false;
@@ -109,6 +112,53 @@ class SessionControllerTest {
         workspaces
             .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
             .id();
+  }
+
+  @Test
+  void formReplyWaitsForTheProviderRoutingLeaseAndThenUsesTheActiveModel() throws Exception {
+    var session = create();
+    var entered = new java.util.concurrent.CountDownLatch(1);
+    var release = new java.util.concurrent.CountDownLatch(1);
+    try (var executor = java.util.concurrent.Executors.newSingleThreadExecutor()) {
+      var holder =
+          executor.submit(
+              () ->
+                  routingLocks.call(
+                      "provider-routing-" + workspace,
+                      java.time.Duration.ofMinutes(10),
+                      () -> {
+                        entered.countDown();
+                        try {
+                          release.await(10, java.util.concurrent.TimeUnit.SECONDS);
+                        } catch (InterruptedException e) {
+                          Thread.currentThread().interrupt();
+                          throw new IllegalStateException(e);
+                        }
+                        return null;
+                      }));
+      assertThat(entered.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+      try {
+        assertThat(
+                send(
+                        "POST",
+                        "/" + session.id() + "/forms/frm_age/reply",
+                        "{\"answer\":{\"age\":35}}")
+                    .statusCode())
+            .isEqualTo(409);
+        assertThat(OPENCODE.requests)
+            .noneMatch(request -> request.path().contains("/form/frm_age/reply"));
+      } finally {
+        release.countDown();
+      }
+      holder.get(5, java.util.concurrent.TimeUnit.SECONDS);
+    }
+    assertThat(
+            send("POST", "/" + session.id() + "/forms/frm_age/reply", "{\"answer\":{\"age\":35}}")
+                .statusCode())
+        .isEqualTo(204);
+    var selected = OPENCODE.requests.get(OPENCODE.requests.size() - 2);
+    assertThat(selected.path()).endsWith("/model");
+    assertThat(selected.body()).contains("\"providerID\":\"openrouter\"");
   }
 
   @Test
@@ -330,6 +380,36 @@ class SessionControllerTest {
     assertThat(sessions.findAll()).isEmpty();
     assertThat(OPENCODE.requests)
         .noneMatch(r -> r.method().equals("POST") && r.path().equals("/api/session"));
+  }
+
+  @Test
+  void attributesCompletedStepsToTheDispatchedPromptThroughTheHttpEntryPoint() throws Exception {
+    var session = create();
+    assertThat(
+            send("POST", "/" + session.id() + "/messages", "{\"text\":\"Usage test\"}")
+                .statusCode())
+        .isEqualTo(202);
+    var input = JSON.readTree(OPENCODE.requests.getLast().body()).path("id").asString();
+    assertThat(input).startsWith("msg_");
+    OPENCODE.messageResponse =
+        """
+        {"data":[{"id":"%s","type":"user","time":{"created":1},"text":"Not stored"},
+        {"id":"msg_receipt","type":"assistant","time":{"created":2,"completed":3},
+        "model":{"providerID":"openrouter","id":"measured-model"},"tokens":{"input":11,"output":7,"reasoning":2,"cache":{"read":3,"write":0}}}],"cursor":{}}
+        """
+            .formatted(input);
+    usage.collect(sessions.findById(session.id()).orElseThrow());
+    usage.collect(sessions.findById(session.id()).orElseThrow());
+    var totals = usage.totals(repository.findById(workspace).orElseThrow().getOwnerId());
+    assertThat(totals)
+        .filteredOn(t -> t.workspaceId().equals(workspace))
+        .singleElement()
+        .satisfies(
+            t -> {
+              assertThat(t.steps()).isEqualTo(1);
+              assertThat(t.input()).isEqualByComparingTo("11");
+              assertThat(t.model()).isEqualTo("measured-model");
+            });
   }
 
   @Test

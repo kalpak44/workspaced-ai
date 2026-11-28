@@ -11,6 +11,10 @@ public interface VmManagerClient {
    */
   void ready(UUID vmId);
 
+  default void ready(UUID vmId, Long revision) {
+    ready(vmId);
+  }
+
   /**
    * @param memory what the VM reported; null when it reported none
    * @return the VM's status as the VM manager now has it, and the rules it applies itself

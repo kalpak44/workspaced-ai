@@ -34,8 +34,15 @@ public class VmSecretService {
 
   private final VmRepository vms;
   private final SecretStore store;
+  private final ProviderBindingService bindings;
 
   public VmSecretService(VmRepository vms, SecretStore store) {
+    this(vms, store, new ProviderBindingService(store, vms));
+  }
+
+  @org.springframework.beans.factory.annotation.Autowired
+  public VmSecretService(VmRepository vms, SecretStore store, ProviderBindingService bindings) {
+    this.bindings = bindings;
     this.vms = vms;
     this.store = store;
   }
@@ -62,7 +69,10 @@ public class VmSecretService {
    */
   public VmSecret add(UUID vmId, String name, String value) {
     requireVm(vmId);
-    if (name.equals(SYSTEM_SECRET)) {
+    if (name.equals(SYSTEM_SECRET)
+        || name.equals("OPENAI_API_KEY")
+        || name.equals("OPENAI_BASE_URL")
+        || name.equals("WORKSPACED_AI_PROVIDER")) {
       throw new SecretRefusedException(name + " is set when the VM is created");
     }
     // The harness gets both entries merged with the system one winning, so the secret would be
@@ -92,6 +102,8 @@ public class VmSecretService {
   /** The API may rotate the protected key after validating a user's saved connector. */
   public void replaceProviderKey(UUID vmId, String value) {
     requireVm(vmId);
+    if (bindings.receipt(vmId).revision() != null)
+      throw new SecretRefusedException("Use the versioned provider binding endpoint");
     if (value == null || value.isBlank())
       throw new SecretRefusedException("provider key must not be blank");
     store.update(
@@ -110,7 +122,10 @@ public class VmSecretService {
    */
   public void remove(UUID vmId, String name) {
     requireVm(vmId);
-    if (name.equals(SYSTEM_SECRET)) {
+    if (name.equals(SYSTEM_SECRET)
+        || name.equals("OPENAI_API_KEY")
+        || name.equals("OPENAI_BASE_URL")
+        || name.equals("WORKSPACED_AI_PROVIDER")) {
       throw new SecretRefusedException(name + " is the model provider's key and cannot be removed");
     }
     store.update(
@@ -133,6 +148,10 @@ public class VmSecretService {
    * names its own password variable, and a second password beside it would be ambiguous.
    */
   public Map<String, String> environment(UUID vmId) {
+    return configuration(vmId).environment();
+  }
+
+  public ProviderBindingService.Configuration configuration(UUID vmId) {
     requireVm(vmId);
     var system =
         store.update(
@@ -146,7 +165,7 @@ public class VmSecretService {
             });
     var merged = new HashMap<>(store.read(vmId, Entry.SECRETS));
     merged.putAll(system);
-    return Map.copyOf(merged);
+    return bindings.configuration(vmId, Map.copyOf(merged));
   }
 
   /**
@@ -158,7 +177,11 @@ public class VmSecretService {
    */
   public void setSystemVariable(UUID vmId, String name, String value) {
     requireVm(vmId);
-    if (name.equals(SYSTEM_SECRET) || name.startsWith(RESERVED_PREFIX)) {
+    if (name.equals(SYSTEM_SECRET)
+        || name.equals("OPENAI_API_KEY")
+        || name.equals("OPENAI_BASE_URL")
+        || name.equals("WORKSPACED_AI_PROVIDER")
+        || name.startsWith(RESERVED_PREFIX)) {
       throw new SecretRefusedException(name + " is set when the VM is created");
     }
     store.update(
@@ -189,6 +212,10 @@ public class VmSecretService {
   /** Called by {@link VmService} once the VM's server is gone. */
   void deleteAll(UUID vmId) {
     store.deleteAll(vmId);
+  }
+
+  public Long providerRevision(UUID vmId) {
+    return bindings.receipt(vmId).revision();
   }
 
   void requireVm(UUID vmId) {

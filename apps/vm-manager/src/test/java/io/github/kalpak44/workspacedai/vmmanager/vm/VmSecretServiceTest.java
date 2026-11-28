@@ -36,6 +36,23 @@ class VmSecretServiceTest {
   }
 
   @Test
+  void durableVersionedBindingNeverLogsOrMixesCredentials() {
+    var bindings = new ProviderBindingService(store, vms);
+    bindings.request(vm, 1, "openai", "inert-openai");
+    var configuration = service.configuration(vm);
+    assertThat(configuration.environment())
+        .containsEntry("OPENAI_API_KEY", "inert-openai")
+        .doesNotContainKey("OPENROUTER_API_KEY");
+    assertThat(configuration.toString()).doesNotContain("inert-openai", "sk-or-v1-test");
+    var recovered = new ProviderBindingService(store, vms);
+    assertThat(recovered.receipt(vm).revision()).isEqualTo(1L);
+    assertThat(recovered.ready(vm, 2L)).isFalse();
+    assertThat(recovered.ready(vm, 1L)).isTrue();
+    assertThatThrownBy(() -> service.replaceProviderKey(vm, "unversioned"))
+        .isInstanceOf(SecretRefusedException.class);
+  }
+
+  @Test
   void replacesOnlyTheProviderKeyAndLeavesOrdinaryRoutesProtected() {
     service.add(vm, "GITHUB_TOKEN", "keep");
     service.replaceProviderKey(vm, "new-provider-key");

@@ -19,7 +19,9 @@ public interface SecretStore {
     /** The harness's system environment, handed over by the API when the VM is created. */
     SYSTEM,
     /** The inbound rules of a VM that filters its own traffic; not a secret, but kept with them. */
-    FIREWALL
+    FIREWALL,
+    /** Atomic desired provider, credential and readiness revision. */
+    PROVIDER
   }
 
   /** Its values by name; empty when the entry does not exist. */

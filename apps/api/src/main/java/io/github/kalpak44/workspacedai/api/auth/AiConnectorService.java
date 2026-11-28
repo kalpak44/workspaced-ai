@@ -16,6 +16,8 @@ import org.springframework.web.server.ResponseStatusException;
 
 @Service
 public class AiConnectorService {
+  private final ProviderBindings bindings;
+
   public record Connector(UUID id, String name, String provider, boolean trial) {}
 
   private final AiConnectorRepository repository;
@@ -37,7 +39,9 @@ public class AiConnectorService {
       OpenRouterMetrics metrics,
       TrialConnectors trials,
       UserRepository users,
-      ConnectorAlerts alerts) {
+      ConnectorAlerts alerts,
+      ProviderBindings bindings) {
+    this.bindings = bindings;
     this.repository = repository;
     this.check = check;
     this.workspaces = workspaces;
@@ -64,6 +68,7 @@ public class AiConnectorService {
   @Transactional
   public Connector create(String name, String providerId, String key) {
     var provider = provider(providerId);
+    bindings.requireEnabled(providerId);
     validate(provider, key);
     return view(
         repository.saveAndFlush(
@@ -118,53 +123,14 @@ public class AiConnectorService {
    */
   @Transactional
   public void delete(UUID id) {
-    // Provision before taking the user lock in this transaction, since ensure has its own
-    // transaction.
+    users.findLockedById(CurrentUser.id()).orElseThrow();
     var row = owned(id);
     if (row.isTrial())
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "The Trial connector cannot be deleted");
-    var affected = workspaces.findAllByOwnerIdAndAiConnectorId(CurrentUser.id(), id);
-    var trial =
-        affected.isEmpty()
-            ? null
-            : trials
-                .ensure(CurrentUser.id())
-                .orElseThrow(
-                    () ->
-                        new ResponseStatusException(
-                            HttpStatus.SERVICE_UNAVAILABLE,
-                            "Trial fallback is unavailable; the connector was not deleted"));
-    users.findLockedById(CurrentUser.id()).orElseThrow();
-    row = owned(id);
-    affected = workspaces.findAllByOwnerIdAndAiConnectorId(CurrentUser.id(), id);
-    var changed = new java.util.ArrayList<UUID>();
-    var previousKey = key(id, row.getProvider());
-    try {
-      for (var workspace : affected) {
-        if (trial == null || !trial.getProvider().equals(workspace.getModelProvider()))
-          throw new ResponseStatusException(
-              HttpStatus.CONFLICT, "No compatible trial fallback is available");
-        if (!workspace.isDraft()) {
-          runtime.replaceProviderKey(workspace.getId(), open(trial));
-          changed.add(workspace.getId());
-          workspace.setSecretsPendingRestart(true);
-        }
-        workspace.setAiConnectorId(trial.getId());
-      }
-      repository.delete(row);
-      repository.flush();
-    } catch (RuntimeException failure) {
-      for (var workspaceId : changed) {
-        try {
-          runtime.replaceProviderKey(workspaceId, previousKey);
-        } catch (RuntimeException restore) {
-          failure.addSuppressed(
-              new IllegalStateException("Could not restore workspace provider key"));
-        }
-      }
-      throw failure;
-    }
+    bindings.requireUnreferenced(id);
+    repository.delete(row);
+    repository.flush();
   }
 
   private String open(AiConnectorEntity row) {
@@ -185,16 +151,13 @@ public class AiConnectorService {
   public Connector select(UUID workspaceId, UUID connectorId) {
     users.findLockedById(CurrentUser.id()).orElseThrow();
     var workspace = workspace(workspaceId);
-    var key = key(connectorId, workspace.getModelProvider());
-    validate(provider(workspace.getModelProvider()), key);
-    try {
-      runtime.replaceProviderKey(workspaceId, key);
-    } catch (IllegalStateException e) {
-      throw new ResponseStatusException(HttpStatus.CONFLICT, "the workspace has no VM yet", e);
-    }
-    workspace.setSecretsPendingRestart(true);
-    remember(workspaceId, connectorId);
+    var selected = owned(connectorId);
+    bindings.stage(workspace, selected);
     return view(owned(connectorId));
+  }
+
+  public ProviderBindings.Status bindingStatus(UUID id) {
+    return bindings.status(id);
   }
 
   @Transactional

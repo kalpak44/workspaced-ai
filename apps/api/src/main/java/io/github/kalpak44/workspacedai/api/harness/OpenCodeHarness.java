@@ -325,6 +325,56 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public List<UsageMessage> usageHistory(HarnessEndpoint endpoint, String sessionId) {
+    var result = new ArrayList<UsageMessage>();
+    String cursor = null;
+    var cursors = new java.util.HashSet<String>();
+    var deadline = Instant.now().plusSeconds(30);
+    do {
+      var path =
+          "/api/session/"
+              + encode(sessionId)
+              + "/message?limit=100"
+              + (cursor == null ? "&order=asc" : "&cursor=" + encode(cursor));
+      var page = call(endpoint, "GET", path, null);
+      for (var message : page.path("data")) {
+        var tokens = message.path("tokens");
+        var values =
+            List.of(
+                tokens.path("input"),
+                tokens.path("output"),
+                tokens.path("reasoning"),
+                tokens.path("cache").path("read"),
+                tokens.path("cache").path("write"));
+        boolean valid =
+            values.stream()
+                .allMatch(v -> v.isIntegralNumber() && v.canConvertToLong() && v.asLong() >= 0);
+        var completed = message.path("time").path("completed");
+        result.add(
+            new UsageMessage(
+                text(message, "id"),
+                text(message, "type"),
+                text(message.path("model"), "providerID"),
+                text(message.path("model"), "id"),
+                completed.isNumber() && completed.asLong() >= 0 ? completed.asLong() : null,
+                valid
+                    ? new UsageMessage.Tokens(
+                        values.get(0).asLong(),
+                        values.get(1).asLong(),
+                        values.get(2).asLong(),
+                        values.get(3).asLong(),
+                        values.get(4).asLong())
+                    : null));
+      }
+      cursor = nullableText(page.path("cursor"), "next");
+      if (cursor != null && (!cursors.add(cursor) || Instant.now().isAfter(deadline)))
+        throw new HarnessUnavailableException(
+            "Usage history pagination did not converge; collection deferred");
+    } while (cursor != null);
+    return result;
+  }
+
+  @Override
   public boolean busy(HarnessEndpoint endpoint, String sessionId) {
     var time =
         call(endpoint, "GET", "/api/session/" + encode(sessionId), null).path("data").path("time");
@@ -359,6 +409,21 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public void replyForm(
+      HarnessEndpoint endpoint,
+      String sessionId,
+      String formId,
+      Map<String, Object> answer,
+      ModelRef model) {
+    call(
+        endpoint,
+        "POST",
+        "/api/session/" + encode(sessionId) + "/model",
+        Map.of("model", Map.of("providerID", model.providerId(), "id", model.modelId())));
+    replyForm(endpoint, sessionId, formId, answer);
+  }
+
+  @Override
   public void cancelForm(HarnessEndpoint endpoint, String sessionId, String formId) {
     call(endpoint, "DELETE", "/api/session/" + encode(sessionId) + "/form/" + encode(formId), null);
   }
@@ -366,6 +431,17 @@ public class OpenCodeHarness implements Harness {
   @Override
   public void prompt(
       HarnessEndpoint endpoint, String directory, String sessionId, String text, ModelRef model) {
+    prompt(endpoint, directory, sessionId, text, model, null);
+  }
+
+  @Override
+  public void prompt(
+      HarnessEndpoint endpoint,
+      String directory,
+      String sessionId,
+      String text,
+      ModelRef model,
+      String inputId) {
     if (model != null) {
       call(
           endpoint,
@@ -373,7 +449,11 @@ public class OpenCodeHarness implements Harness {
           "/api/session/" + encode(sessionId) + "/model",
           Map.of("model", Map.of("providerID", model.providerId(), "id", model.modelId())));
     }
-    call(endpoint, "POST", "/api/session/" + encode(sessionId) + "/prompt", Map.of("text", text));
+    call(
+        endpoint,
+        "POST",
+        "/api/session/" + encode(sessionId) + "/prompt",
+        inputId == null ? Map.of("text", text) : Map.of("text", text, "id", inputId));
   }
 
   @Override
@@ -384,6 +464,18 @@ public class OpenCodeHarness implements Harness {
       String messageId,
       String text,
       ModelRef model) {
+    editMessage(endpoint, directory, sessionId, messageId, text, model, null);
+  }
+
+  @Override
+  public void editMessage(
+      HarnessEndpoint endpoint,
+      String directory,
+      String sessionId,
+      String messageId,
+      String text,
+      ModelRef model,
+      String inputId) {
     var path = "/api/session/" + encode(sessionId);
     if (model != null) {
       call(
@@ -394,7 +486,7 @@ public class OpenCodeHarness implements Harness {
     }
     call(endpoint, "POST", path + "/revert/stage", Map.of("messageID", messageId, "files", false));
     call(endpoint, "POST", path + "/revert/commit", Map.of());
-    prompt(endpoint, directory, sessionId, text, null);
+    prompt(endpoint, directory, sessionId, text, null, inputId);
   }
 
   @Override

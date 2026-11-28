@@ -62,7 +62,13 @@ public class SecretService {
 
   @Transactional
   public Secret add(UUID workspaceId, String name, String value) {
-    var workspace = workspace(workspaceId);
+    var workspace =
+        workspaces
+            .findLockedById(workspaceId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "no workspace " + workspaceId));
     if (HARNESS_VARIABLES.contains(name)) {
       throw conflict(name + " is set by the workspace's harness");
     }
@@ -88,7 +94,13 @@ public class SecretService {
 
   @Transactional
   public void remove(UUID workspaceId, String name) {
-    var workspace = workspace(workspaceId);
+    var workspace =
+        workspaces
+            .findLockedById(workspaceId)
+            .orElseThrow(
+                () ->
+                    new ResponseStatusException(
+                        HttpStatus.NOT_FOUND, "no workspace " + workspaceId));
     if (HARNESS_VARIABLES.contains(name)) {
       throw conflict(name + " is set by the workspace's harness");
     }
@@ -116,9 +128,8 @@ public class SecretService {
 
   /** A user secret of the same name would shadow what the provider sets. */
   private static boolean reserved(WorkspaceEntity workspace, String name) {
-    return ModelProvider.byId(workspace.getModelProvider())
-        .map(p -> p.reserves(name))
-        .orElse(false);
+    return name.equals("WORKSPACED_AI_PROVIDER")
+        || java.util.Arrays.stream(ModelProvider.values()).anyMatch(p -> p.reserves(name));
   }
 
   private static ResponseStatusException conflict(String detail) {

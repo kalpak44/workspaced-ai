@@ -50,8 +50,9 @@ Every way of installing below puts what it installs in `$HOME`, so it survives r
 ## MCP servers
 
 - Add MCP servers to `~/.config/opencode/opencode.jsonc`, under `mcp.servers`. That file is kept.
-- Never edit `~/.config/opencode/opencode.json`: it is replaced from the image on every start, so anything added there
-  is lost.
+- Never edit `~/.config/opencode/opencode.json`: this legacy harness-owned defaults file is removed on every start.
+  The active provider defaults are managed at `/etc/opencode/opencode.json`, rebuilt from the image on start.
+  Put user settings in `opencode.jsonc`; they cannot override the managed provider profile or its model defaults.
 - The user can also add and remove MCP servers in the workspace's settings, which write the same `opencode.jsonc`.
 - A server started by command (for example `npx -y some-mcp-server`) runs inside this container. Install what it needs
   as described above, so it still starts after a restart.

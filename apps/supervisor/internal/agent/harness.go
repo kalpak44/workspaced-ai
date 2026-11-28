@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"sort"
@@ -36,6 +37,7 @@ type Docker interface {
 // Harness is the agent-hub's answer to /agent/harness. Environment holds secret values.
 type Harness struct {
 	Image       string            `json:"image"`
+	Revision    int64             `json:"revision"`
 	Environment map[string]string `json:"environment"`
 }
 
@@ -43,7 +45,11 @@ type Harness struct {
 // same label already runs with exactly these values. JSON sorts the map keys and quotes
 // every string, so no value can pass for a name.
 func ConfigHash(h Harness) string {
-	data, _ := json.Marshal([]any{h.Image, h.Environment})
+	values := []any{h.Image, h.Environment}
+	if h.Revision != 0 {
+		values = append(values, h.Revision)
+	}
+	data, _ := json.Marshal(values)
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
 }
@@ -107,6 +113,17 @@ func (s *Supervisor) bringUp(ctx context.Context, c *Client, log *slog.Logger, f
 		}
 		s.keepPassword(h.Environment)
 		if s.waitHealthy(ctx) {
+			cur, err := s.Docker.Inspect(ctx, harnessName)
+			if err != nil || cur == nil || !cur.Running || cur.Labels[configLabel] != ConfigHash(h) {
+				continue
+			}
+			if h.Revision > 0 && !s.profileHealthy(ctx, h) {
+				log.Warn("managed provider profile is not ready")
+				force = true
+				sleep(ctx, backoff)
+				continue
+			}
+			s.revision.Store(h.Revision)
 			log.Info("harness answers")
 			s.ready(ctx, c, log)
 			return
@@ -243,7 +260,7 @@ func (s *Supervisor) healthy(ctx context.Context) bool {
 		return false
 	}
 	resp.Body.Close()
-	return true
+	return resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusUnauthorized
 }
 
 // redact keeps a Docker error that echoes the create body from leaking a value into the log.
@@ -254,4 +271,54 @@ func redact(msg string, env map[string]string) string {
 		}
 	}
 	return msg
+}
+
+// Versioned readiness also proves the managed profile is loaded; an older image
+// that ignores WORKSPACED_AI_PROVIDER must never acknowledge an OpenAI switch.
+func (s *Supervisor) profileHealthy(ctx context.Context, h Harness) bool {
+	provider := h.Environment["WORKSPACED_AI_PROVIDER"]
+	if provider != "openrouter" && provider != "openai" {
+		return false
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(s.HarnessURL, "/")+"/api/config?location%5Bdirectory%5D=%2Fhome%2Fworkspace%2Fproject", nil)
+	if err != nil {
+		return false
+	}
+	req.SetBasicAuth("opencode", s.harnessPassword())
+	resp, err := s.HTTP.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return false
+	}
+	var docs []struct {
+		Type string
+		Path string
+		Info struct {
+			Model  struct{ ProviderID string }
+			Agents struct {
+				Title struct{ Model struct{ ProviderID string } }
+			}
+			Policies []struct{ Action, Resource, Effect string }
+		}
+	}
+	if json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&docs) != nil {
+		return false
+	}
+	policyOK, modelOK := false, false
+	for _, doc := range docs {
+		if doc.Type != "document" || doc.Path != "/etc/opencode/opencode.json" {
+			continue
+		}
+		p := doc.Info.Policies
+		if len(p) == 2 && p[0].Action == "provider.use" && p[0].Resource == "*" && p[0].Effect == "deny" && p[1].Action == "provider.use" && p[1].Resource == provider && p[1].Effect == "allow" {
+			policyOK = true
+		}
+		if doc.Info.Model.ProviderID == provider && doc.Info.Agents.Title.Model.ProviderID == provider {
+			modelOK = true
+		}
+	}
+	return policyOK && modelOK
 }

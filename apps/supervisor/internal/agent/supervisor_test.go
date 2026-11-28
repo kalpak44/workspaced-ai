@@ -43,6 +43,7 @@ type hub struct {
 	heartbeats []string
 	// heartbeatBody is the body of the latest heartbeat, signature verified.
 	heartbeatBody []byte
+	readyBody     []byte
 	// firewall is raw JSON every heartbeat answers with; empty leaves the field out.
 	firewall string
 	pub      ed25519.PublicKey
@@ -100,6 +101,7 @@ func (h *hub) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 		w.WriteHeader(status)
 	case "/api/v1/agent/ready":
+		h.readyBody = append([]byte(nil), body...)
 		if !h.verify(r, body) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return

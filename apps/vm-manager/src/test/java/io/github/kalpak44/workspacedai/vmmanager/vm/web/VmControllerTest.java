@@ -57,6 +57,60 @@ class VmControllerTest {
   private final HttpClient http = HttpClient.newHttpClient();
 
   @Test
+  void bindsProfileAndKeyAtomicallyAndAcceptsOnlyMatchingReadiness() throws Exception {
+    var created =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\"" + UUID.randomUUID() + "\",\"userId\":\"" + USER + KEY + "}");
+    var id = JSON.readValue(created.body(), VmDto.class).id();
+    assertThat(
+            send(
+                    "PUT",
+                    "/" + id + "/provider-binding",
+                    "{\"revision\":1,\"provider\":\"openai\",\"key\":\"inert-openai\"}")
+                .statusCode())
+        .isEqualTo(202);
+    var harness = JSON.readValue(send("GET", "/" + id + "/harness", null).body(), HarnessDto.class);
+    assertThat(harness.revision()).isEqualTo(1L);
+    assertThat(harness.environment())
+        .containsEntry("WORKSPACED_AI_PROVIDER", "openai")
+        .containsEntry("OPENAI_API_KEY", "inert-openai")
+        .doesNotContainKey("OPENROUTER_API_KEY");
+    send("POST", "/" + id + "/ready", null);
+    send("POST", "/" + id + "/ready-binding", "{\"revision\":0}");
+    assertThat(send("GET", "/" + id + "/provider-binding", null).body())
+        .doesNotContain("inert-openai")
+        .contains("\"readyRevision\":null");
+    send("POST", "/" + id + "/ready-binding", "{\"revision\":1}");
+    assertThat(send("GET", "/" + id + "/provider-binding", null).body())
+        .contains("\"readyRevision\":1");
+    assertThat(
+            send(
+                    "PUT",
+                    "/" + id + "/provider-binding",
+                    "{\"revision\":2,\"provider\":\"openrouter\",\"key\":\"inert-router\"}")
+                .statusCode())
+        .isEqualTo(202);
+    send("POST", "/" + id + "/ready-binding", "{\"revision\":1}");
+    assertThat(send("GET", "/" + id + "/provider-binding", null).body())
+        .contains("\"revision\":2")
+        .contains("\"readyRevision\":null");
+    harness = JSON.readValue(send("GET", "/" + id + "/harness", null).body(), HarnessDto.class);
+    assertThat(harness.environment())
+        .containsEntry("WORKSPACED_AI_PROVIDER", "openrouter")
+        .containsEntry("OPENROUTER_API_KEY", "inert-router")
+        .doesNotContainKey("OPENAI_API_KEY");
+    assertThat(
+            send(
+                    "PUT",
+                    "/" + id + "/provider-binding",
+                    "{\"revision\":1,\"provider\":\"openai\",\"key\":\"stale\"}")
+                .statusCode())
+        .isEqualTo(409);
+  }
+
+  @Test
   void createsOneVmPerOwner() throws Exception {
     var owner = UUID.randomUUID().toString();
     var first =

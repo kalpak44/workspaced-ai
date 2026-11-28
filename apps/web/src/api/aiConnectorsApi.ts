@@ -37,3 +37,32 @@ export async function readConnectorMetrics(id: string, signal?: AbortSignal): Pr
 export async function acknowledgeConnector(id: string): Promise<void> {
   await send(`${BASE}/${encodeURIComponent(id)}/acknowledgement`, { method: "POST", body: JSON.stringify({ accepted: true }) });
 }
+
+export interface ProviderBindingStatus {
+  readonly active: AiConnector | null;
+  readonly pending: AiConnector | null;
+  readonly choices: readonly AiConnector[];
+  readonly phase: "NONE" | "STAGED" | "APPLYING" | "ROLLING_BACK" | "BLOCKED";
+  readonly error: string | null;
+  readonly restartRequired: boolean;
+}
+export async function readProviderBindingStatus(id: string): Promise<ProviderBindingStatus> {
+  return (await send(`${workspaceUrl(id)}/ai-connector/status`)).json();
+}
+
+export interface WorkspacedUsage {
+  readonly workspaceId: string;
+  readonly workspaceName: string;
+  readonly connectorId: string | null;
+  readonly provider: string;
+  readonly model: string;
+  readonly steps: number;
+  readonly input: number;
+  readonly output: number;
+  readonly reasoning: number;
+  readonly cacheRead: number;
+  readonly cacheWrite: number;
+}
+export async function readWorkspacedUsage(signal?: AbortSignal): Promise<WorkspacedUsage[]> {
+  return (await send("/api/v1/ai-usage", { signal })).json();
+}

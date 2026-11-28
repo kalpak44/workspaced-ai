@@ -86,10 +86,10 @@ class RemoteCallsOutsideTransactionsTest {
     doAnswer(remote("messages", List.of(new ChatMessage("msg_1", "user", List.of()))))
         .when(harness)
         .messages(any(), any(), any());
-    doAnswer(remote("prompt", null)).when(harness).prompt(any(), any(), any(), any(), any());
+    doAnswer(remote("prompt", null)).when(harness).prompt(any(), any(), any(), any(), any(), any());
     doAnswer(remote("editMessage", null))
         .when(harness)
-        .editMessage(any(), any(), any(), any(), any(), any());
+        .editMessage(any(), any(), any(), any(), any(), any(), any());
     doAnswer(remote("abort", null)).when(harness).abort(any(), any(), any());
     doAnswer(remote("deleteSession", null)).when(harness).deleteSession(any(), any(), any());
     doAnswer(remote("removeDirectory", null)).when(harness).removeDirectory(any(), any());

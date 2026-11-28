@@ -1,10 +1,24 @@
 #!/bin/sh
-# opencode writes into its config directory (a .gitignore, its lockfile), so the defaults
-# baked into the image are copied into the home, the one writable place, on start.
+# One image, one active provider profile. This is runtime configuration, not auth.
+# /etc/opencode points at this container's writable /tmp, never at persisted home defaults.
 set -eu
 
-mkdir -p "$HOME/.config/opencode" "$HOME/.local/bin" "$HOME/project"
-cp -R /usr/share/harness/opencode/. "$HOME/.config/opencode/"
+profile=${WORKSPACED_AI_PROVIDER-openrouter}
+case "$profile" in
+  openrouter | openai) ;;
+  *) echo "Unsupported WORKSPACED_AI_PROVIDER: $profile (expected openrouter or openai)" >&2; exit 2 ;;
+esac
+
+managed=/tmp/workspaced-opencode
+mkdir -p "$managed" "$HOME/.config/opencode" "$HOME/.local/bin" "$HOME/project"
+# Rebuild from the image every start, including restarts with the same home. OpenCode
+# reads this once as system-managed config, above global/project config and policies.
+jq -s '.[0] * .[1]' /usr/share/harness/opencode/common.json \
+  "/usr/share/harness/opencode/profiles/$profile.json" > "$managed/opencode.json"
+# Only these two files are harness-owned. Keep user opencode.jsonc, MCP, instructions,
+# plugins and all project files. Remove the old, formerly replaced-on-start defaults
+# so instructions and policies are not loaded a second time from the global directory.
+rm -f "$managed/opencode.jsonc" "$HOME/.config/opencode/opencode.json"
 # The user's own instructions, every Markdown file OpenCode finds here. The first start seeds the
 # image's defaults; from then on the folder is the user's, edited in the app and by the agent,
 # and nothing here replaces it.
@@ -29,7 +43,7 @@ if [ -f "$env_file" ]; then
     case "$line" in '' | '#'*) continue ;; esac
     name=${line%%=*}
     [ "$name" != "$line" ] || continue
-    case "$name" in '' | [0-9]* | *[!A-Za-z0-9_]* | OPENCODE_*) continue ;; esac
+    case "$name" in '' | [0-9]* | *[!A-Za-z0-9_]* | OPENCODE_* | WORKSPACED_AI_PROVIDER) continue ;; esac
     eval "[ -z \"\${$name+set}\" ]" || continue
     value=${line#*=}
     case "$value" in

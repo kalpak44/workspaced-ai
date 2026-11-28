@@ -47,6 +47,7 @@ public class FakeOpenCode implements AutoCloseable {
   /** Lists no MCP servers, as OpenCode does while a reload is still starting them. */
   public volatile boolean mcpStarting;
 
+  public volatile String messageResponse;
   public volatile String title;
   public volatile String agent = "build";
   public volatile boolean rejectAgentSwitch;
@@ -197,7 +198,8 @@ public class FakeOpenCode implements AutoCloseable {
           respond(exchange, 204, null);
         }
       }
-      case "GET /api/session/" + SESSION + "/message" -> respond(exchange, 200, MESSAGES);
+      case "GET /api/session/" + SESSION + "/message" ->
+          respond(exchange, 200, messageResponse == null ? MESSAGES : messageResponse);
       case "GET /api/session/" + SESSION + "/form" ->
           respond(
               exchange,

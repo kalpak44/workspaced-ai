@@ -171,7 +171,7 @@ class TrialConnectorsTest {
   }
 
   @Test
-  void fallsBackAllReferencingWorkspacesAndMarksThemForRestart() {
+  void refusesImplicitTrialFallbackForEveryReferencingWorkspace() {
     var trial = trials.ensure(owner).orElseThrow();
     var personal =
         connectors.saveAndFlush(
@@ -185,13 +185,14 @@ class TrialConnectorsTest {
     var first = workspace(personal.getId());
     var second = workspace(personal.getId());
     var untouched = workspace(null);
-    service.delete(personal.getId());
-    assertThat(connectors.existsById(personal.getId())).isFalse();
+    assertThatThrownBy(() -> service.delete(personal.getId()))
+        .isInstanceOf(ResponseStatusException.class);
+    assertThat(connectors.existsById(personal.getId())).isTrue();
     for (var id : List.of(first, second)) {
       var workspace = workspaces.findById(id).orElseThrow();
-      assertThat(workspace.getAiConnectorId()).isEqualTo(trial.getId());
-      assertThat(workspace.isSecretsPendingRestart()).isTrue();
-      verify(runtime).replaceProviderKey(id, "trial-secret-" + owner);
+      assertThat(workspace.getAiConnectorId()).isEqualTo(personal.getId());
+      assertThat(workspace.isSecretsPendingRestart()).isFalse();
+      verify(runtime, never()).replaceProviderKey(any(), any());
     }
     assertThat(workspaces.findById(untouched).orElseThrow().isSecretsPendingRestart()).isFalse();
     verify(management).createTrial(owner);
@@ -214,7 +215,7 @@ class TrialConnectorsTest {
   }
 
   @Test
-  void restoresAlreadyChangedVMsIfAnotherFallbackUpdateFails() {
+  void refusesDisconnectBeforeMakingAnyPartialVmChanges() {
     trials.ensure(owner);
     var personal =
         connectors.saveAndFlush(
@@ -227,11 +228,9 @@ class TrialConnectorsTest {
                     .seal("personal-secret")));
     var first = workspace(personal.getId());
     var second = workspace(personal.getId());
-    doThrow(new IllegalStateException("no VM"))
-        .when(runtime)
-        .replaceProviderKey(second, "trial-secret-" + owner);
     assertThatThrownBy(() -> service.delete(personal.getId()))
-        .isInstanceOf(IllegalStateException.class);
+        .isInstanceOf(ResponseStatusException.class);
+    verify(runtime, never()).replaceProviderKey(any(), any());
     assertThat(connectors.existsById(personal.getId())).isTrue();
     for (var id : List.of(first, second))
       assertThat(workspaces.findById(id).orElseThrow().getAiConnectorId())

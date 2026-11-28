@@ -58,7 +58,8 @@ public class VariableService {
     }
     var names = new HashSet<String>();
     for (var variable : variables) {
-      if (variable.name().startsWith("OPENCODE_")
+      if (variable.name().equals("WORKSPACED_AI_PROVIDER")
+          || variable.name().startsWith("OPENCODE_")
           || variable.name().equals(Harness.TIME_ZONE_VARIABLE)
           || variable.name().equals(Harness.HOSTNAME_VARIABLE)
           || variable.name().equals(Harness.ADDRESS_VARIABLE)) {

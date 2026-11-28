@@ -63,7 +63,13 @@ class WorkspaceUpdatesImpl implements WorkspaceUpdates {
     return update(
         id,
         (update, workspace) ->
-            update.set(workspace.get(WorkspaceEntity_.secretsPendingRestart), true));
+            update
+                .set(workspace.get(WorkspaceEntity_.secretsPendingRestart), true)
+                .set(
+                    workspace.get(WorkspaceEntity_.configurationRevision),
+                    entityManager
+                        .getCriteriaBuilder()
+                        .sum(workspace.get(WorkspaceEntity_.configurationRevision), 1L)));
   }
 
   @Override

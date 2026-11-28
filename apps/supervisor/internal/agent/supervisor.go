@@ -55,6 +55,7 @@ type Supervisor struct {
 
 	// password is the harness password of the container running now.
 	password atomic.Pointer[string]
+	revision atomic.Int64
 }
 
 // Run returns nil when ctx is cancelled and an error only for unusable local state.
@@ -205,7 +206,11 @@ func (s *Supervisor) dropToken(log *slog.Logger) error {
 func (s *Supervisor) ready(ctx context.Context, c *Client, log *slog.Logger) {
 	backoff := s.BackoffMin
 	for ctx.Err() == nil {
-		status, err := c.Signed(ctx, "/agent/ready")
+		var body []byte
+		if revision := s.revision.Load(); revision > 0 {
+			body, _ = json.Marshal(map[string]int64{"revision": revision})
+		}
+		status, _, err := c.Post(ctx, "/agent/ready", body)
 		if err == nil && status == http.StatusNoContent {
 			log.Info("reported ready")
 			return

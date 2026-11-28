@@ -212,7 +212,10 @@ export function useWorkspaces() {
       return;
     }
     patch(id, { status: "INITIALIZING" });
-    restartWorkspace(id).then(() => patch(id, { restartRequired: false })).catch(() => {
+    restartWorkspace(id).then(() => listWorkspaces()).then(rows => {
+      const actual = rows.find(row => row.id === id);
+      if (actual) patch(id, { restartRequired: actual.restartRequired });
+    }).catch(() => {
       if (before) {
         patch(id, { status: latest.current.get(id) ?? before });
       }

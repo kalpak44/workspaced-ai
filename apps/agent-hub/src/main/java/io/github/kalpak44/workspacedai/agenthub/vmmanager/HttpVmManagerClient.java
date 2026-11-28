@@ -33,6 +33,12 @@ public class HttpVmManagerClient implements VmManagerClient {
   }
 
   @Override
+  public void ready(UUID vmId, Long revision) {
+    if (revision == null) ready(vmId);
+    else send(vmId, "POST", "ready-binding", json.writeValueAsString(Map.of("revision", revision)));
+  }
+
+  @Override
   public Heartbeat heartbeat(UUID vmId, VmMemory memory) {
     var report = memory == null ? null : json.writeValueAsString(Map.of("memory", memory));
     var body = send(vmId, "POST", "heartbeat", report);

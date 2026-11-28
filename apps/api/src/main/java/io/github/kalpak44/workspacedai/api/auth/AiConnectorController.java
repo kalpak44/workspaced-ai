@@ -32,12 +32,22 @@ public class AiConnectorController {
 
   public record Selection(@NotNull UUID connectorId) {}
 
+  private final AiUsage usage;
   private final AiConnectorService service;
   private final WorkspaceAiCredits credits;
 
-  public AiConnectorController(AiConnectorService service, WorkspaceAiCredits credits) {
+  public AiConnectorController(
+      AiConnectorService service, WorkspaceAiCredits credits, AiUsage usage) {
+    this.usage = usage;
     this.service = service;
     this.credits = credits;
+  }
+
+  @GetMapping("/ai-usage")
+  public ResponseEntity<List<AiUsage.Total>> usage() {
+    return ResponseEntity.ok()
+        .cacheControl(org.springframework.http.CacheControl.noStore())
+        .body(usage.totals(CurrentUser.id()));
   }
 
   @GetMapping("/ai-connectors")
@@ -85,6 +95,11 @@ public class AiConnectorController {
   public ResponseEntity<AiConnectorService.Connector> selected(@PathVariable UUID id) {
     var selected = service.selected(id);
     return selected == null ? ResponseEntity.noContent().build() : ResponseEntity.ok(selected);
+  }
+
+  @GetMapping("/workspaces/{id}/ai-connector/status")
+  public ProviderBindings.Status bindingStatus(@PathVariable UUID id) {
+    return service.bindingStatus(id);
   }
 
   @PutMapping("/workspaces/{id}/ai-connector")

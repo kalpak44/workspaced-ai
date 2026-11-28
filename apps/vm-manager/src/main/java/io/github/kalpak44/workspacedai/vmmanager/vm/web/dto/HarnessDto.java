@@ -15,7 +15,11 @@ public record HarnessDto(
                 "The container's environment: the VM's secrets, its OPENROUTER_API_KEY and its "
                     + "system environment, the system one winning on a clash",
             example = "{\"OPENROUTER_API_KEY\":\"sk-or-v1-…\",\"OPENCODE_PASSWORD\":\"…\"}")
-        Map<String, String> environment) {
+        Map<String, String> environment,
+    Long revision) {
+  public HarnessDto(String image, Map<String, String> environment) {
+    this(image, environment, null);
+  }
 
   // The environment holds secret values, and a record would print them.
   @Override

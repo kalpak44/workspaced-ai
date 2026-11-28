@@ -12,6 +12,9 @@ public class ModelProviderController implements ModelProviderApi {
   @Override
   public ResponseEntity<List<ModelProviderInfo>> list() {
     return ResponseEntity.ok(
-        Arrays.stream(ModelProvider.values()).map(ModelProviderInfo::of).toList());
+        Arrays.stream(ModelProvider.values())
+            .filter(p -> p == ModelProvider.OPENROUTER)
+            .map(ModelProviderInfo::of)
+            .toList());
   }
 }

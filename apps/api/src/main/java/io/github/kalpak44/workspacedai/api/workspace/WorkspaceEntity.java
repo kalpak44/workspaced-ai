@@ -39,6 +39,18 @@ public class WorkspaceEntity {
   @Column(name = "ai_connector_id")
   private UUID aiConnectorId;
 
+  @jakarta.persistence.Embedded private ProviderChange providerChange = new ProviderChange();
+
+  public ProviderChange getProviderChange() {
+    return providerChange;
+  }
+
+  public void activateProvider(UUID connector, String provider) {
+    if (!modelProvider.equals(provider)) model = null;
+    aiConnectorId = connector;
+    modelProvider = provider;
+  }
+
   public UUID getAiConnectorId() {
     return aiConnectorId;
   }
@@ -68,6 +80,13 @@ public class WorkspaceEntity {
   // Secrets changed since the runtime started; it sees them only once it restarts.
   @Column(name = "secrets_pending_restart", nullable = false)
   private boolean secretsPendingRestart;
+
+  @Column(name = "configuration_revision", nullable = false)
+  private long configurationRevision;
+
+  public long getConfigurationRevision() {
+    return configurationRevision;
+  }
 
   // Whether its own agent may open and close ports with its `firewall` tool; on until the user
   // turns it off.
@@ -118,6 +137,7 @@ public class WorkspaceEntity {
 
   public void setSecretsPendingRestart(boolean pending) {
     this.secretsPendingRestart = pending;
+    if (pending) configurationRevision++;
   }
 
   public boolean isSessionTtlEnabled() {

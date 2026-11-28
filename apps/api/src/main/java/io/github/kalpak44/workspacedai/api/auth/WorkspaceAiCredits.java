@@ -11,6 +11,8 @@ import org.springframework.web.server.ResponseStatusException;
 /** Workspace members may see credit availability, but never the owner's connector or key. */
 @Service
 public class WorkspaceAiCredits {
+  private final ProviderBindings bindings;
+
   public record Status(
       BigDecimal remainingUsd,
       BigDecimal warningThresholdUsd,
@@ -31,7 +33,9 @@ public class WorkspaceAiCredits {
       AiConnectorRepository connectors,
       UserRepository users,
       OpenRouterMetrics metrics,
-      AuthProperties properties) {
+      AuthProperties properties,
+      ProviderBindings bindings) {
+    this.bindings = bindings;
     this.workspaces = workspaces;
     this.connectors = connectors;
     this.users = users;
@@ -57,7 +61,17 @@ public class WorkspaceAiCredits {
   }
 
   /** A fresh check before every prompt, including edits and resumed form replies. */
+  public void withCredits(UUID workspaceId, Runnable dispatch) {
+    bindings.route(
+        workspaceId,
+        () -> {
+          requireCredits(workspaceId);
+          dispatch.run();
+        });
+  }
+
   public void requireCredits(UUID workspaceId) {
+    bindings.requireRoutable(workspaceId);
     var remaining = read(workspaceId).remaining();
     if (remaining != null && remaining.signum() <= 0)
       throw new ResponseStatusException(

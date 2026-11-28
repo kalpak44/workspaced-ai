@@ -88,6 +88,16 @@ public interface VmManager {
   /** Replaces the protected model-provider key, without allowing user secrets to overwrite it. */
   void replaceProviderKey(UUID workspaceId, String value);
 
+  record ProviderReceipt(Long revision, Long readyRevision) {}
+
+  default void restartProvider(UUID workspaceId, long revision, String provider, String key) {
+    throw new IllegalStateException("Versioned provider restart unavailable");
+  }
+
+  default ProviderReceipt providerReceipt(UUID workspaceId) {
+    throw new IllegalStateException("Versioned provider readiness unavailable");
+  }
+
   /** Removes a secret from the workspace's VM; one it does not have, or no VM, is not an error. */
   void removeSecret(UUID workspaceId, String name);
 

@@ -36,7 +36,12 @@ public class ClusterLocks {
 
   /** Waits its turn for the lock, then runs the action; a 409 if the turn does not come in time. */
   public <T> T call(String name, Supplier<T> action) {
-    var lock = acquire(name);
+    return call(name, LEASE, action);
+  }
+
+  /** A bounded multi-request operation may need a longer lease than a single settings edit. */
+  public <T> T call(String name, Duration lease, Supplier<T> action) {
+    var lock = acquire(name, lease);
     try {
       return action.get();
     } finally {
@@ -53,10 +58,10 @@ public class ClusterLocks {
         });
   }
 
-  private SimpleLock acquire(String name) {
+  private SimpleLock acquire(String name, Duration lease) {
     var deadline = System.nanoTime() + wait.toNanos();
     while (true) {
-      var lock = provider.lock(new LockConfiguration(Instant.now(), name, LEASE, Duration.ZERO));
+      var lock = provider.lock(new LockConfiguration(Instant.now(), name, lease, Duration.ZERO));
       if (lock.isPresent()) {
         return lock.get();
       }

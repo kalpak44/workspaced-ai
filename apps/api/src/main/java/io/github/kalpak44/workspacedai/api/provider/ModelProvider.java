@@ -15,7 +15,14 @@ public enum ModelProvider {
       "OPENROUTER_API_KEY",
       "OPENROUTER_BASE_URL",
       // Answers 401 for a key OpenRouter does not know, and costs nothing for one it does.
-      "/key");
+      "/key"),
+  OPENAI(
+      "openai",
+      "OpenAI API key (experimental)",
+      "https://api.openai.com/v1",
+      "OPENAI_API_KEY",
+      "OPENAI_BASE_URL",
+      "/models");
 
   private final String id;
   private final String displayName;

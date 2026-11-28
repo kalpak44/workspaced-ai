@@ -37,6 +37,13 @@ class HttpVmManagerClientTest {
   }
 
   @Test
+  void forwardsVersionedReadinessWithoutUsingTheLegacyRoute() {
+    client(fake.url()).ready(vm, 42L);
+    assertThat(fake.reports).containsExactly("ready-binding " + vm);
+    assertThat(fake.bodies).containsExactly("{\"revision\":42}");
+  }
+
+  @Test
   void postsBothReportsAndReadsTheStatusTheHeartbeatAnswers() {
     var client = client(URI.create(fake.url() + "/"));
     client.ready(vm);

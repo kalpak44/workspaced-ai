@@ -234,7 +234,7 @@ workspace is created and kept in its Secret as `OPENCODE_PASSWORD`, which no use
 `OPENCODE_SERVER_PASSWORD` secrets are accepted by V2 and by endpoint discovery. A
 harness that is not running, not answering, or belongs to a workspace made before the harness existed answers `503`.
 opencode is limited to the `openrouter` provider, reading the workspace's `OPENROUTER_API_KEY` and
-`OPENROUTER_BASE_URL`; its default model is set in `apps/harness/opencode/opencode.json`.
+`OPENROUTER_BASE_URL`; its default model is set in `apps/harness/opencode/profiles/openrouter.json`.
 
 ### Editing chat messages
 
@@ -600,11 +600,13 @@ recover the one-time plaintext; operators can identify orphaned grants by their 
 `workspaced trial: <user UUID>` labels. Errors never echo credentials or provider response bodies.
 
 Connector metadata includes `trial: true` for the protected default, listed first.
-`DELETE /ai-connectors/{id}` returns 409 for it. Deleting a personal connector reassigns every
-workspace referencing it to the owner's Trial connector, updates the protected VM secret, and
-marks running workspaces as requiring restart. It does not delete the personal key in OpenRouter.
-If fallback provisioning or a VM update fails, deletion is refused; changes to already-updated VM
-secrets are restored on a best-effort basis. Exhausting Trial does not trigger another grant.
+`DELETE /ai-connectors/{id}` returns 409 for it. A personal connector referenced by an active or
+pending workspace also returns 409: select and activate another connector before disconnecting.
+There is no automatic Trial/billing fallback, and removing an unused connector does not revoke
+its provider key. Selection stages a pending choice; only matching versioned readiness at the
+explicit restart boundary changes the active connector/provider. The owner can inspect active,
+pending and supported choices at `GET /workspaces/{id}/ai-connector/status`.
+See [the provider binding lifecycle and gated OpenAI transport](provider-bindings.md).
 
 Draft launch accepts exactly one of `apiKey` or `connectorId`; a saved connector is resolved only
 for its owner and must match the workspace's provider. The tour launches with the Trial connector

@@ -26,6 +26,7 @@ import org.springframework.web.server.ResponseStatusException;
  */
 @Service
 public class SettingsService {
+  private final io.github.kalpak44.workspacedai.api.auth.ProviderBindings bindings;
 
   private static final Pattern SECRET_REFERENCE = Pattern.compile("\\{env:[A-Za-z_][A-Za-z0-9_]*}");
 
@@ -40,7 +41,9 @@ public class SettingsService {
       WorkspaceRuntime runtime,
       Harness harness,
       ClusterLocks locks,
-      ModelCatalogues catalogues) {
+      ModelCatalogues catalogues,
+      io.github.kalpak44.workspacedai.api.auth.ProviderBindings bindings) {
+    this.bindings = bindings;
     this.workspaces = workspaces;
     this.runtime = runtime;
     this.harness = harness;
@@ -74,6 +77,7 @@ public class SettingsService {
 
   /** The catalogue lives in the harness, so it needs one running. */
   public ModelCatalogue models(UUID workspaceId) {
+    bindings.requireRoutable(workspaceId);
     var workspace = workspace(workspaceId);
     return catalogues.of(endpoint(workspaceId), workspace.getModelProvider());
   }
@@ -83,6 +87,11 @@ public class SettingsService {
    * check asks the harness, so it happens before the short update rather than inside it.
    */
   public String setModel(UUID workspaceId, String model) {
+    bindings.route(workspaceId, () -> setModelLocked(workspaceId, model));
+    return model;
+  }
+
+  private void setModelLocked(UUID workspaceId, String model) {
     workspace(workspaceId);
     if (model != null
         && models(workspaceId).models().stream().noneMatch(m -> m.id().equals(model))) {
@@ -92,7 +101,6 @@ public class SettingsService {
     if (workspaces.updateModel(workspaceId, model) == 0) {
       throw new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace " + workspaceId);
     }
-    return model;
   }
 
   public List<McpServer> mcpServers(UUID workspaceId) {

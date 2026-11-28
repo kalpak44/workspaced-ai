@@ -32,6 +32,7 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class SessionService {
 
+  private final io.github.kalpak44.workspacedai.api.auth.AiUsage usage;
   private final WorkspaceRepository workspaces;
   private final WorkspaceSessionRepository sessions;
   private final WorkspaceRuntime runtime;
@@ -47,7 +48,9 @@ public class SessionService {
       Harness harness,
       TransactionTemplate transactions,
       ModelCatalogues catalogues,
-      io.github.kalpak44.workspacedai.api.auth.WorkspaceAiCredits credits) {
+      io.github.kalpak44.workspacedai.api.auth.WorkspaceAiCredits credits,
+      io.github.kalpak44.workspacedai.api.auth.AiUsage usage) {
+    this.usage = usage;
     this.workspaces = workspaces;
     this.sessions = sessions;
     this.runtime = runtime;
@@ -136,6 +139,11 @@ public class SessionService {
    */
   public void delete(UUID workspaceId, UUID sessionId) {
     var session = awaitSession(workspaceId, sessionId);
+    try {
+      usage.collect(session);
+    } catch (HarnessUnavailableException ignored) {
+      /* No fabricated measurements. */
+    }
     runtime
         .harness(workspaceId)
         .ifPresent(
@@ -193,9 +201,15 @@ public class SessionService {
   public void replyForm(
       UUID workspaceId, UUID sessionId, String formId, Map<String, Object> answer) {
     awaitSession(workspaceId, sessionId);
-    var target = target(workspaceId, sessionId);
-    credits.requireCredits(workspaceId);
-    harness.replyForm(target.endpoint(), target.harnessSessionId(), formId, answer);
+    credits.withCredits(
+        workspaceId,
+        () -> {
+          var target = target(workspaceId, sessionId);
+          var dispatch = usage.form(session(workspaceId, sessionId));
+          harness.replyForm(
+              target.endpoint(), target.harnessSessionId(), formId, answer, model(workspaceId));
+          usage.acceptForm(dispatch);
+        });
   }
 
   public void cancelForm(UUID workspaceId, UUID sessionId, String formId) {
@@ -207,35 +221,48 @@ public class SessionService {
   /** With the workspace's chosen model, so a change of model applies from the next message. */
   public void send(UUID workspaceId, UUID sessionId, String text) {
     var session = awaitSession(workspaceId, sessionId);
-    credits.requireCredits(workspaceId);
-    harness.prompt(
-        endpoint(workspaceId),
-        session.getPath(),
-        session.getHarnessSessionId(),
-        text,
-        model(workspaceId));
+    credits.withCredits(
+        workspaceId,
+        () -> {
+          var inputId = usage.prompt(session);
+          harness.prompt(
+              endpoint(workspaceId),
+              session.getPath(),
+              session.getHarnessSessionId(),
+              text,
+              model(workspaceId),
+              inputId);
+        });
   }
 
   public void edit(UUID workspaceId, UUID sessionId, String messageId, String text) {
     var session = awaitSession(workspaceId, sessionId);
-    credits.requireCredits(workspaceId);
-    var endpoint = endpoint(workspaceId);
-    var message =
-        harness.messages(endpoint, session.getPath(), session.getHarnessSessionId()).stream()
-            .filter(m -> m.id().equals(messageId))
-            .findFirst()
-            .orElseThrow(
-                () -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no message " + messageId));
-    if (!"user".equals(message.role())) {
-      throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "only user messages can be edited");
-    }
-    harness.editMessage(
-        endpoint,
-        session.getPath(),
-        session.getHarnessSessionId(),
-        messageId,
-        text,
-        model(workspaceId));
+    credits.withCredits(
+        workspaceId,
+        () -> {
+          var endpoint = endpoint(workspaceId);
+          var message =
+              harness.messages(endpoint, session.getPath(), session.getHarnessSessionId()).stream()
+                  .filter(m -> m.id().equals(messageId))
+                  .findFirst()
+                  .orElseThrow(
+                      () ->
+                          new ResponseStatusException(
+                              HttpStatus.NOT_FOUND, "no message " + messageId));
+          if (!"user".equals(message.role())) {
+            throw new ResponseStatusException(
+                HttpStatus.BAD_REQUEST, "only user messages can be edited");
+          }
+          var inputId = usage.prompt(session);
+          harness.editMessage(
+              endpoint,
+              session.getPath(),
+              session.getHarnessSessionId(),
+              messageId,
+              text,
+              model(workspaceId),
+              inputId);
+        });
   }
 
   private Harness.ModelRef model(UUID workspaceId) {

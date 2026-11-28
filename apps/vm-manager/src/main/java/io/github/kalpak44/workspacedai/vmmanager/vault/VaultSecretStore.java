@@ -95,6 +95,7 @@ public class VaultSecretStore implements SecretStore {
       case SECRETS -> path;
       case SYSTEM -> path + "/system";
       case FIREWALL -> path + "/firewall";
+      case PROVIDER -> path + "/provider";
     };
   }
 

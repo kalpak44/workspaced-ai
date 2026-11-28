@@ -57,6 +57,16 @@ public interface WorkspaceRuntime {
   /** Replaces the protected model-provider key, without allowing user secrets to overwrite it. */
   void replaceProviderKey(UUID workspaceId, String value);
 
+  record ProviderReceipt(Long revision, Long readyRevision) {}
+
+  default void restartProvider(UUID workspaceId, long revision, String provider, String key) {
+    throw new IllegalStateException("Versioned provider restart unavailable");
+  }
+
+  default ProviderReceipt providerReceipt(UUID workspaceId) {
+    throw new IllegalStateException("Versioned provider readiness unavailable");
+  }
+
   /** One secret's value; empty when the workspace has no such secret, or none at all. */
   Optional<String> secret(UUID workspaceId, String name);
 

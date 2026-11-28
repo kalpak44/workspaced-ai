@@ -41,11 +41,12 @@ public class HarnessService {
       throw new HarnessNotConfiguredException();
     }
     // Set on top, so a user's secret of the same name cannot point the agent somewhere else.
-    var environment = new HashMap<>(secrets.environment(vmId));
+    var binding = secrets.configuration(vmId);
+    var environment = new HashMap<>(binding.environment());
     dns.hostname(vmId).ifPresent(name -> environment.put(HOSTNAME_VARIABLE, name));
     vms.findById(vmId)
         .map(Vm::ipv4)
         .ifPresent(address -> environment.put(ADDRESS_VARIABLE, address));
-    return new Harness(properties.image().strip(), Map.copyOf(environment));
+    return new Harness(properties.image().strip(), Map.copyOf(environment), binding.revision());
   }
 }

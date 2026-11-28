@@ -47,7 +47,15 @@ public class AgentService {
   public void ready(SignedRequest request) {
     var vmId = authenticate(request);
     store.touch(vmId, clock.instant());
-    vmManager.ready(vmId);
+    Long revision = null;
+    try {
+      var node = json.readTree(request.body()).path("revision");
+      if (node.isIntegralNumber() && node.asLong() > 0) revision = node.asLong();
+    } catch (RuntimeException ignored) {
+      /* Legacy empty body has no revision proof. */
+    }
+    if (revision == null) vmManager.ready(vmId);
+    else vmManager.ready(vmId, revision);
   }
 
   /**

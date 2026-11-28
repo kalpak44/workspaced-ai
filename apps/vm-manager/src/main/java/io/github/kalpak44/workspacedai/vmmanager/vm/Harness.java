@@ -8,7 +8,10 @@ import java.util.TreeSet;
  *
  * @param environment secret values; {@link #toString} shows only their names
  */
-public record Harness(String image, Map<String, String> environment) {
+public record Harness(String image, Map<String, String> environment, Long revision) {
+  public Harness(String image, Map<String, String> environment) {
+    this(image, environment, null);
+  }
 
   @Override
   public String toString() {

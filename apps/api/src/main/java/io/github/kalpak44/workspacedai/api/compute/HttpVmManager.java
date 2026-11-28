@@ -188,6 +188,29 @@ public class HttpVmManager implements VmManager {
   }
 
   @Override
+  public void restartProvider(UUID workspaceId, long revision, String provider, String key) {
+    var vm =
+        vmIdOf(workspaceId).orElseThrow(() -> new IllegalStateException("Workspace has no VM"));
+    var body =
+        json.createObjectNode().put("revision", revision).put("provider", provider).put("key", key);
+    expect(
+        send(
+            request("/vms/" + vm + "/provider-binding")
+                .header("Content-Type", "application/json")
+                .PUT(HttpRequest.BodyPublishers.ofString(json.writeValueAsString(body)))),
+        202);
+  }
+
+  @Override
+  public ProviderReceipt providerReceipt(UUID workspaceId) {
+    var vm =
+        vmIdOf(workspaceId).orElseThrow(() -> new IllegalStateException("Workspace has no VM"));
+    var response = send(get("/vms/" + vm + "/provider-binding"));
+    expect(response, 200);
+    return json.readValue(response.body(), ProviderReceipt.class);
+  }
+
+  @Override
   public void putSecret(UUID workspaceId, String name, String value) {
     var vm =
         vmIdOf(workspaceId)
