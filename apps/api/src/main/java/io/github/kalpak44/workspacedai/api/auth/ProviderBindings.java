@@ -60,7 +60,7 @@ public class ProviderBindings {
       AuthProperties auth,
       TransactionTemplate tx,
       io.github.kalpak44.workspacedai.api.ClusterLocks locks,
-      @Value("${workspaced.ai.openai-api-key-enabled:false}") boolean enabled,
+      @Value("${workspaced.ai.openai-api-key-enabled:true}") boolean enabled,
       @Value("${workspaced.ai.provider-restart-timeout:PT3M}") Duration timeout) {
     this.usage = usage;
     this.workspaces = workspaces;

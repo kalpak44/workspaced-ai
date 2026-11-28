@@ -11,6 +11,7 @@ import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 
 /**
  * Model provider API: the routes and their OpenAPI documentation.
@@ -29,7 +30,8 @@ public interface ModelProviderApi {
   @Operation(
       operationId = "listModelProviders",
       summary = "List model providers",
-      description = "The providers a workspace can be created with.")
+      description =
+          "Workspace creation providers, or enabled saved-connector providers when connectors=true.")
   @ApiResponse(
       responseCode = "200",
       description = "OK.",
@@ -43,5 +45,6 @@ public interface ModelProviderApi {
                           + "\"baseUrl\":\"https://openrouter.ai/api/v1\","
                           + "\"apiKeyVariable\":\"OPENROUTER_API_KEY\"}]")))
   @GetMapping(produces = "application/json")
-  ResponseEntity<List<ModelProviderInfo>> list();
+  ResponseEntity<List<ModelProviderInfo>> list(
+      @RequestParam(defaultValue = "false") boolean connectors);
 }

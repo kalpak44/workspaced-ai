@@ -68,7 +68,7 @@ before relying on newer upstream operations.
 
 ## Model providers
 
-`GET /api/v1/model-providers` lists the providers a workspace can be created with: `id`, `name`, `baseUrl`, and
+`GET /api/v1/model-providers` lists the providers a workspace can be created with. Add `?connectors=true` for enabled saved-connector providers (including experimental OpenAI API keys by default). Each entry contains: `id`, `name`, `baseUrl`, and
 `apiKeyVariable`, the secret the workspace receives the key in. The list is hardcoded — OpenRouter only for now —
 because each provider needs its own key check.
 

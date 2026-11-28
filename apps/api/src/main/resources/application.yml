@@ -45,6 +45,8 @@ spring:
         max-page-size: 100
 
 workspaced:
+  ai:
+    openai-api-key-enabled: ${WORKSPACED_AI_OPENAI_API_KEY_ENABLED:true}
   # The private service that creates the Hetzner VMs workspaces run on. Left unset, as it is
   # locally, workspace routes answer 503.
   vm-manager:

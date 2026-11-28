@@ -611,6 +611,9 @@ export function installFakeApi(
       const current = connectors.find(c => c.id === workspaceConnectors.get(id));
       return current ? json(current) : new Response(null, { status: 204 });
     }
+    if (url.endsWith("/api/v1/model-providers?connectors=true")) {
+      return json([OPENROUTER, { id: "openai", name: "OpenAI API key (experimental)", baseUrl: "https://api.openai.com/v1", apiKeyVariable: "OPENAI_API_KEY" }]);
+    }
     if (url.endsWith("/api/v1/model-providers")) {
       return json([OPENROUTER]);
     }

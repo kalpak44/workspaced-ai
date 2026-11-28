@@ -10,6 +10,6 @@ export interface ModelProvider {
 
 export const MODEL_PROVIDERS_URL = "/api/v1/model-providers";
 
-export async function listModelProviders(): Promise<ModelProvider[]> {
-  return (await send(MODEL_PROVIDERS_URL)).json();
+export async function listModelProviders(connectors = false): Promise<ModelProvider[]> {
+  return (await send(MODEL_PROVIDERS_URL + (connectors ? "?connectors=true" : ""))).json();
 }

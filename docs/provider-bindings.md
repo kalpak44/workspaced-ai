@@ -1,9 +1,12 @@
 # Provider bindings and explicit restart
 
 One connector/provider is active per existing workspace. This slice adds transport and
-restart wiring, not ChatGPT subscription auth. OpenAI is an **API-key-only test path**, off
-by default (`workspaced.ai.openai-api-key-enabled=false`). The public provider-create list
-stays OpenRouter-only; no ChatGPT sign-in or subscription option is exposed. Legacy OpenRouter
+restart wiring, not ChatGPT subscription auth. OpenAI is an **experimental API-key-only path**, enabled
+by default. Set `WORKSPACED_AI_OPENAI_API_KEY_ENABLED=false` to disable it. General settings →
+AI connectors lists enabled providers using `GET /api/v1/model-providers?connectors=true`. Add
+an OpenAI key there, select it in an existing workspace’s Settings → Profile, save, and restart
+the workspace to activate it after verified readiness. The default provider list for workspace
+creation stays OpenRouter-only; no ChatGPT sign-in or subscription option is exposed. Legacy OpenRouter
 creates and ordinary secret restarts keep working. OpenAI workspace creation is gated: test
 selection on an existing workspace instead, with an independently authorized API key.
 

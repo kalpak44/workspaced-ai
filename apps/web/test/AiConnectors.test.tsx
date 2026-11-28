@@ -194,3 +194,20 @@ it("hides Profile from collaborators even when opened by a direct URL", async ()
   expect(screen.queryByRole("combobox", { name: "Saved connector" })).not.toBeInTheDocument();
   expect(screen.queryByRole("region", { name: "Profile" })).not.toBeInTheDocument();
 });
+
+it("creates an OpenAI API-key connector from the provider dropdown", async () => {
+  const user = userEvent.setup();
+  render(<GeneralSettingsPage section="ai-connectors" />);
+  await screen.findByRole("option", { name: "OpenAI API key (experimental)" });
+  await user.selectOptions(screen.getByRole("combobox", { name: "Model provider" }), "openai");
+  expect(screen.queryByRole("button", { name: "Connect OpenRouter" })).not.toBeInTheDocument();
+  expect(screen.getByText(/API usage is billed separately from ChatGPT subscriptions/)).toBeVisible();
+  await user.type(screen.getByRole("textbox", { name: "Connector name" }), "OpenAI work");
+  await user.type(screen.getByLabelText("API key"), "sk-openai-test");
+  await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
+  await user.click(screen.getByRole("button", { name: "Save connector" }));
+  await screen.findByText("AI connector saved. You can now select it in your workspaces.");
+  expect(api.connectors).toEqual([{ id: "connector-1", name: "OpenAI work", provider: "openai" }]);
+  expect(screen.getByLabelText("API key")).toHaveValue("");
+  expect(screen.queryByRole("region", { name: "Usage for OpenAI work" })).not.toBeInTheDocument();
+});

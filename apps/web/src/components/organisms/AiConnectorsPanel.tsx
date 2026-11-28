@@ -12,7 +12,7 @@ import { ConnectorUsage } from "./ConnectorUsage";
 
 export function AiConnectorsPanel() {
   const { connectors, add, remove: removeConnector, loading, error: loadError } = useAiConnectors();
-  const { providers } = useModelProviders();
+  const { providers } = useModelProviders(true);
   const [selectedId, setSelectedId] = useState("");
   const trial = connectors.find(connector => connector.trial);
   const personalConnectors = connectors.filter(connector => !connector.trial);
@@ -101,7 +101,7 @@ export function AiConnectorsPanel() {
       </div>}
       {connecting && <p role="status" className="text-sm text-zinc-500">{oauth.status === "waiting" ? "Approve the key in the OpenRouter window." : "Getting your key from OpenRouter…"}</p>}
       {(oauth.status === "blocked" || oauth.status === "failed") && <p role="alert" className="text-sm text-rose-600">{oauth.status === "blocked" ? "Allow pop-ups for this site and try again." : "OpenRouter did not issue a key. Try again or paste a key."}</p>}
-      <TextField id="connector-key" label="API key" hint="Or paste an existing OpenRouter key. Its current limits and expiry stay in place." type="password" autoComplete="off" maxLength={1000} value={key} disabled={busy || connecting} onChange={event => setKey(event.target.value)} />
+      <TextField id="connector-key" label="API key" hint={providerId === "openrouter" ? "Or paste an existing OpenRouter key. Its current limits and expiry stay in place." : "Paste your OpenAI API key. API usage is billed separately from ChatGPT subscriptions."} type="password" autoComplete="off" maxLength={1000} value={key} disabled={busy || connecting} onChange={event => setKey(event.target.value)} />
       <Button label="Save connector" type="submit" busy={busy} disabled={!name.trim() || !key.trim() || !accepted || connecting} />
     </form>
     {(error || loadError) && <p role="alert" className="text-sm text-rose-600">{error || loadError}</p>}

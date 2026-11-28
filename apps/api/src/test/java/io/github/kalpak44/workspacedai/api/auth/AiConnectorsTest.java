@@ -51,6 +51,25 @@ class AiConnectorsTest {
   }
 
   @Test
+  void discoversAndCreatesOpenAiConnectorsByDefault() throws Exception {
+    var auth = TestUsers.bearer(port);
+    var providers = send("GET", "/model-providers?connectors=true", null, auth);
+    assertThat(providers.statusCode()).isEqualTo(200);
+    assertThat(json.readTree(providers.body())).hasSize(2);
+    assertThat(providers.body()).contains("openai", "OPENAI_API_KEY");
+    var created =
+        send(
+            "POST",
+            "/ai-connectors",
+            """
+        {"name":"OpenAI work","provider":"openai","providerNoticeAccepted":true,"apiKey":"openai-test-key"}
+        """,
+            auth);
+    assertThat(created.statusCode()).isEqualTo(201);
+    assertThat(created.body()).contains("openai").doesNotContain("openai-test-key");
+  }
+
+  @Test
   void storesEncryptedKeysAndOnlyReturnsMetadata() throws Exception {
     var created =
         send(
