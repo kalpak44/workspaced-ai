@@ -235,3 +235,33 @@ The cluster's copy has no IngressRoute, so reach it through a port-forward:
 kubectl --context k3s -n workspaced-ai port-forward svc/workspaced-ai-vm-manager 8080
 open http://localhost:8080/api/v1/swagger-ui
 ```
+
+## Planned: workspace maintenance
+
+| Component | Maintenance action |
+|---|---|
+| VM operating system | Install security updates; reboot when required |
+| Supervisor | Upgrade the agent that manages the workspace |
+| Harness | Upgrade the assistant runtime |
+
+Add OS, supervisor and harness updates, individually or together, with version/status visibility,
+compatibility checks, a pre-update snapshot, verified readiness and rollback that preserves workspace data.
+Keep upgrades separate from workspace restart; allow scheduled maintenance and required reboots.
+
+## Feature implementation: workspace maintenance (planned)
+
+- UI: add a Maintenance section with installed/available versions, update actions and progress/errors.
+- Backend: persist maintenance jobs; check compatibility, create a snapshot, then update selected components.
+- Runtime: support supervisor and harness upgrades on existing VMs; install OS security updates and schedule required reboots.
+- Recovery: verify readiness before success, offer rollback, and preserve workspace files, application volumes and agent identity.
+- Delivery: implement supervisor/harness upgrades first, then OS updates and scheduled maintenance.
+
+### Idea: AI-controlled maintenance tool
+
+Provide a tool that writes a structured maintenance request file, similar to the firewall request flow.
+The supervisor forwards it to VM Manager, which validates owner permissions and coordinates updates through
+the same maintenance service as the UI. Support checking/applying updates, job status and explicit reboot handling.
+
+Use unique request IDs, fixed actions and approved versions; persist jobs centrally and deduplicate retries.
+Keep cloud credentials outside the workspace, take a pre-update snapshot, verify readiness, and retain a recovery
+path independent of the supervisor so a failed supervisor update can be repaired.
