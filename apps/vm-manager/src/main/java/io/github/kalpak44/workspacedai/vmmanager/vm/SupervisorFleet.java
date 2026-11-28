@@ -50,6 +50,43 @@ public class SupervisorFleet {
     }
   }
 
+  public String metrics() {
+    var output =
+        new StringBuilder(
+            "# TYPE workspaced_supervisor_fleet_up gauge\nworkspaced_supervisor_fleet_up 1\n");
+    var now = clock.instant();
+    for (var vm : vms.list(Optional.empty())) {
+      if (vm.status() == VmStatus.STOPPED) continue;
+      var report = reports.get(vm.id());
+      var desired = properties.forVm(vm.id());
+      boolean behind =
+          desired != null && (report == null || !desired.version().equals(report.installed()));
+      boolean failed =
+          report != null
+              && ("failed".equals(report.state()) || "rolled_back".equals(report.state()));
+      var since = restarting.get(vm.id());
+      boolean stalled =
+          vm.status() == VmStatus.RESTARTING
+              && since != null
+              && Duration.between(since, now).toMinutes() >= 15;
+      appendMetric(output, "behind", vm.id(), behind);
+      appendMetric(output, "failed", vm.id(), failed);
+      appendMetric(output, "restart_stalled", vm.id(), stalled);
+    }
+    return output.toString();
+  }
+
+  private static void appendMetric(StringBuilder output, String name, UUID id, boolean value) {
+    output
+        .append("workspaced_supervisor_")
+        .append(name)
+        .append("{vm_id=\"")
+        .append(id)
+        .append("\"} ")
+        .append(value ? 1 : 0)
+        .append('\n');
+  }
+
   @Scheduled(fixedDelay = 60000)
   public void alert() {
     var now = clock.instant();
