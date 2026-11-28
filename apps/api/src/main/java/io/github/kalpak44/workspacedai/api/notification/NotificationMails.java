@@ -98,18 +98,16 @@ class NotificationMails {
                 notifications
                     .findLockedById(id)
                     .filter(n -> n.claimMail(Instant.now()))
-                    .map(NotificationEntity::mail)
-                    .orElse(null));
-    if (event == null) return;
+                    .map(NotificationEntity::mail));
+    if (event.isEmpty()) return;
+    var mail = event.orElseThrow();
     boolean sent = false;
     try {
-      send(event);
+      send(mail);
       sent = true;
     } catch (RuntimeException e) {
       LOG.warn(
-          "a notification to user {} could not be mailed: {}",
-          event.user(),
-          e.getClass().getName());
+          "a notification to user {} could not be mailed: {}", mail.user(), e.getClass().getName());
     }
     var success = sent;
     transactions.executeWithoutResult(
