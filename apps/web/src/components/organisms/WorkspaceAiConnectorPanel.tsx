@@ -8,7 +8,7 @@ export function WorkspaceAiConnectorPanel({ workspace, onChanged }: { readonly w
   const { selected, setSelected, current, status, reading, busy, error, save } = useWorkspaceAiConnector(workspace, onChanged);
   const available = [...status?.choices ?? []].sort((left, right) => Number(!!right.trial) - Number(!!left.trial));
   const changing = status?.phase === "APPLYING" || status?.phase === "ROLLING_BACK" || status?.phase === "BLOCKED";
-  return <SettingsSection title="System secrets" description="Set by the workspace for its agent; a secret or variable cannot override them."><form aria-label="AI connector" className="min-w-0 space-y-3" onSubmit={event => { event.preventDefault(); void save(); }}>
+  return <SettingsSection title="Profile" description="Choose the AI connector this workspace uses. Its credentials are managed automatically; secrets and variables cannot override them."><form aria-label="AI connector" className="min-w-0 space-y-3" onSubmit={event => { event.preventDefault(); void save(); }}>
     <label htmlFor="workspace-ai-connector" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">AI connector <code className="ml-1 font-mono text-xs text-zinc-500">{(status?.active?.provider ?? workspace.modelProvider) === "openai" ? "OPENAI_API_KEY" : "OPENROUTER_API_KEY"}</code></label>
     <Select id="workspace-ai-connector" aria-label="Saved connector" className="w-full min-w-0" value={selected} disabled={reading || busy || changing || available.length === 0} onChange={event => setSelected(event.target.value)}>
       {available.map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}

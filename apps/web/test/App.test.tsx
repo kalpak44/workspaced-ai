@@ -80,7 +80,7 @@ async function openSettings(user: User, section: "mcp" | "secrets" = "secrets") 
   await user.click(screen.getByRole("menuitem", { name: "Settings" }));
   if (section === "secrets") {
     await user.click(screen.getByRole("button", { name: "Secrets" }));
-    await screen.findByText("OPENROUTER_API_KEY");
+    await screen.findByLabelText("Secrets used");
   }
   return screen.getByRole("region", { name: section === "mcp" ? "MCP servers" : "Secrets" });
 }
@@ -588,7 +588,7 @@ describe("App", () => {
   });
 
 
-  it("shows the provider connector dropdown in Secrets with no way to remove its key", async () => {
+  it("shows the owner profile on its own settings route and keeps Secrets separate", async () => {
     const user = userEvent.setup();
     await renderLoaded();
     const secrets = await openSettings(user);
@@ -596,7 +596,12 @@ describe("App", () => {
     expect(screen.queryByRole("navigation", { name: "Breadcrumb" })).not.toBeInTheDocument();
     expect(path()).toBe("/workspaces/starter/settings/secrets");
     expect(document.title).toBe("Settings · Starter — workspaced-ai");
-    expect(screen.getByRole("combobox", { name: "Saved connector" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Saved connector" })).not.toBeInTheDocument();
+    expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Profile" }));
+    expect(path()).toBe("/workspaces/starter/settings/profile");
+    expect(await screen.findByRole("combobox", { name: "Saved connector" })).toBeVisible();
+    expect(screen.getByRole("region", { name: "Profile" })).toBeVisible();
     expect(screen.getByRole("link", { name: "Manage AI connectors in General settings" })).toHaveAttribute("href", "/settings/ai-connectors");
     expect(within(secrets).queryByRole("button", { name: /Remove/ })).not.toBeInTheDocument();
 

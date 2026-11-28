@@ -31,7 +31,7 @@ it("saves a named key under account settings, hides it, and deletes the connecto
 it("applies a saved connector and requests a workspace restart", async () => {
   api.connectors.push({ id: "connector-1", name: "Personal", provider: "openrouter" });
   const changed = vi.fn();
-  render(<SettingsPage section="secrets" workspace={api.rows[0]} onChanged={changed} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  render(<SettingsPage section="profile" workspace={api.rows[0]} onChanged={changed} onRestart={vi.fn()} onLeave={vi.fn()} />);
   await screen.findByRole("option", { name: "Personal" });
   expect(screen.getByRole("link", { name: "Manage AI connectors in General settings" })).toHaveAttribute("href", "/settings/ai-connectors");
   expect(screen.queryByRole("button", { name: "AI connector" })).not.toBeInTheDocument();
@@ -71,19 +71,20 @@ it("shows each selected key's usage and links to provider limit management", asy
   expect(screen.getByRole("link", { name: "Manage limits in OpenRouter" })).toHaveAttribute("href", "https://openrouter.ai/settings/keys");
 });
 
-it("uses separate System secrets and Secrets cards and shows the shared restart banner", async () => {
+it("shows the profile separately from Secrets and keeps its restart action", async () => {
   api.connectors.push({ id: "connector-1", name: "Personal", provider: "openrouter" });
   const restart = vi.fn();
   const changed = vi.fn();
   const workspace = api.rows[0];
-  const { rerender } = render(<SettingsPage section="secrets" workspace={workspace} onChanged={changed} onRestart={restart} onLeave={vi.fn()} />);
-  expect(screen.getByRole("region", { name: "System secrets" })).not.toBe(screen.getByRole("region", { name: "Secrets" }));
+  const { rerender } = render(<SettingsPage section="profile" workspace={workspace} onChanged={changed} onRestart={restart} onLeave={vi.fn()} />);
+  expect(await screen.findByRole("region", { name: "Profile" })).toBeVisible();
+  expect(screen.queryByRole("region", { name: "Secrets" })).not.toBeInTheDocument();
   await waitFor(() => expect(screen.getByRole("combobox", { name: "Saved connector" })).toBeEnabled());
   const user = userEvent.setup();
   await user.selectOptions(screen.getByRole("combobox", { name: "Saved connector" }), "connector-1");
   await user.click(screen.getByRole("button", { name: "Save connector" }));
   await waitFor(() => expect(changed).toHaveBeenCalledWith({ restartRequired: true }));
-  rerender(<SettingsPage section="secrets" workspace={{ ...workspace, restartRequired: true }} onChanged={changed} onRestart={restart} onLeave={vi.fn()} />);
+  rerender(<SettingsPage section="profile" workspace={{ ...workspace, restartRequired: true }} onChanged={changed} onRestart={restart} onLeave={vi.fn()} />);
   expect(screen.getByRole("status", { name: "Restart required" })).toHaveTextContent("Settings changed");
   await user.click(screen.getByRole("button", { name: "Restart workspace" }));
   expect(restart).toHaveBeenCalledOnce();
@@ -115,8 +116,8 @@ it("offers only the user's real connectors, with Trial first and no placeholder 
     { id: "other-provider", name: "Different provider", provider: "another" },
   );
   api.workspaceConnectors.set(api.rows[0].id, "personal");
-  render(<SettingsPage section="secrets" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
-  const select = screen.getByRole("combobox", { name: "Saved connector" });
+  render(<SettingsPage section="profile" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  const select = await screen.findByRole("combobox", { name: "Saved connector" });
   await waitFor(() => expect(select).toBeEnabled());
   expect([...select.querySelectorAll("option")].map(option => option.value)).toEqual(["trial", "personal"]);
   expect(select).toHaveValue("personal");
@@ -127,7 +128,7 @@ it("offers only the user's real connectors, with Trial first and no placeholder 
 it("keeps the active connector distinct from a pending same-provider key and waits for server readiness", async () => {
   api.connectors.push({ id: "old", name: "Old key", provider: "openrouter" }, { id: "new", name: "New key", provider: "openrouter" });
   api.workspaceConnectors.set(api.rows[0].id, "old");
-  render(<SettingsPage section="secrets" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  render(<SettingsPage section="profile" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
   await screen.findByText("Active (last confirmed): Old key · OpenRouter");
   const user = userEvent.setup();
   await user.selectOptions(screen.getByRole("combobox", { name: "Saved connector" }), "new");
@@ -152,7 +153,7 @@ it("reports rollback and blocked recovery without claiming the pending connector
   api.workspaceConnectors.set(api.rows[0].id, "old");
   api.pendingConnectors.set(api.rows[0].id, "new");
   api.providerPhases.set(api.rows[0].id, { phase: "ROLLING_BACK", error: "RESTART_FAILED" });
-  render(<SettingsPage section="secrets" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  render(<SettingsPage section="profile" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
   await screen.findByText(/Restoring the previous connector/);
   api.providerPhases.set(api.rows[0].id, { phase: "STAGED", error: "RESTART_FAILED_ROLLED_BACK" });
   globalThis.dispatchEvent(new Event("focus"));
@@ -174,4 +175,22 @@ it("lets the owner inspect Trial token usage and keeps API-key disconnect provid
   await user.click(screen.getByRole("button", { name: "Delete Local key" }));
   expect(screen.getByRole("dialog")).toHaveTextContent("The API key will stay active with its provider.");
   expect(screen.queryByRole("link", { name: "Open OpenRouter key settings" })).not.toBeInTheDocument();
+});
+
+it("keeps profile controls out of Secrets", async () => {
+  render(<SettingsPage section="secrets" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  await screen.findByLabelText("Secrets used");
+  expect(await screen.findByRole("button", { name: "Profile" })).toBeVisible();
+  expect(screen.getByRole("region", { name: "Secrets" })).toBeVisible();
+  expect(screen.queryByRole("combobox", { name: "Saved connector" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Profile" })).not.toBeInTheDocument();
+});
+
+it("hides Profile from collaborators even when opened by a direct URL", async () => {
+  render(<SettingsPage section="profile" workspace={{ ...api.rows[0], ownerId: "another-owner" }} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  await screen.findByRole("region", { name: "MCP servers" });
+  await screen.findByLabelText("Secrets used");
+  expect(screen.queryByRole("button", { name: "Profile" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("combobox", { name: "Saved connector" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("region", { name: "Profile" })).not.toBeInTheDocument();
 });
