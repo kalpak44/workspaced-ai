@@ -43,6 +43,8 @@ class FakeStripe implements AutoCloseable {
   private final Map<String, String> answered = new ConcurrentHashMap<>();
   volatile int status = 0;
   volatile boolean declineCards;
+  volatile boolean losePaymentResponse;
+  volatile int invoicePageSize = 100;
   private volatile String lastSession;
 
   FakeStripe() {
@@ -120,6 +122,8 @@ class FakeStripe implements AutoCloseable {
   void reset() {
     status = 0;
     declineCards = false;
+    losePaymentResponse = false;
+    invoicePageSize = 100;
     checkouts.clear();
     invoices.clear();
     charges.clear();
@@ -241,6 +245,32 @@ class FakeStripe implements AutoCloseable {
       keyed(exchange, this::invoiceAction);
       return;
     }
+    if (exchange.getRequestURI().getPath().equals("/v1/invoices")) {
+      var query = exchange.getRequestURI().getRawQuery();
+      var params = new LinkedHashMap<String, String>();
+      if (query != null)
+        for (var pair : query.split("&")) {
+          var parts = pair.split("=", 2);
+          params.put(parts[0], URLDecoder.decode(parts[1], StandardCharsets.UTF_8));
+        }
+      var rows =
+          invoices.values().stream()
+              .filter(i -> i.path("customer").asString().equals(params.get("customer")))
+              .sorted(java.util.Comparator.comparing(i -> i.path("id").asString()))
+              .toList();
+      var start = 0;
+      if (params.containsKey("starting_after")) {
+        while (start < rows.size()
+            && !rows.get(start).path("id").asString().equals(params.get("starting_after"))) start++;
+        start++;
+      }
+      var end = Math.min(rows.size(), start + invoicePageSize);
+      var page = JSON.createObjectNode().put("has_more", end < rows.size());
+      var data = page.putArray("data");
+      for (var i = start; i < end; i++) data.add(rows.get(i));
+      answer(exchange, 200, JSON.writeValueAsString(page));
+      return;
+    }
     var id = exchange.getRequestURI().getPath().substring("/v1/invoices/".length());
     if (invoices.containsKey(id)) {
       var invoice = invoices.get(id).deepCopy();
@@ -271,6 +301,7 @@ class FakeStripe implements AutoCloseable {
       invoice.put("currency", form.get("currency"));
       invoice.put("default_payment_method", form.get("default_payment_method"));
       invoice.put("metadata_top_up_id", form.get("metadata[top_up_id]"));
+      invoice.putObject("metadata").put("top_up_id", form.get("metadata[top_up_id]"));
       invoice.put("subtotal", 0);
       invoice.put("total", 0);
       invoice.putNull("number");
@@ -366,6 +397,13 @@ class FakeStripe implements AutoCloseable {
     var result = handle.apply(exchange.getRequestURI().getPath(), form);
     if (key != null) {
       answered.put(key, result.status() + " " + result.body());
+    }
+    if (losePaymentResponse
+        && exchange.getRequestURI().getPath().endsWith("/pay")
+        && result.status() == 200) {
+      losePaymentResponse = false;
+      answer(exchange, 503, "{}");
+      return;
     }
     answer(exchange, result.status(), result.body());
   }

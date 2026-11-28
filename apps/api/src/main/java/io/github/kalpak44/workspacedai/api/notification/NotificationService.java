@@ -34,8 +34,10 @@ public class NotificationService {
   /** Sends it, and mails it to the user once the transaction commits. */
   @Transactional
   public void sendAndMail(UUID user, NotificationMessage message) {
-    send(user, message);
-    events.publishEvent(new NotificationMail(user, message));
+    var notification = new NotificationEntity(user, message, null);
+    var mail = notification.requestMail();
+    repository.save(notification);
+    events.publishEvent(mail);
   }
 
   /**
@@ -63,10 +65,10 @@ public class NotificationService {
         mailKey != null
             && !repository.existsByUserIdAndMailKeyAndCreatedAtAfter(
                 user, mailKey, Instant.now().minus(MAIL_ONCE_WITHIN));
-    repository.save(new NotificationEntity(user, message, key, mail ? mailKey : null));
-    if (mail) {
-      events.publishEvent(new NotificationMail(user, message));
-    }
+    var notification = new NotificationEntity(user, message, key, mail ? mailKey : null);
+    var event = mail ? notification.requestMail() : null;
+    repository.save(notification);
+    if (event != null) events.publishEvent(event);
   }
 
   /** The user's newest notifications, newest first. */

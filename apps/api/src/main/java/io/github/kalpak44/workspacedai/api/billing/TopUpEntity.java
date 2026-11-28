@@ -100,6 +100,12 @@ class TopUpEntity {
     return stripeInvoiceId;
   }
 
+  void rememberInvoice(String invoiceId) {
+    if (stripeInvoiceId != null && !stripeInvoiceId.equals(invoiceId))
+      throw new IllegalStateException("automatic top-up has a different invoice");
+    stripeInvoiceId = invoiceId;
+  }
+
   String getInvoiceNumber() {
     return invoiceNumber;
   }

@@ -52,6 +52,13 @@ public interface Stripe {
    */
   Optional<Charge> charge(String chargeId);
 
+  /** Read-only recovery; never creates an invoice or charges a card. */
+  Optional<AutomaticInvoice> automaticInvoice(String invoiceId);
+
+  Optional<AutomaticInvoice> findAutomaticInvoice(String customerId, UUID topUpId);
+
+  record AutomaticInvoice(UUID topUpId, String customerId, ChargedInvoice invoice) {}
+
   /** Removes the card from the customer; one already gone is not an error. */
   void detachCard(String paymentMethodId);
 

@@ -170,6 +170,9 @@ retained output. Explicit deletion terminates the shell and its commands, retain
 Exited terminals remain listed until deleted. Processes do not survive a workspace runtime restart.
 An invalid, missing, exited, or unavailable terminal closes the connection with an error reason.
 The old auto-creating `/terminal` WebSocket has been replaced by these explicit lifecycle routes.
+An open terminal rechecks its account's session validity before accepting input. Each API instance also
+checks idle connections every five seconds (`workspaced.terminals.auth-check-interval`), so sign-out on
+another instance, account deletion, and token expiry disconnect the browser without deleting the PTY.
 
 The frontend polls metadata every five seconds while visible, supports searching a scrollable terminal list,
 and addresses the selected terminal at `/workspaces/{id}/terminal/{tid}` so reload and browser history reconnect correctly.
@@ -526,6 +529,10 @@ finalizes it and pays it off session, so Stripe issues an invoice as it does for
 with `automatic` set. Every step is keyed by the top-up's id, so one Stripe could not be reached for stays pending and
 is finished on the next run without charging twice. A declined card voids the invoice, marks the top-up `FAILED`,
 turns automatic top-ups off and notifies the user. An admin's card is never charged.
+Pending automatic payments are reconciled even after automatic top-ups are disabled or the card is
+removed. Recovery reads Stripe's invoice and checks its customer, top-up metadata, amount and currency
+before crediting once; it does not initiate a charge when automatic top-ups are off. The signed
+`invoice.paid` webhook provides the same recovery path, with scheduled reconciliation as a fallback.
 
 A user who is not an admin needs a balance covering `WORKSPACED_BILLING_REQUIRE_COVERED` (7 days) of every workspace
 they have plus the new one to create one, and each workspace is then charged by the hour as the hour starts. An admin's workspaces are never charged, even
@@ -656,3 +663,12 @@ For saved OpenRouter connectors, message sends, edits that regenerate, and form 
 on the server. Exhaustion returns `402` before prompting the harness. Existing conversations remain readable. Unknown
 or unlimited balances are not treated as zero. The client checks on page entry, every 30 seconds, on window focus,
 after a reply finishes, and when the user chooses Check again.
+
+## Notification mail delivery
+
+Mail intent is stored with its notification in the same transaction. After commit the API attempts
+delivery, and a bounded sweep retries pending mail every minute (`workspaced.mail.retry-interval`).
+A database row lease prevents concurrent instances from sending the same queued mail, and a crashed
+sender's lease expires after five minutes. Failures back off from one minute up to one hour.
+Existing notifications are not queued again by migration V82. Delivery is at least once: a crash after
+the mail provider accepts a message but before the database records success can cause a duplicate.

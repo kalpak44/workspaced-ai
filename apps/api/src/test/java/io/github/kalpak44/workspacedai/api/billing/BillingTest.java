@@ -61,6 +61,7 @@ class BillingTest {
   @Autowired EntityManager entityManager;
   @Autowired TransactionTemplate transaction;
   @Autowired AutoTopUps autoTopUps;
+  @Autowired Stripe stripe;
   @MockitoBean Mailer mailer;
 
   private final HttpClient http = HttpClient.newHttpClient();
@@ -419,6 +420,143 @@ class BillingTest {
 
     assertThat(STRIPE.invoices).isEmpty();
     assertThat(read(get("/billing")).get("topUps")).isEmpty();
+  }
+
+  @Test
+  void recoversAPaidAutomaticTopUpAfterTheResponseIsLostAndAutomaticTopUpsAreDisabled() {
+    var user = payer();
+    STRIPE.losePaymentResponse = true;
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    assertThat(billing.billing(user).balanceCents()).isZero();
+    assertThat(STRIPE.invoices.values().iterator().next().path("status").asString())
+        .isEqualTo("paid");
+    billing.setAutoTopUp(user, new AutoTopUp(false, 1000, 2000));
+
+    autoTopUps.run();
+    autoTopUps.run();
+
+    assertThat(billing.billing(user).balanceCents()).isEqualTo(2000);
+    assertThat(billing.billing(user).autoTopUp().enabled()).isFalse();
+    assertThat(STRIPE.invoices).hasSize(1);
+    assertThat(billing.billing(user).topUps().getFirst().status()).isEqualTo(TopUpStatus.PAID);
+  }
+
+  @Test
+  void invoicePaidWebhookRecoversAfterCardRemovalAndIsIdempotent() {
+    var user = payer();
+    STRIPE.losePaymentResponse = true;
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    billing.removeCard(user);
+    var invoice = STRIPE.invoices.values().iterator().next();
+    var payload =
+        ("{\"type\":\"invoice.paid\",\"data\":{\"object\":{\"id\":\""
+                + invoice.path("id").asString()
+                + "\"}}}")
+            .getBytes(StandardCharsets.UTF_8);
+    var timestamp = Instant.now().getEpochSecond();
+    var signature =
+        "t="
+            + timestamp
+            + ",v1="
+            + new String(
+                StripeSignature.sign(timestamp, payload, WEBHOOK_SECRET),
+                StandardCharsets.US_ASCII);
+    assertThat(billing.handleEvent(payload, signature)).isTrue();
+    assertThat(billing.handleEvent(payload, signature)).isTrue();
+    autoTopUps.run();
+    assertThat(billing.billing(user).balanceCents()).isEqualTo(2000);
+    assertThat(STRIPE.invoices).hasSize(1);
+  }
+
+  @Test
+  void recoversAfterCardRemovalWithoutAWebhookAndDoesNotStartAnotherCharge() {
+    var user = payer();
+    STRIPE.losePaymentResponse = true;
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    billing.removeCard(user);
+    autoTopUps.run();
+    autoTopUps.run();
+    assertThat(billing.billing(user).balanceCents()).isEqualTo(2000);
+    assertThat(STRIPE.invoices).hasSize(1);
+  }
+
+  @Test
+  void doesNotChargeAPendingTopUpWhenAutomaticTopUpsAreDisabled() {
+    var user = payer();
+    STRIPE.status = 503;
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    STRIPE.status = 0;
+    billing.setAutoTopUp(user, new AutoTopUp(false, 1000, 2000));
+    autoTopUps.run();
+    assertThat(STRIPE.invoices).isEmpty();
+    assertThat(billing.billing(user).balanceCents()).isZero();
+  }
+
+  @Test
+  void recoversAcrossInvoicePagesAndRejectsAnInvoiceOfAnotherCustomer() {
+    var user = payer();
+    STRIPE.losePaymentResponse = true;
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    var invoice = STRIPE.invoices.values().iterator().next();
+    var originalCustomer = invoice.path("customer").asString();
+    var topUp = billing.billing(user).topUps().getFirst();
+    // One earlier, unrelated invoice forces recovery onto the next page.
+    var unrelated = invoice.deepCopy();
+    unrelated.put("id", "in_000");
+    unrelated.putObject("metadata").put("top_up_id", UUID.randomUUID().toString());
+    STRIPE.invoices.put("in_000", unrelated);
+    STRIPE.invoicePageSize = 1;
+    assertThat(stripe.findAutomaticInvoice(originalCustomer, topUp.id())).isPresent();
+
+    invoice.put("customer", "cus_someone_else");
+    var payload = invoiceEvent(invoice.path("id").asString());
+    assertThat(billing.handleEvent(payload, signed(payload))).isTrue();
+    assertThat(billing.billing(user).balanceCents()).isZero();
+    invoice.put("customer", originalCustomer);
+    billing.setAutoTopUp(user, new AutoTopUp(false, 1000, 2000));
+    autoTopUps.run();
+    assertThat(billing.billing(user).balanceCents()).isEqualTo(2000);
+  }
+
+  @Test
+  void doesNotCreditAnAutomaticInvoiceWithTheWrongAmountOrCurrency() {
+    var user = payer();
+    STRIPE.losePaymentResponse = true;
+    assertThatThrownBy(() -> autoTopUps.topUp(user))
+        .isInstanceOf(PaymentsUnavailableException.class);
+    var invoice = STRIPE.invoices.values().iterator().next();
+    var payload = invoiceEvent(invoice.path("id").asString());
+    invoice.put("total", 1);
+    assertThatThrownBy(() -> billing.handleEvent(payload, signed(payload)))
+        .isInstanceOf(StripeFailedException.class);
+    assertThat(billing.billing(user).balanceCents()).isZero();
+    invoice.put("total", 2400);
+    invoice.put("currency", "usd");
+    assertThatThrownBy(() -> billing.handleEvent(payload, signed(payload)))
+        .isInstanceOf(StripeFailedException.class);
+    assertThat(billing.billing(user).balanceCents()).isZero();
+    invoice.put("currency", "eur");
+    assertThat(billing.handleEvent(payload, signed(payload))).isTrue();
+    assertThat(billing.billing(user).balanceCents()).isEqualTo(2000);
+  }
+
+  private static byte[] invoiceEvent(String id) {
+    return ("{\"type\":\"invoice.paid\",\"data\":{\"object\":{\"id\":\"" + id + "\"}}}")
+        .getBytes(StandardCharsets.UTF_8);
+  }
+
+  private static String signed(byte[] payload) {
+    var timestamp = Instant.now().getEpochSecond();
+    return "t="
+        + timestamp
+        + ",v1="
+        + new String(
+            StripeSignature.sign(timestamp, payload, WEBHOOK_SECRET), StandardCharsets.US_ASCII);
   }
 
   /** A user who is not an admin, with a saved card and automatic top-ups of 20 below 10. */

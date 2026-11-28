@@ -24,6 +24,8 @@ interface TopUpRepository extends JpaRepository<TopUpEntity, UUID> {
 
   void deleteByIdAndStatus(UUID id, TopUpStatus status);
 
+  List<TopUpEntity> findAllByAutomaticTrueAndStatus(TopUpStatus status);
+
   /** The automatic top-up still being charged, if one is; there is never more than one. */
   Optional<TopUpEntity> findFirstByUserIdAndAutomaticTrueAndStatus(UUID userId, TopUpStatus status);
 }

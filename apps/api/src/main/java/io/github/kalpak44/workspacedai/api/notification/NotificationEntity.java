@@ -55,7 +55,53 @@ class NotificationEntity {
   @Column(name = "read_at")
   private Instant readAt;
 
+  @Column(name = "mail_pending", nullable = false)
+  private boolean mailPending;
+
+  @Column(name = "mail_next_attempt_at")
+  private Instant mailNextAttemptAt;
+
+  @Column(name = "mail_attempts", nullable = false)
+  private int mailAttempts;
+
   protected NotificationEntity() {}
+
+  NotificationMail requestMail() {
+    mailPending = true;
+    mailNextAttemptAt = Instant.now();
+    return mail();
+  }
+
+  boolean claimMail(Instant now) {
+    if (!mailPending || mailNextAttemptAt == null || mailNextAttemptAt.isAfter(now)) return false;
+    // A crashed sender releases its claim automatically; remote calls have shorter timeouts.
+    mailNextAttemptAt = now.plusSeconds(300);
+    mailAttempts++;
+    return true;
+  }
+
+  void mailFailed() {
+    mailNextAttemptAt =
+        Instant.now().plusSeconds(Math.min(3600, 60L << Math.min(mailAttempts - 1, 6)));
+  }
+
+  void mailed() {
+    mailPending = false;
+    mailNextAttemptAt = null;
+  }
+
+  NotificationMail mail() {
+    return new NotificationMail(
+        id,
+        userId,
+        new NotificationMessage(
+            kind,
+            tone,
+            title,
+            summary,
+            body,
+            actionPath == null ? null : new NotificationAction(actionLabel, actionPath)));
+  }
 
   NotificationEntity(UUID userId, NotificationMessage message, String dedupeKey) {
     this(userId, message, dedupeKey, null);

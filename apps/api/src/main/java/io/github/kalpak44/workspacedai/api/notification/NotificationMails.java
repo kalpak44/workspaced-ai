@@ -8,23 +8,24 @@ import io.github.kalpak44.workspacedai.api.mail.MailProperties;
 import io.github.kalpak44.workspacedai.api.mail.MailService;
 import jakarta.annotation.PreDestroy;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.List;
+import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.event.TransactionalEventListener;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
- * Mails a notification to its user once it has committed, for one they should not miss by staying
- * out of the app. The address is asked of Auth0, where it lives. A mail that cannot go out is
- * logged; the notification itself was sent.
- *
- * <p>Mailed one at a time on a thread of its own, so a billing job that pauses many workspaces
- * waits on neither Auth0 nor Mailjet. What is still queued at shutdown is given a while to go out;
- * a mail lost to a crash is not sent again, though its notification is kept.
+ * Durable mail delivery. Intent commits with the notification; row leases serialize senders across
+ * instances and retries recover failures and crashes. Delivery is at least once.
  */
 @Component
 class NotificationMails {
@@ -32,6 +33,8 @@ class NotificationMails {
   private static final Logger LOG = LoggerFactory.getLogger(NotificationMails.class);
   private static final Duration SHUTDOWN_WAIT = Duration.ofSeconds(30);
 
+  private final NotificationRepository notifications;
+  private final TransactionTemplate transactions;
   private final UserRepository users;
   private final Auth0Users auth0Users;
   private final MailService mail;
@@ -45,7 +48,12 @@ class NotificationMails {
       Auth0Users auth0Users,
       MailService mail,
       AuthProperties properties,
-      MailProperties mailProperties) {
+      MailProperties mailProperties,
+      NotificationRepository notifications,
+      PlatformTransactionManager manager) {
+    this.notifications = notifications;
+    this.transactions = new TransactionTemplate(manager);
+    this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     this.users = users;
     this.auth0Users = auth0Users;
     this.mail = mail;
@@ -56,9 +64,9 @@ class NotificationMails {
   @TransactionalEventListener
   void mail(NotificationMail event) {
     if (background) {
-      sender.execute(() -> send(event));
+      sender.execute(() -> deliver(event.id()));
     } else {
-      send(event);
+      deliver(event.id());
     }
   }
 
@@ -70,24 +78,57 @@ class NotificationMails {
     }
   }
 
-  private void send(NotificationMail event) {
+  /** A bounded sweep also recovers mail whose after-commit callback never ran. */
+  @Scheduled(
+      fixedDelayString = "${workspaced.mail.retry-interval:PT1M}",
+      initialDelayString = "${workspaced.mail.retry-interval:PT1M}")
+  void retry() {
+    for (var notification :
+        notifications
+            .findTop50ByMailPendingTrueAndMailNextAttemptAtLessThanEqualOrderByMailNextAttemptAtAsc(
+                Instant.now())) {
+      deliver(notification.mail().id());
+    }
+  }
+
+  void deliver(UUID id) {
+    var event =
+        transactions.execute(
+            _ ->
+                notifications
+                    .findLockedById(id)
+                    .filter(n -> n.claimMail(Instant.now()))
+                    .map(NotificationEntity::mail)
+                    .orElse(null));
+    if (event == null) return;
+    boolean sent = false;
     try {
-      var subject = users.findById(event.user()).map(UserEntity::getIdpSubject);
-      if (subject.isEmpty()) {
-        return;
-      }
-      var email = auth0Users.email(subject.get());
-      if (email.isBlank()) {
-        return;
-      }
-      mail.notify(List.of(email), event.message().title(), text(event.message()));
+      send(event);
+      sent = true;
     } catch (RuntimeException e) {
-      // The exception alone: a mail service's message can repeat the recipient's address.
       LOG.warn(
           "a notification to user {} could not be mailed: {}",
           event.user(),
           e.getClass().getName());
     }
+    var success = sent;
+    transactions.executeWithoutResult(
+        _ ->
+            notifications
+                .findLockedById(id)
+                .ifPresent(
+                    n -> {
+                      if (success) n.mailed();
+                      else n.mailFailed();
+                    }));
+  }
+
+  private void send(NotificationMail event) {
+    var subject = users.findById(event.user()).map(UserEntity::getIdpSubject);
+    if (subject.isEmpty()) return; // Account deletion also cascades its queued notifications.
+    var email = auth0Users.email(subject.get());
+    if (email.isBlank()) throw new IllegalStateException("recipient address unavailable");
+    mail.notify(List.of(email), event.message().title(), text(event.message()));
   }
 
   private String text(NotificationMessage message) {

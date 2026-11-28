@@ -185,6 +185,49 @@ public class HttpStripe implements Stripe {
   }
 
   @Override
+  public Optional<AutomaticInvoice> automaticInvoice(String invoiceId) {
+    var response = send(get("/v1/invoices/" + encode(invoiceId)));
+    return response.statusCode() == 404 ? Optional.empty() : automatic(read(response));
+  }
+
+  @Override
+  public Optional<AutomaticInvoice> findAutomaticInvoice(String customerId, UUID topUpId) {
+    String cursor = null;
+    do {
+      var page =
+          read(
+              send(
+                  get(
+                      "/v1/invoices?limit=100&customer="
+                          + encode(customerId)
+                          + (cursor == null ? "" : "&starting_after=" + encode(cursor)))));
+      var data = page.path("data");
+      for (var row : data) {
+        var found =
+            automatic(row)
+                .filter(i -> i.topUpId().equals(topUpId) && i.customerId().equals(customerId));
+        if (found.isPresent()) return found;
+      }
+      if (!page.path("has_more").asBoolean()) return Optional.empty();
+      var next = data.isEmpty() ? null : text(data.get(data.size() - 1).path("id"));
+      if (next == null || next.equals(cursor))
+        throw new StripeFailedException("invalid invoice pagination");
+      cursor = next;
+    } while (true);
+  }
+
+  private static Optional<AutomaticInvoice> automatic(JsonNode node) {
+    var customer = text(node.path("customer"));
+    var topUp = text(node.path("metadata").path("top_up_id"));
+    if (customer == null || topUp == null) return Optional.empty();
+    try {
+      return Optional.of(new AutomaticInvoice(UUID.fromString(topUp), customer, invoice(node)));
+    } catch (IllegalArgumentException malformed) {
+      return Optional.empty();
+    }
+  }
+
+  @Override
   public void detachCard(String paymentMethodId) {
     send(
         post(

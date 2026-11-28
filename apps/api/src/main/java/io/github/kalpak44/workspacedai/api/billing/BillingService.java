@@ -439,11 +439,42 @@ public class BillingService {
           "checkout.session.expired" ->
           settle(sessionId, false);
       case "checkout.session.async_payment_failed" -> settle(sessionId, true);
+      case "invoice.paid" -> stripe.automaticInvoice(sessionId).ifPresent(this::settleAutomatic);
       // The object is the charge for a refund and the dispute for a dispute.
       case "charge.refunded" -> reverse(sessionId);
       case "charge.dispute.created" -> reverse(disputedCharge);
       default -> log.debug("ignoring Stripe event {}", type);
     }
+    return true;
+  }
+
+  /** Recovery is independent of the current card or whether new charges are enabled. */
+  boolean recoverAutomatic(TopUpEntity topUp) {
+    var found =
+        topUp.getStripeInvoiceId() == null
+            ? accounts
+                .findById(topUp.getUserId())
+                .map(BillingAccountEntity::getStripeCustomerId)
+                .flatMap(customer -> stripe.findAutomaticInvoice(customer, topUp.getId()))
+            : stripe.automaticInvoice(topUp.getStripeInvoiceId());
+    return found.map(this::settleAutomatic).orElse(false);
+  }
+
+  private boolean settleAutomatic(Stripe.AutomaticInvoice payment) {
+    var found = topUps.findById(payment.topUpId());
+    if (found.isEmpty() || !found.get().isAutomatic()) return false;
+    var topUp = found.get();
+    var customer =
+        accounts.findById(topUp.getUserId()).map(BillingAccountEntity::getStripeCustomerId);
+    if (customer.filter(payment.customerId()::equals).isEmpty()) return false;
+    var invoice = payment.invoice();
+    if (!invoice.paid()) return false;
+    if (invoice.subtotal() != topUp.getAmountCents()
+        || invoice.total() != topUp.getAmountCents() + vatCents(topUp.getAmountCents())
+        || !properties.currency().equalsIgnoreCase(invoice.currency())) {
+      throw new StripeFailedException("automatic invoice does not match the top-up");
+    }
+    credit(topUp.getId(), invoice.id(), invoice.number());
     return true;
   }
 
@@ -500,6 +531,7 @@ public class BillingService {
                   topUps
                       .findLockedById(topUpId)
                       .orElseThrow(() -> new IllegalStateException("no top-up " + topUpId));
+              if (topUp.isAutomatic()) topUp.rememberInvoice(invoiceId);
               topUp.markPaid(Instant.now(), invoiceId, invoiceNumber);
               var micros = topUp.getAmountCents() * Ledger.MICROS_PER_CENT;
               var credited =

@@ -1,15 +1,18 @@
 package io.github.kalpak44.workspacedai.api.terminal;
 
+import io.github.kalpak44.workspacedai.api.auth.UserRepository;
 import io.github.kalpak44.workspacedai.api.runtime.WorkspaceTerminal;
 import io.github.kalpak44.workspacedai.api.workspace.WorkspaceAccessEnded;
 import java.io.IOException;
 import java.io.OutputStream;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Pattern;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationToken;
 import org.springframework.stereotype.Component;
 import org.springframework.web.socket.BinaryMessage;
@@ -29,20 +32,30 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
   private static final int MAX_DIMENSION = 1000;
 
   private final TerminalService service;
+  private final UserRepository users;
   private final Map<String, WorkspaceTerminal> terminals = new ConcurrentHashMap<>();
   private final Map<String, Owner> owners = new ConcurrentHashMap<>();
 
   // Whose connection it is, so it can be cut when that user loses the workspace.
-  private record Owner(UUID workspaceId, UUID userId, WebSocketSession session) {}
+  private record Owner(
+      UUID workspaceId,
+      UUID userId,
+      WebSocketSession session,
+      Instant issuedAt,
+      Instant expiresAt) {}
 
-  public TerminalWebSocketHandler(TerminalService service) {
+  public TerminalWebSocketHandler(TerminalService service, UserRepository users) {
     this.service = service;
+    this.users = users;
   }
 
   @Override
   public void afterConnectionEstablished(WebSocketSession raw) throws Exception {
     var session = new ConcurrentWebSocketSessionDecorator(raw, 10_000, 1_048_576);
     try {
+      if (!(raw.getPrincipal() instanceof JwtAuthenticationToken token)) {
+        throw new IllegalArgumentException("a signed-in session is required");
+      }
       var match = terminalPath(session);
       var id = UUID.fromString(match.group(1));
       var terminal =
@@ -53,11 +66,15 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
               () -> close(session, CloseStatus.NORMAL.withReason("shell exited")));
       if (session.isOpen()) {
         terminals.put(session.getId(), terminal);
-        if (raw.getPrincipal() instanceof JwtAuthenticationToken token) {
-          owners.put(
-              session.getId(),
-              new Owner(id, UUID.fromString(token.getToken().getSubject()), session));
-        }
+        owners.put(
+            session.getId(),
+            new Owner(
+                id,
+                UUID.fromString(token.getToken().getSubject()),
+                session,
+                token.getToken().getIssuedAt(),
+                token.getToken().getExpiresAt()));
+        authorized(session.getId());
       } else {
         terminal.close();
       }
@@ -70,7 +87,7 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
   protected void handleBinaryMessage(WebSocketSession session, BinaryMessage message)
       throws IOException {
     var terminal = terminals.get(session.getId());
-    if (terminal == null) {
+    if (terminal == null || !authorized(session.getId())) {
       return;
     }
     var payload = message.getPayload();
@@ -83,7 +100,7 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
   protected void handleTextMessage(WebSocketSession session, TextMessage message) {
     var terminal = terminals.get(session.getId());
     var resize = RESIZE.matcher(message.getPayload());
-    if (terminal == null || !resize.matches()) {
+    if (terminal == null || !resize.matches() || !authorized(session.getId())) {
       return;
     }
     if (resize.group(1).length() > 4 || resize.group(2).length() > 4) {
@@ -112,6 +129,36 @@ public class TerminalWebSocketHandler extends AbstractWebSocketHandler {
         .filter(o -> o.workspaceId().equals(ended.workspaceId()))
         .filter(o -> o.userId().equals(ended.userId()))
         .forEach(o -> close(o.session(), CloseStatus.POLICY_VIOLATION.withReason("access ended")));
+  }
+
+  /** Each instance checks its own sockets, including revocations committed on another pod. */
+  @Scheduled(fixedDelayString = "${workspaced.terminals.auth-check-interval:PT5S}")
+  void checkSessions() {
+    owners.keySet().forEach(this::authorized);
+  }
+
+  // Also checked before input, so a revoked token cannot send commands between sweeps.
+  private boolean authorized(String socketId) {
+    var owner = owners.get(socketId);
+    if (owner == null) return false;
+    boolean valid;
+    try {
+      valid =
+          owner.issuedAt() != null
+              && owner.expiresAt() != null
+              && owner.expiresAt().isAfter(Instant.now())
+              && users
+                  .findAccessById(owner.userId())
+                  .filter(access -> !owner.issuedAt().isBefore(access.getSessionsValidAfter()))
+                  .isPresent();
+    } catch (RuntimeException unavailable) {
+      valid = false;
+    }
+    if (!valid) {
+      close(owner.session(), CloseStatus.POLICY_VIOLATION.withReason("session ended"));
+      afterConnectionClosed(owner.session(), CloseStatus.POLICY_VIOLATION);
+    }
+    return valid;
   }
 
   @Override

@@ -49,21 +49,23 @@ class AutoTopUps {
   }
 
   void run() {
-    for (var account : accounts.findAllByAutoTopUpEnabledTrue()) {
+    var users = new java.util.LinkedHashSet<UUID>();
+    topUps
+        .findAllByAutomaticTrueAndStatus(TopUpStatus.PENDING)
+        .forEach(t -> users.add(t.getUserId()));
+    accounts.findAllByAutoTopUpEnabledTrue().forEach(a -> users.add(a.getUserId()));
+    for (var user : users) {
       try {
-        topUp(account.getUserId());
+        topUp(user);
       } catch (RuntimeException e) {
         // The others are still topped up; this one is tried again on the next run.
-        log.warn("could not top up the balance of user {} automatically", account.getUserId(), e);
+        log.warn("could not top up the balance of user {} automatically", user, e);
       }
     }
   }
 
   /** Charges the user's card if their balance is low, or finishes a charge left pending. */
   void topUp(UUID user) {
-    if (billing.isFree(user)) {
-      return;
-    }
     var topUp = pendingOrNew(user);
     if (topUp != null) {
       charge(topUp);
@@ -82,7 +84,8 @@ class AutoTopUps {
           }
           var below = account.getAutoTopUpBelowCents();
           var amount = account.getAutoTopUpAmountCents();
-          if (!account.isAutoTopUpEnabled()
+          if (billing.isFree(user)
+              || !account.isAutoTopUpEnabled()
               || account.getPaymentMethodId() == null
               || below == null
               || amount == null
@@ -95,12 +98,14 @@ class AutoTopUps {
 
   private void charge(TopUpEntity topUp) {
     var user = topUp.getUserId();
-    var card = accounts.findById(user).map(BillingAccountEntity::getPaymentMethodId).orElse(null);
-    if (card == null) {
-      // The card was removed while the charge was pending; there is nothing left to charge.
-      end(topUp, TopUpStatus.EXPIRED, null);
-      return;
-    }
+    // Check Stripe first: an earlier /pay may have succeeded even if its answer was lost.
+    if (billing.recoverAutomatic(topUp)) return;
+    var account = accounts.findById(user).orElse(null);
+    if (account == null
+        || billing.isFree(user)
+        || !account.isAutoTopUpEnabled()
+        || account.getPaymentMethodId() == null) return;
+    var card = account.getPaymentMethodId();
     Stripe.ChargedInvoice invoice;
     try {
       invoice =
