@@ -293,7 +293,7 @@ jobs:
     timeout-minutes: 15
 
     permissions:
-      contents: read
+      contents: write # publish immutable supervisor release artifacts
       packages: write # push the image to ghcr.io
 
     defaults:
@@ -326,7 +326,7 @@ jobs:
       - name: Build image
         run: |
           docker build --platform linux/amd64 \
-            --build-arg VERSION="${GITHUB_SHA:0:7}" -t supervisor:candidate .
+            --build-arg VERSION="$GITHUB_SHA" -t supervisor:candidate .
 
       - name: Log in to GHCR
         if: ${{ env.PUBLISH == 'true' }}
@@ -348,6 +348,33 @@ jobs:
           docker tag supervisor:candidate "$GHCR_IMAGE:latest"
           docker push "$GHCR_IMAGE:$tag"
           docker push "$GHCR_IMAGE:latest"
+
+      - name: Publish pinned native supervisor releases
+        if: ${{ env.PUBLISH == 'true' }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          version="$GITHUB_SHA"
+          mkdir -p dist
+          for arch in amd64 arm64; do
+            CGO_ENABLED=0 GOOS=linux GOARCH="$arch" go build -trimpath \
+              -ldflags "-s -w -X main.version=$version" -o "dist/supervisor-linux-$arch" .
+          done
+          cp install/bootstrap.sh dist/bootstrap.sh
+          (cd dist && sha256sum supervisor-linux-* bootstrap.sh > SHA256SUMS)
+          python3 -c 'import json,os,pathlib; p=pathlib.Path("dist"); sums={line.split()[1]:line.split()[0] for line in (p/"SHA256SUMS").read_text().splitlines()}; (p/"release.json").write_text(json.dumps({"version":os.environ["GITHUB_SHA"],"artifacts":{a:{"file":"supervisor-linux-"+a,"sha256":sums["supervisor-linux-"+a]} for a in ["amd64","arm64"]}},indent=2)+"\n")'
+          # Do not overwrite an existing version, including workflow reruns.
+          if ! gh release view "supervisor-$version" >/dev/null 2>&1; then
+            gh release create "supervisor-$version" dist/* --target "$GITHUB_SHA" \
+              --title "Supervisor $version" --notes 'Pinned supervisor binaries for amd64 and arm64.' --latest=false
+          else
+            mkdir -p published
+            gh release download "supervisor-$version" --dir published
+            (cd published && sha256sum --check SHA256SUMS)
+            cmp dist/SHA256SUMS published/SHA256SUMS
+            cmp dist/release.json published/release.json
+          fi
   web:
     name: Build web
     runs-on: ubuntu-latest

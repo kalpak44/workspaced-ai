@@ -16,7 +16,12 @@ public record HarnessDto(
                     + "system environment, the system one winning on a clash",
             example = "{\"OPENROUTER_API_KEY\":\"sk-or-v1-…\",\"OPENCODE_PASSWORD\":\"…\"}")
         Map<String, String> environment,
-    Long revision) {
+    Long revision,
+    io.github.kalpak44.workspacedai.vmmanager.vm.SupervisorProperties.Release supervisor) {
+  public HarnessDto(String image, Map<String, String> environment, Long revision) {
+    this(image, environment, revision, null);
+  }
+
   public HarnessDto(String image, Map<String, String> environment) {
     this(image, environment, null);
   }

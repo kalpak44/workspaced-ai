@@ -17,8 +17,10 @@ VM; the environment's values are never logged.
 
 The release is selected by VM manager's `WORKSPACED_HARNESS_IMAGE`, keeping it coordinated with the
 deployed API. A pinned release moves forward when that deployment updates the reference; `:latest`
-is checked against the registry on each start/restart too. The supervisor itself does not update
-through this mechanism: existing VMs need a supervisor rollout once to acquire this behavior.
+is checked against the registry on each start/restart too. A bootstrapped supervisor also checks independently pinned native supervisor metadata at startup
+and workspace restart. The stable host launcher verifies checksums and rolls back candidates
+that fail readiness. See [supervisor updates](../../docs/supervisor-updates.md) for release trust,
+canary settings, one-time bootstrap, alerts and recovery.
 
 Once the harness first reports ready, the supervisor also keeps a pool of signed WebSocket
 workers open to `{WORKSPACED_AGENT_URL}/agent/tunnel`, since the VM accepts no inbound
@@ -39,11 +41,9 @@ Files:
 - `/var/run/docker.sock` (`SUPERVISOR_DOCKER_SOCKET`) — the system Docker daemon that runs the
   harness. The harness itself only gets the rootless socket `/run/workspace-docker/docker.sock`.
 
-On a VM, systemd starts it as:
+On bootstrapped VMs, systemd runs `/usr/local/lib/workspaced/supervisor-launcher --launch`.
+The launcher and native worker need the host Docker socket and keep the existing state files.
+Legacy VMs use the Docker unit until the controlled bootstrap replaces it. The Docker image
+also carries `/bootstrap.sh` for pinned Packer image builds.
 
-    docker run --network host -v /etc/workspaced:/etc/workspaced \
-      -v /var/lib/workspaced:/var/lib/workspaced -v /var/run/docker.sock:/var/run/docker.sock \
-      --cap-drop ALL --read-only \
-      --security-opt no-new-privileges <image>
-
-Test with `go test ./...`; build with `docker build --build-arg VERSION=<tag> .`.
+Test with `go test -race ./...`; build with `docker build --build-arg VERSION=<full-sha> .`.

@@ -11,4 +11,5 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags "-s -w -X main.version=${VERSION}"
 # Runs as root on purpose: it rewrites the root-owned env file on the host mount.
 FROM gcr.io/distroless/static-debian12
 COPY --from=build /out/supervisor /supervisor
+COPY install/bootstrap.sh /bootstrap.sh
 ENTRYPOINT ["/supervisor"]

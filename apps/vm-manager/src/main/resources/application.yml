@@ -68,6 +68,13 @@ workspaced:
     url: ${WORKSPACED_VAULT_URL:}
     # For a local run only; in the cluster it signs in with its service account instead.
     token: ${WORKSPACED_VAULT_TOKEN:}
+  supervisor:
+    version: ${WORKSPACED_SUPERVISOR_VERSION:}
+    base-url: ${WORKSPACED_SUPERVISOR_BASE_URL:https://github.com/kalpak44/workspaced-ai/releases/download}
+    amd64-sha256: ${WORKSPACED_SUPERVISOR_AMD64_SHA256:}
+    arm64-sha256: ${WORKSPACED_SUPERVISOR_ARM64_SHA256:}
+    paused: ${WORKSPACED_SUPERVISOR_PAUSED:true}
+    vm-ids: ${WORKSPACED_SUPERVISOR_VM_IDS:}
   harness:
     # The image every VM's supervisor runs as its harness, e.g.
     # ghcr.io/kalpak44/workspaced-ai-harness:85c2bd5. Unset, the app still starts, and a VM

@@ -77,7 +77,8 @@ fit the cost-focused approach.
 
 Every VM is to boot from `workspace-vm`, a Hetzner snapshot rather than an ISO: Hetzner Cloud cannot create a server
 from an uploaded ISO, so the homelab's `packer-build` pipeline boots a throwaway server, installs Docker and unattended
-upgrades, masks SSH, installs the supervisor as a systemd unit pinned to the digest `:latest` resolved to at build
-time, and saves the disk as a snapshot labelled `image=workspace-vm`. It holds no secrets and nothing specific to one
-VM, is rebuilt weekly, and the three newest are kept; the VM manager creates every VM from the newest. A new
-supervisor reaches VMs with the next image build, so rebuild by hand after releasing one.
+upgrades, masks SSH, and installs the supervisor and stable rollback launcher from an explicitly
+pinned image digest. It saves the disk as a snapshot labelled `image=workspace-vm`, without secrets
+or VM identity. The three newest snapshots are kept; VM manager creates VMs from the newest.
+Bootstrapped VMs also update supervisors on startup/restart using approved release pins; see
+[supervisor updates](supervisor-updates.md) for Packer configuration and existing-VM bootstrap.

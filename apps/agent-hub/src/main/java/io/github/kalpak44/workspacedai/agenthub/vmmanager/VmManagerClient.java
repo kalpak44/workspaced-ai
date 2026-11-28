@@ -23,6 +23,11 @@ public interface VmManagerClient {
    */
   Heartbeat heartbeat(UUID vmId, VmMemory memory);
 
+  default Heartbeat heartbeat(
+      UUID vmId, VmMemory memory, tools.jackson.databind.JsonNode supervisor) {
+    return heartbeat(vmId, memory);
+  }
+
   /**
    * @return the VM manager's JSON body as it came, image and environment; it holds secret values,
    *     so it is never parsed, logged or kept

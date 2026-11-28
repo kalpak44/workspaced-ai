@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/docker"
+	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/update"
 )
 
 const (
@@ -36,6 +37,7 @@ type Docker interface {
 
 // Harness is the agent-hub's answer to /agent/harness. Environment holds secret values.
 type Harness struct {
+	Supervisor  *update.Release   `json:"supervisor,omitempty"`
 	Image       string            `json:"image"`
 	Revision    int64             `json:"revision"`
 	Environment map[string]string `json:"environment"`
@@ -100,6 +102,20 @@ func (s *Supervisor) bringUp(ctx context.Context, c *Client, log *slog.Logger, f
 		h, ok := s.fetchHarness(ctx, c, log)
 		if !ok {
 			return
+		}
+		if s.UpdateDir != "" {
+			// The expected checksum must come from our authenticated TLS control plane.
+			if strings.HasPrefix(c.BaseURL, "https://") {
+				var staged bool
+				s.updateStatus, staged = update.Stage(ctx, s.UpdateDir, s.Version, h.Supervisor, force)
+				log.Info("supervisor status", "supervisor", s.updateStatus)
+				if staged {
+					<-ctx.Done()
+					return
+				}
+			} else {
+				log.Error("supervisor update refused: control plane must use HTTPS")
+			}
 		}
 		if err := s.ensure(ctx, h, force, log); err != nil {
 			if ctx.Err() != nil {

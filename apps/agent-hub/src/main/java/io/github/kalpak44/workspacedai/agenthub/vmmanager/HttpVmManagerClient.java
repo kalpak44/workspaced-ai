@@ -40,7 +40,16 @@ public class HttpVmManagerClient implements VmManagerClient {
 
   @Override
   public Heartbeat heartbeat(UUID vmId, VmMemory memory) {
-    var report = memory == null ? null : json.writeValueAsString(Map.of("memory", memory));
+    return heartbeat(vmId, memory, null);
+  }
+
+  @Override
+  public Heartbeat heartbeat(
+      UUID vmId, VmMemory memory, tools.jackson.databind.JsonNode supervisor) {
+    var values = new java.util.HashMap<String, Object>();
+    if (memory != null) values.put("memory", memory);
+    if (supervisor != null && supervisor.isObject()) values.put("supervisor", supervisor);
+    var report = values.isEmpty() ? null : json.writeValueAsString(values);
     var body = send(vmId, "POST", "heartbeat", report);
     try {
       var answer = json.readTree(body);

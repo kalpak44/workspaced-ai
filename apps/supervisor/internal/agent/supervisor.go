@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/tunnel"
+	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/update"
 )
 
 const (
@@ -25,12 +26,17 @@ const (
 // Supervisor enrolls the VM once, starts the harness, reports ready once it answers, then
 // heartbeats and follows the status the hub reports back.
 type Supervisor struct {
-	EnvFile   string
-	StateDir  string
-	HTTP      *http.Client
-	UserAgent string
-	Log       *slog.Logger
-	Now       func() time.Time
+	ForceRestart bool
+	Version      string
+	UpdateDir    string
+	ReadyFile    string
+	updateStatus update.Status
+	EnvFile      string
+	StateDir     string
+	HTTP         *http.Client
+	UserAgent    string
+	Log          *slog.Logger
+	Now          func() time.Time
 
 	BackoffMin    time.Duration
 	BackoffMax    time.Duration
@@ -84,7 +90,7 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	if ctx.Err() != nil {
 		return nil
 	}
-	s.bringUp(ctx, c, log, false)
+	s.bringUp(ctx, c, log, s.ForceRestart)
 	tunnelDone := s.startTunnel(ctx, c, log)
 	s.heartbeat(ctx, c, log)
 	<-tunnelDone
@@ -213,6 +219,11 @@ func (s *Supervisor) ready(ctx context.Context, c *Client, log *slog.Logger) {
 		status, _, err := c.Post(ctx, "/agent/ready", body)
 		if err == nil && status == http.StatusNoContent {
 			log.Info("reported ready")
+			if s.ReadyFile != "" {
+				if err := writeAtomic(s.ReadyFile, []byte(s.Version), 0600); err != nil {
+					log.Error("cannot report local readiness")
+				}
+			}
 			return
 		}
 		if ctx.Err() != nil {
@@ -272,15 +283,32 @@ func (s *Supervisor) heartbeat(ctx context.Context, c *Client, log *slog.Logger)
 
 // report is the heartbeat's body; nil sends none, which costs only the memory reading.
 func (s *Supervisor) report(log *slog.Logger) []byte {
-	if s.MemInfo == "" {
+	report := map[string]any{}
+	if s.Version != "" {
+		status := s.updateStatus
+		status.Installed = s.Version
+		// Rollback/health acceptance belongs to the stable watchdog.
+		var journal update.Journal
+		if s.UpdateDir != "" && update.Load(filepath.Join(s.UpdateDir, "journal.json"), &journal) == nil &&
+			(journal.Pending || (journal.Status.State != "" && journal.Status.Desired == status.Desired)) {
+			status = journal.Status
+			status.Installed = s.Version
+		}
+		log.Info("supervisor status", "supervisor", status)
+		report["supervisor"] = status
+	}
+	if s.MemInfo != "" {
+		m, err := ReadMemory(s.MemInfo)
+		if err != nil {
+			log.Warn("memory unreadable, heartbeat carries none", "error", err.Error())
+		} else {
+			report["memory"] = m
+		}
+	}
+	if len(report) == 0 {
 		return nil
 	}
-	m, err := ReadMemory(s.MemInfo)
-	if err != nil {
-		log.Warn("memory unreadable, heartbeat carries none", "error", err.Error())
-		return nil
-	}
-	body, _ := json.Marshal(map[string]Memory{"memory": m})
+	body, _ := json.Marshal(report)
 	return body
 }
 

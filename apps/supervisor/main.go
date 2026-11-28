@@ -4,6 +4,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -15,23 +17,45 @@ import (
 
 	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/agent"
 	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/docker"
+	"github.com/kalpak44/workspaced-ai/apps/supervisor/internal/update"
 )
 
 // version is set at build time with -ldflags "-X main.version=...".
 var version = "dev"
 
 func main() {
+	if len(os.Args) > 1 && os.Args[1] == "--version" {
+		fmt.Println(version)
+		return
+	}
 	log := slog.New(slog.NewJSONHandler(os.Stdout, nil)).With("version", version)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGTERM, os.Interrupt)
 	defer stop()
+	if len(os.Args) > 1 && os.Args[1] == "--launch" {
+		if err := update.Launch(ctx, envOr("SUPERVISOR_UPDATE_DIR", "/var/lib/workspaced/supervisor"), log); err != nil {
+			log.Error("launcher stopped", "error", err.Error())
+			os.Exit(1)
+		}
+		return
+	}
 
 	socket := envOr("SUPERVISOR_DOCKER_SOCKET", "/var/run/docker.sock")
 	harness := envOr("SUPERVISOR_HARNESS_URL", "http://127.0.0.1:4096")
 	s := &agent.Supervisor{
-		EnvFile:       envOr("SUPERVISOR_CONFIG", "/etc/workspaced/agent.env"),
-		StateDir:      envOr("SUPERVISOR_STATE_DIR", "/var/lib/workspaced"),
-		HTTP:          &http.Client{Timeout: 10 * time.Second},
+		ForceRestart: os.Getenv("SUPERVISOR_FORCE_RESTART") == "true",
+		Version:      version,
+		UpdateDir:    os.Getenv("SUPERVISOR_UPDATE_DIR"),
+		ReadyFile:    os.Getenv("SUPERVISOR_READY_FILE"),
+		EnvFile:      envOr("SUPERVISOR_CONFIG", "/etc/workspaced/agent.env"),
+		StateDir:     envOr("SUPERVISOR_STATE_DIR", "/var/lib/workspaced"),
+		HTTP: &http.Client{Timeout: 10 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 5 || (len(via) > 0 && via[0].URL.Scheme == "https" &&
+				(req.URL.Scheme != "https" || req.URL.Host != via[0].URL.Host)) {
+				return errors.New("control plane redirect refused")
+			}
+			return nil
+		}},
 		UserAgent:     "workspaced-supervisor/" + version,
 		Log:           log,
 		Now:           time.Now,

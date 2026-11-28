@@ -31,6 +31,10 @@ public class VmController implements VmApi {
   private final io.github.kalpak44.workspacedai.vmmanager.vm.ProviderBindingService
       providerBindings;
 
+  private final io.github.kalpak44.workspacedai.vmmanager.vm.SupervisorProperties supervisor;
+
+  private final io.github.kalpak44.workspacedai.vmmanager.vm.SupervisorFleet supervisorFleet;
+
   private final VmService service;
   private final HarnessService harnesses;
   private final VmMetricsService metrics;
@@ -45,7 +49,11 @@ public class VmController implements VmApi {
       VmEventStream events,
       VmDtoMapper mapper,
       VmFirewallService firewalls,
-      io.github.kalpak44.workspacedai.vmmanager.vm.ProviderBindingService providerBindings) {
+      io.github.kalpak44.workspacedai.vmmanager.vm.ProviderBindingService providerBindings,
+      io.github.kalpak44.workspacedai.vmmanager.vm.SupervisorProperties supervisor,
+      io.github.kalpak44.workspacedai.vmmanager.vm.SupervisorFleet supervisorFleet) {
+    this.supervisor = supervisor;
+    this.supervisorFleet = supervisorFleet;
     this.providerBindings = providerBindings;
     this.firewalls = firewalls;
     this.service = service;
@@ -121,6 +129,7 @@ public class VmController implements VmApi {
   @Override
   public ResponseEntity<HeartbeatAnswerDto> heartbeat(UUID id, HeartbeatDto body) {
     var vm = service.heartbeat(id);
+    if (body != null) supervisorFleet.report(id, body.supervisor());
     if (body != null && body.memory() != null) {
       metrics.report(id, body.memory().totalBytes(), body.memory().availableBytes());
     }
@@ -156,6 +165,7 @@ public class VmController implements VmApi {
   public ResponseEntity<HarnessDto> harness(UUID id) {
     var harness = harnesses.get(id);
     return ResponseEntity.ok(
-        new HarnessDto(harness.image(), harness.environment(), harness.revision()));
+        new HarnessDto(
+            harness.image(), harness.environment(), harness.revision(), supervisor.forVm(id)));
   }
 }

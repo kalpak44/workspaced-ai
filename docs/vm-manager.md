@@ -144,7 +144,7 @@ On every VM start and workspace restart, the supervisor fetches this configurati
 image even when cached. It compares immutable image IDs, so a moved tag also replaces an existing container.
 Creation uses the resolved image ID, preserving the workspace home mount. Failed pulls retry before the old
 container is stopped. The configured reference selects the release compatible with the deployed API; pinned
-references advance when the deployment changes them. Existing VMs need a supervisor rollout for this behavior.
+references advance when the deployment changes them. Existing VMs need the [one-time supervisor bootstrap](supervisor-updates.md) for native supervisor updates.
 
 ### Vault access
 
@@ -252,16 +252,16 @@ open http://localhost:8080/api/v1/swagger-ui
 
 Add OS, supervisor and harness updates, individually or together, with version/status visibility,
 compatibility checks, a pre-update snapshot, verified readiness and rollback that preserves workspace data.
-Harness updates already apply at workspace start/restart. Keep OS and supervisor upgrades as explicit
-maintenance actions; allow scheduled maintenance and required reboots.
+Harness and bootstrapped supervisor updates now apply at workspace start/restart using independent
+release settings. OS upgrades, scheduled maintenance, central jobs and pre-update snapshots remain planned.
 
 ## Feature implementation: workspace maintenance (planned)
 
 - UI: add a Maintenance section with installed/available versions, update actions and progress/errors.
 - Backend: persist maintenance jobs; check compatibility, create a snapshot, then update selected components.
-- Runtime: support supervisor and harness upgrades on existing VMs; install OS security updates and schedule required reboots.
+- Runtime: supervisor/harness updates are implemented; add OS security updates and required reboot scheduling.
 - Recovery: verify readiness before success, offer rollback, and preserve workspace files, application volumes and agent identity.
-- Delivery: implement supervisor/harness upgrades first, then OS updates and scheduled maintenance.
+- Delivery: validate supervisor rollout on disposable/canary VMs, then add OS updates and scheduled maintenance.
 
 ### Idea: AI-controlled maintenance tool
 
@@ -272,3 +272,6 @@ the same maintenance service as the UI. Support checking/applying updates, job s
 Use unique request IDs, fixed actions and approved versions; persist jobs centrally and deduplicate retries.
 Keep cloud credentials outside the workspace, take a pre-update snapshot, verify readiness, and retain a recovery
 path independent of the supervisor so a failed supervisor update can be repaired.
+
+Supervisor releases are independently pinned and paused/canaried through VM Manager settings; see
+[supervisor updates](supervisor-updates.md) for the protocol, status logs and operational runbook.

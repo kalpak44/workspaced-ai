@@ -76,6 +76,16 @@ class HttpVmManagerClientTest {
   }
 
   @Test
+  void forwardsSupervisorStatusWithoutMemory() {
+    var json = JsonMapper.builder().build();
+    var report = json.readTree("{\"installed\":\"old\",\"desired\":\"new\",\"state\":\"failed\"}");
+    client(fake.url()).heartbeat(vm, null, report);
+    var body = json.readTree(fake.bodies.getFirst());
+    assertThat(body.path("supervisor")).isEqualTo(report);
+    assertThat(body.has("memory")).isFalse();
+  }
+
+  @Test
   void passesTheHarnessOnAsItCame() {
     assertThat(new String(client(fake.url()).harness(vm), StandardCharsets.UTF_8))
         .isEqualTo(FakeVmManager.HARNESS);

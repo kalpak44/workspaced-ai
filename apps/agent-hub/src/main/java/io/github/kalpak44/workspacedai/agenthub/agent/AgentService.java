@@ -68,7 +68,13 @@ public class AgentService {
   public Heartbeat heartbeat(SignedRequest request) {
     var vmId = authenticate(request);
     store.touch(vmId, clock.instant());
-    return vmManager.heartbeat(vmId, memory(request.body()));
+    JsonNode supervisor = null;
+    try {
+      supervisor = json.readTree(request.body()).path("supervisor");
+    } catch (RuntimeException ignored) {
+      /* A legacy heartbeat may have no body. */
+    }
+    return vmManager.heartbeat(vmId, memory(request.body()), supervisor);
   }
 
   // A malformed reading must not fail the heartbeat, or the VM would read it as the hub being
