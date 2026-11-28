@@ -381,8 +381,8 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
           </fieldset>
         )}
         {chatGptPlan && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
-          <p className="font-medium text-zinc-900 dark:text-zinc-100">Create your workspace, then connect ChatGPT</p>
-          <p>We’ll open Profile with ChatGPT selected. Once the workspace is ready, sign in to connect your plan. Each workspace has its own connection.</p>
+          <p className="font-medium text-zinc-900 dark:text-zinc-100">Next: prepare your workspace and connect ChatGPT</p>
+          <p>After this step, we’ll open Profile to finish setup. Step 4 starts your workspace automatically; step 5 guides you through ChatGPT sign-in. Keep that page open — it updates as your workspace becomes ready.</p>
           <p className="mt-2">VM costs still apply. Chat stays unavailable until you connect.</p>
         </div>}
         {!chatGptPlan && ownConnectors.length > 0 && (
@@ -482,8 +482,8 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     >
       <form data-tour="workspace-name-form" onSubmit={submit} className="flex min-h-0 flex-col overflow-hidden">
         <ModalBody>
-          <ol aria-label="Steps" className="flex items-center gap-2 text-xs font-medium">
-            {(onNameChosen ? ["Name", "OpenRouter", "Trial machine"] : STEPS).map((label, index) => {
+          <ol aria-label="Steps" className={chatGptPlan ? "grid grid-cols-2 gap-3 text-xs font-medium sm:grid-cols-3" : "flex items-center gap-2 text-xs font-medium"}>
+            {(onNameChosen ? ["Name", "OpenRouter", "Trial machine"] : chatGptPlan ? [...STEPS, "Prepare workspace", "Connect ChatGPT"] : STEPS).map((label, index) => {
               const reached = index <= step;
               return (
                 <li
@@ -493,7 +493,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
                     reached ? "text-zinc-900 dark:text-zinc-100" : "text-zinc-400 dark:text-zinc-500"
                   }`}
                 >
-                  {index > 0 && <span aria-hidden className="h-px w-6 bg-zinc-300 dark:bg-zinc-700" />}
+                  {index > 0 && !chatGptPlan && <span aria-hidden className="h-px w-6 bg-zinc-300 dark:bg-zinc-700" />}
                   <span
                     aria-hidden
                     className={`flex size-5 items-center justify-center rounded-full border ${

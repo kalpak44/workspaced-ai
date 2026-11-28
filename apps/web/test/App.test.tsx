@@ -168,12 +168,16 @@ describe("App", () => {
     await chooseVmType(user,"cx33");
     await user.click(screen.getByRole("button",{name:"Next"}));
     await user.click(screen.getByRole("radio",{name:/Use ChatGPT plan/}));
+    expect(within(screen.getByRole("list",{name:"Steps"})).getAllByRole("listitem")).toHaveLength(5);
+    expect(screen.getByRole("list",{name:"Steps"})).toHaveTextContent("Prepare workspace");
     expect(document.querySelector("input[type=password]")).not.toBeInTheDocument();
     expect(screen.queryByRole("button",{name:"Connect OpenRouter"})).not.toBeInTheDocument();
     await user.click(screen.getByRole("button",{name:"Create and connect ChatGPT"}));
     await waitFor(()=>expect(path()).toBe("/workspaces/ws-1/settings/profile"));
     await waitFor(()=>expect(screen.getByRole("radio",{name:/Use ChatGPT plan/})).toBeChecked());
     expect(screen.getByRole("button",{name:"Connect ChatGPT"})).toBeDisabled();
+    expect(await screen.findByRole("status",{name:"Preparing workspace"})).toBeVisible();
+    expect(screen.getByText("Step 4 of 5 · Workspace creation")).toBeVisible();
     const [,init]=api.fetchFn.mock.calls.find(([url,i])=>String(url).endsWith("/api/v1/workspaces")&&i?.method==="POST")!;
     expect(JSON.parse(String(init?.body))).toMatchObject({modelProvider:"openai",useChatGptPlan:true});
     expect(JSON.parse(String(init?.body))).not.toHaveProperty("apiKey");

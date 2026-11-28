@@ -3,7 +3,8 @@ import { KeyRound, Sparkles } from "lucide-react";
 import { useWorkspaceAiConnector } from "../../hooks/useWorkspaceAiConnector";
 import type { Workspace } from "../../hooks/useWorkspaces";
 import { SettingsSection } from "../molecules";
-import { Button, Select, ChoiceCard } from "../atoms";
+import { Button, Select, ChoiceCard, Spinner } from "../atoms";
+import { ChatGptSetupProgress } from "./ChatGptSetupProgress";
 import { ChatGptConnect } from "./ChatGptConnect";
 
 const providerName = (provider: string) => provider === "openai" ? "OpenAI API key" : provider === "openrouter" ? "OpenRouter" : provider;
@@ -20,10 +21,12 @@ export function WorkspaceAiConnectorPanel({ workspace, onChanged }: { readonly w
   };
   const changing = status?.phase === "APPLYING" || status?.phase === "ROLLING_BACK" || status?.phase === "BLOCKED";
   return <SettingsSection title="Profile" description="Choose the AI connector this workspace uses. Its credentials are managed automatically; secrets and variables cannot override them."><div className="space-y-6">
+    {reading && <div className="flex items-center gap-2 text-sm text-zinc-500"><Spinner label="Checking workspace setup" />Checking workspace setup…</div>}
+    {method === "chatgpt" && (status?.chatGptSetup || (status?.active?.authType === "chatgpt" && status.phase === "NONE" && workspace.status === "READY")) && <ChatGptSetupProgress workspaceId={workspace.id} status={workspace.status} connected={!status.chatGptSetup && status.active?.authType === "chatgpt"} />}
     <fieldset className="grid gap-2 sm:grid-cols-2">
       <legend className="mb-2 text-sm font-medium">Connection method</legend>
-      <ChoiceCard name="profile-connection-method" value="saved" label="Saved API connector" detail="Use a saved API key" icon={KeyRound} checked={method === "saved"} disabled={busy || changing || status?.chatGptSetup} onChange={() => chooseMethod("saved")} />
-      <ChoiceCard name="profile-connection-method" value="chatgpt" label="Use ChatGPT plan" detail="Sign in to ChatGPT" icon={Sparkles} checked={method === "chatgpt"} disabled={busy || changing} onChange={() => chooseMethod("chatgpt")} />
+      <ChoiceCard name="profile-connection-method" value="saved" label="Saved API connector" detail="Use a saved API key" icon={KeyRound} checked={method === "saved"} disabled={reading || busy || changing || status?.chatGptSetup} onChange={() => chooseMethod("saved")} />
+      <ChoiceCard name="profile-connection-method" value="chatgpt" label="Use ChatGPT plan" detail="Sign in to ChatGPT" icon={Sparkles} checked={method === "chatgpt"} disabled={reading || busy || changing} onChange={() => chooseMethod("chatgpt")} />
     </fieldset>
     <form aria-label="AI connector" className="min-w-0 space-y-3" onSubmit={event => { event.preventDefault(); void save(); }}>
     {(method === "saved" || choices.length > 0) && <><label htmlFor="workspace-ai-connector" className="block text-sm font-medium text-zinc-700 dark:text-zinc-300">AI connector <span className="ml-1 text-xs text-zinc-500">{status?.active?.authType === "chatgpt" ? "ChatGPT sign-in" : (status?.active?.provider ?? workspace.modelProvider) === "openai" ? "OPENAI_API_KEY" : "OPENROUTER_API_KEY"}</span></label>
@@ -43,6 +46,6 @@ export function WorkspaceAiConnectorPanel({ workspace, onChanged }: { readonly w
     {(method === "saved" || choices.length > 0) && <div className="flex justify-end"><Button label="Save connector" type="submit" busy={busy} disabled={choices.length === 0 || !status || !selected || selected === current || reading || changing} /></div>}
     {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
   </form>{method === "chatgpt" && <>
-    {workspace.status !== "READY" && <p role="status" className="text-sm text-zinc-500">Start the workspace and wait until it is ready to connect ChatGPT. VM costs are separate from your ChatGPT plan.</p>}
+    {workspace.status !== "READY" && !status?.chatGptSetup && <p role="status" className="text-sm text-zinc-500">Start the workspace and wait until it is ready to connect ChatGPT. VM costs are separate from your ChatGPT plan.</p>}
     <ChatGptConnect key={workspace.id} workspaceId={workspace.id} disabled={reading || busy || changing || workspace.status !== "READY"} onConnected={async id => { setSelected(id); return (await refresh())?.restartRequired; }} /></>}</div></SettingsSection>;
 }
