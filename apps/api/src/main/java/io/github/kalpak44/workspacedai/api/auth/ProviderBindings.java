@@ -167,12 +167,12 @@ public class ProviderBindings {
             _ -> {
               var w = workspaces.findLockedById(id).orElseThrow();
               var s = w.getProviderChange();
-              if (s.phase.equals("NONE")) return null;
-              if (s.inFlight()) return dispatch(w);
+              if (s.phase.equals("NONE")) return Optional.<Dispatch>empty();
+              if (s.inFlight()) return Optional.of(dispatch(w));
               if (s.phase.equals("BLOCKED")) {
                 if ("SUPERSEDED_RUNTIME".equals(s.error))
                   throw conflict("A newer runtime binding requires operator reconciliation");
-                return rollback(w);
+                return Optional.ofNullable(rollback(w));
               }
               var target = connector(w, s.pending);
               usable(target);
@@ -187,11 +187,11 @@ public class ProviderBindings {
               s.revision++;
               s.deadline = clock.instant().plus(timeout);
               s.error = null;
-              return dispatch(w);
+              return Optional.of(dispatch(w));
             });
-    if (command == null)
-      throw conflict("The previous binding cannot be restored; sending remains blocked");
-    send(command);
+    send(
+        command.orElseThrow(
+            () -> conflict("The previous binding cannot be restored; sending remains blocked")));
     return true;
   }
 

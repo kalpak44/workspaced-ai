@@ -29,6 +29,7 @@ class AgentServiceTest {
   final MutableClock clock = new MutableClock(Instant.parse("2026-11-14T10:00:00Z"));
   final InMemoryAgentStore store = new InMemoryAgentStore();
   final List<String> reports = new CopyOnWriteArrayList<>();
+  final List<String> bindings = new CopyOnWriteArrayList<>();
   final List<UUID> gone = new CopyOnWriteArrayList<>();
   final List<String> memories = new CopyOnWriteArrayList<>();
   final VmManagerClient vmManager =
@@ -36,6 +37,12 @@ class AgentServiceTest {
         @Override
         public void ready(UUID vmId) {
           report("ready", vmId);
+        }
+
+        @Override
+        public void ready(UUID vmId, Long revision) {
+          bindings.add(revision.toString());
+          report("ready-binding", vmId);
         }
 
         @Override
@@ -101,6 +108,22 @@ class AgentServiceTest {
     service.heartbeat(signed(HEARTBEAT, now()));
     assertThat(reports).containsExactly("ready " + vm, "heartbeat " + vm);
     assertThat(store.lastSeen.get(vm)).isEqualTo(clock.instant());
+  }
+
+  @Test
+  void passesARevisionProvenReadinessToTheBindingRoute() {
+    service.ready(signed(READY, now(), "{\"revision\":42}"));
+    assertThat(bindings).containsExactly("42");
+    assertThat(reports).containsExactly("ready-binding " + vm);
+  }
+
+  @Test
+  void fallsBackToTheLegacyReadyReportWithoutAUsableRevision() {
+    service.ready(signed(READY, now(), "not json"));
+    service.ready(signed(READY, now(), "{\"revision\":0}"));
+    service.ready(signed(READY, now(), "{}"));
+    assertThat(bindings).isEmpty();
+    assertThat(reports).containsExactly("ready " + vm, "ready " + vm, "ready " + vm);
   }
 
   @Test

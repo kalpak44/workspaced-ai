@@ -44,6 +44,13 @@ class HttpVmManagerClientTest {
   }
 
   @Test
+  void fallsBackToTheLegacyReadinessRouteWithoutARevision() {
+    client(fake.url()).ready(vm, null);
+    assertThat(fake.reports).containsExactly("ready " + vm);
+    assertThat(fake.bodies).isEmpty();
+  }
+
+  @Test
   void postsBothReportsAndReadsTheStatusTheHeartbeatAnswers() {
     var client = client(URI.create(fake.url() + "/"));
     client.ready(vm);
