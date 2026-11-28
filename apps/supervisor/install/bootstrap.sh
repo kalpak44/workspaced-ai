@@ -9,6 +9,8 @@ case "$version" in ''|*[!a-zA-Z0-9._-]*) exit 1;; esac
 [ "${#checksum}" = 64 ] || exit 1
 case "$checksum" in *[!a-f0-9]*) exit 1;; esac
 printf '%s  %s\n' "$checksum" "$binary" | sha256sum -c -
+# Release download clients do not preserve the executable bit.
+chmod u+x "$binary"
 [ "$("$binary" --version)" = "$version" ] || { echo 'Version mismatch' >&2; exit 1; }
 dir=/var/lib/workspaced/supervisor
 [ ! -e "$dir/journal.json" ] || { echo 'Already bootstrapped; use desired-version configuration' >&2; exit 1; }
