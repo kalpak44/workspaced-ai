@@ -26,7 +26,7 @@ const (
 // Docker is the part of the Engine API the harness lifecycle uses; tests swap in a fake.
 type Docker interface {
 	Inspect(ctx context.Context, name string) (*docker.Container, error)
-	ImageExists(ctx context.Context, ref string) (bool, error)
+	ImageID(ctx context.Context, ref string) (string, error)
 	Pull(ctx context.Context, ref string) error
 	Stop(ctx context.Context, name string) error
 	Remove(ctx context.Context, name string) error
@@ -171,23 +171,26 @@ func (s *Supervisor) ensure(ctx context.Context, h Harness, force bool, log *slo
 	if err != nil {
 		return err
 	}
-	if !force && cur != nil && cur.Labels[configLabel] == want {
+	// Refresh even cached tags before touching the current container. A failed pull leaves
+	// a running workspace available while bringUp retries.
+	log.Info("pulling harness image", "image", h.Image)
+	if err := s.Docker.Pull(ctx, h.Image); err != nil {
+		return err
+	}
+	imageID, err := s.Docker.ImageID(ctx, h.Image)
+	if err != nil {
+		return err
+	}
+	if imageID == "" {
+		return errors.New("pulled harness image is unavailable locally")
+	}
+	if !force && cur != nil && cur.Labels[configLabel] == want && cur.ImageID == imageID {
 		if cur.Running {
 			log.Info("harness already runs with this config")
 			return nil
 		}
 		log.Info("starting stopped harness")
 		return s.Docker.Start(ctx, cur.ID)
-	}
-	present, err := s.Docker.ImageExists(ctx, h.Image)
-	if err != nil {
-		return err
-	}
-	if !present {
-		log.Info("pulling harness image", "image", h.Image)
-		if err := s.Docker.Pull(ctx, h.Image); err != nil {
-			return err
-		}
 	}
 	if cur != nil {
 		log.Info("replacing harness container", "forced", force)
@@ -198,7 +201,10 @@ func (s *Supervisor) ensure(ctx context.Context, h Harness, force bool, log *slo
 			return err
 		}
 	}
-	id, err := s.Docker.Create(ctx, harnessName, harnessSpec(h))
+	spec := harnessSpec(h)
+	// Create exactly the version checked above, even if another pull moves the tag.
+	spec.Image = imageID
+	id, err := s.Docker.Create(ctx, harnessName, spec)
 	if err != nil {
 		return err
 	}
@@ -216,22 +222,9 @@ func (s *Supervisor) keepRunning(ctx context.Context, c *Client, log *slog.Logge
 	switch {
 	case err != nil:
 		log.Warn("harness inspect failed", "error", err.Error())
-	case cur == nil:
-		log.Warn("harness container is gone, recreating it")
-		h, ok := s.fetchHarness(ctx, c, log)
-		if !ok {
-			return
-		}
-		if err := s.ensure(ctx, h, false, log); err != nil {
-			log.Warn("harness ensure failed", "error", redact(err.Error(), h.Environment))
-		} else {
-			s.keepPassword(h.Environment)
-		}
-	case !cur.Running:
-		log.Warn("harness is not running, starting it")
-		if err := s.Docker.Start(ctx, cur.ID); err != nil {
-			log.Warn("harness start failed", "error", err.Error())
-		}
+	case cur == nil || !cur.Running:
+		log.Warn("harness is not running, fetching current config before starting it")
+		s.bringUp(ctx, c, log, false)
 	}
 }
 
@@ -277,6 +270,9 @@ func redact(msg string, env map[string]string) string {
 // that ignores WORKSPACED_AI_PROVIDER must never acknowledge an OpenAI switch.
 func (s *Supervisor) profileHealthy(ctx context.Context, h Harness) bool {
 	provider := h.Environment["WORKSPACED_AI_PROVIDER"]
+	if provider == "openai-chatgpt" {
+		provider = "openai"
+	}
 	if provider != "openrouter" && provider != "openai" {
 		return false
 	}

@@ -27,7 +27,7 @@ func (d *daemon) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	d.reqs = append(d.reqs, r.Method+" "+r.URL.RequestURI())
 	switch {
 	case r.Method == "GET" && r.URL.Path == "/containers/workspaced-harness/json":
-		_, _ = io.WriteString(w, `{"Id":"abc","State":{"Running":true},"Config":{"Labels":{"k":"v"}}}`)
+		_, _ = io.WriteString(w, `{"Id":"abc","Image":"sha256:1","State":{"Running":true},"Config":{"Labels":{"k":"v"}}}`)
 	case r.Method == "GET" && r.URL.Path == "/containers/missing/json",
 		r.Method == "GET" && r.URL.Path == "/images/ghcr.io/x/missing:1/json",
 		r.Method == "DELETE" && r.URL.Path == "/containers/missing":
@@ -74,17 +74,17 @@ func TestClientOverUnixSocket(t *testing.T) {
 	ctx := context.Background()
 
 	got, err := c.Inspect(ctx, "workspaced-harness")
-	if err != nil || got.ID != "abc" || !got.Running || got.Labels["k"] != "v" {
+	if err != nil || got.ID != "abc" || got.ImageID != "sha256:1" || !got.Running || got.Labels["k"] != "v" {
 		t.Fatalf("inspect: %+v %v", got, err)
 	}
 	if got, err := c.Inspect(ctx, "missing"); got != nil || err != nil {
 		t.Fatalf("inspect missing: %+v %v", got, err)
 	}
-	if ok, err := c.ImageExists(ctx, "ghcr.io/x/harness:1"); !ok || err != nil {
-		t.Fatalf("image exists: %v %v", ok, err)
+	if id, err := c.ImageID(ctx, "ghcr.io/x/harness:1"); id != "sha256:1" || err != nil {
+		t.Fatalf("image ID: %v %v", id, err)
 	}
-	if ok, err := c.ImageExists(ctx, "ghcr.io/x/missing:1"); ok || err != nil {
-		t.Fatalf("image missing: %v %v", ok, err)
+	if id, err := c.ImageID(ctx, "ghcr.io/x/missing:1"); id != "" || err != nil {
+		t.Fatalf("image missing: %v %v", id, err)
 	}
 	if err := c.Pull(ctx, "ghcr.io/x/harness:1"); err != nil {
 		t.Fatalf("pull: %v", err)

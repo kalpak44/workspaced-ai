@@ -351,8 +351,10 @@ besides Node.js and git. Anything else installs into the persistent home, withou
 Package install scripts cannot run without root, so a package that relies on one may leave its command under
 `~/.local/alpine/usr/libexec` (PostgreSQL's `psql`, for one); the guide tells the agent to link it into `~/.local/bin`.
 
-Workspaces keep the harness image they were created with. **Restart** moves a workspace on an older image to the
-current one, keeping its home; that is how existing workspaces pick up a new harness, the guide included.
+Every VM start and workspace **Restart** fetches and pulls the current harness image selected by VM manager,
+including when its tag is cached locally. A changed image replaces the container while keeping its home; existing
+workspaces pick up a new harness and guide this way. An unchanged image reuses its downloaded layers. A failed pull
+is retried before stopping the previous container. Existing VMs need the updated supervisor to get this behavior.
 
 ## Recipes
 

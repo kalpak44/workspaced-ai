@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +27,7 @@ const (
 
 type fakeContainer struct {
 	id      string
+	imageID string
 	running bool
 	// answers is whether the harness inside responds on its port.
 	answers bool
@@ -33,19 +36,21 @@ type fakeContainer struct {
 
 // fakeDocker keeps one container and serves the health URL from its state.
 type fakeDocker struct {
-	mu         sync.Mutex
-	images     map[string]bool
-	c          *fakeContainer
-	nextID     int
-	unhealthy  int // the next n containers created never answer
-	failCreate int
-	calls      []string
-	specs      []docker.ContainerSpec
-	healthURL  string
+	mu            sync.Mutex
+	c             *fakeContainer
+	nextID        int
+	unhealthy     int // the next n containers created never answer
+	failCreate    int
+	calls         []string
+	specs         []docker.ContainerSpec
+	healthURL     string
+	imageIDs      map[string]string
+	remoteImageID string
+	pullError     error
 }
 
 func newFakeDocker(t *testing.T) *fakeDocker {
-	d := &fakeDocker{images: map[string]bool{}}
+	d := &fakeDocker{imageIDs: map[string]string{}, remoteImageID: "sha256:current"}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		d.mu.Lock()
 		up := d.c != nil && d.c.running && d.c.answers
@@ -76,21 +81,24 @@ func (d *fakeDocker) Inspect(_ context.Context, name string) (*docker.Container,
 	if name != harnessName || d.c == nil {
 		return nil, nil
 	}
-	return &docker.Container{ID: d.c.id, Running: d.c.running, Labels: d.c.labels}, nil
+	return &docker.Container{ID: d.c.id, ImageID: d.c.imageID, Running: d.c.running, Labels: d.c.labels}, nil
 }
 
-func (d *fakeDocker) ImageExists(_ context.Context, ref string) (bool, error) {
+func (d *fakeDocker) ImageID(_ context.Context, ref string) (string, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.record("image")
-	return d.images[ref], nil
+	return d.imageIDs[ref], nil
 }
 
 func (d *fakeDocker) Pull(_ context.Context, ref string) error {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 	d.record("pull")
-	d.images[ref] = true
+	if d.pullError != nil {
+		return d.pullError
+	}
+	d.imageIDs[ref] = d.remoteImageID
 	return nil
 }
 
@@ -125,7 +133,7 @@ func (d *fakeDocker) Create(_ context.Context, name string, spec docker.Containe
 		return "", errors.New("name " + name + " already in use")
 	}
 	d.nextID++
-	d.c = &fakeContainer{id: "c" + strconv.Itoa(d.nextID), labels: spec.Labels, answers: d.unhealthy == 0}
+	d.c = &fakeContainer{id: "c" + strconv.Itoa(d.nextID), imageID: spec.Image, labels: spec.Labels, answers: d.unhealthy == 0}
 	if d.unhealthy > 0 {
 		d.unhealthy--
 	}
@@ -188,12 +196,12 @@ func TestHarnessCreatedFromHubConfig(t *testing.T) {
 	d.mu.Lock()
 	calls := slices.Clone(d.calls)
 	d.mu.Unlock()
-	want := []string{"inspect", "image", "pull", "create", "start"}
+	want := []string{"inspect", "pull", "image", "create", "start"}
 	if len(calls) < len(want) || !reflect.DeepEqual(calls[:len(want)], want) {
 		t.Fatalf("docker calls %v, want prefix %v", calls, want)
 	}
 	spec := d.spec(0)
-	if spec.Image != testImage || spec.User != "1000:1000" {
+	if spec.Image != "sha256:current" || spec.User != "1000:1000" {
 		t.Errorf("image %q user %q", spec.Image, spec.User)
 	}
 	wantEnv := []string{"GITHUB_TOKEN_FOR_TEST=" + testSecret, "OPENCODE_SERVER_PASSWORD=pw-0", "DOCKER_HOST=unix:///var/run/docker.sock"}
@@ -228,13 +236,12 @@ func TestHarnessWithSameConfigIsKept(t *testing.T) {
 	h, srv := newHub(t, http.StatusNoContent)
 	f := newFixture(t, srv.URL, true)
 	d := newFakeDocker(t)
-	d.images[testImage] = true
-	d.c = &fakeContainer{id: "old", running: true, answers: true, labels: map[string]string{configLabel: ConfigHash(defaultHarness())}}
+	d.c = &fakeContainer{id: "old", imageID: "sha256:current", running: true, answers: true, labels: map[string]string{configLabel: ConfigHash(defaultHarness())}}
 	stop := f.startWith(t, d)
 	waitFor(t, "heartbeat", func() bool { return h.count("heartbeat") >= 2 })
 	stop()
 	h.check()
-	if d.count("create") != 0 || d.count("stop") != 0 || d.count("start") != 0 {
+	if d.count("create") != 0 || d.count("stop") != 0 || d.count("start") != 0 || d.count("pull") != 1 {
 		t.Errorf("container touched: %v", d.calls)
 	}
 	if n := h.count("ready"); n != 1 {
@@ -246,8 +253,7 @@ func TestStoppedHarnessWithSameConfigIsStarted(t *testing.T) {
 	h, srv := newHub(t, http.StatusNoContent)
 	f := newFixture(t, srv.URL, true)
 	d := newFakeDocker(t)
-	d.images[testImage] = true
-	d.c = &fakeContainer{id: "old", answers: true, labels: map[string]string{configLabel: ConfigHash(defaultHarness())}}
+	d.c = &fakeContainer{id: "old", imageID: "sha256:current", answers: true, labels: map[string]string{configLabel: ConfigHash(defaultHarness())}}
 	stop := f.startWith(t, d)
 	waitFor(t, "ready", func() bool { return h.count("ready") >= 1 })
 	stop()
@@ -261,13 +267,12 @@ func TestHarnessWithChangedConfigIsReplaced(t *testing.T) {
 	h, srv := newHub(t, http.StatusNoContent)
 	f := newFixture(t, srv.URL, true)
 	d := newFakeDocker(t)
-	d.images[testImage] = true
 	d.c = &fakeContainer{id: "old", running: true, answers: true, labels: map[string]string{configLabel: "stale"}}
 	stop := f.startWith(t, d)
 	waitFor(t, "ready", func() bool { return h.count("ready") >= 1 })
 	stop()
 	h.check()
-	if d.count("pull") != 0 || d.count("stop") != 1 || d.count("remove") != 1 || d.count("create") != 1 {
+	if d.count("pull") != 1 || d.count("stop") != 1 || d.count("remove") != 1 || d.count("create") != 1 {
 		t.Errorf("docker calls %v", d.calls)
 	}
 }
@@ -286,11 +291,45 @@ func TestRestartingRecreatesHarness(t *testing.T) {
 		t.Errorf("harness fetches = %d, want 2", n)
 	}
 	// Same config both times, so only the forced flag can explain the recreation.
-	if d.count("create") != 2 || d.count("remove") != 1 {
+	if d.count("create") != 2 || d.count("remove") != 1 || d.count("pull") != 2 {
 		t.Errorf("docker calls %v", d.calls)
 	}
 	if n := h.count("ready"); n != 2 {
 		t.Errorf("ready calls = %d, want 2", n)
+	}
+}
+
+func TestStartReplacesCachedMutableTagWhenRegistryImageChanges(t *testing.T) {
+	for _, running := range []bool{false, true} {
+		t.Run(strconv.FormatBool(running), func(t *testing.T) {
+			d := newFakeDocker(t)
+			h := defaultHarness()
+			h.Image = "ghcr.io/kalpak44/workspaced-ai-harness:latest"
+			d.c = &fakeContainer{id: "old", imageID: "sha256:old", running: running, answers: true, labels: map[string]string{configLabel: ConfigHash(h)}}
+			d.imageIDs[h.Image] = "sha256:old"
+			d.remoteImageID = "sha256:new"
+			s := &Supervisor{Docker: d}
+			if err := s.ensure(context.Background(), h, false, slog.New(slog.NewTextHandler(io.Discard, nil))); err != nil {
+				t.Fatal(err)
+			}
+			if !reflect.DeepEqual(d.calls, []string{"inspect", "pull", "image", "stop", "remove", "create", "start"}) {
+				t.Fatalf("latest image was not pulled before replacement: %v", d.calls)
+			}
+			if d.spec(0).Image != "sha256:new" {
+				t.Fatal("container was not created from the resolved image ID")
+			}
+		})
+	}
+}
+
+func TestFailedImageRefreshLeavesRunningHarnessUntouched(t *testing.T) {
+	d := newFakeDocker(t)
+	d.c = &fakeContainer{id: "old", imageID: "sha256:old", running: true, answers: true}
+	d.pullError = errors.New("registry unavailable")
+	s := &Supervisor{Docker: d}
+	err := s.ensure(context.Background(), defaultHarness(), true, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if err == nil || !d.c.running || d.count("stop") != 0 || d.count("remove") != 0 || d.count("create") != 0 {
+		t.Fatalf("failed refresh disturbed the running workspace: %v, %v", err, d.calls)
 	}
 }
 
@@ -351,10 +390,10 @@ func TestExitedHarnessIsStartedAgain(t *testing.T) {
 	stop := f.startWith(t, d)
 	waitFor(t, "ready", func() bool { return h.count("ready") >= 1 })
 	d.mutate(func(c *fakeContainer) { c.running = false })
-	waitFor(t, "restart", func() bool { return d.count("start") >= 2 })
+	waitFor(t, "restart ready", func() bool { return h.count("ready") >= 2 })
 	stop()
 	h.check()
-	if d.count("create") != 1 || h.count("ready") != 1 {
+	if d.count("create") != 1 || h.count("ready") != 2 || h.count("harness") != 2 || d.count("pull") != 2 {
 		t.Errorf("want a plain start: ready %d, calls %v", h.count("ready"), d.calls)
 	}
 }
@@ -375,6 +414,24 @@ func TestHarnessFetchAndCreateFailuresBackOff(t *testing.T) {
 	}
 	if !strings.Contains(f.logs.String(), "[redacted]") {
 		t.Error("create failure not logged")
+	}
+}
+
+func TestExitedHarnessFetchesNewReleaseBeforeStarting(t *testing.T) {
+	h, srv := newHub(t, http.StatusNoContent)
+	f := newFixture(t, srv.URL, true)
+	d := newFakeDocker(t)
+	stop := f.startWith(t, d)
+	waitFor(t, "ready", func() bool { return h.count("ready") >= 1 })
+	h.mu.Lock()
+	h.harness.Image = "ghcr.io/kalpak44/workspaced-ai-harness:new-release"
+	h.mu.Unlock()
+	d.mutate(func(c *fakeContainer) { c.running = false; d.remoteImageID = "sha256:new-release" })
+	waitFor(t, "updated ready", func() bool { return h.count("ready") >= 2 })
+	stop()
+	h.check()
+	if h.count("harness") != 2 || d.count("create") != 2 || d.spec(1).Image != "sha256:new-release" {
+		t.Fatalf("stopped harness reused an old release: %v", d.calls)
 	}
 }
 
@@ -441,6 +498,10 @@ func TestManagedProfileHealthRefusesMissingOrDifferentProvider(t *testing.T) {
 	if !s.profileHealthy(context.Background(), h) {
 		t.Fatal("matching managed profile should be ready")
 	}
+	h.Environment["WORKSPACED_AI_PROVIDER"] = "openai-chatgpt"
+	if !s.profileHealthy(context.Background(), h) {
+		t.Fatal("ChatGPT uses the managed OpenAI provider profile")
+	}
 	h.Environment["WORKSPACED_AI_PROVIDER"] = "openrouter"
 	if s.profileHealthy(context.Background(), h) {
 		t.Fatal("wrong provider cannot acknowledge readiness")
@@ -461,7 +522,7 @@ func TestManagedProfileHealthWithPinnedHarness(t *testing.T) {
 		t.Fatal("pinned harness did not confirm selected managed profile")
 	}
 	other := "openai"
-	if provider == "openai" {
+	if provider == "openai" || provider == "openai-chatgpt" {
 		other = "openrouter"
 	}
 	h.Environment["WORKSPACED_AI_PROVIDER"] = other

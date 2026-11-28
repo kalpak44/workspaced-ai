@@ -6,9 +6,19 @@ the `workspaced-harness` container through the system Docker socket, reports `re
 `127.0.0.1:4096` answers, and sends a signed `heartbeat` every 30 s carrying the VM's memory from
 `/proc/meminfo`, which Hetzner's metrics lack. A heartbeat answering
 `RESTARTING` recreates the harness with fresh values; `PROVISIONING` reports `ready` again. A
-container whose image and environment hash matches its `io.workspaced.config` label is kept, and
-one that exited is started again. Requests are signed with an Ed25519 key that never leaves the
+container is kept only when its configuration hash and immutable image ID match the freshly
+pulled image. Every VM start and requested workspace restart fetches the current image reference
+from VM manager and pulls it, even when that reference is cached. A moved tag replaces the old
+container; an unchanged image reuses its layers. Recovery of a stopped or missing harness follows
+the same path. Pulling finishes before the old container is stopped, and a failed pull is retried
+without removing that container. The persistent workspace home is mounted unchanged. Requests are
+signed with an Ed25519 key that never leaves the
 VM; the environment's values are never logged.
+
+The release is selected by VM manager's `WORKSPACED_HARNESS_IMAGE`, keeping it coordinated with the
+deployed API. A pinned release moves forward when that deployment updates the reference; `:latest`
+is checked against the registry on each start/restart too. The supervisor itself does not update
+through this mechanism: existing VMs need a supervisor rollout once to acquire this behavior.
 
 Once the harness first reports ready, the supervisor also keeps a pool of signed WebSocket
 workers open to `{WORKSPACED_AGENT_URL}/agent/tunnel`, since the VM accepts no inbound

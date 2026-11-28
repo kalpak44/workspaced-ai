@@ -39,6 +39,7 @@ const base = "http://docker"
 // Container is what the supervisor reads back from an inspect.
 type Container struct {
 	ID      string
+	ImageID string
 	Running bool
 	Labels  map[string]string
 }
@@ -83,6 +84,7 @@ type RestartPolicy struct {
 func (c *Client) Inspect(ctx context.Context, name string) (*Container, error) {
 	var out struct {
 		Id     string
+		Image  string
 		State  struct{ Running bool }
 		Config struct{ Labels map[string]string }
 	}
@@ -93,17 +95,18 @@ func (c *Client) Inspect(ctx context.Context, name string) (*Container, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Container{ID: out.Id, Running: out.State.Running, Labels: out.Config.Labels}, nil
+	return &Container{ID: out.Id, ImageID: out.Image, Running: out.State.Running, Labels: out.Config.Labels}, nil
 }
 
-// ImageExists reports whether ref is present locally.
-func (c *Client) ImageExists(ctx context.Context, ref string) (bool, error) {
+// ImageID resolves a pulled reference to its immutable local image ID.
+func (c *Client) ImageID(ctx context.Context, ref string) (string, error) {
+	var out struct{ Id string }
 	// The ref goes in raw, as the docker CLI sends it; the daemon's router expects its slashes.
-	status, err := c.call(ctx, http.MethodGet, "/images/"+ref+"/json", nil, nil)
+	status, err := c.call(ctx, http.MethodGet, "/images/"+ref+"/json", nil, &out)
 	if status == http.StatusNotFound {
-		return false, nil
+		return "", nil
 	}
-	return err == nil, err
+	return out.Id, err
 }
 
 // Pull reads the progress stream to the end, because the daemon reports a failed pull

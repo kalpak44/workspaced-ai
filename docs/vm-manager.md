@@ -140,6 +140,12 @@ only route that returns values, and only the agent hub calls it, for a VM that s
 environment, one created before it existed, is given an `OPENCODE_PASSWORD` on its first call, written with
 check-and-set so two concurrent calls agree on one. No image configured answers `503`.
 
+On every VM start and workspace restart, the supervisor fetches this configuration and pulls the configured
+image even when cached. It compares immutable image IDs, so a moved tag also replaces an existing container.
+Creation uses the resolved image ID, preserving the workspace home mount. Failed pulls retry before the old
+container is stopped. The configured reference selects the release compatible with the deployed API; pinned
+references advance when the deployment changes them. Existing VMs need a supervisor rollout for this behavior.
+
 ### Vault access
 
 The VM manager holds no Vault credential. It signs in through Vault's Kubernetes auth as the role
@@ -246,7 +252,8 @@ open http://localhost:8080/api/v1/swagger-ui
 
 Add OS, supervisor and harness updates, individually or together, with version/status visibility,
 compatibility checks, a pre-update snapshot, verified readiness and rollback that preserves workspace data.
-Keep upgrades separate from workspace restart; allow scheduled maintenance and required reboots.
+Harness updates already apply at workspace start/restart. Keep OS and supervisor upgrades as explicit
+maintenance actions; allow scheduled maintenance and required reboots.
 
 ## Feature implementation: workspace maintenance (planned)
 
