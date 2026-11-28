@@ -163,6 +163,7 @@ describe("App", () => {
   });
 
   it("creates a credential-free ChatGPT workspace and opens its Profile to connect", async () => {
+    api.state.createStatus = "INITIALIZING";
     const user=userEvent.setup();await renderLoaded();
     await user.click(screen.getByRole("button",{name:"New workspace"}));
     await chooseVmType(user,"cx33");
