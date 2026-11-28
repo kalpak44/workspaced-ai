@@ -534,6 +534,10 @@ jobs:
       - name: Build image
         run: docker build --platform linux/amd64 -t harness:candidate .
 
+      - name: Verify provider profiles and ChatGPT model policy
+        timeout-minutes: 10
+        run: python3 test-profiles.py harness:candidate
+
       # Run as the workspace pod runs it: read-only root, a fresh home, no capabilities —
       # and no network, because a pod start must not depend on one. Each check is a
       # contract the API depends on, so a harness upgrade that breaks one fails here
