@@ -267,11 +267,22 @@ public class SessionService {
 
   private Harness.ModelRef model(UUID workspaceId) {
     var workspace = workspaces.findById(workspaceId).orElseThrow();
-    return workspace.getModel() == null
-        ? new Harness.ModelRef(
-            workspace.getModelProvider(),
-            catalogues.of(endpoint(workspaceId), workspace.getModelProvider()).defaultModel())
-        : new Harness.ModelRef(workspace.getModelProvider(), workspace.getModel());
+    var selected = workspace.getModel();
+    if (selected == null || "openai".equals(workspace.getModelProvider())) {
+      var catalogue = catalogues.of(endpoint(workspaceId), workspace.getModelProvider());
+      if (catalogue.defaultModel() == null
+          || catalogue.defaultModel().isBlank()
+          || catalogue.models().isEmpty())
+        throw new HarnessUnavailableException(
+            "No account-supported agent models are available. Check the connection and try again.");
+      // A saved API-key model can outlive a switch to ChatGPT or an entitlement change.
+      // Resolve only within this account's active profile, never another provider/key.
+      if (selected == null
+          || ("workspaced-chatgpt".equals(catalogue.defaultModel())
+              && catalogue.models().stream().noneMatch(m -> m.id().equals(workspace.getModel()))))
+        selected = catalogue.defaultModel();
+    }
+    return new Harness.ModelRef(workspace.getModelProvider(), selected);
   }
 
   public void abort(UUID workspaceId, UUID sessionId) {

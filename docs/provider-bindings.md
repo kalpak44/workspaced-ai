@@ -132,7 +132,9 @@ connection is installed into the already isolated profile before clearing the se
 there is no previous provider or credential to migrate and no extra restart is needed.
 Existing workspace connector changes continue using the versioned, verified restart path.
 
-The ChatGPT profile uses `openai/gpt-5.6-sol` for chat and titles independently of the
-OpenAI API-key profile. Switching connectors resets the workspace model preference so
+The ChatGPT profile discovers visible, API-supported models from the connected account.
+Its managed `openai/workspaced-chatgpt` alias resolves chat and titles to that account’s
+default independently of the OpenAI API-key profile. Failed discovery does not expose the
+static API-key catalog. Unsupported saved selections resolve to the same account default. Switching connectors resets the workspace model preference so
 a model selected under another connection does not carry into a new authentication mode.
 Device authorizations are cancelled when their connection section is dismissed.

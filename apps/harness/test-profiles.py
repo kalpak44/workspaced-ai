@@ -5,13 +5,16 @@ import subprocess
 import sys
 import time
 import uuid
+from pathlib import Path
+
+subprocess.run(["node", "--test", str(Path(__file__).with_name("test-chatgpt-models.mjs"))], check=True)
 
 IMAGE = sys.argv[1] if len(sys.argv) == 2 else "workspaced-harness:provider-profiles"
 PREFIX = "harness-profiles-" + uuid.uuid4().hex[:12]
 VOLUME = PREFIX + "-home"
 LOCATION = "?location%5Bdirectory%5D=%2Fhome%2Fworkspace%2Fproject"
-MODELS = {"openrouter": "deepseek/deepseek-v4.1-flash", "openai": "gpt-6.1-sol", "openai-chatgpt": "gpt-5.6-sol"}
-TITLES = {"openrouter": "anthropic/claude-haiku-5.5", "openai": "gpt-6.1-sol", "openai-chatgpt": "gpt-5.6-sol"}
+MODELS = {"openrouter": "deepseek/deepseek-v4.1-flash", "openai": "gpt-6.1-sol", "openai-chatgpt": "workspaced-chatgpt"}
+TITLES = {"openrouter": "anthropic/claude-haiku-5.5", "openai": "gpt-6.1-sol", "openai-chatgpt": "workspaced-chatgpt"}
 containers = []
 
 

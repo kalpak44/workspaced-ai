@@ -7,7 +7,7 @@ runtime environment variable `WORKSPACED_AI_PROVIDER`:
 | --- | --- | --- | --- |
 | Unset or `openrouter` | `openrouter` | `openrouter/deepseek/deepseek-v4.1-flash` | `openrouter/anthropic/claude-haiku-5.5` |
 | `openai` | `openai` | `openai/gpt-6.1-sol` | `openai/gpt-6.1-sol` |
-| `openai-chatgpt` | `openai` | `openai/gpt-5.6-sol` | `openai/gpt-5.6-sol` |
+| `openai-chatgpt` | `openai` | Account-discovered ChatGPT default | Same account-discovered default |
 
 An empty or unknown value exits with status 2 before the server or user services
 start. There is no provider fallback. The OpenRouter profile retains
@@ -82,3 +82,16 @@ container. It proves explicit dispatch IDs and completed model/token receipts
 against 2.2.5 with an inert key. It is not provider authentication or a live
 subscription test. See [Workspaced usage](../../docs/ai-usage.md) and the isolated
 [local-preview pilot](../../tools/local-preview/README.md).
+
+## ChatGPT account models
+
+The managed `workspaced-chatgpt` model is a runtime alias for the first visible, API-supported
+model returned by the connected account's Codex model catalog. The same alias drives titles.
+The bundled dependency-free plugin discovers models using OpenCode's current, refreshed OAuth
+credential inside the workspace. It refreshes on credential changes and every minute, hides
+all other static OpenAI models and hidden account models, and never persists or logs tokens.
+After sign-in, failed or empty discovery disables all ChatGPT models rather than using an
+API-key catalog. Existing unsupported workspace selections resolve to this account default.
+
+`node --test test-chatgpt-models.mjs` covers account filtering, token rotation, default wire
+mapping, and failed discovery. `test-profiles.py` also runs this regression test in CI.

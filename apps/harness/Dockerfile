@@ -53,7 +53,7 @@ COPY opencode/ /usr/share/harness/opencode/
 # Validate both profiles with the pinned binary at the same managed path as runtime.
 RUN mkdir -p /tmp/workspaced-opencode \
  && ln -s /tmp/workspaced-opencode /etc/opencode \
- && for profile in openrouter openai; do \
+ && for profile in openrouter openai openai-chatgpt; do \
       jq -s '.[0] * .[1]' /usr/share/harness/opencode/common.json \
         "/usr/share/harness/opencode/profiles/$profile.json" > /etc/opencode/opencode.json; \
       HOME=/stage opencode --standalone debug config > /dev/null || exit 1; \

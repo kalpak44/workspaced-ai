@@ -70,6 +70,9 @@ class SessionControllerTest {
   @Autowired io.github.kalpak44.workspacedai.api.auth.AiUsage usage;
   @MockitoBean ApiKeyCheck keyCheck;
 
+  @org.springframework.test.context.bean.override.mockito.MockitoSpyBean
+  io.github.kalpak44.workspacedai.api.harness.ModelCatalogues catalogues;
+
   private final HttpClient http = HttpClient.newHttpClient();
   private UUID workspace;
 
@@ -112,6 +115,35 @@ class SessionControllerTest {
         workspaces
             .create(TestUsers.ADMIN, "Research", ModelProvider.OPENROUTER, "sk-or-1", null, "UTC")
             .id();
+  }
+
+  @Test
+  void staleChatGptModelUsesTheAccountDefaultForAnExistingSession() throws Exception {
+    var session = create();
+    transaction.executeWithoutResult(
+        _ -> {
+          var row = repository.findById(workspace).orElseThrow();
+          row.activateProvider(null, "openai");
+          row.setModel("gpt-5.6-sol");
+        });
+    org.mockito.Mockito.doReturn(
+            new io.github.kalpak44.workspacedai.api.harness.ModelCatalogue(
+                "workspaced-chatgpt",
+                List.of(
+                    new io.github.kalpak44.workspacedai.api.harness.ModelOption(
+                        "gpt-6-luna", "GPT-6-Luna", 200000L, 0.0, 0.0))))
+        .when(catalogues)
+        .of(any(), org.mockito.ArgumentMatchers.eq("openai"));
+    assertThat(send("POST", "/" + session.id() + "/messages", "{\"text\":\"Hello\"}").statusCode())
+        .isEqualTo(202);
+    assertThat(OPENCODE.requests)
+        .anySatisfy(
+            request -> {
+              assertThat(request.path()).endsWith("/model");
+              assertThat(request.body())
+                  .contains("workspaced-chatgpt", "openai")
+                  .doesNotContain("gpt-5.6-sol");
+            });
   }
 
   @Test

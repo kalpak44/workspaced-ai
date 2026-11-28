@@ -11,10 +11,13 @@
       "effect": "allow"
     }
   ],
-  "model": "openai/gpt-5.6-sol",
+  "model": "openai/workspaced-chatgpt",
   "agents": {
     "title": {
-      "model": "openai/gpt-5.6-sol"
+      "model": "openai/workspaced-chatgpt"
     }
-  }
+  },
+  "plugins": [
+    "/usr/share/harness/opencode/chatgpt-models"
+  ]
 }
