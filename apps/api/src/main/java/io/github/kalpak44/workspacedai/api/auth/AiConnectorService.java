@@ -17,8 +17,10 @@ import org.springframework.web.server.ResponseStatusException;
 @Service
 public class AiConnectorService {
   private final ProviderBindings bindings;
+  private final io.github.kalpak44.workspacedai.api.harness.Harness harness;
 
-  public record Connector(UUID id, String name, String provider, boolean trial) {}
+  public record Connector(
+      UUID id, String name, String provider, boolean trial, String authType, UUID workspaceId) {}
 
   private final AiConnectorRepository repository;
   private final ApiKeyCheck check;
@@ -32,6 +34,7 @@ public class AiConnectorService {
 
   public AiConnectorService(
       AiConnectorRepository repository,
+      io.github.kalpak44.workspacedai.api.harness.Harness harness,
       ApiKeyCheck check,
       AuthProperties properties,
       WorkspaceRepository workspaces,
@@ -42,6 +45,7 @@ public class AiConnectorService {
       ConnectorAlerts alerts,
       ProviderBindings bindings) {
     this.bindings = bindings;
+    this.harness = harness;
     this.repository = repository;
     this.check = check;
     this.workspaces = workspaces;
@@ -54,7 +58,13 @@ public class AiConnectorService {
   }
 
   private Connector view(AiConnectorEntity row) {
-    return new Connector(row.getId(), row.getName(), row.getProvider(), row.isTrial());
+    return new Connector(
+        row.getId(),
+        row.getName(),
+        row.getProvider(),
+        row.isTrial(),
+        row.getAuthType(),
+        row.getWorkspaceId());
   }
 
   public List<Connector> list() {
@@ -83,6 +93,9 @@ public class AiConnectorService {
 
   public String key(UUID id, String providerId) {
     var row = owned(id);
+    if (row.isChatGpt())
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "ChatGPT connections are applied in their workspace Profile");
     if (!row.getProvider().equals(providerId))
       throw new ResponseStatusException(
           HttpStatus.BAD_REQUEST, "connector uses a different model provider");
@@ -129,16 +142,19 @@ public class AiConnectorService {
       throw new ResponseStatusException(
           HttpStatus.CONFLICT, "The Trial connector cannot be deleted");
     bindings.requireUnreferenced(id);
+    if (row.isChatGpt()) {
+      var endpoint =
+          runtime
+              .harness(row.getWorkspaceId())
+              .orElseThrow(
+                  () ->
+                      new ResponseStatusException(
+                          HttpStatus.CONFLICT,
+                          "Start the workspace to remove its ChatGPT connection"));
+      harness.removeOpenAiConnection(endpoint, "workspaced-" + row.getId());
+    }
     repository.delete(row);
     repository.flush();
-  }
-
-  private String open(AiConnectorEntity row) {
-    return box.open(row.encryptedKey())
-        .orElseThrow(
-            () ->
-                new ResponseStatusException(
-                    HttpStatus.CONFLICT, "The connector key is unavailable"));
   }
 
   @Transactional(readOnly = true)

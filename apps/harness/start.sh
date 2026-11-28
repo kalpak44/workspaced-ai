@@ -4,6 +4,7 @@
 set -eu
 
 profile=${WORKSPACED_AI_PROVIDER-openrouter}
+case "$profile" in openai-chatgpt) profile=openai ;; esac
 case "$profile" in
   openrouter | openai) ;;
   *) echo "Unsupported WORKSPACED_AI_PROVIDER: $profile (expected openrouter or openai)" >&2; exit 2 ;;

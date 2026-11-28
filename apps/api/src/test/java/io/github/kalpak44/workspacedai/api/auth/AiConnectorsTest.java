@@ -39,6 +39,9 @@ class AiConnectorsTest {
   @MockitoBean OpenRouterManagement management;
   @MockitoBean ApiKeyCheck check;
   @MockitoBean OpenRouterMetrics metrics;
+  @MockitoBean ChatGptDeviceAuth chatGpt;
+  @Autowired ChatGptLoginRepository logins;
+  @Autowired org.springframework.jdbc.core.JdbcTemplate jdbc;
   @org.springframework.test.context.bean.override.mockito.MockitoSpyBean WorkspaceRuntime runtime;
   final HttpClient http = HttpClient.newHttpClient();
   final JsonMapper json = JsonMapper.builder().build();
@@ -48,6 +51,154 @@ class AiConnectorsTest {
     workspaces.deleteAll();
     connectors.deleteAll();
     when(check.accepts(any(), any())).thenReturn(true);
+  }
+
+  @Test
+  void connectsChatGptWithoutLeakingTokensAndScopesTheProfileToOneWorkspace() throws Exception {
+    var auth = TestUsers.bearer(port);
+    var workspace =
+        workspaces
+            .saveAndFlush(
+                new io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity(
+                    TestUsers.ADMIN, "ChatGPT box", "openrouter", "UTC"))
+            .getId();
+    org.mockito.Mockito.doReturn(
+            java.util.Optional.of(
+                new io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint(
+                    URI.create("http://localhost:4096"), "test")))
+        .when(runtime)
+        .harness(workspace);
+    when(chatGpt.start())
+        .thenReturn(
+            json.readTree(
+                "{\"device_auth_id\":\"private-device-id\",\"user_code\":\"ABCD-EFGH\",\"interval\":\"5\"}"));
+    when(chatGpt.poll(any()))
+        .thenReturn(
+            "{\"type\":\"oauth\",\"methodID\":\"chatgpt-headless\",\"access\":\"private-access\",\"refresh\":\"private-refresh\",\"expires\":9999999999999}");
+    var route = "/workspaces/" + workspace + "/chatgpt";
+    assertThat(
+            send(
+                    "POST",
+                    route,
+                    "{\"name\":\"Personal plan\",\"providerNoticeAccepted\":false}",
+                    auth)
+                .statusCode())
+        .isEqualTo(400);
+    var started =
+        send("POST", route, "{\"name\":\"Personal plan\",\"providerNoticeAccepted\":true}", auth);
+    assertThat(started.statusCode()).isEqualTo(201);
+    assertThat(started.body())
+        .contains("ABCD-EFGH")
+        .doesNotContain("private-device-id", "refresh", "access_token");
+    var id = UUID.fromString(json.readTree(started.body()).path("id").asString());
+    assertThat(logins.findById(id).orElseThrow().encryptedState)
+        .doesNotContain("private-device-id", "ABCD-EFGH");
+    assertThat(
+            send("POST", route, "{\"name\":\"Again\",\"providerNoticeAccepted\":true}", auth)
+                .statusCode())
+        .isEqualTo(409);
+    assertThat(send("GET", route + "/" + id, null, auth).body()).contains("pending");
+    verify(chatGpt, never()).poll(any());
+    var other = users.saveAndFlush(TestUsers.newUser(UUID.randomUUID() + "@example.com"));
+    assertThat(send("GET", route + "/" + id, null, TestUsers.bearer(other)).statusCode())
+        .isEqualTo(404);
+    jdbc.update(
+        "update chatgpt_login set next_poll_at=? where id=?",
+        java.sql.Timestamp.from(java.time.Instant.EPOCH),
+        id);
+    var done = send("GET", route + "/" + id, null, auth);
+    assertThat(done.statusCode()).isEqualTo(200);
+    assertThat(done.body())
+        .contains("complete")
+        .doesNotContain("private-access", "private-refresh");
+    var connector = UUID.fromString(json.readTree(done.body()).path("connectorId").asString());
+    var saved = connectors.findById(connector).orElseThrow();
+    assertThat(saved.isChatGpt()).isTrue();
+    assertThat(saved.getWorkspaceId()).isEqualTo(workspace);
+    assertThat(saved.encryptedKey()).doesNotContain("private-access", "private-refresh");
+    assertThat(logins.findById(id).orElseThrow().encryptedState).isNull();
+    assertThat(send("GET", route + "/" + id, null, auth).body()).isEqualTo(done.body());
+    org.mockito.Mockito.verify(chatGpt, org.mockito.Mockito.times(1)).poll(any());
+    assertThat(
+            send(
+                    "PUT",
+                    "/workspaces/" + workspace + "/ai-connector",
+                    "{\"connectorId\":\"" + connector + "\"}",
+                    auth)
+                .statusCode())
+        .isEqualTo(200);
+    var another =
+        workspaces
+            .saveAndFlush(
+                new io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity(
+                    TestUsers.ADMIN, "Another", "openrouter", "UTC"))
+            .getId();
+    assertThat(send("GET", "/workspaces/" + another + "/ai-connector/status", null, auth).body())
+        .doesNotContain(connector.toString());
+    assertThat(
+            send(
+                    "PUT",
+                    "/workspaces/" + another + "/ai-connector",
+                    "{\"connectorId\":\"" + connector + "\"}",
+                    auth)
+                .statusCode())
+        .isEqualTo(409);
+    assertThat(
+            send(
+                    "POST",
+                    "/workspaces",
+                    "{\"name\":\"Clone\",\"modelProvider\":\"openai\",\"connectorId\":\""
+                        + connector
+                        + "\"}",
+                    auth)
+                .statusCode())
+        .isEqualTo(400);
+  }
+
+  @Test
+  void expiresAndCancelsChatGptAttemptsWithoutExchangingThem() throws Exception {
+    var workspace =
+        workspaces
+            .saveAndFlush(
+                new io.github.kalpak44.workspacedai.api.workspace.WorkspaceEntity(
+                    TestUsers.ADMIN, "Pending", "openrouter", "UTC"))
+            .getId();
+    org.mockito.Mockito.doReturn(
+            java.util.Optional.of(
+                new io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint(
+                    URI.create("http://localhost:4096"), "test")))
+        .when(runtime)
+        .harness(workspace);
+    when(chatGpt.start())
+        .thenReturn(
+            json.readTree("{\"device_auth_id\":\"device\",\"user_code\":\"CODE\",\"interval\":5}"));
+    var route = "/workspaces/" + workspace + "/chatgpt";
+    var started =
+        send(
+            "POST",
+            route,
+            "{\"name\":\"Plan\",\"providerNoticeAccepted\":true}",
+            TestUsers.bearer(port));
+    var id = json.readTree(started.body()).path("id").asString();
+    assertThat(send("DELETE", route + "/" + id, null, TestUsers.bearer(port)).statusCode())
+        .isEqualTo(204);
+    assertThat(send("GET", route + "/" + id, null, TestUsers.bearer(port)).body())
+        .contains("cancelled");
+    started =
+        send(
+            "POST",
+            route,
+            "{\"name\":\"Plan\",\"providerNoticeAccepted\":true}",
+            TestUsers.bearer(port));
+    var expired = UUID.fromString(json.readTree(started.body()).path("id").asString());
+    jdbc.update(
+        "update chatgpt_login set expires_at=? where id=?",
+        java.sql.Timestamp.from(java.time.Instant.EPOCH),
+        expired);
+    assertThat(send("GET", route + "/" + expired, null, TestUsers.bearer(port)).body())
+        .contains("expired");
+    assertThat(logins.findById(expired).orElseThrow().encryptedState).isNull();
+    verify(chatGpt, never()).poll(any());
   }
 
   @Test

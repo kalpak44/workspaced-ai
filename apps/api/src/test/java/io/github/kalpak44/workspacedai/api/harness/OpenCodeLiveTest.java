@@ -19,6 +19,46 @@ import tools.jackson.databind.json.JsonMapper;
 @EnabledIfSystemProperty(named = "opencode.live.url", matches = ".+")
 class OpenCodeLiveTest {
   @Test
+  void switchesNativeChatGptAndApiKeyProfilesWithoutOverwritingRefreshedCredentials() {
+    var harness = new OpenCodeHarness(JsonMapper.builder().build());
+    var endpoint =
+        new HarnessEndpoint(
+            URI.create(System.getProperty("opencode.live.url")),
+            System.getProperty("opencode.live.password"));
+    var oauth = "workspaced-" + UUID.randomUUID();
+    var apiKey = "workspaced-" + UUID.randomUUID();
+    var value =
+        JsonMapper.builder()
+            .build()
+            .writeValueAsString(
+                Map.of(
+                    "type",
+                    "oauth",
+                    "methodID",
+                    "chatgpt-headless",
+                    "access",
+                    "test-access-never-sent-to-provider",
+                    "refresh",
+                    "test-refresh-never-sent-to-provider",
+                    "expires",
+                    System.currentTimeMillis() + 3600000,
+                    "metadata",
+                    Map.of("accountID", "test-account")));
+    try {
+      harness.activateOpenAiConnection(endpoint, oauth, "ChatGPT smoke test", value, true);
+      harness.activateOpenAiConnection(
+          endpoint, oauth, "ChatGPT smoke test", "stale snapshot must not be parsed", true);
+      harness.activateOpenAiConnection(
+          endpoint, apiKey, "API key smoke test", "test-key-never-sent-to-provider", false);
+      harness.activateOpenAiConnection(
+          endpoint, oauth, "ChatGPT smoke test", "stale snapshot must not be parsed", true);
+    } finally {
+      harness.removeOpenAiConnection(endpoint, oauth);
+      harness.removeOpenAiConnection(endpoint, apiKey);
+    }
+  }
+
+  @Test
   void switchesAgentsWithoutReplacingTheSessionOrItsHistory() {
     var harness = new OpenCodeHarness(JsonMapper.builder().build());
     var endpoint =

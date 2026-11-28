@@ -47,8 +47,9 @@ export function AiConnectorsPanel() {
   const connecting = oauth.status === "waiting" || oauth.status === "exchanging";
   const remove = async (id: string) => {
     setRemoving(id); setError("");
-    try { await removeConnector(id); setDeleteId(null); setNotice("Connector removed from Workspaced. Your provider key has not been revoked."); }
-    catch (cause) { setError(isConnectorInUse(cause) ? "This connector is still active or pending in a workspace. Activate another connector there first." : "Could not delete the AI connector. Please try again."); }
+    const chatGpt = connectors.find(connector => connector.id === id)?.authType === "chatgpt";
+    try { await removeConnector(id); setDeleteId(null); setNotice(chatGpt ? "ChatGPT connection removed from Workspaced and its workspace." : "Connector removed from Workspaced. Your provider key has not been revoked."); }
+    catch (cause) { setError(isConnectorInUse(cause) ? chatGpt ? "Activate another connector and keep this workspace running before removing its ChatGPT connection." : "This connector is still active or pending in a workspace. Activate another connector there first." : "Could not delete the AI connector. Please try again."); }
     finally { setRemoving(null); }
   };
 
@@ -57,7 +58,7 @@ export function AiConnectorsPanel() {
     <div className="card overflow-hidden">
       <div className="border-b border-zinc-200 p-5 dark:border-zinc-800">
         <h2 className="font-semibold">Your AI connectors</h2>
-        <p className="mt-1 text-sm text-zinc-500">Named connections you can reuse across your workspaces. Select one to see its usage and limits. Keys are encrypted and never shown again.</p>
+        <p className="mt-1 text-sm text-zinc-500">Named connections for your workspaces. API-key connectors can be reused. ChatGPT connections belong to one workspace and are created in its Profile settings. Credentials are encrypted and never shown again.</p>
       </div>
       {trial && <div aria-label="Default Trial connector" className="space-y-3 border-b border-zinc-200 px-5 py-4 dark:border-zinc-800"><div className="flex items-center gap-2"><h3 className="font-medium">{trial.name}</h3><span className="rounded-md bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">Default · Trial</span></div><TrialConnectorBudget id={trial.id} /><Button label="Show Trial token usage" variant="secondary" onClick={() => setSelectedId(trial.id)} /></div>}
       {loading ? <div className="p-5"><Spinner label="Loading AI connectors" /></div> : <div className="divide-y divide-zinc-200 dark:divide-zinc-800">
@@ -65,7 +66,7 @@ export function AiConnectorsPanel() {
         {personalConnectors.map(connector => <div key={connector.id} className={`flex items-center gap-3 px-5 py-3 ${selected?.id === connector.id ? "bg-zinc-50 dark:bg-zinc-900" : ""}`}>
           <button type="button" aria-pressed={selected?.id === connector.id} onClick={() => setSelectedId(connector.id)} className="min-w-0 flex-1 rounded-lg py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-zinc-400">
             <span className="block break-words font-medium">{connector.name}</span>
-            <span className="text-sm text-zinc-500">{providers.find(provider => provider.id === connector.provider)?.name ?? connector.provider}</span>
+            <span className="text-sm text-zinc-500">{connector.authType === "chatgpt" ? "ChatGPT plan · Workspace connection" : providers.find(provider => provider.id === connector.provider)?.name ?? connector.provider}</span>
           </button>
           <IconButton label={`Delete ${connector.name}`} icon={Trash2} className="shrink-0" aria-busy={removing === connector.id} disabled={removing !== null} onClick={() => { setDeleteId(connector.id); setError(""); }} />
         </div>)}
@@ -109,7 +110,7 @@ export function AiConnectorsPanel() {
     {deleting && <Modal title="Remove AI connector?" description={deleting.name} onClose={() => { if (!removing) setDeleteId(null); }}>
       <ModalBody>
         <p>This removes <strong>{deleting.name}</strong> from your Workspaced account only.</p>
-        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{deleting?.provider === "openrouter" ? "The API key will stay active in your OpenRouter account." : "The API key will stay active with its provider."} Workspaces must activate another connector before this one can be removed. Trial uses whatever is left of its one-time budget; removing a connector does not refill it. Revoke the personal key separately with its provider.</p>
+        <p className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm leading-6 text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200">{deleting.authType === "chatgpt" ? "This removes the saved ChatGPT sign-in from its workspace. Activate another connector there first and keep the workspace running while removing this connection." : <>{deleting.provider === "openrouter" ? "The API key will stay active in your OpenRouter account." : "The API key will stay active with its provider."} Workspaces must activate another connector before this one can be removed. Trial uses whatever is left of its one-time budget; removing a connector does not refill it. Revoke the personal key separately with its provider.</>}</p>
         {deleting.provider === "openrouter" && <a href="https://openrouter.ai/settings/keys" target="_blank" rel="noopener noreferrer" className="text-sm underline underline-offset-4">Open OpenRouter key settings</a>}
         {error && <p role="alert" className="text-sm text-rose-600">{error}</p>}
       </ModalBody>

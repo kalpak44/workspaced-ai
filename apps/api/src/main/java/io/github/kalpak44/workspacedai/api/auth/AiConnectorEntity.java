@@ -25,6 +25,31 @@ public class AiConnectorEntity {
   @Column(nullable = false)
   private String provider;
 
+  @Column(name = "auth_type", nullable = false)
+  private String authType = "api_key";
+
+  @Column(name = "workspace_id")
+  private UUID workspaceId;
+
+  public String getAuthType() {
+    return authType;
+  }
+
+  public UUID getWorkspaceId() {
+    return workspaceId;
+  }
+
+  public boolean isChatGpt() {
+    return "chatgpt".equals(authType);
+  }
+
+  static AiConnectorEntity chatGpt(UUID owner, UUID workspace, String name, String sealed) {
+    var row = new AiConnectorEntity(owner, name, "openai", sealed);
+    row.authType = "chatgpt";
+    row.workspaceId = workspace;
+    return row;
+  }
+
   @Column(name = "encrypted_key", nullable = false, columnDefinition = "text")
   private String encryptedKey;
 

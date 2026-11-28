@@ -38,7 +38,7 @@ public class ProviderBindingService {
   public void request(UUID id, long revision, String provider, String key) {
     requireVm(id);
     if (revision < 1
-        || !java.util.Set.of("openrouter", "openai").contains(provider)
+        || !java.util.Set.of("openrouter", "openai", "openai-chatgpt").contains(provider)
         || key == null
         || key.isBlank())
       throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Invalid provider binding");
@@ -98,7 +98,9 @@ public class ProviderBindingService {
     var provider = data.get("provider");
     if (!provider.equals("openrouter")) next.remove("OPENROUTER_BASE_URL");
     next.put("WORKSPACED_AI_PROVIDER", provider);
-    next.put(provider.equals("openai") ? "OPENAI_API_KEY" : "OPENROUTER_API_KEY", data.get("key"));
+    if (!provider.equals("openai-chatgpt"))
+      next.put(
+          provider.equals("openai") ? "OPENAI_API_KEY" : "OPENROUTER_API_KEY", data.get("key"));
     if (provider.equals("openrouter"))
       next.putIfAbsent("OPENROUTER_BASE_URL", "https://openrouter.ai/api/v1");
     return new Configuration(Map.copyOf(next), number(data.get("revision")));

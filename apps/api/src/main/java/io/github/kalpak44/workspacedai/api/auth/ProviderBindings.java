@@ -15,7 +15,8 @@ import org.springframework.web.server.ResponseStatusException;
 /** Durable intent before I/O; readiness receipts, never enqueue/status, advance active state. */
 @Service
 public class ProviderBindings {
-  public record Choice(UUID id, String name, String provider, boolean trial) {}
+  public record Choice(
+      UUID id, String name, String provider, boolean trial, String authType, UUID workspaceId) {}
 
   public record Status(
       Choice active,
@@ -39,6 +40,7 @@ public class ProviderBindings {
   }
 
   private final AiUsage usage;
+  private final io.github.kalpak44.workspacedai.api.harness.Harness harness;
   private final WorkspaceRepository workspaces;
   private final AiConnectorRepository connectors;
   private final WorkspaceRuntime runtime;
@@ -53,6 +55,7 @@ public class ProviderBindings {
 
   public ProviderBindings(
       WorkspaceRepository workspaces,
+      io.github.kalpak44.workspacedai.api.harness.Harness harness,
       AiUsage usage,
       AiConnectorRepository connectors,
       WorkspaceRuntime runtime,
@@ -63,6 +66,7 @@ public class ProviderBindings {
       @Value("${workspaced.ai.openai-api-key-enabled:true}") boolean enabled,
       @Value("${workspaced.ai.provider-restart-timeout:PT3M}") Duration timeout) {
     this.usage = usage;
+    this.harness = harness;
     this.workspaces = workspaces;
     this.connectors = connectors;
     this.runtime = runtime;
@@ -103,12 +107,18 @@ public class ProviderBindings {
   }
 
   private void usable(AiConnectorEntity c) {
+    if (c.isChatGpt()) {
+      key(c);
+      return;
+    }
     requireEnabled(c.getProvider());
     if (!checks.accepts(ModelProvider.byId(c.getProvider()).orElseThrow(), key(c)))
       throw new ApiKeyRejectedException(ModelProvider.byId(c.getProvider()).orElseThrow());
   }
 
   public void stage(WorkspaceEntity w, AiConnectorEntity c) {
+    if (c.getWorkspaceId() != null && !c.getWorkspaceId().equals(w.getId()))
+      throw conflict("Sign in to ChatGPT separately in this workspace");
     var locked = workspaces.findLockedById(w.getId()).orElseThrow();
     var state = locked.getProviderChange();
     if (locked.isDraft()) throw conflict("Launch the workspace before staging a provider change");
@@ -135,9 +145,19 @@ public class ProviderBindings {
         connectors.findAllByOwnerIdOrderByNameAscIdAsc(w.getOwnerId()).stream()
             .filter(
                 c ->
-                    c.getProvider().equals("openrouter")
-                        || (openaiEnabled && c.getProvider().equals("openai")))
-            .map(c -> new Choice(c.getId(), c.getName(), c.getProvider(), c.isTrial()))
+                    (c.getWorkspaceId() == null || c.getWorkspaceId().equals(id))
+                        && (c.isChatGpt()
+                            || c.getProvider().equals("openrouter")
+                            || (openaiEnabled && c.getProvider().equals("openai"))))
+            .map(
+                c ->
+                    new Choice(
+                        c.getId(),
+                        c.getName(),
+                        c.getProvider(),
+                        c.isTrial(),
+                        c.getAuthType(),
+                        c.getWorkspaceId()))
             .toList(),
         s.phase,
         s.error,
@@ -150,7 +170,15 @@ public class ProviderBindings {
         : connectors
             .findById(id)
             .filter(c -> c.getOwnerId().equals(w.getOwnerId()))
-            .map(c -> new Choice(c.getId(), c.getName(), c.getProvider(), c.isTrial()))
+            .map(
+                c ->
+                    new Choice(
+                        c.getId(),
+                        c.getName(),
+                        c.getProvider(),
+                        c.isTrial(),
+                        c.getAuthType(),
+                        c.getWorkspaceId()))
             .orElse(null);
   }
 
@@ -200,10 +228,36 @@ public class ProviderBindings {
     return new Dispatch(
         w.getId(),
         s.revision,
-        s.phase.equals("ROLLING_BACK")
-            ? w.getModelProvider()
-            : connector(w, s.pending).getProvider(),
+        runtimeProvider(
+            connector(w, s.phase.equals("ROLLING_BACK") ? w.getAiConnectorId() : s.pending)),
         s.phase.equals("ROLLING_BACK") ? s.previousKey : s.targetKey);
+  }
+
+  private String runtimeProvider(AiConnectorEntity c) {
+    return c.isChatGpt() ? "openai-chatgpt" : c.getProvider();
+  }
+
+  private void activateConnection(WorkspaceEntity w, AiConnectorEntity c) {
+    if (c.getProvider().equals("openai")) {
+      var endpoint =
+          runtime.harness(w.getId()).orElseThrow(() -> conflict("Workspace is not ready"));
+      // A previous ChatGPT login must not override an API-key profile.
+      harness.activateOpenAiConnection(
+          endpoint, "workspaced-" + c.getId(), c.getName(), key(c), c.isChatGpt());
+    }
+    var oldId =
+        w.getProviderChange().phase.equals("ROLLING_BACK")
+            ? w.getProviderChange().pending
+            : w.getAiConnectorId();
+    if (oldId == null || oldId.equals(c.getId())) return;
+    var old = connector(w, oldId);
+    if (old.getProvider().equals("openai") && !old.isChatGpt()) {
+      // API keys are recoverable from the encrypted connector. Do not retain extra copies in
+      // workspace databases after switching away; OAuth entries must retain rotated tokens.
+      harness.removeOpenAiConnection(
+          runtime.harness(w.getId()).orElseThrow(() -> conflict("Workspace is not ready")),
+          "workspaced-" + oldId);
+    }
   }
 
   private void send(Dispatch command) {
@@ -213,7 +267,9 @@ public class ProviderBindings {
           command.workspace(),
           command.revision(),
           command.provider(),
-          box.open(command.sealedKey()).orElseThrow());
+          command.provider().equals("openai-chatgpt")
+              ? "managed-chatgpt"
+              : box.open(command.sealedKey()).orElseThrow());
     } catch (RuntimeException uncertain) {
       /* Receipt/retry resolves uncertain transport outcomes; no activation here. */
     }
@@ -261,6 +317,12 @@ public class ProviderBindings {
                   } catch (RuntimeException unauthorized) {
                     return rollback(w);
                   }
+                  try {
+                    activateConnection(w, target);
+                  } catch (RuntimeException unavailable) {
+                    // OpenCode's HTTP server can become ready before its integration plugins.
+                    return clock.instant().isBefore(s.deadline) ? null : rollback(w);
+                  }
                   w.activateProvider(target.getId(), target.getProvider());
                   s.pending = null;
                   s.targetKey = null;
@@ -271,6 +333,15 @@ public class ProviderBindings {
                   if (w.getConfigurationRevision() == s.configurationRevision)
                     w.setSecretsPendingRestart(false);
                 } else {
+                  try {
+                    activateConnection(w, connector(w, w.getAiConnectorId()));
+                  } catch (RuntimeException unavailable) {
+                    if (!clock.instant().isBefore(s.deadline)) {
+                      s.phase = "BLOCKED";
+                      s.error = "PREVIOUS_CONNECTION_UNAVAILABLE";
+                    }
+                    return null;
+                  }
                   s.phase = "STAGED";
                   s.previousKey = null;
                   s.deadline = null;
@@ -303,7 +374,9 @@ public class ProviderBindings {
       if (s.previousKey == null) throw conflict("No authorized previous credential snapshot");
       var active = connector(w, w.getAiConnectorId());
       if (!key(active).equals(box.open(s.previousKey).orElseThrow())
-          || !checks.accepts(ModelProvider.byId(active.getProvider()).orElseThrow(), key(active)))
+          || (!active.isChatGpt()
+              && !checks.accepts(
+                  ModelProvider.byId(active.getProvider()).orElseThrow(), key(active))))
         throw conflict("Previous binding unavailable");
       s.phase = "ROLLING_BACK";
       s.revision++;

@@ -164,7 +164,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const noConnectorCredits = remainingCredits !== null && remainingCredits <= 0;
   const checkingConnectorCredits = !!creditCheckId && !connectorUsage.metrics && !connectorUsage.error;
   const connectorCreditBlocked = noConnectorCredits || checkingConnectorCredits;
-  const ownConnectors = connectors.connectors.filter(c => c.provider === providerId);
+  const ownConnectors = connectors.connectors.filter(c => c.provider === providerId && !c.workspaceId);
   const connecting = !connectorId && provider?.id === "openrouter" && !pasting;
   const popupOpen = openRouter.status === "waiting" || openRouter.status === "exchanging";
 

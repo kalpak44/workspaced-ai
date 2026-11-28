@@ -162,7 +162,7 @@ it("reports rollback and blocked recovery without claiming the pending connector
   api.providerPhases.set(api.rows[0].id, { phase: "BLOCKED", error: "PREVIOUS_BINDING_UNAVAILABLE" });
   globalThis.dispatchEvent(new Event("focus"));
   await screen.findByText(/Restart to retry recovery/);
-  expect(screen.queryByRole("button", { name: "Connect ChatGPT" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Connect ChatGPT" })).toBeDisabled();
 });
 
 it("lets the owner inspect Trial token usage and keeps API-key disconnect provider-specific", async () => {

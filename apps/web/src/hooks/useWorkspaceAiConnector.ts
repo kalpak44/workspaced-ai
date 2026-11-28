@@ -43,5 +43,5 @@ export function useWorkspaceAiConnector(workspace: Workspace, onChanged: (change
     }
     finally { setBusy(false); }
   };
-  return { selected, setSelected, current: status?.pending?.id ?? status?.active?.id ?? "", status, reading, busy, error, save };
+  return { selected, setSelected, current: status?.pending?.id ?? status?.active?.id ?? "", status, reading, busy, error, save, refresh };
 }

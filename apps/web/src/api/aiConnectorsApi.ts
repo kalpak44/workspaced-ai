@@ -1,7 +1,18 @@
 import { send } from "./http";
 import { workspaceUrl } from "./workspacesApi";
-export interface AiConnector { readonly id: string; readonly name: string; readonly provider: string; readonly trial?: boolean }
+export interface AiConnector { readonly id: string; readonly name: string; readonly provider: string; readonly trial?: boolean; readonly authType?: "api_key" | "chatgpt"; readonly workspaceId?: string | null }
 const BASE = "/api/v1/ai-connectors";
+export interface ChatGptAttempt { readonly id: string; readonly url: string; readonly instructions: string; readonly expiresAt: string; readonly pollSeconds: number }
+export interface ChatGptStatus { readonly status: "pending" | "complete" | "cancelled" | "expired"; readonly connectorId: string | null }
+export async function connectChatGpt(id: string, name: string, providerNoticeAccepted: boolean): Promise<ChatGptAttempt> {
+  return (await send(`${workspaceUrl(id)}/chatgpt`, { method: "POST", body: JSON.stringify({ name: name.trim(), providerNoticeAccepted }) })).json();
+}
+export async function pollChatGpt(id: string, attempt: string): Promise<ChatGptStatus> {
+  return (await send(`${workspaceUrl(id)}/chatgpt/${encodeURIComponent(attempt)}`)).json();
+}
+export async function cancelChatGpt(id: string, attempt: string): Promise<void> {
+  await send(`${workspaceUrl(id)}/chatgpt/${encodeURIComponent(attempt)}`, { method: "DELETE" });
+}
 export async function listAiConnectors(): Promise<AiConnector[]> { return (await send(BASE)).json(); }
 export async function createAiConnector(name: string, provider: string, apiKey: string, providerNoticeAccepted: boolean): Promise<AiConnector> {
   return (await send(BASE, { method: "POST", body: JSON.stringify({ name: name.trim(), provider, apiKey: apiKey.trim(), providerNoticeAccepted }) })).json();

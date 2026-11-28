@@ -14,6 +14,16 @@ import java.util.function.Consumer;
  */
 public interface Harness {
 
+  /** Install/select a native OpenAI connection without replacing refreshed OAuth credentials. */
+  default void activateOpenAiConnection(
+      HarnessEndpoint endpoint, String id, String label, String value, boolean oauth) {
+    throw new UnsupportedOperationException("OpenAI connections are unavailable");
+  }
+
+  default void removeOpenAiConnection(HarnessEndpoint endpoint, String id) {
+    throw new UnsupportedOperationException("OpenAI connections are unavailable");
+  }
+
   /** The harness reads its password from this variable; no user secret may take it. */
   String PASSWORD_VARIABLE = "OPENCODE_PASSWORD";
 

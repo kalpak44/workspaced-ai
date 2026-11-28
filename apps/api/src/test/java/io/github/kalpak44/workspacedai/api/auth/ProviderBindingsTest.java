@@ -42,6 +42,7 @@ class ProviderBindingsTest {
   @MockitoBean WorkspaceRuntime runtime;
   @MockitoBean ApiKeyCheck checks;
   @MockitoBean OpenRouterMetrics metrics;
+  @MockitoBean io.github.kalpak44.workspacedai.api.harness.Harness harness;
   UserEntity owner;
   UUID workspace;
   UUID original;
@@ -67,6 +68,11 @@ class ProviderBindingsTest {
     var w = new WorkspaceEntity(owner.getId(), "Binding test", "openrouter", "UTC");
     w.setAiConnectorId(original);
     workspace = workspaces.saveAndFlush(w).getId();
+    when(runtime.harness(workspace))
+        .thenReturn(
+            Optional.of(
+                new io.github.kalpak44.workspacedai.api.harness.HarnessEndpoint(
+                    URI.create("http://localhost:4096"), "test")));
   }
 
   UUID connector(String name, String provider, String key) {
@@ -153,6 +159,52 @@ class ProviderBindingsTest {
     assertThat(row().getAiConnectorId()).isEqualTo(target);
     ready(2);
     assertThat(row().getAiConnectorId()).isEqualTo(original);
+  }
+
+  @Test
+  void waitsForNativeIntegrationReadinessBeforeAllowingMessages() throws Exception {
+    stage(target);
+    restart();
+    doThrow(new IllegalStateException("integration is still starting"))
+        .doNothing()
+        .when(harness)
+        .activateOpenAiConnection(any(), any(), any(), any(), anyBoolean());
+    ready(1);
+    assertThat(row().getProviderChange().phase).isEqualTo("APPLYING");
+    assertThatThrownBy(() -> bindings.requireRoutable(workspace))
+        .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    ready(1);
+    assertThat(row().getAiConnectorId()).isEqualTo(target);
+  }
+
+  @Test
+  void activatesNativeChatGptOnlyAfterReadinessAndCanReturnToAnApiKey() throws Exception {
+    var oauth =
+        connectors
+            .saveAndFlush(
+                AiConnectorEntity.chatGpt(
+                    owner.getId(),
+                    workspace,
+                    "ChatGPT",
+                    new SecretBox(auth.jwtSecret(), "workspaced-ai-connectors")
+                        .seal("native-oauth-value")))
+            .getId();
+    stage(oauth);
+    verify(harness, never()).activateOpenAiConnection(any(), any(), any(), any(), anyBoolean());
+    restart();
+    verify(runtime).restartProvider(workspace, 1, "openai-chatgpt", "managed-chatgpt");
+    ready(1);
+    assertThat(row().getAiConnectorId()).isEqualTo(oauth);
+    verify(harness)
+        .activateOpenAiConnection(
+            any(), eq("workspaced-" + oauth), eq("ChatGPT"), eq("native-oauth-value"), eq(true));
+    stage(target);
+    restart();
+    ready(2);
+    assertThat(row().getAiConnectorId()).isEqualTo(target);
+    verify(harness)
+        .activateOpenAiConnection(
+            any(), eq("workspaced-" + target), eq("Target"), eq("target-key"), eq(false));
   }
 
   @Test
@@ -267,6 +319,7 @@ class ProviderBindingsTest {
     var recovered =
         new ProviderBindings(
             workspaces,
+            harness,
             usage,
             connectors,
             runtime,

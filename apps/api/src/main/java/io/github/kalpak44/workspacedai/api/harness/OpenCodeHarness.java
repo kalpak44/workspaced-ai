@@ -97,6 +97,44 @@ public class OpenCodeHarness implements Harness {
   }
 
   @Override
+  public void activateOpenAiConnection(
+      HarnessEndpoint endpoint, String id, String label, String value, boolean oauth) {
+    var connections =
+        call(endpoint, "GET", withLocation("/api/integration/openai", PROJECT_ROOT), null)
+            .path("data")
+            .path("connections");
+    boolean exists = false;
+    for (var connection : connections)
+      if (id.equals(connection.path("id").asString(""))) exists = true;
+    if (!exists) {
+      // OAuth values may have rotated in OpenCode. Only seed a missing credential, never overwrite
+      // it.
+      Object credential = oauth ? json.readTree(value) : Map.of("type", "key", "key", value);
+      call(
+          endpoint,
+          "POST",
+          "/api/credential",
+          Map.of(
+              "id",
+              id,
+              "integrationID",
+              "openai",
+              "label",
+              label,
+              "value",
+              credential,
+              "activate",
+              true));
+    }
+    call(endpoint, "POST", "/api/credential/" + encode(id) + "/activate", null);
+  }
+
+  @Override
+  public void removeOpenAiConnection(HarnessEndpoint endpoint, String id) {
+    call(endpoint, "DELETE", "/api/credential/" + encode(id), null);
+  }
+
+  @Override
   public void validate(HarnessEndpoint endpoint, String directory) {
     var info = call(endpoint, "GET", "/api/info", null);
     var version = text(info, "version");
