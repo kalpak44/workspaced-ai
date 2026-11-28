@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { readProviderBindingStatus } from "../api/aiConnectorsApi";
 import { acceptInvitation, acceptInvitationById, removeCollaborator } from "../api/collaboratorsApi";
 import { ApiError } from "../api/http";
 import {
@@ -61,6 +62,42 @@ export function useWorkspaces() {
   // The latest status seen per id. A status event can beat the create response that
   // introduces its workspace, and this is where it waits until then.
   const latest = useRef(new Map<string, WorkspaceStatus>());
+  const [restartChecks, setRestartChecks] = useState<ReadonlySet<string>>(new Set());
+
+  // Runtime READY can arrive before the API reconciles the provider receipt. Keep reading
+  // authoritative configuration state until that transition settles, including rollback.
+  useEffect(() => {
+    if (restartChecks.size === 0) return;
+    let active = true;
+    let reading = false;
+    const refresh = async () => {
+      if (reading) return;
+      reading = true;
+      try {
+        await Promise.all([...restartChecks].map(async id => {
+          try {
+            const binding = await readProviderBindingStatus(id);
+            if (!active) return;
+            setWorkspaces(current => current.map(w => w.id === id ? {
+              ...w,
+              restartRequired: binding.restartRequired,
+              modelProvider: binding.active?.provider ?? w.modelProvider,
+            } : w));
+            if (binding.phase !== "APPLYING" && binding.phase !== "ROLLING_BACK") {
+              setRestartChecks(current => {
+                const next = new Set(current);
+                next.delete(id);
+                return next;
+              });
+            }
+          } catch { /* Retry transient failures without claiming the changes were applied. */ }
+        }));
+      } finally { reading = false; }
+    };
+    void refresh();
+    const interval = setInterval(() => void refresh(), 3000);
+    return () => { active = false; clearInterval(interval); };
+  }, [restartChecks]);
 
   useEffect(() => {
     // StrictMode runs this twice in development; only the live run may set state.
@@ -212,9 +249,8 @@ export function useWorkspaces() {
       return;
     }
     patch(id, { status: "INITIALIZING" });
-    restartWorkspace(id).then(() => listWorkspaces()).then(rows => {
-      const actual = rows.find(row => row.id === id);
-      if (actual) patch(id, { restartRequired: actual.restartRequired });
+    restartWorkspace(id).then(() => {
+      setRestartChecks(current => new Set(current).add(id));
     }).catch(() => {
       if (before) {
         patch(id, { status: latest.current.get(id) ?? before });

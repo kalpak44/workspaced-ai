@@ -1,5 +1,5 @@
 import { act, renderHook, waitFor } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { uniqueName, useWorkspaces } from "../src/hooks/useWorkspaces";
 import { FakeEventSource, installFakeApi } from "./fakeApi";
 
@@ -129,4 +129,65 @@ describe("useWorkspaces", () => {
     await waitFor(() => expect(result.current.selected?.id).toBe("ws-1"));
     expect(result.current.selected?.status).toBe("READY");
   });
+});
+
+
+it("refreshes the restart flag after readiness while provider verification finishes later", async () => {
+  const api = installFakeApi();
+  api.rows[0] = { ...api.rows[0], restartRequired: true };
+  api.connectors.push({ id: "openai", name: "OpenAI", provider: "openai" });
+  api.pendingConnectors.set("starter", "openai");
+  api.providerPhases.set("starter", { phase: "STAGED", error: null });
+  const result = await loaded();
+  vi.useFakeTimers();
+  try {
+    await act(async () => result.current.restart("starter"));
+    expect(result.current.workspaces[0].restartRequired).toBe(true);
+    FakeEventSource.emit("starter", "READY");
+    expect(result.current.workspaces[0].restartRequired).toBe(true);
+    api.rows[0] = { ...api.rows[0], restartRequired: false, modelProvider: "openai" };
+    api.workspaceConnectors.set("starter", "openai");
+    api.pendingConnectors.delete("starter");
+    api.providerPhases.set("starter", { phase: "NONE", error: null });
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(result.current.workspaces[0]).toMatchObject({ restartRequired: false, modelProvider: "openai", status: "READY" });
+    const calls = api.fetchFn.mock.calls.length;
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(api.fetchFn.mock.calls).toHaveLength(calls);
+  } finally { vi.useRealTimers(); }
+});
+
+it("keeps unapplied changes visible after a verified rollback", async () => {
+  const api = installFakeApi();
+  api.rows[0] = { ...api.rows[0], restartRequired: true };
+  api.pendingConnectors.set("starter", "target");
+  const result = await loaded();
+  vi.useFakeTimers();
+  try {
+    await act(async () => result.current.restart("starter"));
+    api.providerPhases.set("starter", { phase: "ROLLING_BACK", error: "RESTART_FAILED" });
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(result.current.workspaces[0].restartRequired).toBe(true);
+    api.providerPhases.set("starter", { phase: "STAGED", error: "RESTART_FAILED_ROLLED_BACK" });
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(result.current.workspaces[0].restartRequired).toBe(true);
+    const calls = api.fetchFn.mock.calls.length;
+    await act(async () => vi.advanceTimersByTimeAsync(6000));
+    expect(api.fetchFn.mock.calls).toHaveLength(calls);
+  } finally { vi.useRealTimers(); }
+});
+
+it("preserves a newer configuration edit when a provider restart completes", async () => {
+  const api = installFakeApi();
+  api.rows[0] = { ...api.rows[0], restartRequired: true };
+  api.pendingConnectors.set("starter", "target");
+  const result = await loaded();
+  vi.useFakeTimers();
+  try {
+    await act(async () => result.current.restart("starter"));
+    api.pendingConnectors.delete("starter");
+    api.providerPhases.set("starter", { phase: "NONE", error: null });
+    await act(async () => vi.advanceTimersByTimeAsync(3000));
+    expect(result.current.workspaces[0].restartRequired).toBe(true);
+  } finally { vi.useRealTimers(); }
 });
