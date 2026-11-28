@@ -4,3 +4,4 @@
 !main.go
 !internal/
 internal/**/*_test.go
+!install/
