@@ -4,7 +4,7 @@ import { Button, TextField } from "../atoms";
 import { AiProviderNotice } from "../molecules/AiProviderNotice";
 
 export function ChatGptConnect({ workspaceId, disabled, onConnected }: {
-  readonly workspaceId: string; readonly disabled: boolean; readonly onConnected: (connectorId: string) => Promise<void>;
+  readonly workspaceId: string; readonly disabled: boolean; readonly onConnected: (connectorId: string) => Promise<boolean | void>;
 }) {
   const [name, setName] = useState("ChatGPT");
   const [accepted, setAccepted] = useState(false);

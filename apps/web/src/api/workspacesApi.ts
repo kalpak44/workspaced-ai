@@ -35,6 +35,7 @@ export interface NewWorkspace {
   readonly modelProvider: string;
   readonly apiKey: string;
   readonly connectorId?: string;
+  readonly useChatGptPlan?: boolean;
   /** The IANA zone its agent reads times in; the API uses UTC when it is missing. */
   readonly timeZone?: string;
   /** The account's one free demo: the API ignores serverType and charges nothing. */
@@ -72,7 +73,7 @@ export async function listWorkspaces(): Promise<Workspace[]> {
 }
 
 export async function createWorkspace(workspace: NewWorkspace): Promise<Workspace> {
-  return (await send(BASE, { method: "POST", body: JSON.stringify({ ...workspace, apiKey: workspace.connectorId ? undefined : workspace.apiKey }) })).json();
+  return (await send(BASE, { method: "POST", body: JSON.stringify({ ...workspace, apiKey: workspace.connectorId || workspace.useChatGptPlan ? undefined : workspace.apiKey }) })).json();
 }
 
 /**

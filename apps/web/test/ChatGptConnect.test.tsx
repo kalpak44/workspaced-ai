@@ -52,3 +52,19 @@ it("preserves a successful login when staging fails", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("ChatGPT was saved. Select it in Saved connector");
   expect(screen.getByRole("button",{name:"Connect ChatGPT"})).toBeEnabled();
 });
+
+it("confirms a newly configured workspace without requiring an unnecessary restart",async()=>{
+  vi.mocked(pollChatGpt).mockResolvedValue({status:"complete",connectorId:"profile"});
+  render(<ChatGptConnect workspaceId="workspace" disabled={false} onConnected={vi.fn().mockResolvedValue(false)} />);
+  const user=userEvent.setup();await user.click(screen.getByRole("checkbox"));
+  await user.click(screen.getByRole("button",{name:"Connect ChatGPT"}));
+  expect(await screen.findByText("ChatGPT connected. Your workspace is ready to chat.")).toBeVisible();
+});
+
+it("cancels pending device authorization when the selected profile section is dismissed",async()=>{
+  const user=userEvent.setup();
+  const view=render(<ChatGptConnect workspaceId="workspace" disabled={false} onConnected={vi.fn()} />);
+  await user.click(screen.getByRole("checkbox"));await user.click(screen.getByRole("button",{name:"Connect ChatGPT"}));
+  await screen.findByText("ABCD-EFGH");view.unmount();
+  expect(cancelChatGpt).toHaveBeenCalledWith("workspace","attempt");
+});

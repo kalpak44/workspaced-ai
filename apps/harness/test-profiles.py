@@ -10,8 +10,8 @@ IMAGE = sys.argv[1] if len(sys.argv) == 2 else "workspaced-harness:provider-prof
 PREFIX = "harness-profiles-" + uuid.uuid4().hex[:12]
 VOLUME = PREFIX + "-home"
 LOCATION = "?location%5Bdirectory%5D=%2Fhome%2Fworkspace%2Fproject"
-MODELS = {"openrouter": "deepseek/deepseek-v4.1-flash", "openai": "gpt-6.1-sol"}
-TITLES = {"openrouter": "anthropic/claude-haiku-5.5", "openai": "gpt-6.1-sol"}
+MODELS = {"openrouter": "deepseek/deepseek-v4.1-flash", "openai": "gpt-6.1-sol", "openai-chatgpt": "gpt-5.6-sol"}
+TITLES = {"openrouter": "anthropic/claude-haiku-5.5", "openai": "gpt-6.1-sol", "openai-chatgpt": "gpt-5.6-sol"}
 containers = []
 
 
@@ -20,7 +20,7 @@ def docker(*args, check=True, input=None):
                           check=check, timeout=90)
 
 
-def start(profile=None, persisted=False):
+def start(profile=None, persisted=False, credentials=True):
     name = PREFIX + "-" + str(len(containers))
     containers.append(name)
     home = ["--mount", f"type=volume,source={VOLUME},target=/home/workspace"] if persisted else [
@@ -30,8 +30,9 @@ def start(profile=None, persisted=False):
             "--security-opt", "no-new-privileges", *home,
             "-e", "OPENCODE_SERVER_PASSWORD=profile-test",
             # Inert placeholders expose the catalog; no request can leave --network none.
-            "-e", "OPENAI_API_KEY=not-a-real-key", "-e", "OPENROUTER_API_KEY=not-a-real-key",
             "-e", "OPENROUTER_BASE_URL=https://router.example.invalid/v1"]
+    if credentials:
+        args += ["-e", "OPENAI_API_KEY=not-a-real-key", "-e", "OPENROUTER_API_KEY=not-a-real-key"]
     if profile is not None:
         args += ["-e", "WORKSPACED_AI_PROVIDER=" + profile]
     docker(*args, IMAGE)
@@ -54,6 +55,8 @@ def ready(name):
 
 
 def verify(name, profile):
+    selected = profile
+    profile = "openai" if selected == "openai-chatgpt" else selected
     ready(name)
     docs = [entry for entry in api(name, "config" + LOCATION) if entry["type"] == "document"]
     managed = [entry["info"] for entry in docs if entry.get("path") == "/etc/opencode/opencode.json"]
@@ -63,8 +66,8 @@ def verify(name, profile):
     assert policies == [{"action": "provider.use", "resource": "*", "effect": "deny"},
                         {"action": "provider.use", "resource": profile, "effect": "allow"}]
     values = next(doc for doc in managed if "model" in doc)
-    assert values["model"] == {"providerID": profile, "model": MODELS[profile]}, values
-    assert values["agents"]["title"]["model"] == {"providerID": profile, "model": TITLES[profile]}
+    assert values["model"] == {"providerID": profile, "model": MODELS[selected]}, values
+    assert values["agents"]["title"]["model"] == {"providerID": profile, "model": TITLES[selected]}
     # Common defaults must occur only once, not again in a writable global config.
     instructions = [item for doc in docs for item in doc["info"].get("instructions", [])]
     assert instructions == ["/usr/share/harness/instructions/system.md",
@@ -77,12 +80,12 @@ def verify(name, profile):
         assert "openrouter" not in values.get("providers", {})
     models = api(name, "model" + LOCATION)["data"]
     assert {model["providerID"] for model in models} == {profile}
-    assert any(model["id"] == MODELS[profile] for model in models), MODELS[profile]
-    assert any(model["id"] == TITLES[profile] for model in models), TITLES[profile]
+    assert any(model["id"] == MODELS[selected] for model in models), MODELS[selected]
+    assert any(model["id"] == TITLES[selected] for model in models), TITLES[selected]
     default = api(name, "model/default" + LOCATION)["data"]
-    assert (default["providerID"], default["id"]) == (profile, MODELS[profile]), default
+    assert (default["providerID"], default["id"]) == (profile, MODELS[selected]), default
     title = next(agent for agent in api(name, "agent" + LOCATION)["data"] if agent["id"] == "title")
-    assert title["model"] == {"providerID": profile, "id": TITLES[profile]}, title["model"]
+    assert title["model"] == {"providerID": profile, "id": TITLES[selected]}, title["model"]
     print(f"PASS: {profile} managed policies, effective default/title models, provider catalog, single defaults source", flush=True)
 
 
@@ -138,7 +141,19 @@ done
 
 
 try:
-    for profile in [None, "openrouter", "openai"]:
+    name = start("openai-chatgpt", credentials=False)
+    ready(name)
+    for attempt in range(20):
+        try:
+            api(name, "integration/openai" + LOCATION)
+            break
+        except subprocess.CalledProcessError:
+            time.sleep(1)
+    else:
+        raise AssertionError("ChatGPT setup endpoint never became available")
+    docker("rm", "-f", name)
+    print("PASS: credential-free ChatGPT profile starts and exposes connection setup", flush=True)
+    for profile in [None, "openrouter", "openai", "openai-chatgpt"]:
         name = start(profile)
         verify(name, profile or "openrouter")
         docker("rm", "-f", name)
@@ -160,7 +175,7 @@ try:
     docker("rm", "-f", name)
     # Successive starts share the edited home and switch both directions. A real
     # docker restart also has to reconstruct the managed file after edits.
-    for profile in [None, "openai", "openrouter"]:
+    for profile in [None, "openai-chatgpt", "openai", "openrouter"]:
         name = start(profile, persisted=True)
         verify(name, profile or "openrouter")
         preserved(name)

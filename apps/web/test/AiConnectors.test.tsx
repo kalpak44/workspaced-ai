@@ -162,7 +162,7 @@ it("reports rollback and blocked recovery without claiming the pending connector
   api.providerPhases.set(api.rows[0].id, { phase: "BLOCKED", error: "PREVIOUS_BINDING_UNAVAILABLE" });
   globalThis.dispatchEvent(new Event("focus"));
   await screen.findByText(/Restart to retry recovery/);
-  expect(screen.getByRole("button", { name: "Connect ChatGPT" })).toBeDisabled();
+  expect(screen.queryByRole("button", { name: "Connect ChatGPT" })).not.toBeInTheDocument();
 });
 
 it("lets the owner inspect Trial token usage and keeps API-key disconnect provider-specific", async () => {
@@ -210,4 +210,16 @@ it("creates an OpenAI API-key connector from the provider dropdown", async () =>
   expect(api.connectors).toEqual([{ id: "connector-1", name: "OpenAI work", provider: "openai" }]);
   expect(screen.getByLabelText("API key")).toHaveValue("");
   expect(screen.queryByRole("region", { name: "Usage for OpenAI work" })).not.toBeInTheDocument();
+});
+
+it("shows ChatGPT sign-in only for the selected profile connection method", async()=>{
+  api.connectors.push({id:"key",name:"My key",provider:"openrouter"});
+  render(<SettingsPage section="profile" workspace={api.rows[0]} onChanged={vi.fn()} onRestart={vi.fn()} onLeave={vi.fn()} />);
+  await screen.findByRole("combobox",{name:"Saved connector"});
+  expect(screen.queryByRole("button",{name:"Connect ChatGPT"})).not.toBeInTheDocument();
+  const user=userEvent.setup();
+  await user.click(screen.getByRole("radio",{name:/Use ChatGPT plan/}));
+  expect(screen.getByRole("button",{name:"Connect ChatGPT"})).toBeVisible();
+  await user.click(screen.getByRole("radio",{name:/Saved API connector/}));
+  expect(screen.queryByRole("button",{name:"Connect ChatGPT"})).not.toBeInTheDocument();
 });

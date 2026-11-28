@@ -55,23 +55,38 @@ public class WorkspaceController implements WorkspaceApi {
         request.connectorId() == null
             ? request.trimmedApiKey()
             : connectors.key(request.connectorId(), provider.id());
+    if (Boolean.TRUE.equals(request.useChatGptPlan())
+        && (provider != ModelProvider.OPENAI
+            || request.apiKey() != null
+            || request.connectorId() != null
+            || request.wantsDemo())) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST,
+          "ChatGPT setup requires OpenAI without an API key or saved connector, on a paid workspace");
+    }
     var workspace =
-        apiKey == null
-            ? service.createDraft(
+        Boolean.TRUE.equals(request.useChatGptPlan())
+            ? service.createChatGpt(
                 CurrentUser.id(),
                 request.trimmedName(),
-                provider,
                 request.serverTypeOrNull(),
-                request.timeZoneOrUtc(),
-                request.wantsDemo())
-            : service.create(
-                CurrentUser.id(),
-                request.trimmedName(),
-                provider,
-                apiKey,
-                request.serverTypeOrNull(),
-                request.timeZoneOrUtc(),
-                request.wantsDemo());
+                request.timeZoneOrUtc())
+            : apiKey == null
+                ? service.createDraft(
+                    CurrentUser.id(),
+                    request.trimmedName(),
+                    provider,
+                    request.serverTypeOrNull(),
+                    request.timeZoneOrUtc(),
+                    request.wantsDemo())
+                : service.create(
+                    CurrentUser.id(),
+                    request.trimmedName(),
+                    provider,
+                    apiKey,
+                    request.serverTypeOrNull(),
+                    request.timeZoneOrUtc(),
+                    request.wantsDemo());
     if (request.connectorId() != null) connectors.remember(workspace.id(), request.connectorId());
     var location =
         ServletUriComponentsBuilder.fromCurrentRequest()

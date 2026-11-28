@@ -3,15 +3,20 @@ import { cancelChatGpt, connectChatGpt, pollChatGpt, selectAiConnector, type Cha
 import { ApiError } from "../api/http";
 
 /** Runs one ChatGPT device sign-in at a time and stages the resulting profile. */
-export function useChatGptConnect(workspaceId: string, onConnected: (connectorId: string) => Promise<void>) {
+export function useChatGptConnect(workspaceId: string, onConnected: (connectorId: string) => Promise<boolean | void>) {
   const [attempt, setAttempt] = useState<ChatGptAttempt | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
   const latest = useRef(onConnected);
   latest.current = onConnected;
+  const pendingAttempt = useRef(attempt);
+  pendingAttempt.current = attempt;
   const active = useRef(true);
-  useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
+  useEffect(() => { active.current = true; return () => {
+    active.current = false;
+    if (pendingAttempt.current) void cancelChatGpt(workspaceId,pendingAttempt.current.id).catch(() => undefined);
+  }; }, [workspaceId]);
 
   useEffect(() => {
     if (!attempt) return;
@@ -30,10 +35,10 @@ export function useChatGptConnect(workspaceId: string, onConnected: (connectorId
           try {
             await selectAiConnector(workspaceId, result.connectorId);
             if (cancelled) return;
-            await latest.current(result.connectorId);
-            if (!cancelled) setNotice("ChatGPT connected. Restart the workspace to activate this profile.");
+            const restartRequired = await latest.current(result.connectorId);
+            if (!cancelled) setNotice(restartRequired === false ? "ChatGPT connected. Your workspace is ready to chat." : "ChatGPT connected. Restart the workspace to activate this profile.");
           } catch {
-            if (!cancelled) setError("ChatGPT was saved. Select it in Saved connector to apply it, then restart the workspace.");
+            if (!cancelled) setError("ChatGPT was saved. Select it in Saved connector to finish applying this connection.");
           } finally { if (!cancelled) { setBusy(false); setAttempt(null); } }
           return;
         }

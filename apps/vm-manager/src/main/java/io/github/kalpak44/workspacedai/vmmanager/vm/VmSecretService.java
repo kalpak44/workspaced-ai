@@ -203,7 +203,13 @@ public class VmSecretService {
    * is the only source of the key, so an environment entry of that name is dropped.
    */
   void init(UUID vmId, String openRouterApiKey, Map<String, String> environment) {
-    store.update(vmId, Entry.SECRETS, _ -> Map.of(SYSTEM_SECRET, openRouterApiKey));
+    if (openRouterApiKey == null
+        && !"openai-chatgpt".equals(environment.get("WORKSPACED_AI_PROVIDER")))
+      throw new IllegalArgumentException("Provider credential required");
+    store.update(
+        vmId,
+        Entry.SECRETS,
+        _ -> openRouterApiKey == null ? Map.of() : Map.of(SYSTEM_SECRET, openRouterApiKey));
     var system = new HashMap<>(environment);
     system.remove(SYSTEM_SECRET);
     store.update(vmId, Entry.SYSTEM, _ -> system);

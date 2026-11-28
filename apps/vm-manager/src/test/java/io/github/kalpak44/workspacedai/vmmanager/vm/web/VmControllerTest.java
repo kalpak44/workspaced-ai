@@ -57,6 +57,25 @@ class VmControllerTest {
   private final HttpClient http = HttpClient.newHttpClient();
 
   @Test
+  void createsAChatGptSetupWithoutAnyProviderCredential() throws Exception {
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"workspaceId\":\""
+                + UUID.randomUUID()
+                + "\",\"userId\":\""
+                + USER
+                + "\",\"environment\":{\"WORKSPACED_AI_PROVIDER\":\"openai-chatgpt\"}}");
+    assertThat(response.statusCode()).isEqualTo(201);
+    var id = JSON.readValue(response.body(), VmDto.class).id();
+    var harness = JSON.readValue(send("GET", "/" + id + "/harness", null).body(), HarnessDto.class);
+    assertThat(harness.environment())
+        .containsEntry("WORKSPACED_AI_PROVIDER", "openai-chatgpt")
+        .doesNotContainKeys("OPENROUTER_API_KEY", "OPENAI_API_KEY");
+  }
+
+  @Test
   void bindsProfileAndKeyAtomicallyAndAcceptsOnlyMatchingReadiness() throws Exception {
     var created =
         send(

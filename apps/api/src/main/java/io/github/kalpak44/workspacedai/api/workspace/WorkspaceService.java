@@ -198,6 +198,41 @@ public class WorkspaceService {
   }
 
   /**
+   * Provision an isolated, credential-free ChatGPT workspace. Sending stays gated until sign-in.
+   */
+  public Workspace createChatGpt(UUID ownerId, String name, String serverType, String timeZone) {
+    validTimeZone(timeZone);
+    var plan = planFor(ownerId, serverType);
+    var price = plan.map(VmSize::monthlyGross);
+    price.ifPresent(monthly -> billing.requireCovered(ownerId, monthly));
+    var entity =
+        transactions.execute(
+            _ -> {
+              var row =
+                  new WorkspaceEntity(ownerId, name, ModelProvider.OPENAI.id(), timeZone, false);
+              row.setChatGptSetup(true);
+              return repository.saveAndFlush(row);
+            });
+    try {
+      return start(
+          entity.getId(),
+          ownerId,
+          name,
+          ModelProvider.OPENAI,
+          entity.getComputeProvider(),
+          null,
+          plan.map(VmSize::serverType).orElse(serverType),
+          timeZone,
+          price,
+          false);
+    } catch (RuntimeException failure) {
+      release(entity.getId());
+      transactions.executeWithoutResult(_ -> repository.deleteById(entity.getId()));
+      throw failure;
+    }
+  }
+
+  /**
    * A workspace with an id but no VM, for a key that is issued only once the id exists. It is
    * checked as {@link #create} checks one, so its launch fails only on the key or on Hetzner. An
    * account has one demo draft at most: a tour started again, in another browser say, gets the one
@@ -323,11 +358,17 @@ public class WorkspaceService {
             compute,
             serverType,
             new WorkspaceEnvironment(
-                Map.of(
-                    provider.baseUrlVariable(),
-                    provider.baseUrl(),
-                    Harness.TIME_ZONE_VARIABLE,
-                    timeZone),
+                apiKey == null
+                    ? Map.of(
+                        "WORKSPACED_AI_PROVIDER",
+                        "openai-chatgpt",
+                        Harness.TIME_ZONE_VARIABLE,
+                        timeZone)
+                    : Map.of(
+                        provider.baseUrlVariable(),
+                        provider.baseUrl(),
+                        Harness.TIME_ZONE_VARIABLE,
+                        timeZone),
                 secrets(provider, apiKey)));
     price.ifPresent(monthly -> billing.startCharging(id, ownerId, monthly));
     var entity =
@@ -415,7 +456,9 @@ public class WorkspaceService {
   }
 
   private static Map<String, String> secrets(ModelProvider provider, String apiKey) {
-    return Map.of(provider.apiKeyVariable(), apiKey, Harness.PASSWORD_VARIABLE, password());
+    return apiKey == null
+        ? Map.of(Harness.PASSWORD_VARIABLE, password())
+        : Map.of(provider.apiKeyVariable(), apiKey, Harness.PASSWORD_VARIABLE, password());
   }
 
   private static String password() {

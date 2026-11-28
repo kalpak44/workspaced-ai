@@ -41,7 +41,19 @@ public record CreateWorkspaceRequest(
             example = "false")
         Boolean demo,
     @Schema(description = "A saved connector owned by this user, instead of apiKey")
-        java.util.UUID connectorId) {
+        java.util.UUID connectorId,
+    @Schema(description = "Start without provider credentials and open ChatGPT connection setup")
+        Boolean useChatGptPlan) {
+  public CreateWorkspaceRequest(
+      String name,
+      String modelProvider,
+      String apiKey,
+      String serverType,
+      String timeZone,
+      Boolean demo,
+      java.util.UUID connectorId) {
+    this(name, modelProvider, apiKey, serverType, timeZone, demo, connectorId, false);
+  }
 
   public CreateWorkspaceRequest(
       String name,

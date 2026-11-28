@@ -135,6 +135,34 @@ class ProviderBindingsTest {
   }
 
   @Test
+  void firstChatGptSetupGatesTrafficUntilItsConnectionIsInstalled() throws Exception {
+    var row = row();
+    row.activateProvider(null, "openai");
+    row.setChatGptSetup(true);
+    workspaces.saveAndFlush(row);
+    var status = request("GET", "/workspaces/" + workspace + "/ai-connector/status", null, owner);
+    assertThat(json.readTree(status.body()).path("chatGptSetup").asBoolean()).isTrue();
+    assertThatThrownBy(() -> bindings.requireRoutable(workspace))
+        .isInstanceOf(org.springframework.web.server.ResponseStatusException.class);
+    var credential = "{\"type\":\"oauth\",\"access\":\"test-access\",\"refresh\":\"test-refresh\"}";
+    var connector =
+        connectors.saveAndFlush(
+            AiConnectorEntity.chatGpt(
+                owner.getId(),
+                workspace,
+                "Plan",
+                new SecretBox(auth.jwtSecret(), "workspaced-ai-connectors").seal(credential)));
+    stage(connector.getId());
+    assertThat(row().isChatGptSetup()).isFalse();
+    assertThat(row().getAiConnectorId()).isEqualTo(connector.getId());
+    assertThat(row().getProviderChange().phase).isEqualTo("NONE");
+    verify(harness)
+        .activateOpenAiConnection(
+            any(), eq("workspaced-" + connector.getId()), eq("Plan"), eq(credential), eq(true));
+    verify(runtime, never()).restartProvider(any(), anyLong(), any(), any());
+  }
+
+  @Test
   void stagesBeforeRotatingAndActivatesOnlyMatchingReadinessBothDirections() throws Exception {
     stage(target);
     assertThat(row().getAiConnectorId()).isEqualTo(original);

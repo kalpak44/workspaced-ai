@@ -268,7 +268,7 @@ export function WorkspacesPage() {
           onNameChosen={tour ? (name) => { setNewName(null); reportTourAction({ type: "workspace-named", name }); } : undefined}
           onCreate={(request) =>
             create(request, (created) =>
-              navigate({ name: "workspace", workspaceId: created.id }),
+              navigate(request.useChatGptPlan ? { name: "settings", workspaceId: created.id, section: "profile" } : { name: "workspace", workspaceId: created.id }),
             )
           }
           onClose={() => { setNewName(null); reportTourAction({ type: "workspace-form-closed" }); }}

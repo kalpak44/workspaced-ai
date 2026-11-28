@@ -162,6 +162,24 @@ describe("App", () => {
     });
   });
 
+  it("creates a credential-free ChatGPT workspace and opens its Profile to connect", async () => {
+    const user=userEvent.setup();await renderLoaded();
+    await user.click(screen.getByRole("button",{name:"New workspace"}));
+    await chooseVmType(user,"cx33");
+    await user.click(screen.getByRole("button",{name:"Next"}));
+    await user.click(screen.getByRole("radio",{name:/Use ChatGPT plan/}));
+    expect(document.querySelector("input[type=password]")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button",{name:"Connect OpenRouter"})).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button",{name:"Create and connect ChatGPT"}));
+    await waitFor(()=>expect(path()).toBe("/workspaces/ws-1/settings/profile"));
+    await waitFor(()=>expect(screen.getByRole("radio",{name:/Use ChatGPT plan/})).toBeChecked());
+    expect(screen.getByRole("button",{name:"Connect ChatGPT"})).toBeDisabled();
+    const [,init]=api.fetchFn.mock.calls.find(([url,i])=>String(url).endsWith("/api/v1/workspaces")&&i?.method==="POST")!;
+    expect(JSON.parse(String(init?.body))).toMatchObject({modelProvider:"openai",useChatGptPlan:true});
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty("apiKey");
+    expect(JSON.parse(String(init?.body))).not.toHaveProperty("connectorId");
+  });
+
   it("connects OpenRouter by default once the notice is acknowledged", async () => {
     const user = userEvent.setup();
     await renderLoaded();
@@ -172,7 +190,8 @@ describe("App", () => {
     expect(screen.getByRole("listitem", { current: "step" })).toHaveTextContent("Model provider");
     // The only provider is no choice, so no card asks for one.
     const connect = await screen.findByRole("button", { name: "Connect OpenRouter" });
-    expect(screen.queryByRole("group", { name: "Model provider" })).not.toBeInTheDocument();
+    expect(screen.getByRole("group", { name: "Model provider" })).toBeVisible();
+    expect(screen.getByRole("radio", { name: /Use ChatGPT plan/ })).toBeVisible();
     expect(screen.queryByLabelText("OpenRouter API key")).not.toBeInTheDocument();
     expect(connect).toBeDisabled();
     await user.click(screen.getByRole("checkbox", { name: /I acknowledge the third-party AI risks/ }));
@@ -210,7 +229,7 @@ describe("App", () => {
     expect(within(types).getByRole("radio", { name: /2 vCPU.*4 GB RAM.*40 GB disk/ })).toBeInTheDocument();
     expect(within(types).getByRole("radio", { name: /4 vCPU.*8 GB RAM.*80 GB disk/ })).not.toBeChecked();
     expect(types).toHaveTextContent("€0.35 a day €10.65 a month");
-    expect(screen.queryByLabelText(/API key/)).not.toBeInTheDocument();
+    expect(document.querySelector("input[type=password]")).not.toBeInTheDocument();
   });
 
   it("needs a name to move on, and keeps it when going back", async () => {

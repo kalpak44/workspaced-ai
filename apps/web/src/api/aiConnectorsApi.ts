@@ -56,6 +56,7 @@ export interface ProviderBindingStatus {
   readonly phase: "NONE" | "STAGED" | "APPLYING" | "ROLLING_BACK" | "BLOCKED";
   readonly error: string | null;
   readonly restartRequired: boolean;
+  readonly chatGptSetup?: boolean;
 }
 export async function readProviderBindingStatus(id: string): Promise<ProviderBindingStatus> {
   return (await send(`${workspaceUrl(id)}/ai-connector/status`)).json();

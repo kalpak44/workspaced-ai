@@ -59,6 +59,36 @@ class WorkspaceControllerTest {
   }
 
   @Test
+  void createsAChatGptWorkspaceWithoutAnyProviderKey() throws Exception {
+    var response =
+        send(
+            "POST",
+            "",
+            "{\"name\":\"Plan workspace\",\"modelProvider\":\"openai\",\"useChatGptPlan\":true}");
+    assertThat(response.statusCode()).isEqualTo(201);
+    var created = JSON.readValue(response.body(), Workspace.class);
+    assertThat(repository.findById(created.id()).orElseThrow().isChatGptSetup()).isTrue();
+    var environment = ArgumentCaptor.forClass(WorkspaceEnvironment.class);
+    verify(runtime).start(eq(created.id()), any(), any(), any(), environment.capture());
+    assertThat(environment.getValue().config())
+        .containsEntry("WORKSPACED_AI_PROVIDER", "openai-chatgpt");
+    assertThat(environment.getValue().secrets())
+        .doesNotContainKeys("OPENROUTER_API_KEY", "OPENAI_API_KEY");
+    verify(keyCheck, never()).accepts(any(), any());
+  }
+
+  @Test
+  void refusesAChatGptSetupWithAnApiKey() throws Exception {
+    assertThat(
+            send(
+                    "POST",
+                    "",
+                    "{\"name\":\"Plan workspace\",\"modelProvider\":\"openai\",\"useChatGptPlan\":true,\"apiKey\":\"not-a-key\"}")
+                .statusCode())
+        .isEqualTo(400);
+  }
+
+  @Test
   void createsAndListsInCreationOrder() throws Exception {
     var created = send("POST", "", body("  Research  ", "openrouter", " sk-or-1\\n"));
     assertThat(created.statusCode()).isEqualTo(201);

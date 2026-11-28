@@ -24,7 +24,8 @@ public class ProviderBindings {
       List<Choice> choices,
       String phase,
       String error,
-      boolean restartRequired) {}
+      boolean restartRequired,
+      boolean chatGptSetup) {}
 
   private record Dispatch(UUID workspace, long revision, String provider, String sealedKey) {
     @Override
@@ -126,6 +127,15 @@ public class ProviderBindings {
       throw conflict(
           "Wait for the provider restart or recover the blocked binding before selecting another connector");
     usable(c);
+    if (locked.isChatGptSetup()) {
+      if (!c.isChatGpt()) throw conflict("Connect ChatGPT to finish this workspace setup");
+      // This fresh workspace already runs the ChatGPT-only profile, with no prior key or
+      // traffic to migrate. Authenticate before unblocking its first request.
+      activateConnection(locked, c);
+      locked.activateProvider(c.getId(), c.getProvider());
+      locked.setChatGptSetup(false);
+      return;
+    }
 
     state.pending = c.getId();
     state.targetKey = box.seal(key(c));
@@ -161,7 +171,8 @@ public class ProviderBindings {
             .toList(),
         s.phase,
         s.error,
-        w.isSecretsPendingRestart());
+        w.isSecretsPendingRestart(),
+        w.isChatGptSetup());
   }
 
   private Choice choice(WorkspaceEntity w, UUID id) {
@@ -410,6 +421,7 @@ public class ProviderBindings {
         workspaces
             .findById(id)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "no workspace"));
+    if (w.isChatGptSetup()) throw conflict("Connect ChatGPT in Profile before sending messages");
     if (w.getProviderChange().blocked()) throw conflict("Provider restart is not ready");
     if (w.getAiConnectorId() != null) connector(w, w.getAiConnectorId());
   }

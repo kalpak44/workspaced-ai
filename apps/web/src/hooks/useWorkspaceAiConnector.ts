@@ -24,6 +24,7 @@ export function useWorkspaceAiConnector(workspace: Workspace, onChanged: (change
       ...(result.active && result.active.provider !== latest.current.workspace.modelProvider ? { modelProvider: result.active.provider } : {}),
     };
     if (Object.keys(changes).length) latest.current.onChanged(changes);
+    return result;
   }, [workspace.id]);
   useEffect(() => {
     let mounted = true;

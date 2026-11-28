@@ -32,6 +32,17 @@ public class WorkspaceEntity {
   @Column(name = "model_provider", nullable = false, length = 50)
   private String modelProvider;
 
+  @Column(name = "chatgpt_setup", nullable = false)
+  private boolean chatGptSetup;
+
+  public boolean isChatGptSetup() {
+    return chatGptSetup;
+  }
+
+  public void setChatGptSetup(boolean value) {
+    chatGptSetup = value;
+  }
+
   // An id from ComputeProvider, fixed at creation: a VM cannot move between clouds.
   @Column(name = "compute_provider", nullable = false, updatable = false, length = 50)
   private String computeProvider = ComputeProvider.DEFAULT.id();
@@ -46,7 +57,8 @@ public class WorkspaceEntity {
   }
 
   public void activateProvider(UUID connector, String provider) {
-    if (!modelProvider.equals(provider)) model = null;
+    if (!modelProvider.equals(provider) || !java.util.Objects.equals(aiConnectorId, connector))
+      model = null;
     aiConnectorId = connector;
     modelProvider = provider;
   }

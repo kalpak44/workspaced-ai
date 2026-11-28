@@ -7,6 +7,7 @@ runtime environment variable `WORKSPACED_AI_PROVIDER`:
 | --- | --- | --- | --- |
 | Unset or `openrouter` | `openrouter` | `openrouter/deepseek/deepseek-v4.1-flash` | `openrouter/anthropic/claude-haiku-5.5` |
 | `openai` | `openai` | `openai/gpt-6.1-sol` | `openai/gpt-6.1-sol` |
+| `openai-chatgpt` | `openai` | `openai/gpt-5.6-sol` | `openai/gpt-5.6-sol` |
 
 An empty or unknown value exits with status 2 before the server or user services
 start. There is no provider fallback. The OpenRouter profile retains
@@ -44,9 +45,11 @@ again or carrying a previous profile. Put user settings and MCP servers in
 plugins, sessions and project data remain intact. The pre-existing V1 plugin migration
 is unchanged. Edits to the generated `/tmp` config do not survive the next start.
 
-A profile is configuration, **not OAuth or a security sandbox**. No ChatGPT sign-in,
-subscription integration, token storage/refresh, account isolation, or production
-connector is implemented here. The profile alone does not authorize model calls.
+A profile is configuration, **not OAuth or a security sandbox**. ChatGPT authentication is
+managed by the workspace-bound connection flow in the API and OpenCode. The ChatGPT profile
+keeps its Codex-compatible default independent of the API-key profile; the profile alone
+does not authorize model calls. A newly created ChatGPT workspace starts without either
+provider API key and its API rejects chat until sign-in has been installed.
 There are no credentials in these templates. A user with shell access can run their
 own processes or alter writable runtime files; provider policies constrain the
 configured OpenCode server, not the container's general network or shell access.

@@ -1,7 +1,6 @@
 package io.github.kalpak44.workspacedai.vmmanager.vm.web.dto;
 
 import io.swagger.v3.oas.annotations.media.Schema;
-import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
@@ -38,7 +37,7 @@ public record CreateVmDto(
                     + "system secret OPENROUTER_API_KEY; ignored when the workspace already has a VM",
             example = "sk-or-v1-…",
             maxLength = 1000)
-        @NotBlank
+        @jakarta.validation.constraints.Pattern(regexp = "(?s).*\\S.*")
         @Size(max = 1000)
         String openRouterApiKey,
     @Schema(
@@ -54,6 +53,13 @@ public record CreateVmDto(
                 @NotEmpty @Size(max = 100) @Pattern(regexp = CreateVmSecretDto.NAME_PATTERN) String,
                 @NotNull @Size(max = 65536) String>
             environment) {
+
+  @jakarta.validation.constraints.AssertTrue(
+      message = "A provider key is required unless this is ChatGPT setup")
+  public boolean isProviderConfigured() {
+    return openRouterApiKey != null
+        || "openai-chatgpt".equals(environment.get("WORKSPACED_AI_PROVIDER"));
+  }
 
   public CreateVmDto {
     environment = environment == null ? Map.of() : environment;

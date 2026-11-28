@@ -1,0 +1,20 @@
+{
+  "policies": [
+    {
+      "action": "provider.use",
+      "resource": "*",
+      "effect": "deny"
+    },
+    {
+      "action": "provider.use",
+      "resource": "openai",
+      "effect": "allow"
+    }
+  ],
+  "model": "openai/gpt-5.6-sol",
+  "agents": {
+    "title": {
+      "model": "openai/gpt-5.6-sol"
+    }
+  }
+}

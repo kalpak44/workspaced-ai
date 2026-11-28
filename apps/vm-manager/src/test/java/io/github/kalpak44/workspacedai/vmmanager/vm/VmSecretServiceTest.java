@@ -36,6 +36,16 @@ class VmSecretServiceTest {
   }
 
   @Test
+  void chatGptSetupHasNoPlaceholderOrFallbackApiKey() {
+    service.init(vm, null, Map.of("WORKSPACED_AI_PROVIDER", "openai-chatgpt"));
+    assertThat(service.environment(vm))
+        .containsEntry("WORKSPACED_AI_PROVIDER", "openai-chatgpt")
+        .doesNotContainKeys("OPENAI_API_KEY", "OPENROUTER_API_KEY");
+    assertThatThrownBy(() -> service.init(vm, null, Map.of()))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
   void durableVersionedBindingNeverLogsOrMixesCredentials() {
     var bindings = new ProviderBindingService(store, vms);
     bindings.request(vm, 1, "openai", "inert-openai");

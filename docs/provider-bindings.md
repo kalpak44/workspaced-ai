@@ -1,14 +1,14 @@
 # Provider bindings and explicit restart
 
-One connector/provider is active per existing workspace. This slice adds transport and
-restart wiring, not ChatGPT subscription auth. OpenAI is an **experimental API-key-only path**, enabled
-by default. Set `WORKSPACED_AI_OPENAI_API_KEY_ENABLED=false` to disable it. General settings →
-AI connectors lists enabled providers using `GET /api/v1/model-providers?connectors=true`. Add
-an OpenAI key there, select it in an existing workspace’s Settings → Profile, save, and restart
-the workspace to activate it after verified readiness. The default provider list for workspace
-creation stays OpenRouter-only; no ChatGPT sign-in or subscription option is exposed. Legacy OpenRouter
-creates and ordinary secret restarts keep working. OpenAI workspace creation is gated: test
-selection on an existing workspace instead, with an independently authorized API key.
+One connector/provider is active per workspace. Profile offers saved API connectors and
+workspace-bound ChatGPT plan sign-in as separate connection methods. ChatGPT controls appear
+only when that method is selected. OpenAI API keys remain experimental and can be disabled
+with `WORKSPACED_AI_OPENAI_API_KEY_ENABLED=false`.
+
+General settings → AI connectors manages saved API keys. Workspace Settings → Profile
+selects a connector, or connects a ChatGPT account. Existing workspace changes require a
+verified restart. New workspace creation offers OpenRouter or Use ChatGPT plan; direct
+OpenAI API-key creation remains gated. ChatGPT workspace creation is described below.
 
 ## Selection and status
 
@@ -90,12 +90,13 @@ revoked/unavailable previous bindings remain gated. An unexpectedly newer runtim
 Legacy rows with no saved active connector
 have no recoverable key snapshot; failed changes on those rows require operator reconciliation.
 External revocation can race any check; provider errors never trigger another billing provider.
-Profile selection is not a security sandbox or OAuth/token lifecycle implementation.
+Profile selection is not a security sandbox. ChatGPT device authorization and token lifecycle
+are managed by the workspace harness; provider binding controls when that connection becomes active.
 
 All services, supervisor and harness must support this contract before using versioned connector selection, including same-provider changes. Legacy creates and ordinary restarts remain compatible; selection with an older image is safely gated by the readiness probe.
 API-key validation uses the [public OpenAI models endpoint](https://developers.openai.com/api/reference/resources/models/methods/list); it does not prove access to a
-particular model or successful inference. No hosted eligibility, sign-in, OAuth token forwarding,
-credential refresh, or production rollout is implemented or implied.
+particular model or successful inference. ChatGPT uses its separate sign-in flow and Codex model catalog; API-key validation does not
+establish ChatGPT account eligibility or subscription model access.
 
 ## Verification
 
@@ -104,7 +105,7 @@ staged supersession, in-flight conflicts, matching/late readiness, uncertain tra
 timeout/rollback, revoked fallback, coordinator restart and newer secret changes. VM Manager
 HTTP tests cover atomic profile/key output and legacy/stale readiness. Agent-hub and supervisor
 checks cover transport, revision identity and actual managed-profile validation. Harness Docker
-checks exercise both pinned profiles with no external network. The opt-in supervisor test `TestManagedProfileHealthWithPinnedHarness` can also validate an
+checks exercise all three pinned profiles with no external network. The opt-in supervisor test `TestManagedProfileHealthWithPinnedHarness` can also validate an
 actual disposable harness (`WORKSPACED_TEST_HARNESS_URL`, `WORKSPACED_TEST_PROVIDER`, test
 server password `profile-test`); it never requests inference. It was exercised with OpenRouter
 → OpenAI → OpenRouter on one persisted home, using the pinned image with networking disabled.
@@ -117,3 +118,21 @@ Dispatch attribution and restart fences also feed the owner-only
 credential change is excluded, not assigned to an old connector. The separate
 [local preview pilot](../tools/local-preview/README.md) is fixture tested outside
 the hosted product and never forwards OAuth credentials to the workspace.
+
+## Creating a workspace with a ChatGPT plan
+
+`POST /api/v1/workspaces` accepts `useChatGptPlan: true` with `modelProvider: "openai"`
+and no API key or connector ID. This is a paid VM, not a free demo. It is provisioned
+with the isolated `openai-chatgpt` profile and no model credentials. The durable
+`chatgpt_setup` flag blocks model requests until connection setup succeeds.
+
+The creation dialog opens workspace Profile with Use ChatGPT plan selected. Once its
+harness is ready, the owner acknowledges the provider notice and signs in. The first
+connection is installed into the already isolated profile before clearing the setup gate;
+there is no previous provider or credential to migrate and no extra restart is needed.
+Existing workspace connector changes continue using the versioned, verified restart path.
+
+The ChatGPT profile uses `openai/gpt-5.6-sol` for chat and titles independently of the
+OpenAI API-key profile. Switching connectors resets the workspace model preference so
+a model selected under another connection does not carry into a new authentication mode.
+Device authorizations are cancelled when their connection section is dismissed.

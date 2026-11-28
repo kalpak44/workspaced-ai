@@ -125,6 +125,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
   const [name, setName] = useState(initialName);
   const [serverType, setServerType] = useState("");
   const [providerId, setProviderId] = useState("");
+  const chatGptPlan = providerId === "chatgpt";
   const [apiKey, setApiKey] = useState("");
   const [connectorId, setConnectorId] = useState("");
   const [accepted, setAccepted] = useState(false);
@@ -265,6 +266,15 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     }
   };
 
+  const createChatGpt = async () => {
+    setPending(true);setConnectorError("");
+    try {
+      const result = await onCreate({ name, serverType, modelProvider: "openai", apiKey: "", useChatGptPlan: true });
+      if (result === "created") onClose(); else refused(result);
+    } catch { setConnectorError("Could not create the workspace. Please try again."); }
+    finally { setPending(false); }
+  };
+
   const submit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (step === 1 && insufficientFunds) return;
@@ -276,6 +286,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
       setStep(step + 1);
       return;
     }
+    if (chatGptPlan) { await createChatGpt(); return; }
     if (connecting) {
       // A popup the user lost behind the page can be opened again; an exchange in flight cannot.
       if (accepted && openRouter.status !== "exchanging") {
@@ -302,7 +313,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
       </p>
     );
   } else {
-    providerChoices = providers.providers.map((p) => (
+    providerChoices = [...providers.providers.map((p) => (
       <ChoiceCard
         key={p.id}
         name="workspace-provider"
@@ -311,14 +322,14 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
         detail={hostOf(p.baseUrl)}
         icon={Sparkles}
         checked={p.id === providerId}
-        disabled={pending}
+        disabled={pending || popupOpen}
         onChange={(id) => {
           setProviderId(id);
           setConnectorId("");
           setRejected(false);
         }}
       />
-    ));
+    )), <ChoiceCard key="chatgpt" name="workspace-provider" value="chatgpt" label="Use ChatGPT plan" detail="No API key required" icon={Sparkles} checked={chatGptPlan} disabled={pending || popupOpen} onChange={() => {setProviderId("chatgpt");setConnectorId("");setRejected(false);}} />];
   }
 
   let stepBody;
@@ -363,14 +374,18 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     );
     stepBody = (
       <>
-        {/* A single provider is no choice, so the card shows only while there is something to say. */}
-        {(providers.status !== "ready" || providers.providers.length !== 1) && (
+        {(
           <fieldset className="flex min-w-0 flex-col gap-2">
             <legend className="mb-1.5 text-sm font-medium text-zinc-700 dark:text-zinc-300">Model provider</legend>
             {providerChoices}
           </fieldset>
         )}
-        {ownConnectors.length > 0 && (
+        {chatGptPlan && <div className="rounded-xl border border-zinc-200 bg-zinc-50 p-4 text-sm leading-6 text-zinc-600 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-400">
+          <p className="font-medium text-zinc-900 dark:text-zinc-100">Create your workspace, then connect ChatGPT</p>
+          <p>We’ll open Profile with ChatGPT selected. Once the workspace is ready, sign in to connect your plan. Each workspace has its own connection.</p>
+          <p className="mt-2">VM costs still apply. Chat stays unavailable until you connect.</p>
+        </div>}
+        {!chatGptPlan && ownConnectors.length > 0 && (
           <label className="block text-sm font-medium">AI connector
             <select aria-label="AI connector" className="mt-1.5 block w-full rounded-lg border border-zinc-300 bg-transparent p-2 dark:border-zinc-700" value={connectorId} disabled={pending || connectors.loading} onChange={event => { setConnectorId(event.target.value); setRejected(false); }}>
               {ownConnectors.map(c => <option key={c.id} value={c.id}>{c.name}{c.trial ? " — Default" : ""}</option>)}
@@ -418,7 +433,7 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
             {provider.id === "openrouter" && switchTo(false)}
           </div>
         )}
-        {(!connectorId || selected?.trial) && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || popupOpen} />}
+        {!chatGptPlan && (!connectorId || selected?.trial) && <AiProviderNotice accepted={accepted} onChange={setAccepted} disabled={pending || popupOpen} />}
         {noFunds && (
           <div role="alert" className="flex flex-col gap-3 rounded-xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-zinc-700 dark:border-amber-950 dark:bg-amber-950/30 dark:text-zinc-300">
             <p>{shortfall(billing, chosen, serverType)}</p>
@@ -434,6 +449,8 @@ export function CreateWorkspaceDialog({ initialName, onNameChosen, onCreate, onC
     next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!name.trim()} />;
   } else if (step === 1) {
     next = <Button label="Next" type="submit" icon={ArrowRight} disabled={!serverType || status !== "ready" || insufficientFunds} />;
+  } else if (chatGptPlan) {
+    next = <Button label="Create and connect ChatGPT" type="submit" icon={ArrowRight} busy={pending} disabled={pending} />;
   } else if (connecting) {
     next = (
       <Button

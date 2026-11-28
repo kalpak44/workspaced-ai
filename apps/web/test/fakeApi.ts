@@ -115,6 +115,7 @@ export function installFakeApi(
   const connectors: { id: string; name: string; provider: string; trial?: boolean }[] = [];
   const connectorKeys = new Map<string, string>();
   const workspaceConnectors = new Map<string, string>();
+  const chatGptSetups = new Set<string>();
   const pendingConnectors = new Map<string, string>();
   const providerPhases = new Map<string, { phase: string; error: string | null }>();
   // Created without a key: unlisted until launched, as the API keeps them.
@@ -596,7 +597,7 @@ export function installFakeApi(
       const workspace = rows.find(row => row.id === id);
       const current = connectors.find(c => c.id === workspaceConnectors.get(id)) ?? null;
       const pending = connectors.find(c => c.id === pendingConnectors.get(id)) ?? null;
-      return json({ active: current, pending, choices: connectors.filter(c => c.provider === "openrouter" || c.provider === "openai"), ...providerPhases.get(id) ?? { phase: "NONE", error: null }, restartRequired: workspace?.restartRequired ?? false });
+      return json({ chatGptSetup: chatGptSetups.has(id), active: current, pending, choices: connectors.filter(c => c.provider === "openrouter" || c.provider === "openai"), ...providerPhases.get(id) ?? { phase: "NONE", error: null }, restartRequired: workspace?.restartRequired ?? false });
     }
     const selectionRoute = /\/api\/v1\/workspaces\/([^/]+)\/ai-connector$/.exec(url);
     if (selectionRoute) {
@@ -849,7 +850,7 @@ export function installFakeApi(
     }
     const id = url.split("/api/v1/workspaces/")[1];
     const body = init?.body
-      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; connectorId?: string; timeZone?: string; serverType?: string; demo?: boolean })
+      ? (JSON.parse(String(init.body)) as { name: string; modelProvider?: string; apiKey?: string; connectorId?: string; useChatGptPlan?: boolean; timeZone?: string; serverType?: string; demo?: boolean })
       : undefined;
     const index = rows.findIndex((w) => w.id === id);
     switch (init?.method ?? "GET") {
@@ -859,7 +860,7 @@ export function installFakeApi(
         if (state.vmSizes.some((size) => size.serverType === body!.serverType && !size.available)) return json({ status: 409 }, 409);
         if (body!.demo && !auth.account.demoAvailable) return json({ status: 409 }, 409);
         if (state.noFunds && !body!.demo) return json({ status: 402, detail: "add funds" }, 402);
-        if (body!.apiKey === undefined && !body!.connectorId) {
+        if (body!.apiKey === undefined && !body!.connectorId && !body!.useChatGptPlan) {
           const draft = {
             id: `ws-${state.nextId++}`,
             name: body!.name,
@@ -883,6 +884,7 @@ export function installFakeApi(
           ...demoFields(body!.demo === true),
         };
         rows.push(created);
+        if (body!.useChatGptPlan) chatGptSetups.add(created.id);
         if (body!.connectorId) workspaceConnectors.set(created.id, body!.connectorId);
         return json(created, 201);
       }
